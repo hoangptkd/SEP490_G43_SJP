@@ -16,6 +16,6 @@ public interface CandidateProfileRepository extends JpaRepository<CandidateProfi
     @Query("SELECT cp FROM CandidateProfile cp WHERE LOWER(cp.fullName) LIKE LOWER(CONCAT('%', :name, '%'))")
     List<CandidateProfile> searchByName(String name);
 
-    @Query("SELECT cp FROM CandidateProfile cp JOIN cp.skills s WHERE LOWER(s) LIKE LOWER(CONCAT('%', :skill, '%'))")
+    @Query(value = "SELECT * FROM candidate_profiles cp WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(cp.skills) s WHERE s = :skill)", nativeQuery = true)
     List<CandidateProfile> findBySkillContaining(String skill);
 }

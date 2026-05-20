@@ -1,5 +1,6 @@
 package com.sjp.recruitment.util;
 
+import com.sjp.recruitment.model.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;

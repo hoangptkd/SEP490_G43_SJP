@@ -1,5 +1,5 @@
-import { api } from '../api';
-import type { Interview, InterviewResponse, InterviewFeedback, InterviewQuestion } from '../../types/interview';
+import { api } from './api';
+import type { Interview, InterviewResponse, InterviewFeedback, InterviewQuestion } from '../types/interview';
 
 export interface CreateInterviewRequest {
   applicationId: number;

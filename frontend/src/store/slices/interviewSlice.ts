@@ -1,6 +1,6 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { interviewService, CreateInterviewRequest } from '../services/interviewService';
-import type { Interview } from '../types/interview';
+import { interviewService, CreateInterviewRequest } from '@services/interviewService';
+import type { Interview } from '@types/interview';
 
 interface InterviewState {
   interviews: Interview[];

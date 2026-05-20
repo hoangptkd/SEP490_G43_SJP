@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { jobService } from '../services/jobService';
-import type { Job, JobFilters, JobApiResponse } from '../types/job';
+import { jobService } from '@services/jobService';
+import type { Job, JobFilters, JobApiResponse } from '@types/job';
 
 interface JobState {
   jobs: Job[];
