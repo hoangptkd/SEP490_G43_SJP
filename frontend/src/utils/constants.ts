@@ -1,0 +1,57 @@
+export const JOB_STATUS = {
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+  DRAFT: 'DRAFT',
+} as const;
+
+export const APPLICATION_STATUS = {
+  PENDING: 'PENDING',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  INTERVIEW_SCHEDULED: 'INTERVIEW_SCHEDULED',
+  REJECTED: 'REJECTED',
+  ACCEPTED: 'ACCEPTED',
+} as const;
+
+export const INTERVIEW_STATUS = {
+  SCHEDULED: 'SCHEDULED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+export const INTERVIEW_TYPE = {
+  AI_INTERVIEW: 'AI_INTERVIEW',
+  HUMAN_INTERVIEW: 'HUMAN_INTERVIEW',
+} as const;
+
+export const ASSESSMENT_STATUS = {
+  DRAFT: 'DRAFT',
+  ACTIVE: 'ACTIVE',
+  COMPLETED: 'COMPLETED',
+  EXPIRED: 'EXPIRED',
+} as const;
+
+export const ASSESSMENT_TYPE = {
+  QUIZ: 'QUIZ',
+  CODING: 'CODING',
+  MULTIPLE_CHOICE: 'MULTIPLE_CHOICE',
+  VIDEO: 'VIDEO',
+} as const;
+
+export const QUESTION_TYPE = {
+  MULTIPLE_CHOICE: 'MULTIPLE_CHOICE',
+  TEXT: 'TEXT',
+  CODING: 'CODING',
+} as const;
+
+export const DIFFICULTY_LEVEL = {
+  EASY: 'EASY',
+  MEDIUM: 'MEDIUM',
+  HARD: 'HARD',
+} as const;
+
+export const USER_ROLE = {
+  CANDIDATE: 'CANDIDATE',
+  EMPLOYER: 'EMPLOYER',
+  ADMIN: 'ADMIN',
+} as const;
