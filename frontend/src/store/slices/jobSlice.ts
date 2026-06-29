@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { jobService } from '@services/jobService';
-import type { Job, JobFilters, JobApiResponse } from '@types/job';
+import type { Job, JobFilters, JobApiResponse } from '@/types/job';
 
 interface JobState {
   jobs: Job[];
@@ -38,7 +38,7 @@ export const fetchJobs = createAsyncThunk<JobApiResponse, { filters: JobFilters;
   }
 );
 
-export const fetchJobById = createAsyncThunk<Job, number>(
+export const fetchJobById = createAsyncThunk<Job, string>(
   'jobs/fetchById',
   async (id) => {
     const job = await jobService.getById(id);

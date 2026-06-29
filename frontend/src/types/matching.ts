@@ -1,3 +1,6 @@
+import type { Candidate } from './candidate';
+import type { Job } from './job';
+
 export interface MatchingResult<T> {
   item: T;
   matchScore: number;

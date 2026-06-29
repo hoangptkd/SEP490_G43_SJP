@@ -1,5 +1,5 @@
-import { api } from '../api';
-import type { Assessment, AssessmentResult } from '../../types/assessment';
+import { api } from './api';
+import type { Assessment, AssessmentResult } from '../types/assessment';
 
 export interface CreateAssessmentRequest {
   jobId?: number;

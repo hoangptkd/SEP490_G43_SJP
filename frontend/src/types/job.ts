@@ -1,23 +1,26 @@
 export interface Job {
-  id: number;
+  id: string;
   title: string;
   description: string;
   salaryMin?: number;
   salaryMax?: number;
   location: string;
   requirements: string[];
-  employer: Employer;
-  status: 'ACTIVE' | 'CLOSED' | 'DRAFT';
-  createdAt: string;
-  updatedAt: string;
+  skills: string[];
+  company: Company;
+  experienceLevel?: string;
+  deadline?: string;
+  status: 'ACTIVE' | 'CLOSED' | 'DRAFT' | 'EXPIRED' | 'ARCHIVED';
+  saved: boolean;
+  applied: boolean;
+  matchScore?: number;
 }
 
-export interface Employer {
-  id: number;
+export interface Company {
+  id: string;
   name: string;
-  email: string;
-  company: string;
   website?: string;
+  location?: string;
 }
 
 export interface JobFilters {
@@ -25,7 +28,9 @@ export interface JobFilters {
   location?: string;
   minSalary?: number;
   maxSalary?: number;
-  status?: string;
+  experienceLevel?: string;
+  skills?: string;
+  sort?: string;
 }
 
 export interface JobApiResponse {
@@ -34,4 +39,13 @@ export interface JobApiResponse {
   size: number;
   totalElements: number;
   totalPages: number;
+}
+
+export interface Recommendation {
+  job: Job;
+  matchScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  reason: string;
+  lowConfidence: boolean;
 }

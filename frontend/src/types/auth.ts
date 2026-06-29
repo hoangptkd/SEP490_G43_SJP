@@ -1,8 +1,9 @@
 export interface User {
-  id: number;
+  id: string;
   email: string;
   role: 'CANDIDATE' | 'EMPLOYER' | 'ADMIN';
-  createdAt: string;
+  status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED';
+  emailVerified: boolean;
 }
 
 export interface AuthState {
