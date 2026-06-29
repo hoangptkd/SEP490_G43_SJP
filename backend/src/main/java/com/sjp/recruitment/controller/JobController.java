@@ -66,8 +66,10 @@ public class JobController {
     }
 
     @GetMapping("/employer/{employerId}")
-    public ResponseEntity<List<Job>> getJobsByEmployer(@PathVariable String employerId) {
-        List<Job> jobs = jobService.findByEmployerId(employerId);
+    public ResponseEntity<Page<Job>> getJobsByEmployer(
+            @PathVariable String employerId,
+            Pageable pageable) {
+        Page<Job> jobs = jobService.findByEmployerId(employerId, pageable);
         return ResponseEntity.ok(jobs);
     }
 }
