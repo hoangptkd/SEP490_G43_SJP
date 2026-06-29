@@ -7,19 +7,23 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
 import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -31,17 +35,20 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/auth/register",
                     "/auth/login",
-                    "/auth/refresh"
+                    "/auth/verify-email",
+                    "/auth/oauth/complete-role",
+                    "/auth/refresh",
+                    "/oauth2/**",
+                    "/login/oauth2/**",
+                    "/actuator/health"
                 ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**").permitAll()
                 .anyRequest().authenticated()
-            );
+            )
+            .oauth2Login(oauth -> oauth.successHandler(oAuth2LoginSuccessHandler))
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
     }
 
     @Bean
