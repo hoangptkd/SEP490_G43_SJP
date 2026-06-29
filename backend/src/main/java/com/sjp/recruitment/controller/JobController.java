@@ -1,7 +1,10 @@
 package com.sjp.recruitment.controller;
 
-import com.sjp.recruitment.model.entity.Job;
 import com.sjp.recruitment.model.dto.request.JobRequest;
+import com.sjp.recruitment.model.dto.response.JobPageResponse;
+import com.sjp.recruitment.model.dto.response.JobResponse;
+import com.sjp.recruitment.model.dto.response.RecommendationResponse;
+import com.sjp.recruitment.model.entity.Job;
 import com.sjp.recruitment.service.JobService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -20,18 +24,27 @@ public class JobController {
     private final JobService jobService;
 
     @GetMapping
-    public ResponseEntity<Page<Job>> getAllJobs(
+    public ResponseEntity<JobPageResponse> getAllJobs(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String location,
-            Pageable pageable) {
-        Page<Job> jobs = jobService.findAll(search, location, pageable);
-        return ResponseEntity.ok(jobs);
+            @RequestParam(required = false) BigDecimal minSalary,
+            @RequestParam(required = false) BigDecimal maxSalary,
+            @RequestParam(required = false) String experienceLevel,
+            @RequestParam(required = false) String skills,
+            @RequestParam(defaultValue = "newest") String sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(jobService.search(search, location, minSalary, maxSalary, experienceLevel, skills, sort, page, size));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Job> getJobById(@PathVariable Long id) {
-        Job job = jobService.findById(id);
-        return ResponseEntity.ok(job);
+    public ResponseEntity<JobResponse> getJobById(@PathVariable String id) {
+        return ResponseEntity.ok(jobService.findJobResponseById(id));
+    }
+
+    @GetMapping("/recommendations")
+    public ResponseEntity<List<RecommendationResponse>> recommendations() {
+        return ResponseEntity.ok(jobService.recommendations());
     }
 
     @PostMapping
@@ -41,19 +54,19 @@ public class JobController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Job> updateJob(@PathVariable Long id, @Valid @RequestBody JobRequest request) {
+    public ResponseEntity<Job> updateJob(@PathVariable String id, @Valid @RequestBody JobRequest request) {
         Job job = jobService.update(id, request);
         return ResponseEntity.ok(job);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteJob(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteJob(@PathVariable String id) {
         jobService.delete(id);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/employer/{employerId}")
-    public ResponseEntity<List<Job>> getJobsByEmployer(@PathVariable Long employerId) {
+    public ResponseEntity<List<Job>> getJobsByEmployer(@PathVariable String employerId) {
         List<Job> jobs = jobService.findByEmployerId(employerId);
         return ResponseEntity.ok(jobs);
     }

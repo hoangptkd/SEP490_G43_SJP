@@ -1,9 +1,12 @@
 package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.entity.User;
+import com.sjp.recruitment.model.dto.request.CompleteOauthRoleRequest;
 import com.sjp.recruitment.model.dto.request.LoginRequest;
 import com.sjp.recruitment.model.dto.request.RegisterRequest;
+import com.sjp.recruitment.model.dto.request.VerifyEmailRequest;
 import com.sjp.recruitment.model.dto.response.AuthResponse;
+import com.sjp.recruitment.model.dto.response.UserResponse;
 import com.sjp.recruitment.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,14 +32,23 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/verify-email")
+    public ResponseEntity<UserResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        return ResponseEntity.ok(authService.verifyEmail(request.token()));
+    }
+
+    @PostMapping("/oauth/complete-role")
+    public ResponseEntity<AuthResponse> completeOauthRole(@Valid @RequestBody CompleteOauthRoleRequest request) {
+        return ResponseEntity.ok(authService.completeOauthRole(request));
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<Void> logout() {
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/me")
-    public ResponseEntity<User> getCurrentUser() {
-        User user = authService.getCurrentUser();
-        return ResponseEntity.ok(user);
+    public ResponseEntity<UserResponse> getCurrentUser() {
+        return ResponseEntity.ok(authService.getCurrentUserResponse());
     }
 }

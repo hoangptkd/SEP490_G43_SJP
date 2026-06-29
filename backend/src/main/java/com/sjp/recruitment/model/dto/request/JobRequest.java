@@ -20,5 +20,5 @@ public class JobRequest {
 
     private String location;
 
-    private Long employerId;
+    private String employerId;
 }

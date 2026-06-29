@@ -1,6 +1,7 @@
 package com.sjp.recruitment.util;
 
 import com.sjp.recruitment.model.entity.User;
+import com.sjp.recruitment.model.dto.response.UserResponse;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -39,6 +40,11 @@ public class JwtUtil {
         return claimsResolver.apply(claims);
     }
 
+    public String extractStringClaim(String token, String claimName) {
+        Object value = extractAllClaims(token).get(claimName);
+        return value == null ? null : String.valueOf(value);
+    }
+
     private Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -62,7 +68,22 @@ public class JwtUtil {
                 .compact();
     }
 
+    public String generateToken(UserResponse user) {
+        return Jwts.builder()
+                .subject(user.email())
+                .claim("id", user.id())
+                .claim("role", user.role())
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(getSigningKey())
+                .compact();
+    }
+
     public Boolean validateToken(String token, User user) {
         return !isTokenExpired(token) && extractUsername(token).equals(user.getEmail());
+    }
+
+    public Boolean validateToken(String token) {
+        return !isTokenExpired(token) && extractUsername(token) != null;
     }
 }

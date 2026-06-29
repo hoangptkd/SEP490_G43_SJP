@@ -3,7 +3,7 @@ package com.sjp.recruitment.model.dto.request;
 import com.sjp.recruitment.model.entity.User;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
+import jakarta.validation.constraints.NotNull;
 
 public class RegisterRequest {
     @NotBlank
@@ -13,7 +13,7 @@ public class RegisterRequest {
     @NotBlank
     private String password;
 
-    @NotBlank
+    @NotNull
     private User.UserRole role;
 
     public String getEmail() { return email; }

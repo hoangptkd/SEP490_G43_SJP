@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Job, JobFilters, JobApiResponse } from '../types/job';
+import type { Job, JobFilters, JobApiResponse, Recommendation } from '../types/job';
 
 export const jobService = {
   getAll: async (filters: JobFilters, page = 0, size = 10): Promise<JobApiResponse> => {
@@ -10,13 +10,21 @@ export const jobService = {
       ...(filters.location && { location: filters.location }),
       ...(filters.minSalary && { minSalary: filters.minSalary.toString() }),
       ...(filters.maxSalary && { maxSalary: filters.maxSalary.toString() }),
+      ...(filters.experienceLevel && { experienceLevel: filters.experienceLevel }),
+      ...(filters.skills && { skills: filters.skills }),
+      ...(filters.sort && { sort: filters.sort }),
     });
     const response = await api.get<JobApiResponse>(`/jobs?${params}`);
     return response.data;
   },
 
-  getById: async (id: number): Promise<Job> => {
+  getById: async (id: string): Promise<Job> => {
     const response = await api.get<Job>(`/jobs/${id}`);
+    return response.data;
+  },
+
+  recommendations: async (): Promise<Recommendation[]> => {
+    const response = await api.get<Recommendation[]>('/candidate/recommendations/jobs');
     return response.data;
   },
 
@@ -25,12 +33,12 @@ export const jobService = {
     return response.data;
   },
 
-  update: async (id: number, jobData: Partial<Job>): Promise<Job> => {
+  update: async (id: string, jobData: Partial<Job>): Promise<Job> => {
     const response = await api.put<Job>(`/jobs/${id}`, jobData);
     return response.data;
   },
 
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     await api.delete(`/jobs/${id}`);
   },
 };

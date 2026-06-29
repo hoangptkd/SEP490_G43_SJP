@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { authService, LoginRequest, RegisterRequest, AuthResponse } from '@services/authService';
-import type { User, AuthState } from '@types/auth';
+import type { AuthState } from '@/types/auth';
 
 const initialState: AuthState = {
   user: null,
@@ -61,7 +61,9 @@ const authSlice = createSlice({
         state.isAuthenticated = true;
         state.user = action.payload.user;
         state.token = action.payload.token;
-        localStorage.setItem('token', action.payload.token);
+        if (action.payload.token) {
+          localStorage.setItem('token', action.payload.token);
+        }
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
@@ -74,10 +76,12 @@ const authSlice = createSlice({
       })
       .addCase(register.fulfilled, (state, action: PayloadAction<AuthResponse>) => {
         state.loading = false;
-        state.isAuthenticated = true;
+        state.isAuthenticated = !!action.payload.token;
         state.user = action.payload.user;
         state.token = action.payload.token;
-        localStorage.setItem('token', action.payload.token);
+        if (action.payload.token) {
+          localStorage.setItem('token', action.payload.token);
+        }
       })
       .addCase(register.rejected, (state, action) => {
         state.loading = false;

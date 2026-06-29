@@ -13,7 +13,7 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
-  token: string;
+  token: string | null;
   user: User;
 }
 
@@ -25,6 +25,16 @@ export const authService = {
 
   register: async (userData: RegisterRequest): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/auth/register', userData);
+    return response.data;
+  },
+
+  verifyEmail: async (token: string): Promise<User> => {
+    const response = await api.post<User>('/auth/verify-email', { token });
+    return response.data;
+  },
+
+  completeOauthRole: async (token: string, role: 'CANDIDATE' | 'EMPLOYER'): Promise<AuthResponse> => {
+    const response = await api.post<AuthResponse>('/auth/oauth/complete-role', { token, role });
     return response.data;
   },
 
