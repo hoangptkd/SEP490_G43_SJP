@@ -206,8 +206,8 @@ public class JobService {
     }
 
     @Transactional(readOnly = true)
-    public List<Job> findByEmployerId(String employerId) {
-        return jobRepository.findByEmployerId(parseUuid(employerId, "EMPLOYER_ID_INVALID"), Pageable.unpaged()).getContent();
+    public Page<Job> findByEmployerId(String employerId, Pageable pageable) {
+        return jobRepository.findByEmployerId(parseUuid(employerId, "EMPLOYER_ID_INVALID"), pageable);
     }
 
     public JobResponse toJobResponse(Job job, CandidateProfile candidate) {

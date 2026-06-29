@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @RestController
 @RequestMapping("/auth")
@@ -19,6 +20,37 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final JdbcTemplate jdbcTemplate;
+
+    @GetMapping("/diagnostic")
+    public ResponseEntity<String> diagnostic() {
+        StringBuilder sb = new StringBuilder();
+        try {
+            sb.append("DB Connection Test: ");
+            jdbcTemplate.execute("SELECT 1");
+            sb.append("Success\n");
+        } catch (Exception e) {
+            sb.append("Failed: ").append(e.toString()).append("\n");
+        }
+
+        try {
+            sb.append("Query companies table: ");
+            jdbcTemplate.execute("SELECT count(*) FROM companies");
+            sb.append("Exists\n");
+        } catch (Exception e) {
+            sb.append("Failed: ").append(e.toString()).append("\n");
+        }
+
+        try {
+            sb.append("Query employers table: ");
+            jdbcTemplate.execute("SELECT count(*) FROM employers");
+            sb.append("Exists\n");
+        } catch (Exception e) {
+            sb.append("Failed: ").append(e.toString()).append("\n");
+        }
+
+        return ResponseEntity.ok(sb.toString());
+    }
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {

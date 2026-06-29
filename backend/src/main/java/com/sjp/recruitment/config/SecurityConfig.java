@@ -38,6 +38,7 @@ public class SecurityConfig {
                     "/auth/verify-email",
                     "/auth/oauth/complete-role",
                     "/auth/refresh",
+                    "/auth/diagnostic",
                     "/oauth2/**",
                     "/login/oauth2/**",
                     "/actuator/health"

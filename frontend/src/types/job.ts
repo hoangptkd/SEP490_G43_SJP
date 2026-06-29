@@ -19,8 +19,14 @@ export interface Job {
 export interface Company {
   id: string;
   name: string;
+  description?: string;
   website?: string;
+  industry?: string;
   location?: string;
+  companySize?: number;
+  taxCode?: string;
+  verified?: boolean;
+  status?: string;
 }
 
 export interface JobFilters {
