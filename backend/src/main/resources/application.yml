@@ -1,16 +1,26 @@
 spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:backend/.env[.properties]
+
   application:
     name: smart-recruitment-portal
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/smart_recruitment
-    username: postgres
-    password: hoang123
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_CV_UPLOAD_SIZE:5MB}
+      max-request-size: ${MAX_CV_UPLOAD_SIZE:5MB}
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:none}
     show-sql: false
     properties:
       hibernate:
@@ -18,10 +28,33 @@ spring:
         format_sql: true
 
   flyway:
-    enabled: true
+    enabled: ${SPRING_FLYWAY_ENABLED:false}
     locations: classpath:db/migration
-    baseline-on-migrate: true
-    baseline-version: 1
+    baseline-on-migrate: false
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:google-client-id-placeholder}
+            client-secret: ${GOOGLE_CLIENT_SECRET:google-client-secret-placeholder}
+            scope:
+              - openid
+              - profile
+              - email
 
 server:
   port: 8080
@@ -34,6 +67,15 @@ logging:
     org.springframework.security: INFO
 
 jwt:
-  secret: ${JWT_SECRET:your-secret-key-change-in-production-min-32-chars}
-  expiration: 86400000
-  refresh-expiration: 604800000
+  secret: ${JWT_SECRET:change-this-local-dev-secret-minimum-32-chars}
+  expiration: ${JWT_EXPIRATION:86400000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+app:
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  backend-base-url: ${BACKEND_BASE_URL:http://localhost:8080/api}
+  mail-from: ${MAIL_FROM:no-reply@smart-recruitment.local}
+  email-verification-token-ttl-minutes: ${EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:1440}
+  oauth-role-selection-token-ttl-minutes: ${OAUTH_ROLE_SELECTION_TOKEN_TTL_MINUTES:15}
+  storage:
+    cv-upload-dir: ${CV_UPLOAD_DIR:uploads/cvs}
