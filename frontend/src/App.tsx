@@ -1,6 +1,15 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import AdminJobsPage from './pages/admin/AdminJobsPage';
+import AdminLayout, { AdminProtected } from './pages/admin/AdminLayout';
+import AdminLoginPage from './pages/admin/AdminLoginPage';
+import AdminProfilePage from './pages/admin/AdminProfilePage';
+import AdminSettingsPage from './pages/admin/AdminSettingsPage';
+import AdminStatisticsPage from './pages/admin/AdminStatisticsPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
 import { authService } from './services/authService';
+import { clearAuthSession, getToken, setAuthSession } from './utils/authStorage';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import type {
@@ -45,12 +54,17 @@ function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
       </Route>
+      <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
+        <Route index element={<AdminDashboardPage />} />
+        <Route path="users" element={<AdminUsersPage />} />
+        <Route path="jobs" element={<AdminJobsPage />} />
+        <Route path="statistics" element={<AdminStatisticsPage />} />
+        <Route path="settings" element={<AdminSettingsPage />} />
+        <Route path="profile" element={<AdminProfilePage />} />
+      </Route>
     </Routes>
   );
-}
-
-function getToken() {
-  return localStorage.getItem('token');
 }
 
 function formatMoney(value?: number) {
@@ -99,8 +113,9 @@ function LoginPage() {
     setError('');
     try {
       const response = await authService.login({ email, password });
-      if (response.token) localStorage.setItem('token', response.token);
-      navigate(response.user.role === 'CANDIDATE' ? '/candidate' : '/jobs');
+      if (response.token) setAuthSession(response.token, response.user);
+      if (response.user.role === 'ADMIN') navigate('/admin');
+      else navigate(response.user.role === 'CANDIDATE' ? '/candidate' : '/jobs');
     } catch (err) {
       setError(readError(err));
     }
@@ -204,7 +219,7 @@ function SelectRolePage() {
     if (!token) return setError('Thieu token chon vai tro.');
     try {
       const response = await authService.completeOauthRole(token, role);
-      if (response.token) localStorage.setItem('token', response.token);
+      if (response.token) setAuthSession(response.token, response.user);
       navigate(role === 'CANDIDATE' ? '/candidate' : '/jobs');
     } catch (err) {
       setError(readError(err));
@@ -362,7 +377,7 @@ function JobDetailPage() {
 function CandidateLayout() {
   const navigate = useNavigate();
   function logout() {
-    localStorage.removeItem('token');
+    clearAuthSession();
     navigate('/login');
   }
   return (
