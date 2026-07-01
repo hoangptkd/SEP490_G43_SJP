@@ -110,12 +110,26 @@ function CompanyProfilePage() {
         </label>
 
         <label>
-          Địa điểm trụ sở
-          <input
-            value={company.location || ''}
-            onChange={(e) => setCompany({ ...company, location: e.target.value })}
-            placeholder="Thành phố hoặc địa chỉ chi tiết"
-          />
+          Địa điểm trụ sở (Head Office)
+          {company.locations && company.locations.length > 0 ? (
+            <select
+              value={company.location || ''}
+              onChange={(e) => setCompany({ ...company, location: e.target.value })}
+            >
+              <option value="">-- Chọn chi nhánh làm trụ sở chính --</option>
+              {company.locations.map((loc) => (
+                <option key={loc.id} value={loc.branchName}>
+                  {loc.branchName} {loc.city ? `(${loc.city})` : ''} {loc.headquarter ? '★ [Trụ sở hiện tại]' : ''}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={company.location || ''}
+              onChange={(e) => setCompany({ ...company, location: e.target.value })}
+              placeholder="Thành phố hoặc địa chỉ chi tiết (Hoặc vào Quản lý chi nhánh để thêm)"
+            />
+          )}
         </label>
 
         <label>
@@ -155,6 +169,35 @@ function CompanyProfilePage() {
           </button>
         </div>
       </form>
+
+      {company.locations && company.locations.length > 0 && (
+        <div style={{ marginTop: '36px', borderTop: '1px solid #eaeaea', paddingTop: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0, color: '#111827', fontSize: '1.2rem' }}>Các chi nhánh & Văn phòng ({company.locations.length})</h3>
+            <a href="/employer/locations" style={{ color: '#245d43', fontWeight: 600, textDecoration: 'none' }}>
+              Quản lý chi nhánh →
+            </a>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+            {company.locations.map((loc) => (
+              <div key={loc.id} style={{
+                border: '1px solid #e5e7eb',
+                borderRadius: '6px',
+                padding: '12px 16px',
+                background: loc.headquarter ? '#f0fdf4' : '#f9fafb'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <strong style={{ color: '#1f2937' }}>{loc.branchName}</strong>
+                  {loc.headquarter && <span style={{ fontSize: '0.7rem', background: '#245d43', color: '#fff', padding: '1px 6px', borderRadius: '10px' }}>HQ</span>}
+                </div>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>
+                  {loc.address ? `${loc.address}, ` : ''}{loc.city || ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -9,6 +9,8 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -31,7 +33,12 @@ public class Company {
 
     private String website;
     private String industry;
+    
+    // Cột location giữ nguyên với ý nghĩa là Head Office
     private String location;
+
+    @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CompanyLocation> locations = new ArrayList<>();
 
     @Column(name = "company_size")
     private Integer companySize;

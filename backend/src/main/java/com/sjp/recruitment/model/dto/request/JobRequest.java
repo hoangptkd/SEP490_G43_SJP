@@ -19,6 +19,7 @@ public class JobRequest {
     private BigDecimal salaryMax;
 
     private String location;
+    private String companyLocationId;
 
     private String employerId;
 }
