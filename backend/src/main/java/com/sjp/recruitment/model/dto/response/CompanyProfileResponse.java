@@ -1,5 +1,7 @@
 package com.sjp.recruitment.model.dto.response;
 
+import java.util.List;
+
 public record CompanyProfileResponse(
         String id,
         String name,
@@ -10,6 +12,7 @@ public record CompanyProfileResponse(
         Integer companySize,
         String taxCode,
         boolean verified,
-        String status
+        String status,
+        List<CompanyLocationResponse> locations
 ) {
 }

@@ -4,6 +4,7 @@ import { authService } from './services/authService';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
+import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -49,7 +50,7 @@ function App() {
       <Route path="/employer" element={<Protected><EmployerLayout /></Protected>}>
         <Route index element={<EmployerDashboard />} />
         <Route path="company-profile" element={<CompanyProfilePage />} />
-        <Route path="locations" element={<EmployerPlaceholder title="Dia diem lam viec" />} />
+        <Route path="locations" element={<CompanyLocationsPage />} />
         <Route path="verification" element={<EmployerPlaceholder title="Xac thuc phap ly" />} />
       </Route>
     </Routes>

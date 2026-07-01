@@ -53,7 +53,12 @@ public class Job {
     @Column(name = "salary_max")
     private BigDecimal salaryMax;
 
+    // Cột location giữ nguyên để backend cũ hoạt động
     private String location;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "company_location_id")
+    private CompanyLocation companyLocation;
 
     @Column(name = "job_type")
     private String jobType;
