@@ -68,6 +68,21 @@ public class DtoMapper {
         return new CompanyResponse(String.valueOf(company.getId()), company.getName(), company.getWebsite(), company.getLocation());
     }
 
+    public CompanyLocationResponse toCompanyLocationResponse(CompanyLocation location) {
+        if (location == null) {
+            return null;
+        }
+        return new CompanyLocationResponse(
+                String.valueOf(location.getId()),
+                location.getBranchName(),
+                location.getAddress(),
+                location.getCity(),
+                location.getDistrict(),
+                location.getCountry(),
+                location.isHeadquarter()
+        );
+    }
+
     public JobResponse toJobResponse(Job job, boolean saved, boolean applied, Integer matchScore) {
         return new JobResponse(
                 String.valueOf(job.getId()),
@@ -82,6 +97,8 @@ public class DtoMapper {
                 job.getDeadline() == null ? null : job.getDeadline().atStartOfDay(),
                 toFrontendJobStatus(job.getStatus()),
                 toCompanyResponse(job.getCompany()),
+                job.getCompanyLocation() == null ? null : String.valueOf(job.getCompanyLocation().getId()),
+                toCompanyLocationResponse(job.getCompanyLocation()),
                 saved,
                 applied,
                 matchScore

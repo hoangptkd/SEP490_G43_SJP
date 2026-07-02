@@ -12,6 +12,8 @@ import { authService } from './services/authService';
 import { clearAuthSession, getToken, setAuthSession } from './utils/authStorage';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
+import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
+import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -54,6 +56,12 @@ function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
       </Route>
+      <Route path="/employer" element={<Protected><EmployerLayout /></Protected>}>
+        <Route index element={<EmployerDashboard />} />
+        <Route path="company-profile" element={<CompanyProfilePage />} />
+        <Route path="locations" element={<CompanyLocationsPage />} />
+        <Route path="verification" element={<EmployerPlaceholder title="Xac thuc phap ly" />} />
+      </Route>
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
         <Route index element={<AdminDashboardPage />} />
@@ -87,13 +95,15 @@ function Protected({ children }: { children: JSX.Element }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const token = getToken();
+  const role = localStorage.getItem('role');
   return (
     <div className="app-shell">
       <header className="topbar">
         <Link className="brand" to="/jobs">Smart Recruitment</Link>
         <nav>
           <NavLink to="/jobs">Viec lam</NavLink>
-          {token && <NavLink to="/candidate">Candidate</NavLink>}
+          {token && role === 'CANDIDATE' && <NavLink to="/candidate">Candidate</NavLink>}
+          {token && role === 'EMPLOYER' && <NavLink to="/employer">Employer</NavLink>}
           {!token && <NavLink to="/login">Dang nhap</NavLink>}
         </nav>
       </header>
@@ -113,6 +123,17 @@ function LoginPage() {
     setError('');
     try {
       const response = await authService.login({ email, password });
+      if (response.token) {
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('role', response.user.role);
+      }
+      if (response.user.role === 'CANDIDATE') {
+        navigate('/candidate');
+      } else if (response.user.role === 'EMPLOYER') {
+        navigate('/employer');
+      } else {
+        navigate('/jobs');
+      }
       if (response.token) setAuthSession(response.token, response.user);
       if (response.user.role === 'ADMIN') navigate('/admin');
       else navigate(response.user.role === 'CANDIDATE' ? '/candidate' : '/jobs');
@@ -198,15 +219,37 @@ function VerifyEmailPage() {
 function OAuthCallbackPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const [error, setError] = useState('');
+
   useEffect(() => {
     const token = params.get('token');
     if (token) {
       localStorage.setItem('token', token);
-      navigate('/candidate');
+      authService.getCurrentUser()
+        .then((user) => {
+          localStorage.setItem('role', user.role);
+          if (user.role === 'CANDIDATE') {
+            navigate('/candidate');
+          } else if (user.role === 'EMPLOYER') {
+            navigate('/employer');
+          } else {
+            navigate('/jobs');
+          }
+        })
+        .catch((err) => {
+          setError(readError(err));
+          localStorage.removeItem('token');
+          setTimeout(() => navigate('/login'), 2000);
+        });
     } else {
       navigate('/login');
     }
   }, [navigate, params]);
+
+  if (error) {
+    return <Shell><section className="auth-panel"><h1>Loi dang nhap</h1><p className="error">{error}</p></section></Shell>;
+  }
+
   return <Shell><section className="auth-panel"><p>Dang hoan tat dang nhap Google...</p></section></Shell>;
 }
 
@@ -219,6 +262,11 @@ function SelectRolePage() {
     if (!token) return setError('Thieu token chon vai tro.');
     try {
       const response = await authService.completeOauthRole(token, role);
+      if (response.token) {
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('role', response.user.role);
+      }
+      navigate(role === 'CANDIDATE' ? '/candidate' : '/employer');
       if (response.token) setAuthSession(response.token, response.user);
       navigate(role === 'CANDIDATE' ? '/candidate' : '/jobs');
     } catch (err) {
@@ -377,6 +425,8 @@ function JobDetailPage() {
 function CandidateLayout() {
   const navigate = useNavigate();
   function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
     clearAuthSession();
     navigate('/login');
   }
@@ -557,6 +607,71 @@ function SubscriptionPage() {
       </div>
       <h2>Quyen loi</h2>
       <div className="chip-row">{subscription.benefits.map((benefit) => <span className="chip" key={benefit}>{benefit}</span>)}</div>
+    </section>
+  );
+}
+
+function EmployerLayout() {
+  const navigate = useNavigate();
+  const [companyOpen, setCompanyOpen] = useState(false);
+
+  function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    navigate('/login');
+  }
+
+  return (
+    <div className="employer-shell">
+      <aside className="employer-nav">
+        <Link className="brand" to="/employer">Employer Portal</Link>
+        <NavLink to="/employer" end>Dashboard</NavLink>
+        
+        <div className="nav-dropdown">
+          <button 
+            type="button" 
+            className="nav-dropdown-trigger" 
+            onClick={() => setCompanyOpen(!companyOpen)}
+          >
+            <span>Cong ty</span>
+            <span className={`arrow ${companyOpen ? 'open' : ''}`}>▼</span>
+          </button>
+          {companyOpen && (
+            <div className="nav-dropdown-items">
+              <NavLink to="/employer/company-profile" className="sub-nav-item">Ho so Cong ty</NavLink>
+              <NavLink to="/employer/locations" className="sub-nav-item">Dia diem lam viec</NavLink>
+              <NavLink to="/employer/verification" className="sub-nav-item">Xac thuc phap ly</NavLink>
+            </div>
+          )}
+        </div>
+
+        <button onClick={logout} style={{ marginTop: 'auto' }}>Dang xuat</button>
+      </aside>
+      <main className="employer-main"><Outlet /></main>
+    </div>
+  );
+}
+
+function EmployerDashboard() {
+  return (
+    <section className="content-card">
+      <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+        <h1 style={{ color: '#245d43', marginBottom: '16px' }}>Employer Dashboard</h1>
+        <p style={{ color: '#4b5b52', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto' }}>
+          Chao mung Nha tuyen dung den voi Smart Recruitment Portal. Day la trang tong quan cua ban.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function EmployerPlaceholder({ title }: { title: string }) {
+  return (
+    <section className="content-card">
+      <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+        <h1 style={{ color: '#245d43', marginBottom: '16px' }}>{title}</h1>
+        <p style={{ color: '#4b5b52', fontSize: '1.1rem' }}>Giao dien dang duoc phat trien.</p>
+      </div>
     </section>
   );
 }

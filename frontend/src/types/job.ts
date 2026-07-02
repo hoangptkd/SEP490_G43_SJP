@@ -1,3 +1,13 @@
+export interface CompanyLocation {
+  id: string;
+  branchName: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  country?: string;
+  headquarter: boolean;
+}
+
 export interface Job {
   id: string;
   title: string;
@@ -8,6 +18,8 @@ export interface Job {
   requirements: string[];
   skills: string[];
   company: Company;
+  companyLocationId?: string;
+  companyLocation?: CompanyLocation;
   experienceLevel?: string;
   deadline?: string;
   status: 'ACTIVE' | 'CLOSED' | 'DRAFT' | 'EXPIRED' | 'ARCHIVED';
@@ -19,8 +31,15 @@ export interface Job {
 export interface Company {
   id: string;
   name: string;
+  description?: string;
   website?: string;
+  industry?: string;
   location?: string;
+  companySize?: number;
+  taxCode?: string;
+  verified?: boolean;
+  status?: string;
+  locations?: CompanyLocation[];
 }
 
 export interface JobFilters {

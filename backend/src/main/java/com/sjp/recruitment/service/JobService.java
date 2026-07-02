@@ -2,6 +2,7 @@ package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.JobRequest;
+import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyResponse;
 import com.sjp.recruitment.model.dto.response.JobPageResponse;
 import com.sjp.recruitment.model.dto.response.JobResponse;
@@ -9,6 +10,7 @@ import com.sjp.recruitment.model.dto.response.RecommendationResponse;
 import com.sjp.recruitment.model.dto.response.UserResponse;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.Company;
+import com.sjp.recruitment.model.entity.CompanyLocation;
 import com.sjp.recruitment.model.entity.Employer;
 import com.sjp.recruitment.model.entity.Job;
 import com.sjp.recruitment.model.entity.User;
@@ -39,6 +41,7 @@ public class JobService {
     private final JobRepository jobRepository;
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
+    private final CompanyLocationRepository companyLocationRepository;
     private final CandidateProfileRepository candidateProfileRepository;
     private final SavedJobRepository savedJobRepository;
     private final ApplicationRepository applicationRepository;
@@ -73,6 +76,13 @@ public class JobService {
                     j.experience_level,
                     j.deadline,
                     j.status,
+                    j.company_location_id::text AS company_location_id,
+                    cl.branch_name AS cl_branch_name,
+                    cl.address AS cl_address,
+                    cl.city AS cl_city,
+                    cl.district AS cl_district,
+                    cl.country AS cl_country,
+                    cl.is_headquarter AS cl_is_headquarter,
                     c.id::text AS company_id,
                     c.name AS company_name,
                     c.website AS company_website,
@@ -80,6 +90,7 @@ public class JobService {
                     COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills
                 FROM jobs j
                 JOIN companies c ON c.id = j.company_id
+                LEFT JOIN company_locations cl ON cl.id = j.company_location_id
                 LEFT JOIN job_skills js ON js.job_id = j.id
                 LEFT JOIN skills s ON s.id = js.skill_id
                 """
@@ -87,7 +98,8 @@ public class JobService {
                 + """
                 GROUP BY
                     j.id, j.title, j.description, j.requirements, j.salary_min, j.salary_max,
-                    j.location, j.experience_level, j.deadline, j.status,
+                    j.location, j.experience_level, j.deadline, j.status, j.company_location_id,
+                    cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
                     c.id, c.name, c.website, c.location
                 """
                 + resolveRemoteJobOrder(sort)
@@ -119,6 +131,13 @@ public class JobService {
                     j.experience_level,
                     j.deadline,
                     j.status,
+                    j.company_location_id::text AS company_location_id,
+                    cl.branch_name AS cl_branch_name,
+                    cl.address AS cl_address,
+                    cl.city AS cl_city,
+                    cl.district AS cl_district,
+                    cl.country AS cl_country,
+                    cl.is_headquarter AS cl_is_headquarter,
                     c.id::text AS company_id,
                     c.name AS company_name,
                     c.website AS company_website,
@@ -126,13 +145,15 @@ public class JobService {
                     COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills
                 FROM jobs j
                 JOIN companies c ON c.id = j.company_id
+                LEFT JOIN company_locations cl ON cl.id = j.company_location_id
                 LEFT JOIN job_skills js ON js.job_id = j.id
                 LEFT JOIN skills s ON s.id = js.skill_id
                 WHERE j.id = CAST(:id AS uuid)
                   AND j.status = 'published'
                 GROUP BY
                     j.id, j.title, j.description, j.requirements, j.salary_min, j.salary_max,
-                    j.location, j.experience_level, j.deadline, j.status,
+                    j.location, j.experience_level, j.deadline, j.status, j.company_location_id,
+                    cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
                     c.id, c.name, c.website, c.location
                 """;
         List<JobResponse> jobs = namedParameterJdbcTemplate.query(
@@ -177,7 +198,14 @@ public class JobService {
         job.setSkills(request.getRequirements() == null ? List.of() : request.getRequirements());
         job.setSalaryMin(request.getSalaryMin());
         job.setSalaryMax(request.getSalaryMax());
-        job.setLocation(request.getLocation());
+        if (request.getCompanyLocationId() != null && !request.getCompanyLocationId().isBlank()) {
+            CompanyLocation loc = companyLocationRepository.findById(parseUuid(request.getCompanyLocationId(), "LOCATION_ID_INVALID"))
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "LOCATION_NOT_FOUND", "Khong tim thay dia diem lam viec"));
+            job.setCompanyLocation(loc);
+            job.setLocation(loc.getBranchName());
+        } else {
+            job.setLocation(request.getLocation());
+        }
         job.setExperienceLevel("fresher");
         job.setDeadline(LocalDate.now().plusDays(30));
         job.setStatus("published");
@@ -196,7 +224,14 @@ public class JobService {
         job.setSkills(request.getRequirements() == null ? List.of() : request.getRequirements());
         job.setSalaryMin(request.getSalaryMin());
         job.setSalaryMax(request.getSalaryMax());
-        job.setLocation(request.getLocation());
+        if (request.getCompanyLocationId() != null && !request.getCompanyLocationId().isBlank()) {
+            CompanyLocation loc = companyLocationRepository.findById(parseUuid(request.getCompanyLocationId(), "LOCATION_ID_INVALID"))
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "LOCATION_NOT_FOUND", "Khong tim thay dia diem lam viec"));
+            job.setCompanyLocation(loc);
+            job.setLocation(loc.getBranchName());
+        } else {
+            job.setLocation(request.getLocation());
+        }
         return jobRepository.save(job);
     }
 
@@ -206,8 +241,8 @@ public class JobService {
     }
 
     @Transactional(readOnly = true)
-    public List<Job> findByEmployerId(String employerId) {
-        return jobRepository.findByEmployerId(parseUuid(employerId, "EMPLOYER_ID_INVALID"), Pageable.unpaged()).getContent();
+    public Page<Job> findByEmployerId(String employerId, Pageable pageable) {
+        return jobRepository.findByEmployerId(parseUuid(employerId, "EMPLOYER_ID_INVALID"), pageable);
     }
 
     public JobResponse toJobResponse(Job job, CandidateProfile candidate) {
@@ -372,6 +407,16 @@ public class JobService {
     }
 
     private JobResponse mapRemoteJobResponse(ResultSet resultSet, int rowNumber) throws SQLException {
+        String clId = resultSet.getString("company_location_id");
+        CompanyLocationResponse clResp = clId == null ? null : new CompanyLocationResponse(
+                clId,
+                resultSet.getString("cl_branch_name"),
+                resultSet.getString("cl_address"),
+                resultSet.getString("cl_city"),
+                resultSet.getString("cl_district"),
+                resultSet.getString("cl_country"),
+                resultSet.getBoolean("cl_is_headquarter")
+        );
         return new JobResponse(
                 resultSet.getString("id"),
                 resultSet.getString("title"),
@@ -390,6 +435,8 @@ public class JobService {
                         resultSet.getString("company_website"),
                         resultSet.getString("company_location")
                 ),
+                clId,
+                clResp,
                 false,
                 false,
                 null

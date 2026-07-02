@@ -17,6 +17,8 @@ public record JobResponse(
         LocalDateTime deadline,
         String status,
         CompanyResponse company,
+        String companyLocationId,
+        CompanyLocationResponse companyLocation,
         boolean saved,
         boolean applied,
         Integer matchScore
