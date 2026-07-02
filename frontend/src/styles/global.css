@@ -585,8 +585,7 @@ h2 {
   .page-grid,
   .detail-page,
   .candidate-shell,
-  .employer-shell {
-  .candidate-shell,
+  .employer-shell,
   .admin-shell {
     grid-template-columns: 1fr;
   }
