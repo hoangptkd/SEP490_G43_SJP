@@ -38,8 +38,20 @@ export interface Company {
   companySize?: number;
   taxCode?: string;
   verified?: boolean;
+  verificationStatus?: string;
   status?: string;
   locations?: CompanyLocation[];
+}
+
+export interface CompanyDocument {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  status: string;
+  rejectReason?: string;
+  uploadedAt: string;
+  reviewedAt?: string;
 }
 
 export interface JobFilters {

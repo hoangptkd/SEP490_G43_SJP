@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Company, CompanyLocation } from '../types/job';
+import type { Company, CompanyLocation, CompanyDocument } from '../types/job';
 
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
@@ -29,5 +29,25 @@ export const employerService = {
 
   deleteLocation: async (id: string): Promise<void> => {
     await api.delete(`/employer/company/locations/${id}`);
+  },
+
+  getDocuments: async (): Promise<CompanyDocument[]> => {
+    const response = await api.get<CompanyDocument[]>('/employer/company/documents');
+    return response.data;
+  },
+
+  uploadDocument: async (file: File): Promise<CompanyDocument> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<CompanyDocument>('/employer/company/documents', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  deleteDocument: async (id: string): Promise<void> => {
+    await api.delete(`/employer/company/documents/${id}`);
   },
 };

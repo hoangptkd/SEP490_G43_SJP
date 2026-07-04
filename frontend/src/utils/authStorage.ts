@@ -20,9 +20,11 @@ export function getStoredUser(): User | null {
 export function setAuthSession(token: string, user: User) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem('role', user.role);
 }
 
 export function clearAuthSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem('role');
 }

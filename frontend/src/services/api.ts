@@ -30,6 +30,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('role');
       const isAdminRoute = window.location.pathname.startsWith('/admin');
       window.location.href = isAdminRoute ? '/admin/login' : '/login';
     }
