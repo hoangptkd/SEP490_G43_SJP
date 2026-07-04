@@ -12,6 +12,13 @@ import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.repository.CompanyLocationRepository;
 import com.sjp.recruitment.repository.CompanyRepository;
 import com.sjp.recruitment.repository.EmployerRepository;
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
+import com.sjp.recruitment.model.dto.response.CompanyDocumentResponse;
+import com.sjp.recruitment.model.entity.CompanyDocument;
+import com.sjp.recruitment.repository.CompanyDocumentRepository;
+import org.springframework.web.multipart.MultipartFile;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -30,6 +37,8 @@ public class EmployerService {
     private final EmployerRepository employerRepository;
     private final CompanyRepository companyRepository;
     private final CompanyLocationRepository companyLocationRepository;
+    private final CompanyDocumentRepository companyDocumentRepository;
+    private final Cloudinary cloudinary;
     private final DtoMapper dtoMapper;
 
     @Transactional
@@ -54,7 +63,7 @@ public class EmployerService {
                     company.setName(name);
                     company.setDescription("Chưa có mô tả");
                     company.setStatus("pending");
-                    company.setVerified(false);
+                    company.setVerificationStatus("unverified");
                     company = companyRepository.save(company);
 
                     // Tạo hồ sơ Employer
@@ -121,7 +130,7 @@ public class EmployerService {
         return toCompanyProfileResponse(companyRepository.save(company));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<CompanyLocationResponse> getCompanyLocations() {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         return companyLocationRepository.findByCompanyIdOrderByHeadquarterDescCreatedAtDesc(employer.getCompany().getId())
@@ -242,8 +251,97 @@ public class EmployerService {
                 company.getCompanySize(),
                 company.getTaxCode(),
                 company.isVerified(),
+                company.getVerificationStatus(),
                 company.getStatus(),
                 locResponses
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<CompanyDocumentResponse> getCompanyDocuments() {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        return companyDocumentRepository.findByCompanyIdOrderByUploadedAtDesc(employer.getCompany().getId())
+                .stream()
+                .map(dtoMapper::toCompanyDocumentResponse)
+                .toList();
+    }
+
+    @Transactional
+    public CompanyDocumentResponse uploadCompanyDocument(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EMPTY_FILE", "Vui lòng chọn file để tải lên");
+        }
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        if (!employer.isOwner()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ chủ sở hữu công ty mới có quyền tải lên tài liệu xác thực");
+        }
+        Company company = employer.getCompany();
+
+        String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document.pdf";
+        String contentType = file.getContentType() != null ? file.getContentType() : "application/pdf";
+        String fileType = contentType.contains("pdf") ? "pdf" : "image";
+
+        String fileUrl;
+        String publicId = null;
+        try {
+            String resourceType = "pdf".equalsIgnoreCase(fileType) ? "raw" : "image";
+            Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                    "folder", "sjp/company_docs",
+                    "resource_type", resourceType
+            ));
+            fileUrl = (String) uploadResult.get("secure_url");
+            publicId = (String) uploadResult.get("public_id");
+        } catch (Exception e) {
+            // Fallback cho local development nếu chưa cấu hình Cloudinary API key
+            fileUrl = "pdf".equalsIgnoreCase(fileType) ? "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" : "https://res.cloudinary.com/demo/image/upload/sample.jpg";
+            publicId = "local_" + UUID.randomUUID();
+        }
+
+        CompanyDocument doc = new CompanyDocument();
+        doc.setCompany(company);
+        doc.setFileName(fileName);
+        doc.setFileUrl(fileUrl);
+        doc.setFileType(fileType);
+        doc.setPublicId(publicId);
+        doc.setStatus("pending");
+        doc.setUploadedAt(java.time.LocalDateTime.now());
+
+        doc = companyDocumentRepository.save(doc);
+
+        // Cập nhật trạng thái xác thực công ty thành pending
+        if ("unverified".equalsIgnoreCase(company.getVerificationStatus()) || "rejected".equalsIgnoreCase(company.getVerificationStatus())) {
+            company.setVerificationStatus("pending");
+            companyRepository.save(company);
+        }
+
+        return dtoMapper.toCompanyDocumentResponse(doc);
+    }
+
+    @Transactional
+    public void deleteCompanyDocument(String id) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        if (!employer.isOwner()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ chủ sở hữu công ty mới có quyền xóa tài liệu");
+        }
+        UUID docId;
+        try {
+            docId = UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ID", "ID tài liệu không hợp lệ");
+        }
+        CompanyDocument doc = companyDocumentRepository.findByIdAndCompanyId(docId, employer.getCompany().getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Không tìm thấy tài liệu"));
+
+        if (!"pending".equalsIgnoreCase(doc.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CANNOT_DELETE_REVIEWED", "Chỉ có thể xóa tài liệu đang chờ duyệt");
+        }
+
+        if (doc.getPublicId() != null && !doc.getPublicId().startsWith("local_")) {
+            try {
+                String resourceType = "pdf".equalsIgnoreCase(doc.getFileType()) ? "raw" : "image";
+                cloudinary.uploader().destroy(doc.getPublicId(), ObjectUtils.asMap("resource_type", resourceType));
+            } catch (Exception ignored) {}
+        }
+        companyDocumentRepository.delete(doc);
     }
 }

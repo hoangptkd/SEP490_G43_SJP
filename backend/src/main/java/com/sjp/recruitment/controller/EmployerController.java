@@ -2,6 +2,7 @@ package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.dto.request.CompanyLocationRequest;
 import com.sjp.recruitment.model.dto.request.CompanyProfileRequest;
+import com.sjp.recruitment.model.dto.response.CompanyDocumentResponse;
 import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
 import com.sjp.recruitment.service.EmployerService;
@@ -9,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -47,6 +49,22 @@ public class EmployerController {
     @DeleteMapping("/company/locations/{id}")
     public ResponseEntity<Void> deleteCompanyLocation(@PathVariable String id) {
         employerService.deleteCompanyLocation(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/company/documents")
+    public ResponseEntity<List<CompanyDocumentResponse>> getCompanyDocuments() {
+        return ResponseEntity.ok(employerService.getCompanyDocuments());
+    }
+
+    @PostMapping(value = "/company/documents", consumes = "multipart/form-data")
+    public ResponseEntity<CompanyDocumentResponse> uploadCompanyDocument(@RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(employerService.uploadCompanyDocument(file));
+    }
+
+    @DeleteMapping("/company/documents/{id}")
+    public ResponseEntity<Void> deleteCompanyDocument(@PathVariable String id) {
+        employerService.deleteCompanyDocument(id);
         return ResponseEntity.noContent().build();
     }
 }

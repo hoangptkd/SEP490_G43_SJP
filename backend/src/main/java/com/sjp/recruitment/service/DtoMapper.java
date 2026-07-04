@@ -83,6 +83,22 @@ public class DtoMapper {
         );
     }
 
+    public CompanyDocumentResponse toCompanyDocumentResponse(CompanyDocument doc) {
+        if (doc == null) {
+            return null;
+        }
+        return new CompanyDocumentResponse(
+                String.valueOf(doc.getId()),
+                doc.getFileName(),
+                doc.getFileUrl(),
+                doc.getFileType(),
+                doc.getStatus(),
+                doc.getRejectReason(),
+                doc.getUploadedAt(),
+                doc.getReviewedAt()
+        );
+    }
+
     public JobResponse toJobResponse(Job job, boolean saved, boolean applied, Integer matchScore) {
         return new JobResponse(
                 String.valueOf(job.getId()),

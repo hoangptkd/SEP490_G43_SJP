@@ -46,8 +46,11 @@ public class Company {
     @Column(name = "tax_code")
     private String taxCode;
 
-    @Column(name = "is_verified", nullable = false)
-    private boolean verified = false;
+    @Column(name = "verification_status", nullable = false)
+    private String verificationStatus = "unverified";
+
+    @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CompanyDocument> documents = new ArrayList<>();
 
     @Column(nullable = false)
     private String status = "pending";
@@ -58,4 +61,12 @@ public class Company {
 
     @LastModifiedDate
     private LocalDateTime updatedAt;
+
+    public boolean isVerified() {
+        return "verified".equalsIgnoreCase(verificationStatus);
+    }
+
+    public void setVerified(boolean verified) {
+        this.verificationStatus = verified ? "verified" : "unverified";
+    }
 }

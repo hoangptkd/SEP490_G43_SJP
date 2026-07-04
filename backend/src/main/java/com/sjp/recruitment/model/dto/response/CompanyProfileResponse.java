@@ -12,6 +12,7 @@ public record CompanyProfileResponse(
         Integer companySize,
         String taxCode,
         boolean verified,
+        String verificationStatus,
         String status,
         List<CompanyLocationResponse> locations
 ) {

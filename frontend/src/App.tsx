@@ -14,6 +14,7 @@ import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
 import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
+import CompanyVerificationPage from './pages/Employer/CompanyVerificationPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -60,7 +61,7 @@ function App() {
         <Route index element={<EmployerDashboard />} />
         <Route path="company-profile" element={<CompanyProfilePage />} />
         <Route path="locations" element={<CompanyLocationsPage />} />
-        <Route path="verification" element={<EmployerPlaceholder title="Xac thuc phap ly" />} />
+        <Route path="verification" element={<CompanyVerificationPage />} />
       </Route>
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
@@ -124,19 +125,17 @@ function LoginPage() {
     try {
       const response = await authService.login({ email, password });
       if (response.token) {
-        localStorage.setItem('token', response.token);
-        localStorage.setItem('role', response.user.role);
+        setAuthSession(response.token, response.user);
       }
-      if (response.user.role === 'CANDIDATE') {
-        navigate('/candidate');
+      if (response.user.role === 'ADMIN') {
+        navigate('/admin');
       } else if (response.user.role === 'EMPLOYER') {
         navigate('/employer');
+      } else if (response.user.role === 'CANDIDATE') {
+        navigate('/candidate');
       } else {
         navigate('/jobs');
       }
-      if (response.token) setAuthSession(response.token, response.user);
-      if (response.user.role === 'ADMIN') navigate('/admin');
-      else navigate(response.user.role === 'CANDIDATE' ? '/candidate' : '/jobs');
     } catch (err) {
       setError(readError(err));
     }
@@ -227,7 +226,7 @@ function OAuthCallbackPage() {
       localStorage.setItem('token', token);
       authService.getCurrentUser()
         .then((user) => {
-          localStorage.setItem('role', user.role);
+          setAuthSession(token, user);
           if (user.role === 'CANDIDATE') {
             navigate('/candidate');
           } else if (user.role === 'EMPLOYER') {
@@ -263,12 +262,9 @@ function SelectRolePage() {
     try {
       const response = await authService.completeOauthRole(token, role);
       if (response.token) {
-        localStorage.setItem('token', response.token);
-        localStorage.setItem('role', response.user.role);
+        setAuthSession(response.token, response.user);
       }
       navigate(role === 'CANDIDATE' ? '/candidate' : '/employer');
-      if (response.token) setAuthSession(response.token, response.user);
-      navigate(role === 'CANDIDATE' ? '/candidate' : '/jobs');
     } catch (err) {
       setError(readError(err));
     }
@@ -425,8 +421,6 @@ function JobDetailPage() {
 function CandidateLayout() {
   const navigate = useNavigate();
   function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
     clearAuthSession();
     navigate('/login');
   }
@@ -616,8 +610,7 @@ function EmployerLayout() {
   const [companyOpen, setCompanyOpen] = useState(false);
 
   function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
+    clearAuthSession();
     navigate('/login');
   }
 
