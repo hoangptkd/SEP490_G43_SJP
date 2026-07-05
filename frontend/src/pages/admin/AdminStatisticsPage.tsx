@@ -2,11 +2,11 @@ export default function AdminStatisticsPage() {
   return (
     <section className="admin-page">
       <header className="admin-page-header">
-        <h1>Statistics</h1>
-        <p className="muted">Platform usage and recruitment analytics.</p>
+        <h1>Thống kê</h1>
+        <p className="muted">Phân tích sử dụng nền tảng và tuyển dụng.</p>
       </header>
       <div className="admin-placeholder-card">
-        <p>Statistics charts and reports will be available here.</p>
+        <p>Biểu đồ và báo cáo thống kê sẽ có tại đây.</p>
       </div>
     </section>
   );

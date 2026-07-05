@@ -30,7 +30,11 @@ function CompanyProfilePage() {
     try {
       const updated = await employerService.updateCompanyProfile(company);
       setCompany(updated);
-      setMessage('Lưu hồ sơ công ty thành công.');
+      if (updated.verificationStatus?.toLowerCase() === 'pending') {
+        setMessage('Lưu hồ sơ thành công. Hồ sơ đã được gửi và đang chờ admin duyệt.');
+      } else {
+        setMessage('Lưu hồ sơ công ty thành công.');
+      }
     } catch (err: any) {
       if (err.response?.data?.message) {
         setError(err.response.data.message);
@@ -44,6 +48,15 @@ function CompanyProfilePage() {
 
   if (loading) return <p className="loading">Đang tải...</p>;
   if (!company) return <div className="content-card"><p className="error">{error || 'Không tìm thấy thông tin công ty.'}</p></div>;
+
+  const verificationStatus = company.verificationStatus?.toLowerCase() || 'unverified';
+  const statusBadge = verificationStatus === 'verified'
+    ? { text: '✓ Đã xác thực', bg: '#e4eee7', color: '#245d43' }
+    : verificationStatus === 'pending'
+    ? { text: '⏳ Chờ duyệt', bg: '#fff3cd', color: '#856404' }
+    : verificationStatus === 'rejected'
+    ? { text: '✕ Bị từ chối', bg: '#f8d7da', color: '#842029' }
+    : { text: '○ Chưa gửi duyệt', bg: '#e2e3e5', color: '#41464b' };
 
   return (
     <section className="content-card">
@@ -65,8 +78,8 @@ function CompanyProfilePage() {
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <span style={{
-              background: company.verified ? '#e4eee7' : '#fff3cd',
-              color: company.verified ? '#245d43' : '#856404',
+              background: statusBadge.bg,
+              color: statusBadge.color,
               padding: '6px 12px',
               borderRadius: '20px',
               fontSize: '0.85rem',
@@ -74,7 +87,7 @@ function CompanyProfilePage() {
               textTransform: 'uppercase',
               letterSpacing: '0.5px'
             }}>
-              {company.verified ? '✓ Đã xác thực' : '⚠ Chờ xác thực'}
+              {statusBadge.text}
             </span>
           </div>
         </div>

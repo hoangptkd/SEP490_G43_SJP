@@ -5,12 +5,13 @@ import { clearAuthSession, getStoredUser, getToken } from '../../utils/authStora
 import type { User } from '../../types/auth';
 
 const menuItems = [
-  { to: '/admin', label: 'Dashboard', end: true },
-  { to: '/admin/users', label: 'User Management' },
-  { to: '/admin/jobs', label: 'Job Moderation' },
-  { to: '/admin/statistics', label: 'Statistics' },
-  { to: '/admin/settings', label: 'System Settings' },
-  { to: '/admin/profile', label: 'Profile' },
+  { to: '/admin', label: 'Bảng điều khiển', end: true },
+  { to: '/admin/companies', label: 'Duyệt hồ sơ công ty' },
+  { to: '/admin/users', label: 'Quản lý người dùng' },
+  { to: '/admin/jobs', label: 'Kiểm duyệt việc làm' },
+  { to: '/admin/statistics', label: 'Thống kê' },
+  { to: '/admin/settings', label: 'Cài đặt hệ thống' },
+  { to: '/admin/profile', label: 'Hồ sơ' },
 ];
 
 export function AdminProtected({ children }: { children: JSX.Element }) {
@@ -44,7 +45,7 @@ export default function AdminLayout() {
     <div className="admin-shell">
       <aside className="admin-nav">
         <div className="admin-nav-header">
-          <span className="admin-nav-badge">Admin</span>
+          <span className="admin-nav-badge">Quản trị</span>
           <strong>Smart Recruitment Portal</strong>
           {user && <p className="admin-nav-user">{user.email}</p>}
         </div>
@@ -58,7 +59,7 @@ export default function AdminLayout() {
         </nav>
 
         <button type="button" className="admin-logout" onClick={logout}>
-          Logout
+          Đăng xuất
         </button>
       </aside>
 

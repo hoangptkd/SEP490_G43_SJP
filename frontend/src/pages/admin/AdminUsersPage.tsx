@@ -2,11 +2,11 @@ export default function AdminUsersPage() {
   return (
     <section className="admin-page">
       <header className="admin-page-header">
-        <h1>User Management</h1>
-        <p className="muted">Manage candidate, employer, and admin accounts.</p>
+        <h1>Quản lý người dùng</h1>
+        <p className="muted">Quản lý tài khoản ứng viên, nhà tuyển dụng và quản trị.</p>
       </header>
       <div className="admin-placeholder-card">
-        <p>User management tools will be available here.</p>
+        <p>Công cụ quản lý người dùng sẽ có tại đây.</p>
       </div>
     </section>
   );

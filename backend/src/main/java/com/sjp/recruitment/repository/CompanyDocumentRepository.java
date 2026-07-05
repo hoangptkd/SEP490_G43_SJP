@@ -11,5 +11,12 @@ import java.util.UUID;
 @Repository
 public interface CompanyDocumentRepository extends JpaRepository<CompanyDocument, UUID> {
     List<CompanyDocument> findByCompanyIdOrderByUploadedAtDesc(UUID companyId);
+
     Optional<CompanyDocument> findByIdAndCompanyId(UUID id, UUID companyId);
+
+    long countByCompanyId(UUID companyId);
+
+    long countByCompanyIdAndStatusIgnoreCase(UUID companyId, String status);
+
+    List<CompanyDocument> findByCompanyIdAndStatusIgnoreCase(UUID companyId, String status);
 }

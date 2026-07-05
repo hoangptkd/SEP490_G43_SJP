@@ -127,7 +127,23 @@ public class EmployerService {
         company.setCompanySize(request.companySize());
         company.setTaxCode(request.taxCode());
 
+        markCompanyPendingReviewIfNeeded(company);
+
         return toCompanyProfileResponse(companyRepository.save(company));
+    }
+
+    private void markCompanyPendingReviewIfNeeded(Company company) {
+        String verificationStatus = company.getVerificationStatus();
+        if (verificationStatus == null
+                || "unverified".equalsIgnoreCase(verificationStatus)
+                || "rejected".equalsIgnoreCase(verificationStatus)) {
+            company.setVerificationStatus("pending");
+            if (company.getStatus() == null
+                    || "pending".equalsIgnoreCase(company.getStatus())
+                    || "rejected".equalsIgnoreCase(company.getStatus())) {
+                company.setStatus("pending");
+            }
+        }
     }
 
     @Transactional
@@ -309,10 +325,8 @@ public class EmployerService {
         doc = companyDocumentRepository.save(doc);
 
         // Cập nhật trạng thái xác thực công ty thành pending
-        if ("unverified".equalsIgnoreCase(company.getVerificationStatus()) || "rejected".equalsIgnoreCase(company.getVerificationStatus())) {
-            company.setVerificationStatus("pending");
-            companyRepository.save(company);
-        }
+        markCompanyPendingReviewIfNeeded(company);
+        companyRepository.save(company);
 
         return dtoMapper.toCompanyDocumentResponse(doc);
     }

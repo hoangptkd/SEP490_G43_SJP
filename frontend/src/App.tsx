@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import AdminCompanyReviewPage from './pages/admin/AdminCompanyReviewPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminJobsPage from './pages/admin/AdminJobsPage';
 import AdminLayout, { AdminProtected } from './pages/admin/AdminLayout';
@@ -66,6 +67,7 @@ function App() {
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
         <Route index element={<AdminDashboardPage />} />
+        <Route path="companies" element={<AdminCompanyReviewPage />} />
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="jobs" element={<AdminJobsPage />} />
         <Route path="statistics" element={<AdminStatisticsPage />} />

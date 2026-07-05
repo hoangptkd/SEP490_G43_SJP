@@ -581,6 +581,254 @@ h2 {
   font-weight: 800;
 }
 
+.admin-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.admin-filter-tabs button {
+  min-height: 36px;
+}
+
+.admin-filter-tabs button.active {
+  background: #245d43;
+  border-color: #245d43;
+  color: #fff;
+}
+
+.admin-inline-message {
+  margin-bottom: 16px;
+}
+
+.admin-company-layout {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 320px 1fr;
+}
+
+.admin-company-list-panel,
+.admin-company-detail-panel {
+  background: #fff;
+  border: 1px solid #dfe7e1;
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.admin-company-list-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.admin-company-list-header h2,
+.admin-company-detail-header h2,
+.admin-company-section h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.admin-company-list-header span {
+  color: #68766e;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.admin-company-list {
+  display: grid;
+  gap: 10px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.admin-company-list-item {
+  background: #f8faf8;
+  border: 1px solid #e3ebe5;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.admin-company-list-item:hover,
+.admin-company-list-item.active {
+  background: #edf5ef;
+  border-color: #b9d0c1;
+}
+
+.admin-company-list-item-top {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.admin-company-list-item p,
+.admin-company-list-item-meta {
+  color: #68766e;
+  font-size: 0.86rem;
+  margin: 0;
+}
+
+.admin-company-list-item-meta {
+  display: flex;
+  justify-content: space-between;
+}
+
+.admin-status-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.admin-status-badge.status-verified {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+
+.admin-status-badge.status-pending {
+  background: #fff3cd;
+  color: #664d03;
+}
+
+.admin-status-badge.status-rejected {
+  background: #f8d7da;
+  color: #842029;
+}
+
+.admin-status-badge.status-unverified {
+  background: #e2e3e5;
+  color: #41464b;
+}
+
+.admin-company-detail-header {
+  align-items: flex-start;
+  border-bottom: 1px solid #e8eeea;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+}
+
+.admin-company-info-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.admin-company-info-grid div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-company-info-grid span {
+  color: #68766e;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.admin-company-section {
+  border-top: 1px solid #e8eeea;
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.admin-company-section-header {
+  margin-bottom: 12px;
+}
+
+.admin-company-doc-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-company-doc {
+  align-items: center;
+  background: #f8faf8;
+  border: 1px solid #e3ebe5;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+}
+
+.admin-company-doc-icon {
+  align-items: center;
+  background: #e8f0eb;
+  border-radius: 8px;
+  color: #245d43;
+  display: flex;
+  font-size: 0.75rem;
+  font-weight: 900;
+  height: 44px;
+  justify-content: center;
+  min-width: 44px;
+}
+
+.admin-company-doc-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-company-doc-body strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.admin-company-doc-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-company-doc-meta span:first-child {
+  color: #68766e;
+  font-size: 0.82rem;
+}
+
+.admin-company-doc-reason {
+  color: #842029;
+  font-size: 0.84rem;
+  margin: 8px 0 0;
+}
+
+.admin-company-doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-company-doc-actions .button-link {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.admin-company-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.admin-company-reject-form {
+  background: #fff8f8;
+  border: 1px solid #f1d4d4;
+  border-radius: 8px;
+  margin-top: 14px;
+  padding: 16px;
+}
+
 @media (max-width: 900px) {
   .page-grid,
   .detail-page,
@@ -597,6 +845,16 @@ h2 {
 
   .admin-metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-company-layout,
+  .admin-company-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-company-doc {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .candidate-nav,

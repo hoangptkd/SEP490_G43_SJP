@@ -6,9 +6,9 @@ import { setAuthSession } from '../../utils/authStorage';
 function readError(error: unknown) {
   if (typeof error === 'object' && error && 'response' in error) {
     const response = (error as { response?: { data?: { message?: string } } }).response;
-    return response?.data?.message || 'Login failed';
+    return response?.data?.message || 'Đăng nhập thất bại';
   }
-  return 'Login failed';
+  return 'Đăng nhập thất bại';
 }
 
 export default function AdminLoginPage() {
@@ -25,12 +25,12 @@ export default function AdminLoginPage() {
       const response = await authService.login({ email, password });
 
       if (!response.token) {
-        setError('Account is not verified yet.');
+        setError('Tài khoản chưa được xác minh.');
         return;
       }
 
       if (response.user.role !== 'ADMIN') {
-        setError('This account does not have admin access.');
+        setError('Tài khoản này không có quyền quản trị.');
         return;
       }
 
@@ -45,8 +45,8 @@ export default function AdminLoginPage() {
     <div className="admin-auth-shell">
       <section className="admin-auth-panel">
         <p className="admin-auth-eyebrow">Smart Recruitment Portal</p>
-        <h1>Admin Login</h1>
-        <p className="muted">Sign in to access the administration dashboard.</p>
+        <h1>Đăng nhập quản trị</h1>
+        <p className="muted">Đăng nhập để truy cập bảng quản trị.</p>
 
         <form onSubmit={submit} className="form-grid">
           <label>
@@ -60,7 +60,7 @@ export default function AdminLoginPage() {
             />
           </label>
           <label>
-            Password
+            Mật khẩu
             <input
               type="password"
               value={password}
@@ -69,11 +69,11 @@ export default function AdminLoginPage() {
             />
           </label>
           {error && <p className="error">{error}</p>}
-          <button type="submit">Sign in</button>
+          <button type="submit">Đăng nhập</button>
         </form>
 
         <p className="admin-auth-footer">
-          <Link to="/jobs">Back to public site</Link>
+          <Link to="/jobs">Quay lại trang công khai</Link>
         </p>
       </section>
     </div>
