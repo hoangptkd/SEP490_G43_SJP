@@ -48,15 +48,13 @@ public class JobController {
     }
 
     @PostMapping
-    public ResponseEntity<Job> createJob(@Valid @RequestBody JobRequest request) {
-        Job job = jobService.create(request);
-        return ResponseEntity.ok(job);
+    public ResponseEntity<JobResponse> createJob(@Valid @RequestBody JobRequest request) {
+        return ResponseEntity.ok(jobService.createJobResponse(request));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Job> updateJob(@PathVariable String id, @Valid @RequestBody JobRequest request) {
-        Job job = jobService.update(id, request);
-        return ResponseEntity.ok(job);
+    public ResponseEntity<JobResponse> updateJob(@PathVariable String id, @Valid @RequestBody JobRequest request) {
+        return ResponseEntity.ok(jobService.updateJobResponse(id, request));
     }
 
     @DeleteMapping("/{id}")

@@ -193,6 +193,7 @@ public class AdminService {
                 company.getLocation(),
                 company.getCompanySize(),
                 company.getTaxCode(),
+                company.getLogoUrl(),
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),

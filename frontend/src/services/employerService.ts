@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Company, CompanyLocation, CompanyDocument } from '../types/job';
+import type { Company, CompanyLocation, CompanyDocument, Job } from '../types/job';
 
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
@@ -9,6 +9,17 @@ export const employerService = {
 
   updateCompanyProfile: async (company: Partial<Company>): Promise<Company> => {
     const response = await api.put<Company>('/employer/company', company);
+    return response.data;
+  },
+
+  uploadLogo: async (file: File): Promise<Company> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<Company>('/employer/company/logo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   },
 
@@ -49,5 +60,29 @@ export const employerService = {
 
   deleteDocument: async (id: string): Promise<void> => {
     await api.delete(`/employer/company/documents/${id}`);
+  },
+
+  getJobs: async (): Promise<Job[]> => {
+    const response = await api.get<Job[]>('/employer/jobs');
+    return response.data;
+  },
+
+  createJob: async (jobData: Partial<Job>): Promise<Job> => {
+    const response = await api.post<Job>('/employer/jobs', jobData);
+    return response.data;
+  },
+
+  updateJob: async (id: string, jobData: Partial<Job>): Promise<Job> => {
+    const response = await api.put<Job>(`/employer/jobs/${id}`, jobData);
+    return response.data;
+  },
+
+  submitJobForReview: async (id: string): Promise<Job> => {
+    const response = await api.post<Job>(`/employer/jobs/${id}/submit-review`);
+    return response.data;
+  },
+
+  deleteJob: async (id: string): Promise<void> => {
+    await api.delete(`/employer/jobs/${id}`);
   },
 };

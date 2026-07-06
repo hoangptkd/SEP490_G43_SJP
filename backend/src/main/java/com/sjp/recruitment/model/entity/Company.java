@@ -28,6 +28,9 @@ public class Company {
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "logo_url")
+    private String logoUrl;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 

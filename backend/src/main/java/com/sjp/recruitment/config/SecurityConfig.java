@@ -43,7 +43,7 @@ public class SecurityConfig {
                     "/login/oauth2/**",
                     "/actuator/health"
                 ).permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**", "/categories", "/categories/**").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2Login(oauth -> oauth.successHandler(oAuth2LoginSuccessHandler))

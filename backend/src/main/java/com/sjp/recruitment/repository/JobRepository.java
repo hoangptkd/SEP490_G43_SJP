@@ -17,6 +17,8 @@ import java.util.UUID;
 public interface JobRepository extends JpaRepository<Job, UUID> {
     Page<Job> findByStatus(String status, Pageable pageable);
     Page<Job> findByEmployerId(UUID employerId, Pageable pageable);
+    List<Job> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
+    List<Job> findByEmployerIdOrderByCreatedAtDesc(UUID employerId);
 
     @Query("""
            SELECT j FROM Job j

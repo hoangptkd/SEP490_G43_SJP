@@ -16,6 +16,7 @@ import { jobService } from './services/jobService';
 import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
 import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
 import CompanyVerificationPage from './pages/Employer/CompanyVerificationPage';
+import EmployerJobsPage from './pages/employer/EmployerJobsPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -63,6 +64,7 @@ function App() {
         <Route path="company-profile" element={<CompanyProfilePage />} />
         <Route path="locations" element={<CompanyLocationsPage />} />
         <Route path="verification" element={<CompanyVerificationPage />} />
+        <Route path="jobs" element={<EmployerJobsPage />} />
       </Route>
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
@@ -621,6 +623,7 @@ function EmployerLayout() {
       <aside className="employer-nav">
         <Link className="brand" to="/employer">Employer Portal</Link>
         <NavLink to="/employer" end>Dashboard</NavLink>
+        <NavLink to="/employer/jobs">Quan ly Viec lam</NavLink>
         
         <div className="nav-dropdown">
           <button 
@@ -650,11 +653,49 @@ function EmployerLayout() {
 function EmployerDashboard() {
   return (
     <section className="content-card">
-      <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-        <h1 style={{ color: '#245d43', marginBottom: '16px' }}>Employer Dashboard</h1>
+      <div style={{ textAlign: 'center', padding: '30px 20px', marginBottom: '20px' }}>
+        <h1 style={{ color: '#245d43', marginBottom: '12px' }}>Employer Dashboard</h1>
         <p style={{ color: '#4b5b52', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto' }}>
-          Chao mung Nha tuyen dung den voi Smart Recruitment Portal. Day la trang tong quan cua ban.
+          Chào mừng Nhà tuyển dụng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty và tin tuyển dụng của bạn.
         </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', padding: '0 10px' }}>
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>📢 Quản lý & Đăng tin tuyển dụng</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Tạo mới các vị trí tuyển dụng, thiết lập mức lương, quyền lợi và theo dõi trạng thái các tin đăng. (Yêu cầu công ty đã xác thực)
+            </p>
+          </div>
+          <Link to="/employer/jobs" style={{ background: '#245d43', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Quản lý việc làm →
+          </Link>
+        </div>
+
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>🏢 Hồ sơ công ty & Logo</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Cập nhật thông tin giới thiệu, địa điểm trụ sở và tải lên logo chính thức của doanh nghiệp.
+            </p>
+          </div>
+          <Link to="/employer/company-profile" style={{ background: '#334155', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Hồ sơ công ty →
+          </Link>
+        </div>
+
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>⚖️ Xác thực pháp lý</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Tải lên giấy phép kinh doanh và các tài liệu minh chứng để được Admin phê duyệt tài khoản hợp lệ.
+            </p>
+          </div>
+          <Link to="/employer/verification" style={{ background: '#3b82f6', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Xác thực ngay →
+          </Link>
+        </div>
       </div>
     </section>
   );

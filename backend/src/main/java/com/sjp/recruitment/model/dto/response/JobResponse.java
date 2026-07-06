@@ -21,6 +21,14 @@ public record JobResponse(
         CompanyLocationResponse companyLocation,
         boolean saved,
         boolean applied,
-        Integer matchScore
+        Integer matchScore,
+        String benefits,
+        Integer vacancies,
+        String workingTime,
+        String salaryType,
+        String jobType,
+        String workMode,
+        Integer viewsCount,
+        String rejectionReason
 ) {
 }

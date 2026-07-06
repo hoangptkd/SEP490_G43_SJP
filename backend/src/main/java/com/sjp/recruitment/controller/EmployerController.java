@@ -5,6 +5,8 @@ import com.sjp.recruitment.model.dto.request.CompanyProfileRequest;
 import com.sjp.recruitment.model.dto.response.CompanyDocumentResponse;
 import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
+import com.sjp.recruitment.model.dto.request.JobRequest;
+import com.sjp.recruitment.model.dto.response.JobResponse;
 import com.sjp.recruitment.service.EmployerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +67,37 @@ public class EmployerController {
     @DeleteMapping("/company/documents/{id}")
     public ResponseEntity<Void> deleteCompanyDocument(@PathVariable String id) {
         employerService.deleteCompanyDocument(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(value = "/company/logo", consumes = "multipart/form-data")
+    public ResponseEntity<CompanyProfileResponse> uploadCompanyLogo(@RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(employerService.uploadCompanyLogo(file));
+    }
+
+    @GetMapping("/jobs")
+    public ResponseEntity<List<JobResponse>> getCompanyJobs() {
+        return ResponseEntity.ok(employerService.getCompanyJobs());
+    }
+
+    @PostMapping("/jobs")
+    public ResponseEntity<JobResponse> createJob(@Valid @RequestBody JobRequest request) {
+        return ResponseEntity.ok(employerService.createJob(request));
+    }
+
+    @PutMapping("/jobs/{id}")
+    public ResponseEntity<JobResponse> updateJob(@PathVariable String id, @Valid @RequestBody JobRequest request) {
+        return ResponseEntity.ok(employerService.updateJob(id, request));
+    }
+
+    @PostMapping("/jobs/{id}/submit-review")
+    public ResponseEntity<JobResponse> submitJobForReview(@PathVariable String id) {
+        return ResponseEntity.ok(employerService.submitJobForReview(id));
+    }
+
+    @DeleteMapping("/jobs/{id}")
+    public ResponseEntity<Void> deleteJob(@PathVariable String id) {
+        employerService.deleteJob(id);
         return ResponseEntity.noContent().build();
     }
 }

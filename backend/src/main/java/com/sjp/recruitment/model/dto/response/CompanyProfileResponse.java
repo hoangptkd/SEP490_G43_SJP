@@ -11,6 +11,7 @@ public record CompanyProfileResponse(
         String location,
         Integer companySize,
         String taxCode,
+        String logoUrl,
         boolean verified,
         String verificationStatus,
         String status,
