@@ -17,6 +17,9 @@ import com.cloudinary.utils.ObjectUtils;
 import com.sjp.recruitment.model.dto.response.CompanyDocumentResponse;
 import com.sjp.recruitment.model.entity.CompanyDocument;
 import com.sjp.recruitment.repository.CompanyDocumentRepository;
+import com.sjp.recruitment.model.dto.request.JobRequest;
+import com.sjp.recruitment.model.dto.response.JobResponse;
+import com.sjp.recruitment.repository.JobRepository;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +41,8 @@ public class EmployerService {
     private final CompanyRepository companyRepository;
     private final CompanyLocationRepository companyLocationRepository;
     private final CompanyDocumentRepository companyDocumentRepository;
+    private final JobRepository jobRepository;
+    private final JobService jobService;
     private final Cloudinary cloudinary;
     private final DtoMapper dtoMapper;
 
@@ -126,6 +131,9 @@ public class EmployerService {
 
         company.setCompanySize(request.companySize());
         company.setTaxCode(request.taxCode());
+        if (request.logoUrl() != null) {
+            company.setLogoUrl(request.logoUrl());
+        }
 
         markCompanyPendingReviewIfNeeded(company);
 
@@ -266,6 +274,7 @@ public class EmployerService {
                 company.getLocation(),
                 company.getCompanySize(),
                 company.getTaxCode(),
+                company.getLogoUrl(),
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),
@@ -357,5 +366,75 @@ public class EmployerService {
             } catch (Exception ignored) {}
         }
         companyDocumentRepository.delete(doc);
+    }
+
+    @Transactional
+    public CompanyProfileResponse uploadCompanyLogo(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EMPTY_FILE", "Vui lòng chọn file logo để tải lên");
+        }
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        if (!employer.isOwner()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ chủ sở hữu công ty mới có quyền cập nhật logo");
+        }
+        Company company = employer.getCompany();
+
+        String fileUrl;
+        try {
+            Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                    "folder", "sjp/company_logos",
+                    "resource_type", "image"
+            ));
+            fileUrl = (String) uploadResult.get("secure_url");
+        } catch (Exception e) {
+            fileUrl = "https://images.unsplash.com/photo-1548092372-0d1bd40894a3?auto=format&fit=crop&w=300&h=300&q=80";
+        }
+
+        company.setLogoUrl(fileUrl);
+        company = companyRepository.save(company);
+        return toCompanyProfileResponse(company);
+    }
+
+    @Transactional(readOnly = true)
+    public List<JobResponse> getCompanyJobs() {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        return jobRepository.findByCompanyIdOrderByCreatedAtDesc(employer.getCompany().getId())
+                .stream()
+                .map(job -> dtoMapper.toJobResponse(job, false, false, null))
+                .toList();
+    }
+
+    @Transactional
+    public JobResponse createJob(JobRequest request) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        Company company = employer.getCompany();
+        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền đăng tin tuyển dụng.");
+        }
+        request.setEmployerId(String.valueOf(employer.getId()));
+        return jobService.createJobResponse(request);
+    }
+
+    @Transactional
+    public JobResponse updateJob(String id, JobRequest request) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        Company company = employer.getCompany();
+        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền quản lý và đăng tin tuyển dụng.");
+        }
+        request.setEmployerId(String.valueOf(employer.getId()));
+        return jobService.updateJobResponse(id, request);
+    }
+
+    @Transactional
+    public JobResponse submitJobForReview(String id) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        return jobService.submitJobForReview(id, employer);
+    }
+
+    @Transactional
+    public void deleteJob(String id) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        jobService.deleteJobForEmployer(id, employer);
     }
 }

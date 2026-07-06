@@ -47,6 +47,18 @@ public class Job {
     @Column(name = "requirements", columnDefinition = "TEXT")
     private String requirementsText;
 
+    @Column(columnDefinition = "TEXT")
+    private String benefits;
+
+    @Column(nullable = false)
+    private Integer vacancies = 1;
+
+    @Column(name = "working_time")
+    private String workingTime;
+
+    @Column(name = "salary_type")
+    private String salaryType;
+
     @Column(name = "salary_min")
     private BigDecimal salaryMin;
 

@@ -14,12 +14,23 @@ public class JobRequest {
     private String description;
 
     private List<String> requirements;
+    private List<String> skills;
+    private String benefits;
 
     private BigDecimal salaryMin;
     private BigDecimal salaryMax;
+    private String salaryType;
 
     private String location;
     private String companyLocationId;
+
+    private Integer vacancies;
+    private String workingTime;
+    private String jobType;
+    private String workMode;
+    private String experienceLevel;
+    private String deadline;
+    private String status;
 
     private String employerId;
 }

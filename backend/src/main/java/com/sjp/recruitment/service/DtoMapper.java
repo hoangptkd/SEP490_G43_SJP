@@ -2,12 +2,17 @@ package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.model.dto.response.*;
 import com.sjp.recruitment.model.entity.*;
+import com.sjp.recruitment.repository.JobReviewHistoryRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
 public class DtoMapper {
+
+    @Autowired
+    private JobReviewHistoryRepository jobReviewHistoryRepository;
 
     public UserResponse toUserResponse(User user) {
         return new UserResponse(
@@ -65,7 +70,8 @@ public class DtoMapper {
     }
 
     public CompanyResponse toCompanyResponse(Company company) {
-        return new CompanyResponse(String.valueOf(company.getId()), company.getName(), company.getWebsite(), company.getLocation());
+        if (company == null) return null;
+        return new CompanyResponse(String.valueOf(company.getId()), company.getName(), company.getWebsite(), company.getLocation(), company.getLogoUrl());
     }
 
     public CompanyLocationResponse toCompanyLocationResponse(CompanyLocation location) {
@@ -100,6 +106,12 @@ public class DtoMapper {
     }
 
     public JobResponse toJobResponse(Job job, boolean saved, boolean applied, Integer matchScore) {
+        String rejectionReason = null;
+        if ("rejected".equalsIgnoreCase(job.getStatus()) && jobReviewHistoryRepository != null && job.getId() != null) {
+            rejectionReason = jobReviewHistoryRepository.findFirstByJobIdAndActionOrderByReviewedAtDesc(job.getId(), "REJECTED")
+                    .map(JobReviewHistory::getReason)
+                    .orElse(null);
+        }
         return new JobResponse(
                 String.valueOf(job.getId()),
                 job.getTitle(),
@@ -117,7 +129,15 @@ public class DtoMapper {
                 toCompanyLocationResponse(job.getCompanyLocation()),
                 saved,
                 applied,
-                matchScore
+                matchScore,
+                job.getBenefits(),
+                job.getVacancies(),
+                job.getWorkingTime(),
+                job.getSalaryType(),
+                job.getJobType(),
+                job.getWorkMode(),
+                job.getViewsCount() != null ? job.getViewsCount() : 0,
+                rejectionReason
         );
     }
 
@@ -173,10 +193,12 @@ public class DtoMapper {
             return "DRAFT";
         }
         return switch (status.toLowerCase()) {
-            case "published" -> "ACTIVE";
+            case "published", "active" -> "PUBLISHED";
+            case "pending_review" -> "PENDING_REVIEW";
+            case "rejected" -> "REJECTED";
             case "closed" -> "CLOSED";
             case "expired" -> "EXPIRED";
-            default -> "DRAFT";
+            default -> status.toUpperCase();
         };
     }
 

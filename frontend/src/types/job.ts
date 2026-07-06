@@ -8,6 +8,15 @@ export interface CompanyLocation {
   headquarter: boolean;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  parentId?: string | null;
+  description?: string;
+  status?: string;
+}
+
 export interface Job {
   id: string;
   title: string;
@@ -17,12 +26,20 @@ export interface Job {
   location: string;
   requirements: string[];
   skills: string[];
+  benefits?: string;
+  vacancies?: number;
+  workingTime?: string;
+  salaryType?: 'range' | 'fixed' | 'negotiable' | string;
+  jobType?: 'full_time' | 'part_time' | 'contract' | 'internship' | 'freelance' | string;
+  workMode?: 'onsite' | 'remote' | 'hybrid' | string;
+  viewsCount?: number;
   company: Company;
   companyLocationId?: string;
   companyLocation?: CompanyLocation;
   experienceLevel?: string;
   deadline?: string;
-  status: 'ACTIVE' | 'CLOSED' | 'DRAFT' | 'EXPIRED' | 'ARCHIVED';
+  status: 'ACTIVE' | 'PUBLISHED' | 'PENDING_REVIEW' | 'REJECTED' | 'CLOSED' | 'DRAFT' | 'EXPIRED' | 'ARCHIVED' | string;
+  rejectionReason?: string;
   saved: boolean;
   applied: boolean;
   matchScore?: number;
@@ -37,6 +54,7 @@ export interface Company {
   location?: string;
   companySize?: number;
   taxCode?: string;
+  logoUrl?: string;
   verified?: boolean;
   verificationStatus?: string;
   status?: string;

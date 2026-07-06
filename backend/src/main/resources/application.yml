@@ -79,3 +79,8 @@ app:
   oauth-role-selection-token-ttl-minutes: ${OAUTH_ROLE_SELECTION_TOKEN_TTL_MINUTES:15}
   storage:
     cv-upload-dir: ${CV_UPLOAD_DIR:uploads/cvs}
+    
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}

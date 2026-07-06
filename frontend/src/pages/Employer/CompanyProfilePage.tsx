@@ -1,18 +1,25 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { employerService } from '../../services/employerService';
-import type { Company } from '../../types/job';
+import { jobService } from '../../services/jobService';
+import type { Company, Category } from '../../types/job';
 
 function CompanyProfilePage() {
   const [company, setCompany] = useState<Company | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    employerService.getCompanyProfile()
-      .then((data) => {
-        setCompany(data);
+    Promise.all([
+      employerService.getCompanyProfile(),
+      jobService.getCategories().catch(() => [])
+    ])
+      .then(([companyData, categoriesData]) => {
+        setCompany(companyData);
+        setCategories(categoriesData);
         setLoading(false);
       })
       .catch((err) => {
@@ -20,6 +27,27 @@ function CompanyProfilePage() {
         setLoading(false);
       });
   }, []);
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploadingLogo(true);
+    setMessage('');
+    setError('');
+    try {
+      const updated = await employerService.uploadLogo(files[0]);
+      setCompany(updated);
+      setMessage('Tải lên logo thành công!');
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Có lỗi xảy ra khi tải lên logo.');
+      }
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -70,13 +98,55 @@ function CompanyProfilePage() {
         boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h1 style={{ color: '#fff', marginBottom: '8px', fontSize: '2rem', fontWeight: 800 }}>{company.name}</h1>
-            <p style={{ margin: 0, opacity: 0.9, fontSize: '1rem' }}>
-              {company.industry || 'Chưa cập nhật ngành nghề'} · {company.location || 'Chưa cập nhật địa điểm'}
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '12px',
+              backgroundColor: '#fff',
+              border: '2px solid rgba(255,255,255,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              position: 'relative',
+              flexShrink: 0,
+              boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
+            }}>
+              {company.logoUrl ? (
+                <img src={company.logoUrl} alt={company.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontSize: '2rem', fontWeight: 700, color: '#245d43' }}>
+                  {company.name ? company.name.charAt(0).toUpperCase() : 'C'}
+                </span>
+              )}
+            </div>
+            <div>
+              <h1 style={{ color: '#fff', marginBottom: '8px', fontSize: '2rem', fontWeight: 800 }}>{company.name}</h1>
+              <p style={{ margin: 0, opacity: 0.9, fontSize: '1rem' }}>
+                {company.industry || 'Chưa cập nhật ngành nghề'} · {company.location || 'Chưa cập nhật địa điểm'}
+              </p>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{
+              background: 'rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255,255,255,0.3)',
+              color: '#fff',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              cursor: uploadingLogo ? 'wait' : 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'background 0.2s',
+              margin: 0
+            }}>
+              <span>{uploadingLogo ? '⏳ Đang tải logo...' : '📷 Thay đổi Logo'}</span>
+              <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} style={{ display: 'none' }} />
+            </label>
             <span style={{
               background: statusBadge.bg,
               color: statusBadge.color,
@@ -114,12 +184,32 @@ function CompanyProfilePage() {
         </label>
 
         <label>
-          Ngành nghề
-          <input
-            value={company.industry || ''}
-            onChange={(e) => setCompany({ ...company, industry: e.target.value })}
-            placeholder="Ví dụ: Công nghệ thông tin, Bán lẻ, Giáo dục..."
-          />
+          Ngành nghề hoạt động
+          {categories.length > 0 ? (
+            <select
+              value={company.industry || ''}
+              onChange={(e) => setCompany({ ...company, industry: e.target.value })}
+              style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', fontSize: '0.95rem' }}
+            >
+              <option value="">-- Chọn lĩnh vực / ngành nghề chính --</option>
+              {categories
+                .filter((c) => !c.parentId)
+                .map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))}
+              {company.industry && !categories.some(c => !c.parentId && c.name === company.industry) && (
+                <option value={company.industry}>★ [{company.industry}] (Ngành hiện tại)</option>
+              )}
+            </select>
+          ) : (
+            <input
+              value={company.industry || ''}
+              onChange={(e) => setCompany({ ...company, industry: e.target.value })}
+              placeholder="Ví dụ: Công nghệ thông tin, Bán lẻ, Giáo dục..."
+            />
+          )}
         </label>
 
         <label>

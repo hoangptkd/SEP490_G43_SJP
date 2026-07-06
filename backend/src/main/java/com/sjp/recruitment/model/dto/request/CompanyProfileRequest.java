@@ -10,6 +10,7 @@ public record CompanyProfileRequest(
         String industry,
         String location,
         Integer companySize,
-        String taxCode
+        String taxCode,
+        String logoUrl
 ) {
 }
