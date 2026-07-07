@@ -1,5 +1,12 @@
 import { api } from './api';
-import type { AdminCompanyDetail, AdminCompanySummary, CompanyReviewFilter } from '../types/admin';
+import type {
+  AdminCompanyDetail,
+  AdminCompanySummary,
+  AdminJobDetail,
+  AdminJobSummary,
+  CompanyReviewFilter,
+  JobReviewFilter,
+} from '../types/admin';
 
 export const adminService = {
   listCompanies: async (status: CompanyReviewFilter = 'pending'): Promise<AdminCompanySummary[]> => {
@@ -19,6 +26,26 @@ export const adminService = {
 
   rejectCompany: async (id: string, reason: string): Promise<AdminCompanyDetail> => {
     const response = await api.post<AdminCompanyDetail>(`/admin/companies/${id}/reject`, { reason });
+    return response.data;
+  },
+
+  listJobs: async (status: JobReviewFilter = 'pending_review'): Promise<AdminJobSummary[]> => {
+    const response = await api.get<AdminJobSummary[]>('/admin/jobs', { params: { status } });
+    return response.data;
+  },
+
+  getJobDetail: async (id: string): Promise<AdminJobDetail> => {
+    const response = await api.get<AdminJobDetail>(`/admin/jobs/${id}`);
+    return response.data;
+  },
+
+  approveJob: async (id: string): Promise<AdminJobDetail> => {
+    const response = await api.post<AdminJobDetail>(`/admin/jobs/${id}/approve`);
+    return response.data;
+  },
+
+  rejectJob: async (id: string, reason: string): Promise<AdminJobDetail> => {
+    const response = await api.post<AdminJobDetail>(`/admin/jobs/${id}/reject`, { reason });
     return response.data;
   },
 };

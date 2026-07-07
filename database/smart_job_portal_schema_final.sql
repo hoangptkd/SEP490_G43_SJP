@@ -8,7 +8,7 @@
 -- - Partial unique index for one primary resume per candidate
 -- - Search indexes for job listing filters
 -- - OAuth, email verification, password reset, application history, notes, quotas, webhooks, audit logs
-
+    -- tk mt admin: admin@sjp.local/ Admin@123
 create extension if not exists pgcrypto;
 create extension if not exists citext;
 

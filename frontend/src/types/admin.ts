@@ -1,4 +1,4 @@
-import type { Company, CompanyDocument } from './job';
+import type { Company, CompanyDocument, Job } from './job';
 
 export interface AdminCompanySummary {
   id: string;
@@ -33,3 +33,28 @@ export interface AdminCompanyDetail {
 }
 
 export type CompanyReviewFilter = 'pending' | 'verified' | 'rejected';
+
+export type JobReviewFilter = 'pending_review' | 'published' | 'rejected';
+
+export interface AdminJobSummary {
+  id: string;
+  title: string;
+  companyName?: string;
+  employerEmail?: string;
+  employerName?: string;
+  status: string;
+  location?: string;
+  salaryMin?: number;
+  salaryMax?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminJobDetail {
+  job: Job;
+  employerEmail?: string;
+  employerName?: string;
+  employerPosition?: string;
+  createdAt: string;
+  updatedAt: string;
+}

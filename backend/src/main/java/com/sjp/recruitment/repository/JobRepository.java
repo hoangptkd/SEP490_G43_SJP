@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -19,6 +20,27 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     Page<Job> findByEmployerId(UUID employerId, Pageable pageable);
     List<Job> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
     List<Job> findByEmployerIdOrderByCreatedAtDesc(UUID employerId);
+
+    List<Job> findByStatusIgnoreCaseOrderByUpdatedAtDesc(String status);
+
+    @Query("""
+            SELECT j FROM Job j
+            JOIN FETCH j.company
+            JOIN FETCH j.employer e
+            JOIN FETCH e.user
+            WHERE LOWER(j.status) = LOWER(:status)
+            ORDER BY j.updatedAt DESC
+            """)
+    List<Job> findByStatusWithDetails(@Param("status") String status);
+
+    @Query("""
+            SELECT j FROM Job j
+            JOIN FETCH j.company
+            JOIN FETCH j.employer e
+            JOIN FETCH e.user
+            WHERE j.id = :id
+            """)
+    Optional<Job> findByIdWithDetails(@Param("id") UUID id);
 
     @Query("""
            SELECT j FROM Job j

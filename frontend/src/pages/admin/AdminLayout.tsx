@@ -8,7 +8,7 @@ const menuItems = [
   { to: '/admin', label: 'Bảng điều khiển', end: true },
   { to: '/admin/companies', label: 'Duyệt hồ sơ công ty' },
   { to: '/admin/users', label: 'Quản lý người dùng' },
-  { to: '/admin/jobs', label: 'Kiểm duyệt việc làm' },
+  { to: '/admin/jobs', label: 'Quản lý việc làm' },
   { to: '/admin/statistics', label: 'Thống kê' },
   { to: '/admin/settings', label: 'Cài đặt hệ thống' },
   { to: '/admin/profile', label: 'Hồ sơ' },
