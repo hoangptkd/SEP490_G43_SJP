@@ -85,6 +85,9 @@ public class Job {
 
     private String status = "draft";
 
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
+
     @Column(name = "posted_at")
     private LocalDateTime postedAt;
 

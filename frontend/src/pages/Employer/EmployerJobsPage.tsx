@@ -116,9 +116,9 @@ function EmployerJobsPage() {
       deadline: deadlineStr,
       location: job.location || '',
       companyLocationId: job.companyLocationId || '',
-      status: job.status?.toLowerCase() || 'draft',
+      status: job.status?.toLowerCase() === 'rejected' ? 'pending_review' : (job.status?.toLowerCase() || 'draft'),
     });
-    submitTargetRef.current = job.status?.toLowerCase() || 'draft';
+    submitTargetRef.current = job.status?.toLowerCase() === 'rejected' ? 'pending_review' : (job.status?.toLowerCase() || 'draft');
     setShowForm(true);
     setMessage('');
     setError('');
@@ -222,21 +222,22 @@ function EmployerJobsPage() {
             <button
               onClick={handleOpenAdd}
               style={{
-                background: '#52b788',
+                background: '#2563eb',
                 color: '#fff',
                 border: 'none',
                 padding: '10px 20px',
-                borderRadius: '8px',
-                fontWeight: 700,
-                fontSize: '1rem',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '0.95rem',
                 cursor: 'pointer',
-                boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                transition: 'background-color 0.2s',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                gap: '6px'
               }}
             >
-              <span>➕</span> Đăng tin tuyển dụng mới
+              + Tạo tin tuyển dụng mới
             </button>
           )}
         </div>
@@ -320,17 +321,30 @@ function EmployerJobsPage() {
           marginBottom: '30px'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
-            <h2 style={{ margin: 0, color: '#1e293b', fontSize: '1.4rem' }}>
-              {editingId ? '✏️ Chỉnh sửa tin tuyển dụng' : '➕ Đăng tin tuyển dụng mới'}
+            <h2 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem', fontWeight: 700 }}>
+              {editingId ? 'Chỉnh sửa tin tuyển dụng' : 'Tạo tin tuyển dụng mới'}
             </h2>
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              style={{ background: 'transparent', border: '1px solid #cbd5e1', color: '#64748b', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}
+              style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#475569', padding: '6px 14px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' }}
             >
-              ✕ Hủy bỏ
+              Hủy
             </button>
           </div>
+          {editingId && jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected' && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626', padding: '16px 20px', borderRadius: '8px', marginBottom: '24px' }}>
+              <div style={{ fontWeight: 600, color: '#991b1b', fontSize: '0.95rem', marginBottom: '8px' }}>
+                Phản hồi từ Bộ phận kiểm duyệt
+              </div>
+              <div style={{ background: '#ffffff', padding: '12px 16px', borderRadius: '6px', border: '1px solid #fee2e2', color: '#7f1d1d', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '10px' }}>
+                {jobs.find((j) => j.id === editingId)?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#991b1b', opacity: 0.9, lineHeight: 1.5 }}>
+                Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để tiếp tục quy trình kiểm duyệt.
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="form-grid two">
             <label className="wide">
@@ -431,8 +445,8 @@ function EmployerJobsPage() {
                 </label>
               </>
             ) : (
-              <div className="wide" style={{ padding: '10px 14px', background: '#e2e8f0', borderRadius: '6px', color: '#475569', fontSize: '0.9rem', alignSelf: 'center' }}>
-                ℹ️ Mức lương sẽ hiển thị là "Thỏa thuận" đối với ứng viên.
+              <div className="wide" style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', color: '#475569', fontSize: '0.875rem', alignSelf: 'center' }}>
+                Mức lương sẽ được hiển thị là "Thỏa thuận" đối với ứng viên.
               </div>
             )}
 
@@ -535,15 +549,15 @@ function EmployerJobsPage() {
                   submitTargetRef.current = e.target.value;
                 }}
               >
-                <option value="draft">🟡 Bản nháp (Draft)</option>
-                <option value="pending_review">⏳ Gửi duyệt tin (Pending Review)</option>
+                <option value="draft">Bản nháp (Draft)</option>
+                <option value="pending_review">Gửi kiểm duyệt (Pending Review)</option>
                 {formData.status === 'published' || formData.status === 'active' ? (
-                  <option value="published">🟢 Đang hiển thị (Published)</option>
+                  <option value="published">Đang hiển thị (Published)</option>
                 ) : null}
               </select>
             </label>
 
-            <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '16px', flexWrap: 'wrap' }}>
+            <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
               <button
                 type="submit"
                 disabled={saving}
@@ -552,16 +566,18 @@ function EmployerJobsPage() {
                   setFormData((prev) => ({ ...prev, status: 'draft' }));
                 }}
                 style={{
-                  background: '#64748b',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '12px 20px',
+                  background: '#f1f5f9',
+                  color: '#334155',
+                  border: '1px solid #cbd5e1',
+                  padding: '10px 18px',
                   borderRadius: '6px',
-                  fontWeight: 700,
-                  cursor: saving ? 'wait' : 'pointer'
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: saving ? 'wait' : 'pointer',
+                  transition: 'all 0.2s'
                 }}
               >
-                {saving ? '⏳ Đang lưu...' : '💾 Lưu bản nháp'}
+                {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
               </button>
               <button
                 type="submit"
@@ -571,17 +587,19 @@ function EmployerJobsPage() {
                   setFormData((prev) => ({ ...prev, status: 'pending_review' }));
                 }}
                 style={{
-                  background: '#0d6efd',
+                  background: '#2563eb',
                   color: '#fff',
                   border: 'none',
-                  padding: '12px 24px',
+                  padding: '10px 22px',
                   borderRadius: '6px',
-                  fontWeight: 700,
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
                   cursor: saving ? 'wait' : 'pointer',
-                  boxShadow: '0 4px 6px rgba(13, 110, 253, 0.25)'
+                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                  transition: 'background-color 0.2s'
                 }}
               >
-                {saving ? '⏳ Đang lưu...' : '🚀 Lưu & Gửi duyệt ngay'}
+                {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
               </button>
               {formData.status === 'published' || formData.status === 'active' ? (
                 <button
@@ -592,28 +610,30 @@ function EmployerJobsPage() {
                     setFormData((prev) => ({ ...prev, status: 'published' }));
                   }}
                   style={{
-                    background: '#245d43',
+                    background: '#059669',
                     color: '#fff',
                     border: 'none',
-                    padding: '12px 20px',
+                    padding: '10px 18px',
                     borderRadius: '6px',
-                    fontWeight: 700,
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
                     cursor: saving ? 'wait' : 'pointer'
                   }}
                 >
-                  {saving ? '⏳ Đang lưu...' : '✅ Lưu tin đang hiển thị'}
+                  {saving ? 'Đang xử lý...' : 'Lưu & Công khai'}
                 </button>
               ) : null}
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
                 style={{
-                  background: '#e2e8f0',
-                  color: '#475569',
+                  background: 'transparent',
+                  color: '#64748b',
                   border: 'none',
-                  padding: '12px 20px',
+                  padding: '10px 16px',
                   borderRadius: '6px',
-                  fontWeight: 600,
+                  fontWeight: 500,
+                  fontSize: '0.9rem',
                   cursor: 'pointer'
                 }}
               >
@@ -630,16 +650,16 @@ function EmployerJobsPage() {
         </h2>
 
         {jobs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-            <p style={{ color: '#64748b', fontSize: '1.1rem', margin: '0 0 16px 0' }}>
-              Công ty chưa có tin tuyển dụng nào được đăng.
+          <div style={{ textAlign: 'center', padding: '48px 24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+            <p style={{ color: '#64748b', fontSize: '1.05rem', margin: '0 0 16px 0' }}>
+              Công ty chưa có tin tuyển dụng nào được đăng trên hệ thống.
             </p>
             {isVerified && (
               <button
                 onClick={handleOpenAdd}
-                style={{ background: '#245d43', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+                style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)' }}
               >
-                ➕ Đăng tin tuyển dụng đầu tiên
+                + Tạo tin tuyển dụng đầu tiên
               </button>
             )}
           </div>
@@ -647,53 +667,68 @@ function EmployerJobsPage() {
           <div style={{ display: 'grid', gap: '16px' }}>
             {jobs.map((job) => {
               const st = job.status?.toLowerCase() || 'draft';
-              const statusBg = st === 'published' || st === 'active' ? '#d1e7dd' : st === 'pending_review' ? '#cff4fc' : st === 'rejected' ? '#f8d7da' : st === 'draft' ? '#fff3cd' : '#e2e3e5';
-              const statusColor = st === 'published' || st === 'active' ? '#0f5132' : st === 'pending_review' ? '#055160' : st === 'rejected' ? '#842029' : st === 'draft' ? '#856404' : '#41464b';
-              const statusLabel = st === 'published' || st === 'active' ? '🟢 Đang công khai' : st === 'pending_review' ? '⏳ Đang chờ duyệt' : st === 'rejected' ? '❌ Bị từ chối duyệt' : st === 'draft' ? '🟡 Bản nháp' : '⚫ Đã đóng';
+              const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'rejected' ? '#fef2f2' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
+              const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'rejected' ? '#b91c1c' : st === 'draft' ? '#475569' : '#64748b';
+              const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'rejected' ? '#fecaca' : st === 'draft' ? '#cbd5e1' : '#e2e8f0';
+              const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'rejected' ? '#ef4444' : st === 'draft' ? '#94a3b8' : '#64748b';
+              const statusLabel = st === 'published' || st === 'active' ? 'Đang hiển thị' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'draft' ? 'Bản nháp' : 'Đã đóng';
 
               return (
                 <div key={job.id} style={{
                   border: '1px solid #e2e8f0',
                   borderRadius: '8px',
-                  padding: '20px',
-                  background: '#fff',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
+                  padding: '22px',
+                  background: '#ffffff',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'flex-start',
                   flexWrap: 'wrap',
                   gap: '16px',
-                  transition: 'border-color 0.2s'
+                  transition: 'border-color 0.2s, box-shadow 0.2s'
                 }}>
-                  <div style={{ flex: '1 1 400px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                      <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a' }}>
+                  <div style={{ flex: '1 1 420px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a', fontWeight: 700 }}>
                         {job.title}
                       </h3>
                       <span style={{
                         background: statusBg,
                         color: statusColor,
-                        padding: '4px 10px',
+                        border: `1px solid ${statusBorder}`,
+                        padding: '4px 12px',
                         borderRadius: '20px',
                         fontSize: '0.8rem',
-                        fontWeight: 700
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
                       }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusDot }}></span>
                         {statusLabel}
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', color: '#64748b', fontSize: '0.9rem', marginBottom: '12px' }}>
-                      <span>📍 {job.location || 'Hà Nội'}</span>
-                      <span>💰 {job.salaryType === 'negotiable' ? 'Thỏa thuận' : `${job.salaryMin ? job.salaryMin.toLocaleString() : 0} - ${job.salaryMax ? job.salaryMax.toLocaleString() : 0} VNĐ`}</span>
-                      <span>👥 Tuyển {job.vacancies || 1} người</span>
-                      <span>👁️ {job.viewsCount || 0} lượt xem</span>
-                      {job.deadline && <span>⏰ Hạn nộp: {new Date(job.deadline).toLocaleDateString('vi-VN')}</span>}
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', color: '#64748b', fontSize: '0.875rem', marginBottom: '14px', alignItems: 'center' }}>
+                      <span>Địa điểm: <strong style={{ color: '#334155' }}>{job.location || 'Hà Nội'}</strong></span>
+                      <span style={{ color: '#cbd5e1' }}>•</span>
+                      <span>Mức lương: <strong style={{ color: '#059669' }}>{job.salaryType === 'negotiable' ? 'Thỏa thuận' : `${job.salaryMin ? job.salaryMin.toLocaleString() : 0} - ${job.salaryMax ? job.salaryMax.toLocaleString() : 0} VNĐ`}</strong></span>
+                      <span style={{ color: '#cbd5e1' }}>•</span>
+                      <span>Số lượng: <strong style={{ color: '#334155' }}>{job.vacancies || 1}</strong></span>
+                      <span style={{ color: '#cbd5e1' }}>•</span>
+                      <span>Lượt xem: <strong style={{ color: '#334155' }}>{job.viewsCount || 0}</strong></span>
+                      {job.deadline && (
+                        <>
+                          <span style={{ color: '#cbd5e1' }}>•</span>
+                          <span>Hạn nộp: <strong style={{ color: '#334155' }}>{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong></span>
+                        </>
+                      )}
                     </div>
 
                     {job.skills && job.skills.length > 0 && (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {job.skills.map((s, idx) => (
-                          <span key={idx} style={{ background: '#f1f5f9', color: '#334155', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                          <span key={idx} style={{ background: '#f1f5f9', color: '#334155', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, border: '1px solid #e2e8f0' }}>
                             {s}
                           </span>
                         ))}
@@ -701,69 +736,94 @@ function EmployerJobsPage() {
                     )}
 
                     {st === 'rejected' && (
-                      <div style={{ marginTop: '12px', background: '#fff8f6', border: '1px solid #ffd8d0', borderLeft: '4px solid #e11d48', padding: '10px 14px', borderRadius: '6px', color: '#9f1239', fontSize: '0.9rem' }}>
-                        <div style={{ fontWeight: 700, marginBottom: '4px' }}>⚠️ Tin tuyển dụng bị từ chối duyệt:</div>
-                        <div>{job.rejectionReason || 'Vui lòng chỉnh sửa lại nội dung theo yêu cầu và gửi duyệt lại.'}</div>
+                      <div style={{ marginTop: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '3px solid #dc2626', padding: '14px 16px', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <span style={{ fontWeight: 600, color: '#991b1b', fontSize: '0.875rem' }}>
+                            Yêu cầu chỉnh sửa từ Bộ phận kiểm duyệt
+                          </span>
+                        </div>
+                        <div style={{ background: '#ffffff', padding: '10px 12px', borderRadius: '4px', border: '1px solid #fee2e2', color: '#7f1d1d', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '6px' }}>
+                          {job.rejectionReason || 'Vui lòng rà soát lại thông tin vị trí tuyển dụng theo quy định.'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#991b1b', opacity: 0.9 }}>
+                          Vui lòng nhấn nút "Cập nhật & Nộp lại" để hoàn thiện hồ sơ và gửi duyệt lại.
+                        </div>
                       </div>
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {isVerified && (st === 'draft' || st === 'rejected') && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {isVerified && st === 'draft' && (
                       <button
                         onClick={() => handleSubmitForReview(job.id, job.title)}
                         style={{
-                          background: '#0d6efd',
+                          background: '#2563eb',
                           border: 'none',
                           color: '#fff',
-                          padding: '8px 14px',
+                          padding: '8px 16px',
                           borderRadius: '6px',
-                          fontWeight: 700,
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
                           cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          boxShadow: '0 2px 4px rgba(13, 110, 253, 0.2)'
+                          boxShadow: '0 2px 4px rgba(37, 99, 235, 0.15)',
+                          transition: 'background-color 0.2s'
                         }}
                       >
-                        🚀 Gửi duyệt
+                        Nộp kiểm duyệt
                       </button>
                     )}
-                    {isVerified && (
+                    {isVerified && st === 'rejected' && (
+                      <button
+                        onClick={() => handleOpenEdit(job)}
+                        style={{
+                          background: '#dc2626',
+                          border: 'none',
+                          color: '#fff',
+                          padding: '8px 16px',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(220, 38, 38, 0.15)',
+                          transition: 'background-color 0.2s'
+                        }}
+                      >
+                        Cập nhật & Nộp lại
+                      </button>
+                    )}
+                    {isVerified && st !== 'rejected' && (
                       <button
                         onClick={() => handleOpenEdit(job)}
                         style={{
                           background: '#f8fafc',
                           border: '1px solid #cbd5e1',
                           color: '#334155',
-                          padding: '8px 14px',
+                          padding: '8px 16px',
                           borderRadius: '6px',
                           fontWeight: 600,
+                          fontSize: '0.875rem',
                           cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
+                          transition: 'all 0.2s'
                         }}
                       >
-                        ✏️ Sửa
+                        Chỉnh sửa
                       </button>
                     )}
                     <button
                       onClick={() => handleDelete(job.id, job.title)}
                       style={{
-                        background: '#fff5f5',
-                        border: '1px solid #feb2b2',
-                        color: '#c53030',
+                        background: '#ffffff',
+                        border: '1px solid #fecaca',
+                        color: '#ef4444',
                         padding: '8px 14px',
                         borderRadius: '6px',
-                        fontWeight: 600,
+                        fontWeight: 500,
+                        fontSize: '0.875rem',
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
+                        transition: 'all 0.2s'
                       }}
                     >
-                      🗑️ Xóa
+                      Xóa
                     </button>
                   </div>
                 </div>

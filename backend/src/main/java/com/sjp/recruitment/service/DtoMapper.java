@@ -106,8 +106,8 @@ public class DtoMapper {
     }
 
     public JobResponse toJobResponse(Job job, boolean saved, boolean applied, Integer matchScore) {
-        String rejectionReason = null;
-        if ("rejected".equalsIgnoreCase(job.getStatus()) && jobReviewHistoryRepository != null && job.getId() != null) {
+        String rejectionReason = job.getRejectionReason();
+        if (rejectionReason == null && "rejected".equalsIgnoreCase(job.getStatus()) && jobReviewHistoryRepository != null && job.getId() != null) {
             rejectionReason = jobReviewHistoryRepository.findFirstByJobIdAndActionOrderByReviewedAtDesc(job.getId(), "REJECTED")
                     .map(JobReviewHistory::getReason)
                     .orElse(null);

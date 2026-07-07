@@ -150,6 +150,7 @@ public class JobService {
                     j.experience_level,
                     j.deadline,
                     j.status,
+                    j.rejection_reason,
                     j.company_location_id::text AS company_location_id,
                     cl.branch_name AS cl_branch_name,
                     cl.address AS cl_address,
@@ -172,7 +173,7 @@ public class JobService {
                   AND j.status = 'published'
                 GROUP BY
                     j.id, j.title, j.description, j.requirements, j.benefits, j.vacancies, j.working_time, j.salary_type, j.job_type, j.work_mode, j.views_count, j.salary_min, j.salary_max,
-                    j.location, j.experience_level, j.deadline, j.status, j.company_location_id,
+                    j.location, j.experience_level, j.deadline, j.status, j.rejection_reason, j.company_location_id,
                     cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
                     c.id, c.name, c.website, c.location, c.logo_url
                 """;
@@ -248,7 +249,11 @@ public class JobService {
         if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực pháp lý.");
         }
+        if ("rejected".equalsIgnoreCase(job.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_REJECTED", "Tin tuyển dụng đã bị từ chối duyệt. Vui lòng chỉnh sửa nội dung tin tuyển dụng trước khi gửi duyệt lại.");
+        }
         job.setStatus("pending_review");
+        job.setRejectionReason(null);
         job = jobRepository.save(job);
         return dtoMapper.toJobResponse(job, false, false, null);
     }
@@ -309,6 +314,9 @@ public class JobService {
 
         String targetStatus = request.getStatus() != null && !request.getStatus().isBlank() ? request.getStatus().toLowerCase() : "draft";
         job.setStatus(targetStatus);
+        if ("pending_review".equals(targetStatus) || "published".equals(targetStatus)) {
+            job.setRejectionReason(null);
+        }
         if ("published".equals(targetStatus) && job.getPublishedAt() == null) {
             job.setPublishedAt(LocalDateTime.now());
         }
@@ -341,11 +349,14 @@ public class JobService {
                 .forEach(skillName -> {
                     Skill skill = skillRepository.findByNameIgnoreCase(skillName)
                             .orElseGet(() -> {
-                                Skill created = new Skill();
-                                created.setName(skillName);
-                                created.setSlug(slugifySkill(skillName));
-                                created.setCategory("General");
-                                return skillRepository.save(created);
+                                String slug = slugifySkill(skillName);
+                                return skillRepository.findBySlug(slug).orElseGet(() -> {
+                                    Skill created = new Skill();
+                                    created.setName(skillName);
+                                    created.setSlug(slug);
+                                    created.setCategory("General");
+                                    return skillRepository.save(created);
+                                });
                             });
                     JobSkill jobSkill = new JobSkill();
                     jobSkill.setJob(finalJob);
@@ -358,9 +369,13 @@ public class JobService {
     }
 
     private String slugifySkill(String value) {
-        return value.toLowerCase(Locale.ROOT)
+        String slug = value.toLowerCase(Locale.ROOT)
+                .replace("c++", "cplusplus")
+                .replace("c#", "csharp")
+                .replace(".net", "dotnet")
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("(^-|-$)", "");
+        return slug.isEmpty() ? "skill-" + UUID.randomUUID().toString().substring(0, 8) : slug;
     }
 
     @Transactional(readOnly = true)
@@ -571,7 +586,7 @@ public class JobService {
                 resultSet.getString("job_type"),
                 resultSet.getString("work_mode"),
                 resultSet.getInt("views_count"),
-                null
+                resultSet.getString("rejection_reason")
         );
     }
 

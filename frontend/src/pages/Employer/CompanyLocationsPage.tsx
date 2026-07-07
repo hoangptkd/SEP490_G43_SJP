@@ -113,55 +113,58 @@ function CompanyLocationsPage() {
   return (
     <section className="content-card">
       <div className="company-profile-banner" style={{
-        background: 'linear-gradient(135deg, #245d43 0%, #123327 100%)',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
         color: '#fff',
-        padding: '30px',
-        borderRadius: '8px',
-        marginBottom: '24px',
+        padding: '32px',
+        borderRadius: '10px',
+        marginBottom: '28px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
-        gap: '16px',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
+        gap: '20px',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.08)'
       }}>
         <div>
-          <h1 style={{ color: '#fff', marginBottom: '8px', fontSize: '1.8rem', fontWeight: 800 }}>Quản lý Địa điểm làm việc</h1>
-          <p style={{ margin: 0, opacity: 0.9, fontSize: '0.95rem' }}>
-            Danh sách các chi nhánh và văn phòng làm việc của công ty.
+          <h1 style={{ color: '#fff', marginBottom: '8px', fontSize: '1.75rem', fontWeight: 700 }}>Quản lý chi nhánh & Văn phòng</h1>
+          <p style={{ margin: 0, opacity: 0.85, fontSize: '0.95rem', color: '#cbd5e1' }}>
+            Danh sách các địa điểm hoạt động và văn phòng làm việc của doanh nghiệp.
           </p>
         </div>
         <button
           type="button"
           onClick={handleOpenAdd}
           style={{
-            background: '#fff',
-            color: '#245d43',
+            background: '#2563eb',
+            color: '#fff',
             border: 'none',
-            padding: '10px 18px',
+            padding: '10px 20px',
             borderRadius: '6px',
-            fontWeight: 700,
+            fontWeight: 600,
             cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+            fontSize: '0.9rem',
+            boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+            transition: 'background-color 0.2s'
           }}
         >
           + Thêm địa điểm mới
         </button>
       </div>
 
-      {message && <p className="success" style={{ marginBottom: '16px' }}>{message}</p>}
-      {error && !showForm && <p className="error" style={{ marginBottom: '16px' }}>{error}</p>}
+      {message && <p className="success" style={{ marginBottom: '20px', padding: '12px 16px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', borderRadius: '6px', fontSize: '0.9rem' }}>{message}</p>}
+      {error && !showForm && <p className="error" style={{ marginBottom: '20px', padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', fontSize: '0.9rem' }}>{error}</p>}
 
       {showForm && (
         <div style={{
-          background: '#f8f9fa',
-          border: '1px solid #dee2e6',
-          borderRadius: '8px',
-          padding: '20px',
-          marginBottom: '24px'
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: '10px',
+          padding: '24px',
+          marginBottom: '28px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
         }}>
-          <h3 style={{ marginTop: 0, color: '#245d43', marginBottom: '16px' }}>
-            {editingId ? 'Chỉnh sửa Địa điểm' : 'Thêm Địa điểm mới'}
+          <h3 style={{ marginTop: 0, color: '#0f172a', marginBottom: '20px', fontSize: '1.2rem', fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+            {editingId ? 'Chỉnh sửa thông tin chi nhánh' : 'Thêm chi nhánh văn phòng mới'}
           </h3>
           <form onSubmit={handleSubmit} className="form-grid two">
             <label className="wide">
@@ -216,17 +219,41 @@ function CompanyLocationsPage() {
                 checked={formData.headquarter || false}
                 onChange={(e) => setFormData({ ...formData, headquarter: e.target.checked })}
               />
-              <span style={{ fontWeight: 600, color: '#245d43' }}>Đặt làm Trụ sở chính (Head Office)</span>
+              <span style={{ fontWeight: 600, color: '#0f172a' }}>Đặt làm Trụ sở chính (Head Office)</span>
             </label>
 
-            <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-              <button type="submit" disabled={saving} style={{ background: '#245d43', color: '#fff' }}>
-                {saving ? 'Đang lưu...' : (editingId ? 'Cập nhật' : 'Thêm mới')}
+            <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+              <button
+                type="submit"
+                disabled={saving}
+                style={{
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '10px 24px',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: saving ? 'wait' : 'pointer',
+                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                {saving ? 'Đang xử lý...' : (editingId ? 'Lưu thay đổi' : 'Thêm mới')}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                style={{ background: '#6c757d', color: '#fff' }}
+                style={{
+                  background: 'transparent',
+                  color: '#64748b',
+                  border: 'none',
+                  padding: '10px 18px',
+                  borderRadius: '6px',
+                  fontWeight: 500,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer'
+                }}
               >
                 Hủy
               </button>
@@ -238,85 +265,90 @@ function CompanyLocationsPage() {
 
       <div className="table-list">
         {locations.length === 0 ? (
-          <p style={{ textAlign: 'center', padding: '30px', color: '#6c757d', margin: 0 }}>
-            Chưa có địa điểm làm việc nào được cấu hình. Nhấn "+ Thêm địa điểm mới" để bắt đầu.
-          </p>
+          <div style={{ textAlign: 'center', padding: '48px 24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+            <p style={{ color: '#64748b', fontSize: '1.05rem', margin: '0 0 16px 0' }}>
+              Chưa có địa điểm làm việc nào được cấu hình trên hệ thống.
+            </p>
+          </div>
         ) : (
-          locations.map((loc) => (
-            <div key={loc.id} style={{
-              border: '1px solid #eaeaea',
-              borderRadius: '8px',
-              padding: '16px 20px',
-              marginBottom: '12px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '12px',
-              background: loc.headquarter ? '#f0fdf4' : '#fff'
-            }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '1.1rem', color: '#111827' }}>{loc.branchName}</strong>
-                  {loc.headquarter && (
-                    <span style={{
-                      background: '#245d43',
-                      color: '#fff',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      textTransform: 'uppercase'
-                    }}>
-                      ★ Trụ sở chính
-                    </span>
-                  )}
+          <div style={{ display: 'grid', gap: '14px' }}>
+            {locations.map((loc) => (
+              <div key={loc.id} style={{
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '18px 22px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '16px',
+                background: loc.headquarter ? '#f0fdf4' : '#ffffff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontWeight: 700 }}>{loc.branchName}</strong>
+                    {loc.headquarter && (
+                      <span style={{
+                        background: '#059669',
+                        color: '#fff',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        padding: '2px 10px',
+                        borderRadius: '12px'
+                      }}>
+                        Trụ sở chính
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                    {loc.address ? `${loc.address}, ` : ''}
+                    {loc.district ? `${loc.district}, ` : ''}
+                    {loc.city || ''}
+                    {loc.country ? ` (${loc.country})` : ''}
+                  </p>
                 </div>
-                <p style={{ margin: '0 0 4px', color: '#4b5563', fontSize: '0.95rem' }}>
-                  {loc.address ? `${loc.address}, ` : ''}
-                  {loc.district ? `${loc.district}, ` : ''}
-                  {loc.city || ''}
-                  {loc.country ? ` (${loc.country})` : ''}
-                </p>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(loc)}
+                    style={{
+                      background: '#f8fafc',
+                      color: '#334155',
+                      border: '1px solid #cbd5e1',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Chỉnh sửa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(loc.id, loc.headquarter)}
+                    style={{
+                      background: loc.headquarter ? '#f1f5f9' : '#ffffff',
+                      color: loc.headquarter ? '#94a3b8' : '#ef4444',
+                      border: loc.headquarter ? '1px solid #cbd5e1' : '1px solid #fecaca',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      cursor: loc.headquarter ? 'not-allowed' : 'pointer',
+                      fontWeight: 500,
+                      fontSize: '0.85rem',
+                      transition: 'all 0.2s'
+                    }}
+                    disabled={loc.headquarter}
+                    title={loc.headquarter ? 'Không thể xóa trụ sở chính' : 'Xóa chi nhánh'}
+                  >
+                    Xóa
+                  </button>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => handleOpenEdit(loc)}
-                  style={{
-                    background: '#e2e8f0',
-                    color: '#334155',
-                    border: 'none',
-                    padding: '6px 14px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: '0.85rem'
-                  }}
-                >
-                  Sửa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(loc.id, loc.headquarter)}
-                  style={{
-                    background: loc.headquarter ? '#f3f4f6' : '#fee2e2',
-                    color: loc.headquarter ? '#9ca3af' : '#ef4444',
-                    border: 'none',
-                    padding: '6px 14px',
-                    borderRadius: '4px',
-                    cursor: loc.headquarter ? 'not-allowed' : 'pointer',
-                    fontWeight: 600,
-                    fontSize: '0.85rem'
-                  }}
-                  disabled={loc.headquarter}
-                  title={loc.headquarter ? 'Không thể xóa trụ sở chính' : 'Xóa địa điểm'}
-                >
-                  Xóa
-                </button>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </section>

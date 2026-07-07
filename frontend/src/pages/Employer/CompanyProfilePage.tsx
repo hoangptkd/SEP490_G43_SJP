@@ -79,84 +79,87 @@ function CompanyProfilePage() {
 
   const verificationStatus = company.verificationStatus?.toLowerCase() || 'unverified';
   const statusBadge = verificationStatus === 'verified'
-    ? { text: '✓ Đã xác thực', bg: '#e4eee7', color: '#245d43' }
+    ? { text: 'Đã xác thực', bg: '#ecfdf5', color: '#047857', border: '#a7f3d0', dot: '#10b981' }
     : verificationStatus === 'pending'
-    ? { text: '⏳ Chờ duyệt', bg: '#fff3cd', color: '#856404' }
+    ? { text: 'Chờ kiểm duyệt', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' }
     : verificationStatus === 'rejected'
-    ? { text: '✕ Bị từ chối', bg: '#f8d7da', color: '#842029' }
-    : { text: '○ Chưa gửi duyệt', bg: '#e2e3e5', color: '#41464b' };
+    ? { text: 'Yêu cầu bổ sung hồ sơ', bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', dot: '#ef4444' }
+    : { text: 'Chưa xác thực', bg: '#f8fafc', color: '#475569', border: '#cbd5e1', dot: '#94a3b8' };
 
   return (
     <section className="content-card">
       <div className="company-profile-banner" style={{
-        background: 'linear-gradient(135deg, #245d43 0%, #123327 100%)',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
         color: '#fff',
-        padding: '30px',
-        borderRadius: '8px',
-        marginBottom: '24px',
+        padding: '32px',
+        borderRadius: '10px',
+        marginBottom: '28px',
         position: 'relative',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
+        boxShadow: '0 4px 15px rgba(0,0,0,0.08)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <div style={{
-              width: '80px',
-              height: '80px',
+              width: '84px',
+              height: '84px',
               borderRadius: '12px',
               backgroundColor: '#fff',
-              border: '2px solid rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.2)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               overflow: 'hidden',
               position: 'relative',
               flexShrink: 0,
-              boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
             }}>
               {company.logoUrl ? (
                 <img src={company.logoUrl} alt={company.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <span style={{ fontSize: '2rem', fontWeight: 700, color: '#245d43' }}>
+                <span style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a' }}>
                   {company.name ? company.name.charAt(0).toUpperCase() : 'C'}
                 </span>
               )}
             </div>
             <div>
-              <h1 style={{ color: '#fff', marginBottom: '8px', fontSize: '2rem', fontWeight: 800 }}>{company.name}</h1>
-              <p style={{ margin: 0, opacity: 0.9, fontSize: '1rem' }}>
+              <h1 style={{ color: '#fff', marginBottom: '8px', fontSize: '1.75rem', fontWeight: 700 }}>{company.name}</h1>
+              <p style={{ margin: 0, opacity: 0.85, fontSize: '0.95rem', color: '#cbd5e1' }}>
                 {company.industry || 'Chưa cập nhật ngành nghề'} · {company.location || 'Chưa cập nhật địa điểm'}
               </p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{
-              background: 'rgba(255,255,255,0.15)',
-              border: '1px solid rgba(255,255,255,0.3)',
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
               color: '#fff',
               padding: '8px 16px',
               borderRadius: '6px',
               cursor: uploadingLogo ? 'wait' : 'pointer',
-              fontSize: '0.85rem',
-              fontWeight: 600,
+              fontSize: '0.875rem',
+              fontWeight: 500,
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               transition: 'background 0.2s',
               margin: 0
             }}>
-              <span>{uploadingLogo ? '⏳ Đang tải logo...' : '📷 Thay đổi Logo'}</span>
+              <span>{uploadingLogo ? 'Đang cập nhật...' : 'Thay đổi logo'}</span>
               <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} style={{ display: 'none' }} />
             </label>
             <span style={{
               background: statusBadge.bg,
               color: statusBadge.color,
-              padding: '6px 12px',
+              border: `1px solid ${statusBadge.border}`,
+              padding: '6px 14px',
               borderRadius: '20px',
               fontSize: '0.85rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px'
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
             }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusBadge.dot }}></span>
               {statusBadge.text}
             </span>
           </div>
@@ -200,7 +203,7 @@ function CompanyProfilePage() {
                   </option>
                 ))}
               {company.industry && !categories.some(c => !c.parentId && c.name === company.industry) && (
-                <option value={company.industry}>★ [{company.industry}] (Ngành hiện tại)</option>
+                <option value={company.industry}>[{company.industry}] (Ngành hiện tại)</option>
               )}
             </select>
           ) : (
@@ -222,7 +225,7 @@ function CompanyProfilePage() {
               <option value="">-- Chọn chi nhánh làm trụ sở chính --</option>
               {company.locations.map((loc) => (
                 <option key={loc.id} value={loc.branchName}>
-                  {loc.branchName} {loc.city ? `(${loc.city})` : ''} {loc.headquarter ? '★ [Trụ sở hiện tại]' : ''}
+                  {loc.branchName} {loc.city ? `(${loc.city})` : ''} {loc.headquarter ? '(Trụ sở chính)' : ''}
                 </option>
               ))}
             </select>
@@ -264,36 +267,53 @@ function CompanyProfilePage() {
           />
         </label>
 
-        <div className="wide" style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {message && <p className="success" style={{ margin: 0 }}>{message}</p>}
-          {error && <p className="error" style={{ margin: 0 }}>{error}</p>}
-          <button type="submit" disabled={saving} style={{ alignSelf: 'flex-start' }}>
-            {saving ? 'Đang lưu...' : 'Lưu hồ sơ công ty'}
+        <div className="wide" style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+          {message && <p className="success" style={{ margin: 0, padding: '12px 16px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', borderRadius: '6px', fontSize: '0.9rem' }}>{message}</p>}
+          {error && <p className="error" style={{ margin: 0, padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', fontSize: '0.9rem' }}>{error}</p>}
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              alignSelf: 'flex-start',
+              background: '#2563eb',
+              color: '#fff',
+              border: 'none',
+              padding: '10px 24px',
+              borderRadius: '6px',
+              fontWeight: 600,
+              fontSize: '0.95rem',
+              cursor: saving ? 'wait' : 'pointer',
+              boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+              transition: 'background-color 0.2s'
+            }}
+          >
+            {saving ? 'Đang xử lý...' : 'Lưu thay đổi'}
           </button>
         </div>
       </form>
 
       {company.locations && company.locations.length > 0 && (
-        <div style={{ marginTop: '36px', borderTop: '1px solid #eaeaea', paddingTop: '24px' }}>
+        <div style={{ marginTop: '36px', borderTop: '1px solid #e2e8f0', paddingTop: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ margin: 0, color: '#111827', fontSize: '1.2rem' }}>Các chi nhánh & Văn phòng ({company.locations.length})</h3>
-            <a href="/employer/locations" style={{ color: '#245d43', fontWeight: 600, textDecoration: 'none' }}>
+            <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.2rem', fontWeight: 700 }}>Các chi nhánh & Văn phòng ({company.locations.length})</h3>
+            <a href="/employer/locations" style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none', fontSize: '0.9rem' }}>
               Quản lý chi nhánh →
             </a>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
             {company.locations.map((loc) => (
               <div key={loc.id} style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: '6px',
-                padding: '12px 16px',
-                background: loc.headquarter ? '#f0fdf4' : '#f9fafb'
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '14px 18px',
+                background: loc.headquarter ? '#f0fdf4' : '#ffffff',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <strong style={{ color: '#1f2937' }}>{loc.branchName}</strong>
-                  {loc.headquarter && <span style={{ fontSize: '0.7rem', background: '#245d43', color: '#fff', padding: '1px 6px', borderRadius: '10px' }}>HQ</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <strong style={{ color: '#0f172a', fontSize: '0.95rem' }}>{loc.branchName}</strong>
+                  {loc.headquarter && <span style={{ fontSize: '0.75rem', background: '#059669', color: '#fff', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>Trụ sở chính</span>}
                 </div>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>
                   {loc.address ? `${loc.address}, ` : ''}{loc.city || ''}
                 </p>
               </div>
