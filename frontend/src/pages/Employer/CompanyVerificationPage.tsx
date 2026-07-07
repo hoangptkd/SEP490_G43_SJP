@@ -97,36 +97,40 @@ function CompanyVerificationPage() {
       case 'VERIFIED':
       case 'APPROVED':
         return {
-          text: 'Đã xác thực (Verified)',
-          color: '#0f5132',
-          bg: '#d1e7dd',
-          border: '#badbcc',
-          desc: 'Tuyệt vời! Công ty của bạn đã được kiểm duyệt pháp lý thành công. Huy hiệu Verified được hiển thị công khai.'
+          text: 'Đã xác thực pháp lý',
+          color: '#047857',
+          bg: '#ecfdf5',
+          border: '#a7f3d0',
+          dot: '#10b981',
+          desc: 'Tuyệt vời! Doanh nghiệp của bạn đã hoàn tất kiểm duyệt pháp lý thành công. Huy hiệu xác thực được hiển thị công khai trên tất cả tin tuyển dụng.'
         };
       case 'PENDING':
       case 'PENDING_REVIEW':
         return {
-          text: 'Đang chờ duyệt (Pending Review)',
-          color: '#664d03',
-          bg: '#fff3cd',
-          border: '#ffecb5',
-          desc: 'Tài liệu của bạn đang được ban quản trị kiểm tra. Quá trình duyệt thường diễn ra trong 24h làm việc.'
+          text: 'Chờ kiểm duyệt hồ sơ',
+          color: '#1d4ed8',
+          bg: '#eff6ff',
+          border: '#bfdbfe',
+          dot: '#3b82f6',
+          desc: 'Tài liệu pháp lý đang được Bộ phận kiểm duyệt rà soát. Quá trình kiểm duyệt thường hoàn tất trong vòng 24 giờ làm việc.'
         };
       case 'REJECTED':
         return {
-          text: 'Bị từ chối (Rejected)',
-          color: '#842029',
-          bg: '#f8d7da',
-          border: '#f5c2c7',
-          desc: 'Tài liệu không đạt yêu cầu hoặc không rõ ràng. Vui lòng xem lý do từ chối và tải lên lại tài liệu hợp lệ.'
+          text: 'Yêu cầu cập nhật tài liệu',
+          color: '#b91c1c',
+          bg: '#fef2f2',
+          border: '#fecaca',
+          dot: '#ef4444',
+          desc: 'Tài liệu không đạt yêu cầu hoặc chưa đủ thông tin. Vui lòng kiểm tra phản hồi từ bộ phận kiểm duyệt và gửi lại hồ sơ hợp lệ.'
         };
       default:
         return {
-          text: 'Chưa xác thực (Unverified)',
-          color: '#41464b',
-          bg: '#e2e3e5',
-          border: '#d3d6d8',
-          desc: 'Vui lòng tải lên Giấy phép đăng ký kinh doanh hoặc Mã số thuế doanh nghiệp (File PDF hoặc Ảnh) để xác thực tài khoản.'
+          text: 'Chưa xác thực',
+          color: '#475569',
+          bg: '#f8fafc',
+          border: '#cbd5e1',
+          dot: '#94a3b8',
+          desc: 'Vui lòng tải lên Giấy phép đăng ký kinh doanh hoặc Mã số thuế doanh nghiệp (File PDF hoặc hình ảnh) để tiến hành xác thực.'
         };
     }
   }
@@ -135,48 +139,51 @@ function CompanyVerificationPage() {
 
   if (loading) {
     return (
-      <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-        <p>Đang tải thông tin xác thực pháp lý...</p>
+      <div className="card" style={{ padding: '48px', textAlign: 'center', color: '#64748b' }}>
+        <p style={{ margin: 0, fontSize: '1rem' }}>Đang tải thông tin xác thực doanh nghiệp...</p>
       </div>
     );
   }
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+    <div className="card" style={{ padding: '32px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
         <div>
-          <h1 style={{ margin: '0 0 8px 0', fontSize: '24px', color: '#111' }}>Xác thực pháp lý doanh nghiệp</h1>
-          <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>
-            Tải lên Giấy đăng ký kinh doanh, Giấy phép hoạt động hoặc tài liệu thuế định danh doanh nghiệp
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>Xác thực pháp lý doanh nghiệp</h1>
+          <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>
+            Tải lên Giấy chứng nhận đăng ký doanh nghiệp hoặc tài liệu thuế định danh tổ chức
           </p>
         </div>
         <button
           onClick={loadData}
           style={{
-            background: '#f8f9fa',
-            border: '1px solid #ced4da',
+            background: '#f8fafc',
+            border: '1px solid #cbd5e1',
+            color: '#334155',
             padding: '8px 16px',
             borderRadius: '6px',
             cursor: 'pointer',
-            fontSize: '14px',
+            fontSize: '0.875rem',
+            fontWeight: 600,
             display: 'flex',
             alignItems: 'center',
-            gap: '6px'
+            gap: '6px',
+            transition: 'all 0.2s'
           }}
         >
-          🔄 Làm mới
+          Làm mới dữ liệu
         </button>
       </div>
 
       {error && (
-        <div style={{ background: '#f8d7da', color: '#842029', padding: '12px 16px', borderRadius: '6px', marginBottom: '16px', border: '1px solid #f5c2c7' }}>
-          ⚠️ {error}
+        <div style={{ background: '#fef2f2', color: '#991b1b', padding: '14px 18px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626', fontSize: '0.9rem' }}>
+          {error}
         </div>
       )}
 
       {success && (
-        <div style={{ background: '#d1e7dd', color: '#0f5132', padding: '12px 16px', borderRadius: '6px', marginBottom: '16px', border: '1px solid #badbcc' }}>
-          ✅ {success}
+        <div style={{ background: '#ecfdf5', color: '#047857', padding: '14px 18px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #a7f3d0', borderLeft: '4px solid #10b981', fontSize: '0.9rem' }}>
+          {success}
         </div>
       )}
 
@@ -185,53 +192,54 @@ function CompanyVerificationPage() {
         background: badgeInfo.bg,
         color: badgeInfo.color,
         border: `1px solid ${badgeInfo.border}`,
-        padding: '20px',
-        borderRadius: '10px',
-        marginBottom: '24px',
+        padding: '22px 24px',
+        borderRadius: '8px',
+        marginBottom: '28px',
         display: 'flex',
         alignItems: 'flex-start',
         gap: '16px'
       }}>
-        <div style={{ fontSize: '28px' }}>
-          {company?.verificationStatus?.toUpperCase() === 'VERIFIED' ? '🛡️' :
-           company?.verificationStatus?.toUpperCase() === 'PENDING' ? '⏳' :
-           company?.verificationStatus?.toUpperCase() === 'REJECTED' ? '❌' : '📋'}
-        </div>
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <span style={{ fontWeight: 'bold', fontSize: '16px' }}>Trạng thái:</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>Trạng thái hồ sơ:</span>
             <span style={{
-              background: 'rgba(0,0,0,0.08)',
-              padding: '4px 10px',
+              background: '#ffffff',
+              color: badgeInfo.color,
+              border: `1px solid ${badgeInfo.border}`,
+              padding: '4px 14px',
               borderRadius: '20px',
-              fontWeight: '600',
-              fontSize: '14px'
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
             }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: badgeInfo.dot }}></span>
               {badgeInfo.text}
             </span>
           </div>
-          <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.5' }}>{badgeInfo.desc}</p>
+          <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.6, opacity: 0.9 }}>{badgeInfo.desc}</p>
         </div>
       </div>
 
       {/* Upload Box */}
       <div style={{
-        border: '2px dashed #a8b3be',
+        border: '2px dashed #cbd5e1',
         borderRadius: '10px',
-        padding: '28px 20px',
+        padding: '36px 24px',
         textAlign: 'center',
-        background: '#fafbfc',
-        marginBottom: '28px'
+        background: '#f8fafc',
+        marginBottom: '32px',
+        transition: 'border-color 0.2s'
       }}>
-        <div style={{ fontSize: '40px', marginBottom: '12px' }}>📁</div>
-        <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: '#333' }}>
+        <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: '#0f172a', fontWeight: 600 }}>
           Tải lên tài liệu xác thực (PDF, JPG, PNG)
         </h3>
-        <p style={{ margin: '0 0 16px 0', color: '#6c757d', fontSize: '13px' }}>
-          Hỗ trợ file tối đa 10MB. Tài liệu sẽ được lưu trữ an toàn trên Cloudinary.
+        <p style={{ margin: '0 0 20px 0', color: '#64748b', fontSize: '0.875rem' }}>
+          Hỗ trợ tệp tin tối đa 10MB. Tài liệu được mã hóa và bảo mật tuyệt đối trên hệ thống cloud.
         </p>
 
-        <form onSubmit={handleUpload} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+        <form onSubmit={handleUpload} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
           <input
             type="file"
             ref={fileInputRef}
@@ -243,18 +251,20 @@ function CompanyVerificationPage() {
           <label
             htmlFor="doc-upload-input"
             style={{
-              background: '#fff',
-              border: '1px solid #ced4da',
-              padding: '10px 20px',
+              background: '#ffffff',
+              border: '1px solid #cbd5e1',
+              padding: '10px 22px',
               borderRadius: '6px',
               cursor: 'pointer',
               fontWeight: 500,
-              color: '#333',
+              color: '#334155',
+              fontSize: '0.9rem',
               boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              display: 'inline-block'
+              display: 'inline-block',
+              transition: 'all 0.2s'
             }}
           >
-            {selectedFile ? `📄 Đã chọn: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB)` : '🔍 Chọn file từ máy tính'}
+            {selectedFile ? `Đã chọn: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB)` : '+ Chọn tệp từ máy tính'}
           </label>
 
           {selectedFile && (
@@ -262,97 +272,103 @@ function CompanyVerificationPage() {
               type="submit"
               disabled={uploading}
               style={{
-                background: '#245d43',
+                background: '#2563eb',
                 color: '#fff',
                 border: 'none',
-                padding: '10px 24px',
+                padding: '10px 26px',
                 borderRadius: '6px',
                 cursor: uploading ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold',
-                fontSize: '14px',
-                boxShadow: '0 2px 4px rgba(36,93,67,0.2)'
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                transition: 'background-color 0.2s'
               }}
             >
-              {uploading ? '☁️ Đang tải lên Cloudinary...' : '⬆️ Bắt đầu tải lên & Gửi xác thực'}
+              {uploading ? 'Đang tải lên hệ thống...' : 'Tải lên & Nộp kiểm duyệt'}
             </button>
           )}
         </form>
       </div>
 
       {/* Document List */}
-      <h3 style={{ fontSize: '18px', margin: '0 0 16px 0', color: '#111', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-        📋 Danh sách tài liệu đã gửi ({documents.length})
+      <h3 style={{ fontSize: '1.2rem', margin: '0 0 16px 0', color: '#0f172a', fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+        Danh sách tài liệu đã gửi ({documents.length})
       </h3>
 
       {documents.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: '30px 0', color: '#6c757d', margin: 0 }}>
-          Chưa có tài liệu nào được tải lên. Vui lòng tải lên tài liệu pháp lý ở trên để bắt đầu xác thực.
+        <p style={{ textAlign: 'center', padding: '36px 0', color: '#64748b', margin: 0, fontSize: '0.95rem' }}>
+          Chưa có tài liệu nào được tải lên. Vui lòng chọn và tải lên tài liệu pháp lý ở khung phía trên.
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {documents.map((doc) => {
             const docStatus = doc.status?.toLowerCase() || 'pending';
             const statusStyle = docStatus === 'approved' || docStatus === 'verified'
-              ? { bg: '#d1e7dd', color: '#0f5132', label: 'Đã duyệt' }
+              ? { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0', label: 'Đã hợp lệ' }
               : docStatus === 'rejected'
-              ? { bg: '#f8d7da', color: '#842029', label: 'Bị từ chối' }
-              : { bg: '#fff3cd', color: '#664d03', label: 'Chờ duyệt' };
+              ? { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', label: 'Yêu cầu cập nhật' }
+              : { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', label: 'Chờ kiểm duyệt' };
 
             return (
               <div
                 key={doc.id}
                 style={{
-                  border: '1px solid #e9ecef',
+                  border: '1px solid #e2e8f0',
                   borderRadius: '8px',
-                  padding: '16px',
+                  padding: '18px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  background: '#fff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                  background: '#ffffff',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                  flexWrap: 'wrap',
+                  gap: '16px'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: '1 1 300px' }}>
                   <div style={{
-                    width: '44px',
-                    height: '44px',
+                    width: '48px',
+                    height: '48px',
                     borderRadius: '8px',
-                    background: doc.fileType === 'pdf' ? '#fde8e8' : '#e1f5fe',
-                    color: doc.fileType === 'pdf' ? '#e53e3e' : '#0288d1',
+                    background: doc.fileType === 'pdf' ? '#fef2f2' : '#eff6ff',
+                    color: doc.fileType === 'pdf' ? '#dc2626' : '#2563eb',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '20px',
-                    fontWeight: 'bold'
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    border: doc.fileType === 'pdf' ? '1px solid #fecaca' : '1px solid #bfdbfe',
+                    flexShrink: 0
                   }}>
                     {doc.fileType === 'pdf' ? 'PDF' : 'IMG'}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, color: '#333', fontSize: '15px', marginBottom: '4px' }}>
+                    <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem', marginBottom: '6px' }}>
                       {doc.fileName}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#6c757d', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                      <span>🕒 {new Date(doc.uploadedAt).toLocaleString('vi-VN')}</span>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span>Thời gian: {new Date(doc.uploadedAt).toLocaleString('vi-VN')}</span>
                       <span style={{
                         background: statusStyle.bg,
                         color: statusStyle.color,
-                        padding: '2px 8px',
+                        border: `1px solid ${statusStyle.border}`,
+                        padding: '2px 10px',
                         borderRadius: '12px',
                         fontWeight: 600,
-                        fontSize: '11px'
+                        fontSize: '0.75rem'
                       }}>
                         {statusStyle.label}
                       </span>
                     </div>
                     {doc.rejectReason && (
-                      <div style={{ color: '#842029', fontSize: '13px', marginTop: '6px', background: '#f8d7da', padding: '6px 10px', borderRadius: '4px' }}>
-                        ⚠️ Lý do từ chối: {doc.rejectReason}
+                      <div style={{ color: '#b91c1c', fontSize: '0.85rem', marginTop: '8px', background: '#fef2f2', border: '1px solid #fecaca', padding: '8px 12px', borderRadius: '6px', lineHeight: 1.4 }}>
+                        <strong>Phản hồi:</strong> {doc.rejectReason}
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                   <a
                     href={doc.fileType === 'pdf' || doc.fileName?.toLowerCase().endsWith('.pdf')
                       ? `https://docs.google.com/gview?url=${encodeURIComponent(doc.fileUrl)}`
@@ -360,20 +376,21 @@ function CompanyVerificationPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
-                      background: '#e3f2fd',
-                      color: '#0d47a1',
-                      border: '1px solid #bbdefb',
+                      background: '#f8fafc',
+                      color: '#334155',
+                      border: '1px solid #cbd5e1',
                       padding: '8px 14px',
                       borderRadius: '6px',
                       textDecoration: 'none',
-                      fontSize: '13px',
+                      fontSize: '0.85rem',
                       fontWeight: 600,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '6px'
+                      gap: '6px',
+                      transition: 'all 0.2s'
                     }}
                   >
-                    👁️ Xem trực tiếp
+                    Xem chi tiết
                   </a>
 
                   <a
@@ -382,20 +399,21 @@ function CompanyVerificationPage() {
                     rel="noopener noreferrer"
                     download={doc.fileName}
                     style={{
-                      background: '#f8f9fa',
-                      color: '#495057',
-                      border: '1px solid #dee2e6',
-                      padding: '8px 12px',
+                      background: '#ffffff',
+                      color: '#475569',
+                      border: '1px solid #cbd5e1',
+                      padding: '8px 14px',
                       borderRadius: '6px',
                       textDecoration: 'none',
-                      fontSize: '13px',
+                      fontSize: '0.85rem',
                       fontWeight: 500,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px'
+                      gap: '4px',
+                      transition: 'all 0.2s'
                     }}
                   >
-                    ⬇️ Tải về
+                    Tải về
                   </a>
 
                   {docStatus === 'pending' && (
@@ -403,17 +421,18 @@ function CompanyVerificationPage() {
                       onClick={() => handleDelete(doc.id)}
                       disabled={deletingId === doc.id}
                       style={{
-                        background: '#fff',
-                        color: '#dc3545',
-                        border: '1px solid #dc3545',
+                        background: '#ffffff',
+                        color: '#ef4444',
+                        border: '1px solid #fecaca',
                         padding: '8px 14px',
                         borderRadius: '6px',
                         cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: 500
+                        fontSize: '0.85rem',
+                        fontWeight: 500,
+                        transition: 'all 0.2s'
                       }}
                     >
-                      {deletingId === doc.id ? 'Đang xóa...' : '🗑️ Xóa'}
+                      {deletingId === doc.id ? 'Đang xử lý...' : 'Xóa'}
                     </button>
                   )}
                 </div>
