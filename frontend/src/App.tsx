@@ -1,8 +1,16 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { authService } from './services/authService';
+import { aiInterviewService } from './services/aiInterviewService';
+import { useVoiceConversation } from './hooks/useVoiceConversation';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
+import type {
+  AiInterviewConfig,
+  AiInterviewEligibleApplication,
+  AiInterviewQuestion,
+  AiInterviewSession,
+} from './types/aiInterview';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -16,6 +24,7 @@ import type { Job, JobFilters, Recommendation } from './types/job';
 const statusLabels: Record<string, string> = {
   SUBMITTED: 'Da nop',
   UNDER_REVIEW: 'Dang xem xet',
+  SHORTLISTED: 'Vao shortlist',
   INTERVIEW_SCHEDULED: 'Hen phong van',
   INTERVIEWED: 'Da phong van',
   EVALUATED: 'Da danh gia',
@@ -42,6 +51,7 @@ function App() {
         <Route path="saved-jobs" element={<SavedJobsPage />} />
         <Route path="applications" element={<ApplicationsPage />} />
         <Route path="applications/:id" element={<ApplicationDetailPage />} />
+        <Route path="ai-interviews" element={<AiInterviewPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
       </Route>
@@ -90,9 +100,18 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function LoginPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [email, setEmail] = useState('candidate.demo@sjp.local');
   const [password, setPassword] = useState('Password123!');
   const [error, setError] = useState('');
+  const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
+  const oauthError = params.get('oauthError');
+
+  useEffect(() => {
+    authService.getConfig()
+      .then((config) => setGoogleOAuthEnabled(config.googleOAuthEnabled))
+      .catch(() => setGoogleOAuthEnabled(false));
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -113,10 +132,13 @@ function LoginPage() {
         <form onSubmit={submit} className="form-grid">
           <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           <label>Mat khau<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+          {oauthError === 'google_not_configured' && <p className="error">Dang nhap Google chua duoc cau hinh tren moi truong nay.</p>}
           {error && <p className="error">{error}</p>}
           <button type="submit">Dang nhap</button>
         </form>
-        <a className="secondary-action" href="/api/oauth2/authorization/google">Dang nhap voi Google</a>
+        {googleOAuthEnabled
+          ? <a className="secondary-action" href="/api/oauth2/authorization/google">Dang nhap voi Google</a>
+          : <p className="muted">Dang nhap Google chua duoc cau hinh tren moi truong nay.</p>}
         <p className="muted">Demo: candidate.demo@sjp.local / Password123!</p>
       </section>
     </Shell>
@@ -229,16 +251,16 @@ function JobsPage() {
   const [filters, setFilters] = useState<JobFilters>({ sort: 'newest' });
   const [error, setError] = useState('');
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const response = await jobService.getAll(filters, 0, 12);
       setJobs(response.content);
     } catch (err) {
       setError(readError(err));
     }
-  }
+  }, [filters]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, [load]);
 
   return (
     <Shell>
@@ -296,7 +318,7 @@ function JobDetailPage() {
   const [cvId, setCvId] = useState<string | undefined>();
   const [message, setMessage] = useState('');
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!id) return;
     setJob(await jobService.getById(id));
     if (getToken()) {
@@ -305,9 +327,9 @@ function JobDetailPage() {
         setCvId(items.find((item) => item.defaultCv)?.id || items[0]?.id);
       }).catch(() => setCvs([]));
     }
-  }
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { void load(); }, [load]);
 
   async function toggleSave() {
     if (!job) return;
@@ -373,6 +395,7 @@ function CandidateLayout() {
         <NavLink to="/candidate/cvs">CV</NavLink>
         <NavLink to="/candidate/saved-jobs">Viec da luu</NavLink>
         <NavLink to="/candidate/applications">Ung tuyen</NavLink>
+        <NavLink to="/candidate/ai-interviews">AI Interview</NavLink>
         <NavLink to="/candidate/notifications">Thong bao</NavLink>
         <NavLink to="/candidate/subscription">Goi dich vu</NavLink>
         <NavLink to="/jobs">Tim viec</NavLink>
@@ -543,6 +566,549 @@ function SubscriptionPage() {
       <h2>Quyen loi</h2>
       <div className="chip-row">{subscription.benefits.map((benefit) => <span className="chip" key={benefit}>{benefit}</span>)}</div>
     </section>
+  );
+}
+
+function AiInterviewPage() {
+  const [config, setConfig] = useState<AiInterviewConfig | null>(null);
+  const [applications, setApplications] = useState<AiInterviewEligibleApplication[]>([]);
+  const [sessions, setSessions] = useState<AiInterviewSession[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [activeTab, setActiveTab] = useState<'application' | 'practice'>('application');
+  const [targetRole, setTargetRole] = useState('Java Backend Developer');
+  const [skills, setSkills] = useState('Spring Boot, PostgreSQL');
+  const [jobId, setJobId] = useState('');
+  const [selectedSession, setSelectedSession] = useState<AiInterviewSession | null>(null);
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    const configData = await aiInterviewService.configStatus();
+    setConfig(configData);
+    if (!configData.enabled) {
+      setApplications([]);
+      setSessions([]);
+      setJobs([]);
+      return;
+    }
+    const sessionData = await aiInterviewService.sessions();
+    setSessions(sessionData);
+    if (configData.enabled) {
+      const [applicationData, jobsData] = await Promise.all([
+        aiInterviewService.eligibleApplications(),
+        jobService.getAll({ sort: 'newest' }, 0, 20).then((result) => result.content),
+      ]);
+      setApplications(applicationData);
+      setJobs(jobsData);
+    }
+  }
+
+  useEffect(() => {
+    load().catch((err) => setMessage(readError(err)));
+  }, []);
+
+  async function createFromApplication(applicationId: string) {
+    setLoading(true);
+    setMessage('');
+    try {
+      const session = await aiInterviewService.createApplicationSession(applicationId);
+      setSelectedSession(session);
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createPractice(event: FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setMessage('');
+    try {
+      const skillList = skills.split(',').map((item) => item.trim()).filter(Boolean);
+      const session = await aiInterviewService.createPracticeSession(targetRole, skillList, jobId || undefined);
+      setSelectedSession(session);
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openSession(id: string) {
+    setSelectedSession(await aiInterviewService.getSession(id));
+  }
+
+  async function deleteSession(id: string) {
+    await aiInterviewService.deleteSession(id);
+    if (selectedSession?.id === id) setSelectedSession(null);
+    await load();
+  }
+
+  if (!config) return <p className="loading">Dang tai AI Interview...</p>;
+
+  return (
+    <section className="ai-page">
+      <div className="ai-heading">
+        <div>
+          <p className="eyebrow">Candidate practice</p>
+          <h1>AI Interview</h1>
+          <p className="muted">AI feedback chi dung de luyen tap, khong phai quyet dinh tuyen dung.</p>
+        </div>
+        <span className="status-pill">{config.questionCount} cau / session</span>
+      </div>
+
+      {!config.enabled && (
+        <div className="notice-panel" role="status">
+          <strong>AI Interview chua san sang</strong>
+          <p>{config.message || 'AI Interview chua duoc cau hinh.'}</p>
+        </div>
+      )}
+
+      {config.enabled && selectedSession && (
+        <AiInterviewRoom
+          config={config}
+          session={selectedSession}
+          onSessionChange={setSelectedSession}
+          onBack={async () => { setSelectedSession(null); await load(); }}
+        />
+      )}
+
+      {config.enabled && !selectedSession && (
+        <div className="ai-layout">
+          <div className="content-card">
+            <div className="segmented" role="tablist" aria-label="Che do tao phong van AI">
+              <button type="button" className={activeTab === 'application' ? 'active' : 'outline'} onClick={() => setActiveTab('application')}>Theo application</button>
+              <button type="button" className={activeTab === 'practice' ? 'active' : 'outline'} onClick={() => setActiveTab('practice')}>Practice tu do</button>
+            </div>
+
+            {activeTab === 'application' ? (
+              <div className="table-list ai-table">
+                {applications.length === 0 && <p className="empty-state">Chua co application hop le de luyen phong van.</p>}
+                {applications.map((application) => (
+                  <div className="table-row" key={application.id}>
+                    <strong>{application.job.title}</strong>
+                    <span>{application.job.company.name}</span>
+                    <span className="status-pill">{statusLabels[application.status] || application.status}</span>
+                    <button type="button" disabled={loading} onClick={() => createFromApplication(application.id)}>Bat dau</button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <form className="form-grid" onSubmit={createPractice}>
+                <label>Target role
+                  <input required value={targetRole} onChange={(event) => setTargetRole(event.target.value)} />
+                </label>
+                <label>Skills
+                  <input required value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="Spring Boot, PostgreSQL" />
+                </label>
+                <label>Optional active job
+                  <select value={jobId} onChange={(event) => setJobId(event.target.value)}>
+                    <option value="">Khong chon job</option>
+                    {jobs.map((job) => <option value={job.id} key={job.id}>{job.title}</option>)}
+                  </select>
+                </label>
+                <button type="submit" disabled={loading}>Tao practice session</button>
+              </form>
+            )}
+
+            {message && <p className="error" role="alert">{message}</p>}
+          </div>
+
+          <div className="content-card">
+            <h2>Lich su gan day</h2>
+            <div className="session-list">
+              {sessions.length === 0 && <p className="empty-state">Chua co phien phong van nao.</p>}
+              {sessions.map((session) => (
+                <article className="session-row" key={session.id}>
+                  <div>
+                    <strong>{session.title}</strong>
+                    <p>{session.contextType === 'application' ? 'Theo application' : 'Practice tu do'} - {session.status}</p>
+                  </div>
+                  <div className="button-row">
+                    <button type="button" className="outline" onClick={() => openSession(session.id)}>
+                      {session.status === 'completed' ? 'Xem lai' : 'Resume'}
+                    </button>
+                    <button type="button" className="danger" onClick={() => deleteSession(session.id)}>An</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AiInterviewRoom({
+  config,
+  session,
+  onSessionChange,
+  onBack,
+}: {
+  config: AiInterviewConfig;
+  session: AiInterviewSession;
+  onSessionChange: (session: AiInterviewSession) => void;
+  onBack: () => void;
+}) {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | undefined>();
+  const recordingStartedAtRef = useRef(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioDurationSeconds, setAudioDurationSeconds] = useState(0);
+  const [transcript, setTranscript] = useState('');
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+
+  const currentQuestion = findCurrentQuestion(session);
+  const currentAnswerLocked = Boolean(currentQuestion?.answer?.answeredAt);
+
+  useEffect(() => {
+    setAudioFile(null);
+    setAudioDurationSeconds(0);
+    setTranscript(currentQuestion?.answer?.answeredAt ? '' : currentQuestion?.answer?.transcript || '');
+    setError('');
+    setBusy('');
+  }, [currentQuestion?.answer?.answeredAt, currentQuestion?.answer?.transcript, currentQuestion?.id]);
+
+  async function refreshSession() {
+    onSessionChange(await aiInterviewService.getSession(session.id));
+  }
+
+  async function startRecording() {
+    setError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        setAudioFile(new File([blob], `answer-${Date.now()}.webm`, { type: blob.type || 'audio/webm' }));
+        setAudioDurationSeconds(Math.max(1, (Date.now() - recordingStartedAtRef.current) / 1000));
+        stream.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+        window.clearTimeout(timerRef.current);
+      };
+      recorder.start();
+      recordingStartedAtRef.current = Date.now();
+      setIsRecording(true);
+      timerRef.current = window.setTimeout(() => stopRecording(), config.audioMaxSeconds * 1000);
+    } catch {
+      setError('Khong the truy cap microphone. Vui long kiem tra quyen trinh duyet.');
+    }
+  }
+
+  function stopRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    setIsRecording(false);
+  }
+
+  async function transcribe() {
+    if (!audioFile || !currentQuestion) return;
+    setBusy('Dang chuyen giong noi thanh transcript...');
+    setError('');
+    try {
+      const result = await aiInterviewService.uploadAudio(session.id, audioFile, audioDurationSeconds);
+      setTranscript(result.transcript);
+      await refreshSession();
+    } catch (err) {
+      setError(readError(err));
+      await refreshSession().catch(() => undefined);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function submitAnswer(answerText = transcript, propagateError = false) {
+    if (!currentQuestion || !answerText.trim()) return;
+    setBusy('Dang cham feedback...');
+    setError('');
+    try {
+      onSessionChange(await aiInterviewService.submitAnswer(session.id, currentQuestion.id, answerText.trim()));
+    } catch (err) {
+      setError(readError(err));
+      await refreshSession().catch(() => undefined);
+      if (propagateError) throw new Error(readError(err));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function skipQuestion() {
+    if (!currentQuestion) return;
+    setBusy('Dang bo qua cau hoi...');
+    setError('');
+    try {
+      onSessionChange(await aiInterviewService.skipQuestion(session.id, currentQuestion.id));
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function retryFeedback(question: AiInterviewQuestion) {
+    setBusy('Dang thu lai feedback...');
+    setError('');
+    try {
+      onSessionChange(await aiInterviewService.retryFeedback(session.id, question.id));
+    } catch (err) {
+      setError(readError(err));
+      await refreshSession().catch(() => undefined);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function retrySummary() {
+    setBusy('Dang tao lai tong ket...');
+    setError('');
+    try {
+      onSessionChange(await aiInterviewService.retrySummary(session.id));
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  const voice = useVoiceConversation({
+    questionId: currentQuestion?.id,
+    questionText: currentQuestion?.content,
+    initialTranscript: currentQuestion?.answer?.transcript || '',
+    silenceMs: config.voiceSilenceMs || 4000,
+    disabled: Boolean(busy) || currentAnswerLocked || !currentQuestion,
+    onTranscript: setTranscript,
+    onSubmit: (value) => submitAnswer(value, true),
+  });
+
+  useEffect(() => () => {
+    window.clearTimeout(timerRef.current);
+    if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current?.stop();
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  if (session.status === 'completed') {
+    return (
+      <div className="interview-room">
+        <button type="button" className="outline" onClick={onBack}>Quay lai danh sach</button>
+        <div className="result-panel">
+          <p className="eyebrow">Ket qua luyen tap</p>
+          <h2>{session.title}</h2>
+          <strong className="score-display">{Math.round(Number(session.summary?.overallScore || session.overallScore || 0))}%</strong>
+          <p>{session.summary?.summary}</p>
+          {session.summary?.fallback ? (
+            <div className="notice-panel" role="status">
+              <p>Đây là tổng kết dự phòng vì dịch vụ AI tạm thời chưa phản hồi.</p>
+              <button type="button" disabled={Boolean(busy)} onClick={retrySummary}>Thử tạo lại tổng kết AI</button>
+            </div>
+          ) : null}
+          <FeedbackList title="Diem manh" items={session.summary?.strengths || []} />
+          <FeedbackList title="Diem can cai thien" items={session.summary?.weaknesses || []} />
+          <FeedbackList title="Ke hoach cai thien" items={session.summary?.improvementPlan || []} />
+          <p className="muted">AI feedback chi phuc vu luyen tap, khong phai quyet dinh tuyen dung.</p>
+        </div>
+        <QuestionHistory questions={session.questions} onRetryFeedback={retryFeedback} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="interview-room">
+      <button type="button" className="outline" onClick={onBack}>Quay lai danh sach</button>
+      <div className="question-panel">
+        <div className="interview-progress">
+          <span>Cau {currentQuestion?.orderIndex || session.totalQuestions}/{config.questionCount}</span>
+          <span>{session.title}</span>
+        </div>
+        <p className="muted">AI feedback chi phuc vu luyen tap, khong phai quyet dinh tuyen dung.</p>
+        {currentQuestion ? (
+          <>
+            <h2>{currentQuestion.content}</h2>
+            <div className="chip-row">
+              <span className="chip">{currentQuestion.questionType}</span>
+              {currentQuestion.difficulty && <span className="chip">{currentQuestion.difficulty}</span>}
+              {currentQuestion.skillTag && <span className="chip">{currentQuestion.skillTag}</span>}
+            </div>
+            {currentQuestion.answer?.errorMessage && (
+              <div className="notice-panel" role="alert">
+                <p>{currentQuestion.answer.errorMessage || 'He thong chua xu ly duoc cau tra loi nay, vui long thu lai.'}</p>
+                {currentAnswerLocked && currentQuestion.answer.feedbackStatus === 'failed' && (
+                  <button type="button" onClick={() => retryFeedback(currentQuestion)}>Retry feedback</button>
+                )}
+              </div>
+            )}
+            {currentAnswerLocked ? (
+              <div className="locked-answer">
+                <strong>Cau tra loi da duoc chot</strong>
+                <p>{currentQuestion.answer?.skipped ? 'Da skip cau nay.' : currentQuestion.answer?.transcript}</p>
+                {currentQuestion.answer?.feedbackStatus === 'failed' && !currentQuestion.answer?.errorMessage && (
+                  <button type="button" onClick={() => retryFeedback(currentQuestion)}>Retry feedback</button>
+                )}
+              </div>
+            ) : (
+              <>
+                {config.voiceStreamingEnabled ? (
+                  <section className="voice-conversation-panel" aria-labelledby="voice-conversation-title">
+                    <div>
+                      <h3 id="voice-conversation-title">Hội thoại giọng nói liên tục</h3>
+                      <p className="muted">AI sẽ đọc câu hỏi, nghe câu trả lời và tự gửi sau khoảng lặng.</p>
+                    </div>
+                    {voice.supported ? (
+                      <>
+                        <div className="voice-controls">
+                          <button
+                            type="button"
+                            className={voice.active ? 'outline' : ''}
+                            aria-pressed={voice.active}
+                            disabled={Boolean(busy)}
+                            onClick={voice.active ? voice.pause : voice.start}
+                          >
+                            {voice.active ? 'Tạm dừng hội thoại' : 'Bắt đầu hội thoại bằng mic'}
+                          </button>
+                          <label className="voice-auto-submit">
+                            <input
+                              type="checkbox"
+                              checked={voice.autoSubmit}
+                              onChange={(event) => voice.setAutoSubmit(event.target.checked)}
+                            />
+                            Tự gửi sau {Math.round((config.voiceSilenceMs || 4000) / 1000)} giây im lặng
+                          </label>
+                        </div>
+                        <p className="voice-status" role="status" aria-live="polite">
+                          Trạng thái: {voicePhaseLabel(voice.phase)}
+                        </p>
+                        {voice.interimTranscript ? (
+                          <p className="voice-interim" aria-live="polite">Đang nghe: {voice.interimTranscript}</p>
+                        ) : null}
+                        {voice.error ? <p className="error" role="alert">{voice.error}</p> : null}
+                      </>
+                    ) : (
+                      <p className="notice-panel" role="status">
+                        Trình duyệt này chưa hỗ trợ nhận dạng giọng nói liên tục. Bạn vẫn có thể ghi âm thủ công bên dưới.
+                      </p>
+                    )}
+                  </section>
+                ) : null}
+                <div className="recorder-panel">
+                  <button type="button" disabled={voice.active} onClick={isRecording ? stopRecording : startRecording}>
+                    {isRecording ? 'Dung ghi am' : 'Bat dau ghi am'}
+                  </button>
+                  <button type="button" className="outline" disabled={!audioFile || isRecording || !!busy} onClick={transcribe}>
+                    Tao transcript
+                  </button>
+                  <button type="button" className="outline" disabled={!!busy} onClick={skipQuestion}>Skip cau nay</button>
+                  {audioFile && <span className="muted">{Math.round(audioFile.size / 1024)} KB da ghi</span>}
+                </div>
+                <label className="transcript-editor">Transcript có thể sửa
+                  <textarea
+                    value={transcript}
+                    onChange={(event) => setTranscript(event.target.value)}
+                    placeholder="Transcript sẽ hiện trực tiếp khi bạn nói hoặc sau khi xử lý audio..."
+                    aria-describedby="transcript-help"
+                  />
+                </label>
+                <p id="transcript-help" className="muted">Kiểm tra transcript trước khi gửi nếu chế độ tự gửi đang tắt.</p>
+                <button type="button" disabled={!transcript.trim() || !!busy} onClick={() => void submitAnswer()}>Gửi câu trả lời để nhận feedback</button>
+              </>
+            )}
+          </>
+        ) : (
+          <div className="notice-panel">
+            <p>Da tra loi du cau. Neu tong ket chua hien thi, hay thu lai.</p>
+            <button type="button" onClick={retrySummary}>Retry tong ket</button>
+          </div>
+        )}
+        {busy && <p className="muted" role="status">{busy}</p>}
+        {error && <p className="error" role="alert">{error}</p>}
+      </div>
+      <QuestionHistory questions={session.questions} onRetryFeedback={retryFeedback} />
+    </div>
+  );
+}
+
+function findCurrentQuestion(session: AiInterviewSession) {
+  return session.questions.find((question) => !question.answer?.answeredAt || question.answer.feedbackStatus === 'failed');
+}
+
+function voicePhaseLabel(phase: 'idle' | 'speaking' | 'listening' | 'processing' | 'paused' | 'error') {
+  const labels = {
+    idle: 'Sẵn sàng',
+    speaking: 'AI đang đọc câu hỏi',
+    listening: 'Microphone đang nghe',
+    processing: 'Đang gửi và chấm câu trả lời',
+    paused: 'Đã tạm dừng',
+    error: 'Cần kiểm tra microphone',
+  };
+  return labels[phase];
+}
+
+function QuestionHistory({
+  questions,
+  onRetryFeedback,
+}: {
+  questions: AiInterviewQuestion[];
+  onRetryFeedback?: (question: AiInterviewQuestion) => Promise<void>;
+}) {
+  return (
+    <div className="content-card">
+      <h2>Cau hoi da xu ly</h2>
+      <div className="question-history">
+        {questions.map((question) => (
+          <article className="history-item" key={question.id}>
+            <strong>Cau {question.orderIndex}: {question.content}</strong>
+            {question.answer?.answeredAt && (
+              <>
+                <p>{question.answer.skipped ? 'Da skip cau nay.' : question.answer.transcript}</p>
+                {question.answer.feedback && (
+                  <div className="feedback-box">
+                    <span className="status-pill">{Math.round(Number(question.answer.feedback.score))}%</span>
+                    {question.answer.feedback.fallback ? (
+                      <>
+                        <span className="fallback-pill">Đánh giá dự phòng</span>
+                        {onRetryFeedback ? (
+                          <button type="button" className="outline" onClick={() => void onRetryFeedback(question)}>
+                            Thử chấm lại bằng AI
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
+                    <p>{question.answer.feedback.feedback}</p>
+                    <FeedbackList title="Diem manh" items={question.answer.feedback.strengths} />
+                    <FeedbackList title="Can cai thien" items={question.answer.feedback.weaknesses} />
+                    <FeedbackList title="Goi y" items={question.answer.feedback.suggestions} />
+                  </div>
+                )}
+              </>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeedbackList({ title, items }: { title: string; items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="feedback-list">
+      <strong>{title}</strong>
+      <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>
+    </div>
   );
 }
 

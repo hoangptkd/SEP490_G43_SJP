@@ -9,6 +9,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
 
@@ -31,7 +33,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiError> handleMaxUpload(MaxUploadSizeExceededException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiError("File CV vuot qua dung luong 5MB", "CV_FILE_TOO_LARGE", Instant.now().toString()));
+                .body(new ApiError("File tải lên vượt quá dung lượng cho phép", "FILE_TOO_LARGE", Instant.now().toString()));
+    }
+
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, DataIntegrityViolationException.class})
+    public ResponseEntity<ApiError> handleConcurrentWrite(Exception exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError("Dữ liệu vừa được cập nhật bởi yêu cầu khác", "CONCURRENT_UPDATE", Instant.now().toString()));
     }
 
     @ExceptionHandler(Exception.class)

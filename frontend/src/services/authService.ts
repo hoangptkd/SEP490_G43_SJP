@@ -17,7 +17,16 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface AuthConfigResponse {
+  googleOAuthEnabled: boolean;
+}
+
 export const authService = {
+  getConfig: async (): Promise<AuthConfigResponse> => {
+    const response = await api.get<AuthConfigResponse>('/auth/config');
+    return response.data;
+  },
+
   login: async (credentials: LoginRequest): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/auth/login', credentials);
     return response.data;
