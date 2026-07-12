@@ -44,11 +44,12 @@ public class SecurityConfig {
                     "/auth/verify-email",
                     "/auth/oauth/complete-role",
                     "/auth/refresh",
+                    "/auth/diagnostic",
                     "/oauth2/**",
                     "/login/oauth2/**",
                     "/actuator/health"
                 ).permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**", "/categories", "/categories/**").permitAll()
                 .anyRequest().authenticated()
             );
 

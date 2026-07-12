@@ -3,8 +3,13 @@ import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams,
 import { authService } from './services/authService';
 import { aiInterviewService } from './services/aiInterviewService';
 import { useVoiceConversation } from './hooks/useVoiceConversation';
+import { clearAuthSession, getToken, setAuthSession } from './utils/authStorage';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
+import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
+import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
+import CompanyVerificationPage from './pages/Employer/CompanyVerificationPage';
+import EmployerJobsPage from './pages/employer/EmployerJobsPage';
 import type {
   AiInterviewConfig,
   AiInterviewEligibleApplication,
@@ -55,12 +60,25 @@ function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
       </Route>
+      <Route path="/employer" element={<Protected><EmployerLayout /></Protected>}>
+        <Route index element={<EmployerDashboard />} />
+        <Route path="company-profile" element={<CompanyProfilePage />} />
+        <Route path="locations" element={<CompanyLocationsPage />} />
+        <Route path="verification" element={<CompanyVerificationPage />} />
+        <Route path="jobs" element={<EmployerJobsPage />} />
+      </Route>
+      <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
+        <Route index element={<AdminDashboardPage />} />
+        <Route path="companies" element={<AdminCompanyReviewPage />} />
+        <Route path="users" element={<AdminUsersPage />} />
+        <Route path="jobs" element={<AdminJobsPage />} />
+        <Route path="statistics" element={<AdminStatisticsPage />} />
+        <Route path="settings" element={<AdminSettingsPage />} />
+        <Route path="profile" element={<AdminProfilePage />} />
+      </Route>
     </Routes>
   );
-}
-
-function getToken() {
-  return localStorage.getItem('token');
 }
 
 function formatMoney(value?: number) {
@@ -83,13 +101,15 @@ function Protected({ children }: { children: JSX.Element }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const token = getToken();
+  const role = localStorage.getItem('role');
   return (
     <div className="app-shell">
       <header className="topbar">
         <Link className="brand" to="/jobs">Smart Recruitment</Link>
         <nav>
           <NavLink to="/jobs">Viec lam</NavLink>
-          {token && <NavLink to="/candidate">Candidate</NavLink>}
+          {token && role === 'CANDIDATE' && <NavLink to="/candidate">Candidate</NavLink>}
+          {token && role === 'EMPLOYER' && <NavLink to="/employer">Employer</NavLink>}
           {!token && <NavLink to="/login">Dang nhap</NavLink>}
         </nav>
       </header>
@@ -118,8 +138,18 @@ function LoginPage() {
     setError('');
     try {
       const response = await authService.login({ email, password });
-      if (response.token) localStorage.setItem('token', response.token);
-      navigate(response.user.role === 'CANDIDATE' ? '/candidate' : '/jobs');
+      if (response.token) {
+        setAuthSession(response.token, response.user);
+      }
+      if (response.user.role === 'ADMIN') {
+        navigate('/admin');
+      } else if (response.user.role === 'EMPLOYER') {
+        navigate('/employer');
+      } else if (response.user.role === 'CANDIDATE') {
+        navigate('/candidate');
+      } else {
+        navigate('/jobs');
+      }
     } catch (err) {
       setError(readError(err));
     }
@@ -205,15 +235,37 @@ function VerifyEmailPage() {
 function OAuthCallbackPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const [error, setError] = useState('');
+
   useEffect(() => {
     const token = params.get('token');
     if (token) {
       localStorage.setItem('token', token);
-      navigate('/candidate');
+      authService.getCurrentUser()
+        .then((user) => {
+          setAuthSession(token, user);
+          if (user.role === 'CANDIDATE') {
+            navigate('/candidate');
+          } else if (user.role === 'EMPLOYER') {
+            navigate('/employer');
+          } else {
+            navigate('/jobs');
+          }
+        })
+        .catch((err) => {
+          setError(readError(err));
+          localStorage.removeItem('token');
+          setTimeout(() => navigate('/login'), 2000);
+        });
     } else {
       navigate('/login');
     }
   }, [navigate, params]);
+
+  if (error) {
+    return <Shell><section className="auth-panel"><h1>Loi dang nhap</h1><p className="error">{error}</p></section></Shell>;
+  }
+
   return <Shell><section className="auth-panel"><p>Dang hoan tat dang nhap Google...</p></section></Shell>;
 }
 
@@ -226,8 +278,10 @@ function SelectRolePage() {
     if (!token) return setError('Thieu token chon vai tro.');
     try {
       const response = await authService.completeOauthRole(token, role);
-      if (response.token) localStorage.setItem('token', response.token);
-      navigate(role === 'CANDIDATE' ? '/candidate' : '/jobs');
+      if (response.token) {
+        setAuthSession(response.token, response.user);
+      }
+      navigate(role === 'CANDIDATE' ? '/candidate' : '/employer');
     } catch (err) {
       setError(readError(err));
     }
@@ -384,7 +438,7 @@ function JobDetailPage() {
 function CandidateLayout() {
   const navigate = useNavigate();
   function logout() {
-    localStorage.removeItem('token');
+    clearAuthSession();
     navigate('/login');
   }
   return (
@@ -565,6 +619,109 @@ function SubscriptionPage() {
       </div>
       <h2>Quyen loi</h2>
       <div className="chip-row">{subscription.benefits.map((benefit) => <span className="chip" key={benefit}>{benefit}</span>)}</div>
+    </section>
+  );
+}
+
+function EmployerLayout() {
+  const navigate = useNavigate();
+  const [companyOpen, setCompanyOpen] = useState(false);
+
+  function logout() {
+    clearAuthSession();
+    navigate('/login');
+  }
+
+  return (
+    <div className="employer-shell">
+      <aside className="employer-nav">
+        <Link className="brand" to="/employer">Employer Portal</Link>
+        <NavLink to="/employer" end>Dashboard</NavLink>
+        <NavLink to="/employer/jobs">Quan ly Viec lam</NavLink>
+
+        <div className="nav-dropdown">
+          <button
+            type="button"
+            className="nav-dropdown-trigger"
+            onClick={() => setCompanyOpen(!companyOpen)}
+          >
+            <span>Cong ty</span>
+            <span className={`arrow ${companyOpen ? 'open' : ''}`}>▼</span>
+          </button>
+          {companyOpen && (
+            <div className="nav-dropdown-items">
+              <NavLink to="/employer/company-profile" className="sub-nav-item">Ho so Cong ty</NavLink>
+              <NavLink to="/employer/locations" className="sub-nav-item">Dia diem lam viec</NavLink>
+              <NavLink to="/employer/verification" className="sub-nav-item">Xac thuc phap ly</NavLink>
+            </div>
+          )}
+        </div>
+
+        <button onClick={logout} style={{ marginTop: 'auto' }}>Dang xuat</button>
+      </aside>
+      <main className="employer-main"><Outlet /></main>
+    </div>
+  );
+}
+
+function EmployerDashboard() {
+  return (
+    <section className="content-card">
+      <div style={{ textAlign: 'center', padding: '30px 20px', marginBottom: '20px' }}>
+        <h1 style={{ color: '#245d43', marginBottom: '12px' }}>Employer Dashboard</h1>
+        <p style={{ color: '#4b5b52', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto' }}>
+          Chào mừng Nhà tuyển dụng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty và tin tuyển dụng của bạn.
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', padding: '0 10px' }}>
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>📢 Quản lý & Đăng tin tuyển dụng</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Tạo mới các vị trí tuyển dụng, thiết lập mức lương, quyền lợi và theo dõi trạng thái các tin đăng. (Yêu cầu công ty đã xác thực)
+            </p>
+          </div>
+          <Link to="/employer/jobs" style={{ background: '#245d43', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Quản lý việc làm →
+          </Link>
+        </div>
+
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>🏢 Hồ sơ công ty & Logo</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Cập nhật thông tin giới thiệu, địa điểm trụ sở và tải lên logo chính thức của doanh nghiệp.
+            </p>
+          </div>
+          <Link to="/employer/company-profile" style={{ background: '#334155', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Hồ sơ công ty →
+          </Link>
+        </div>
+
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>⚖️ Xác thực pháp lý</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Tải lên giấy phép kinh doanh và các tài liệu minh chứng để được Admin phê duyệt tài khoản hợp lệ.
+            </p>
+          </div>
+          <Link to="/employer/verification" style={{ background: '#3b82f6', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Xác thực ngay →
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EmployerPlaceholder({ title }: { title: string }) {
+  return (
+    <section className="content-card">
+      <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+        <h1 style={{ color: '#245d43', marginBottom: '16px' }}>{title}</h1>
+        <p style={{ color: '#4b5b52', fontSize: '1.1rem' }}>Giao dien dang duoc phat trien.</p>
+      </div>
     </section>
   );
 }

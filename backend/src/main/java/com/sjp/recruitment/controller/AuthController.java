@@ -15,6 +15,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @RestController
 @RequestMapping("/auth")
@@ -27,6 +28,37 @@ public class AuthController {
     @GetMapping("/config")
     public ResponseEntity<AuthConfigResponse> config() {
         return ResponseEntity.ok(new AuthConfigResponse(clientRegistrationRepository.getIfAvailable() != null));
+    }
+    private final JdbcTemplate jdbcTemplate;
+
+    @GetMapping("/diagnostic")
+    public ResponseEntity<String> diagnostic() {
+        StringBuilder sb = new StringBuilder();
+        try {
+            sb.append("DB Connection Test: ");
+            jdbcTemplate.execute("SELECT 1");
+            sb.append("Success\n");
+        } catch (Exception e) {
+            sb.append("Failed: ").append(e.toString()).append("\n");
+        }
+
+        try {
+            sb.append("Query companies table: ");
+            jdbcTemplate.execute("SELECT count(*) FROM companies");
+            sb.append("Exists\n");
+        } catch (Exception e) {
+            sb.append("Failed: ").append(e.toString()).append("\n");
+        }
+
+        try {
+            sb.append("Query employers table: ");
+            jdbcTemplate.execute("SELECT count(*) FROM employers");
+            sb.append("Exists\n");
+        } catch (Exception e) {
+            sb.append("Failed: ").append(e.toString()).append("\n");
+        }
+
+        return ResponseEntity.ok(sb.toString());
     }
 
     @PostMapping("/register")

@@ -2,6 +2,7 @@ package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.JobRequest;
+import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyResponse;
 import com.sjp.recruitment.model.dto.response.JobPageResponse;
 import com.sjp.recruitment.model.dto.response.JobResponse;
@@ -9,9 +10,12 @@ import com.sjp.recruitment.model.dto.response.RecommendationResponse;
 import com.sjp.recruitment.model.dto.response.UserResponse;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.Company;
+import com.sjp.recruitment.model.entity.CompanyLocation;
 import com.sjp.recruitment.model.entity.Employer;
 import com.sjp.recruitment.model.entity.Job;
 import com.sjp.recruitment.model.entity.User;
+import com.sjp.recruitment.model.entity.Skill;
+import com.sjp.recruitment.model.entity.JobSkill;
 import com.sjp.recruitment.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -39,10 +43,13 @@ public class JobService {
     private final JobRepository jobRepository;
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
+    private final CompanyLocationRepository companyLocationRepository;
     private final CandidateProfileRepository candidateProfileRepository;
     private final SavedJobRepository savedJobRepository;
     private final ApplicationRepository applicationRepository;
     private final EmployerRepository employerRepository;
+    private final SkillRepository skillRepository;
+    private final JobSkillRepository jobSkillRepository;
     private final DtoMapper dtoMapper;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
@@ -67,28 +74,45 @@ public class JobService {
                     j.title,
                     j.description,
                     j.requirements,
+                    j.benefits,
+                    j.vacancies,
+                    j.working_time,
+                    j.salary_type,
+                    j.job_type,
+                    j.work_mode,
+                    j.views_count,
                     j.salary_min,
                     j.salary_max,
                     j.location,
                     j.experience_level,
                     j.deadline,
                     j.status,
+                    j.company_location_id::text AS company_location_id,
+                    cl.branch_name AS cl_branch_name,
+                    cl.address AS cl_address,
+                    cl.city AS cl_city,
+                    cl.district AS cl_district,
+                    cl.country AS cl_country,
+                    cl.is_headquarter AS cl_is_headquarter,
                     c.id::text AS company_id,
                     c.name AS company_name,
                     c.website AS company_website,
                     c.location AS company_location,
+                    c.logo_url AS company_logo_url,
                     COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills
                 FROM jobs j
                 JOIN companies c ON c.id = j.company_id
+                LEFT JOIN company_locations cl ON cl.id = j.company_location_id
                 LEFT JOIN job_skills js ON js.job_id = j.id
                 LEFT JOIN skills s ON s.id = js.skill_id
                 """
                 + whereClause
                 + """
                 GROUP BY
-                    j.id, j.title, j.description, j.requirements, j.salary_min, j.salary_max,
-                    j.location, j.experience_level, j.deadline, j.status,
-                    c.id, c.name, c.website, c.location
+                    j.id, j.title, j.description, j.requirements, j.benefits, j.vacancies, j.working_time, j.salary_type, j.job_type, j.work_mode, j.views_count, j.salary_min, j.salary_max,
+                    j.location, j.experience_level, j.deadline, j.status, j.company_location_id,
+                    cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
+                    c.id, c.name, c.website, c.location, c.logo_url
                 """
                 + resolveRemoteJobOrder(sort)
                 + " LIMIT :limit OFFSET :offset";
@@ -113,27 +137,45 @@ public class JobService {
                     j.title,
                     j.description,
                     j.requirements,
+                    j.benefits,
+                    j.vacancies,
+                    j.working_time,
+                    j.salary_type,
+                    j.job_type,
+                    j.work_mode,
+                    j.views_count,
                     j.salary_min,
                     j.salary_max,
                     j.location,
                     j.experience_level,
                     j.deadline,
                     j.status,
+                    j.rejection_reason,
+                    j.company_location_id::text AS company_location_id,
+                    cl.branch_name AS cl_branch_name,
+                    cl.address AS cl_address,
+                    cl.city AS cl_city,
+                    cl.district AS cl_district,
+                    cl.country AS cl_country,
+                    cl.is_headquarter AS cl_is_headquarter,
                     c.id::text AS company_id,
                     c.name AS company_name,
                     c.website AS company_website,
                     c.location AS company_location,
+                    c.logo_url AS company_logo_url,
                     COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills
                 FROM jobs j
                 JOIN companies c ON c.id = j.company_id
+                LEFT JOIN company_locations cl ON cl.id = j.company_location_id
                 LEFT JOIN job_skills js ON js.job_id = j.id
                 LEFT JOIN skills s ON s.id = js.skill_id
                 WHERE j.id = CAST(:id AS uuid)
                   AND j.status = 'published'
                 GROUP BY
-                    j.id, j.title, j.description, j.requirements, j.salary_min, j.salary_max,
-                    j.location, j.experience_level, j.deadline, j.status,
-                    c.id, c.name, c.website, c.location
+                    j.id, j.title, j.description, j.requirements, j.benefits, j.vacancies, j.working_time, j.salary_type, j.job_type, j.work_mode, j.views_count, j.salary_min, j.salary_max,
+                    j.location, j.experience_level, j.deadline, j.status, j.rejection_reason, j.company_location_id,
+                    cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
+                    c.id, c.name, c.website, c.location, c.logo_url
                 """;
         List<JobResponse> jobs = namedParameterJdbcTemplate.query(
                 sql,
@@ -166,48 +208,179 @@ public class JobService {
 
     @Transactional
     public Job create(JobRequest request) {
-        Employer employer = employerRepository.findById(parseUuid(request.getEmployerId(), "EMPLOYER_ID_INVALID"))
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "EMPLOYER_NOT_FOUND", "Khong tim thay nha tuyen dung"));
-        Company company = companyRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "COMPANY_REQUIRED", "Can co cong ty truoc khi tao viec lam"));
-        Job job = new Job();
-        job.setTitle(request.getTitle());
-        job.setDescription(request.getDescription());
-        job.setRequirements(request.getRequirements() == null ? List.of() : request.getRequirements());
-        job.setSkills(request.getRequirements() == null ? List.of() : request.getRequirements());
-        job.setSalaryMin(request.getSalaryMin());
-        job.setSalaryMax(request.getSalaryMax());
-        job.setLocation(request.getLocation());
-        job.setExperienceLevel("fresher");
-        job.setDeadline(LocalDate.now().plusDays(30));
-        job.setStatus("published");
-        job.setPublishedAt(LocalDateTime.now());
-        job.setEmployer(employer);
-        job.setCompany(company);
-        return jobRepository.save(job);
+        Employer employer = resolveEmployer(request.getEmployerId());
+        Company company = employer.getCompany();
+        if (company == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "COMPANY_REQUIRED", "Cần có công ty trước khi tạo việc làm");
+        }
+        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền đăng tin tuyển dụng.");
+        }
+        return buildAndSaveJob(new Job(), employer, company, request);
+    }
+
+    @Transactional
+    public JobResponse createJobResponse(JobRequest request) {
+        Job job = create(request);
+        return dtoMapper.toJobResponse(job, false, false, null);
     }
 
     @Transactional
     public Job update(String id, JobRequest request) {
         Job job = findById(id);
-        job.setTitle(request.getTitle());
-        job.setDescription(request.getDescription());
-        job.setRequirements(request.getRequirements() == null ? List.of() : request.getRequirements());
-        job.setSkills(request.getRequirements() == null ? List.of() : request.getRequirements());
-        job.setSalaryMin(request.getSalaryMin());
-        job.setSalaryMax(request.getSalaryMax());
-        job.setLocation(request.getLocation());
-        return jobRepository.save(job);
+        if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực.");
+        }
+        return buildAndSaveJob(job, job.getEmployer(), job.getCompany(), request);
+    }
+
+    @Transactional
+    public JobResponse updateJobResponse(String id, JobRequest request) {
+        Job job = update(id, request);
+        return dtoMapper.toJobResponse(job, false, false, null);
+    }
+
+    @Transactional
+    public JobResponse submitJobForReview(String id, Employer employer) {
+        Job job = findById(id);
+        if (!job.getEmployer().getId().equals(employer.getId()) && (job.getCompany() == null || !job.getCompany().getId().equals(employer.getCompany().getId()))) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền thao tác với việc làm này");
+        }
+        if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực pháp lý.");
+        }
+        if ("rejected".equalsIgnoreCase(job.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_REJECTED", "Tin tuyển dụng đã bị từ chối duyệt. Vui lòng chỉnh sửa nội dung tin tuyển dụng trước khi gửi duyệt lại.");
+        }
+        job.setStatus("pending_review");
+        job.setRejectionReason(null);
+        job = jobRepository.save(job);
+        return dtoMapper.toJobResponse(job, false, false, null);
     }
 
     @Transactional
     public void delete(String id) {
-        jobRepository.deleteById(parseUuid(id, "JOB_ID_INVALID"));
+        UUID jobId = parseUuid(id, "JOB_ID_INVALID");
+        jobSkillRepository.deleteByJobId(jobId);
+        jobRepository.deleteById(jobId);
+    }
+
+    @Transactional
+    public void deleteJobForEmployer(String id, Employer employer) {
+        Job job = findById(id);
+        if (!job.getEmployer().getId().equals(employer.getId()) && (job.getCompany() == null || !job.getCompany().getId().equals(employer.getCompany().getId()))) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền xóa việc làm này");
+        }
+        jobSkillRepository.deleteByJobId(job.getId());
+        jobRepository.delete(job);
+    }
+
+    private Employer resolveEmployer(String employerIdStr) {
+        if (employerIdStr != null && !employerIdStr.isBlank()) {
+            return employerRepository.findById(parseUuid(employerIdStr, "EMPLOYER_ID_INVALID"))
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "EMPLOYER_NOT_FOUND", "Không tìm thấy nhà tuyển dụng"));
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof User user) {
+            return employerRepository.findByUserId(user.getId())
+                    .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "EMPLOYER_REQUIRED", "Không tìm thấy tài khoản nhà tuyển dụng"));
+        }
+        throw new ApiException(HttpStatus.BAD_REQUEST, "EMPLOYER_ID_REQUIRED", "Cần thông tin nhà tuyển dụng");
+    }
+
+    private Job buildAndSaveJob(Job job, Employer employer, Company company, JobRequest request) {
+        job.setTitle(request.getTitle());
+        job.setDescription(request.getDescription());
+        job.setRequirements(request.getRequirements() == null ? List.of() : request.getRequirements());
+        job.setBenefits(request.getBenefits());
+        job.setSalaryMin(request.getSalaryMin());
+        job.setSalaryMax(request.getSalaryMax());
+        job.setSalaryType(request.getSalaryType() != null ? request.getSalaryType() : (request.getSalaryMin() != null && request.getSalaryMax() != null ? "range" : "negotiable"));
+        job.setVacancies(request.getVacancies() != null && request.getVacancies() > 0 ? request.getVacancies() : 1);
+        job.setWorkingTime(request.getWorkingTime());
+        job.setJobType(request.getJobType() != null ? request.getJobType() : "full_time");
+        job.setWorkMode(request.getWorkMode() != null ? request.getWorkMode() : "onsite");
+        job.setExperienceLevel(request.getExperienceLevel() != null ? request.getExperienceLevel() : "fresher");
+        
+        if (request.getDeadline() != null && !request.getDeadline().isBlank()) {
+            try {
+                job.setDeadline(LocalDate.parse(request.getDeadline()));
+            } catch (Exception e) {
+                job.setDeadline(LocalDate.now().plusDays(30));
+            }
+        } else if (job.getDeadline() == null) {
+            job.setDeadline(LocalDate.now().plusDays(30));
+        }
+
+        String targetStatus = request.getStatus() != null && !request.getStatus().isBlank() ? request.getStatus().toLowerCase() : "draft";
+        job.setStatus(targetStatus);
+        if ("pending_review".equals(targetStatus) || "published".equals(targetStatus)) {
+            job.setRejectionReason(null);
+        }
+        if ("published".equals(targetStatus) && job.getPublishedAt() == null) {
+            job.setPublishedAt(LocalDateTime.now());
+        }
+        if (job.getPostedAt() == null) {
+            job.setPostedAt(LocalDateTime.now());
+        }
+
+        if (request.getCompanyLocationId() != null && !request.getCompanyLocationId().isBlank()) {
+            CompanyLocation loc = companyLocationRepository.findById(parseUuid(request.getCompanyLocationId(), "LOCATION_ID_INVALID"))
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "LOCATION_NOT_FOUND", "Không tìm thấy địa điểm làm việc"));
+            job.setCompanyLocation(loc);
+            job.setLocation(loc.getBranchName());
+        } else {
+            job.setLocation(request.getLocation() != null ? request.getLocation() : (company != null ? company.getLocation() : "Hà Nội"));
+        }
+
+        job.setEmployer(employer);
+        job.setCompany(company);
+        job = jobRepository.save(job);
+
+        jobSkillRepository.deleteByJobId(job.getId());
+        List<String> skillNames = request.getSkills() != null && !request.getSkills().isEmpty()
+                ? request.getSkills()
+                : (request.getRequirements() == null ? List.of() : request.getRequirements());
+        Job finalJob = job;
+        skillNames.stream()
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .forEach(skillName -> {
+                    Skill skill = skillRepository.findByNameIgnoreCase(skillName)
+                            .orElseGet(() -> {
+                                String slug = slugifySkill(skillName);
+                                return skillRepository.findBySlug(slug).orElseGet(() -> {
+                                    Skill created = new Skill();
+                                    created.setName(skillName);
+                                    created.setSlug(slug);
+                                    created.setCategory("General");
+                                    return skillRepository.save(created);
+                                });
+                            });
+                    JobSkill jobSkill = new JobSkill();
+                    jobSkill.setJob(finalJob);
+                    jobSkill.setSkill(skill);
+                    jobSkill.setRequired(true);
+                    jobSkillRepository.save(jobSkill);
+                });
+
+        return job;
+    }
+
+    private String slugifySkill(String value) {
+        String slug = value.toLowerCase(Locale.ROOT)
+                .replace("c++", "cplusplus")
+                .replace("c#", "csharp")
+                .replace(".net", "dotnet")
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+        return slug.isEmpty() ? "skill-" + UUID.randomUUID().toString().substring(0, 8) : slug;
     }
 
     @Transactional(readOnly = true)
-    public List<Job> findByEmployerId(String employerId) {
-        return jobRepository.findByEmployerId(parseUuid(employerId, "EMPLOYER_ID_INVALID"), Pageable.unpaged()).getContent();
+    public Page<Job> findByEmployerId(String employerId, Pageable pageable) {
+        return jobRepository.findByEmployerId(parseUuid(employerId, "EMPLOYER_ID_INVALID"), pageable);
     }
 
     public JobResponse toJobResponse(Job job, CandidateProfile candidate) {
@@ -372,6 +545,16 @@ public class JobService {
     }
 
     private JobResponse mapRemoteJobResponse(ResultSet resultSet, int rowNumber) throws SQLException {
+        String clId = resultSet.getString("company_location_id");
+        CompanyLocationResponse clResp = clId == null ? null : new CompanyLocationResponse(
+                clId,
+                resultSet.getString("cl_branch_name"),
+                resultSet.getString("cl_address"),
+                resultSet.getString("cl_city"),
+                resultSet.getString("cl_district"),
+                resultSet.getString("cl_country"),
+                resultSet.getBoolean("cl_is_headquarter")
+        );
         return new JobResponse(
                 resultSet.getString("id"),
                 resultSet.getString("title"),
@@ -388,11 +571,22 @@ public class JobService {
                         resultSet.getString("company_id"),
                         resultSet.getString("company_name"),
                         resultSet.getString("company_website"),
-                        resultSet.getString("company_location")
+                        resultSet.getString("company_location"),
+                        resultSet.getString("company_logo_url")
                 ),
+                clId,
+                clResp,
                 false,
                 false,
-                null
+                null,
+                resultSet.getString("benefits"),
+                resultSet.getInt("vacancies"),
+                resultSet.getString("working_time"),
+                resultSet.getString("salary_type"),
+                resultSet.getString("job_type"),
+                resultSet.getString("work_mode"),
+                resultSet.getInt("views_count"),
+                resultSet.getString("rejection_reason")
         );
     }
 

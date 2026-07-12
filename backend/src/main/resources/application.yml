@@ -93,3 +93,8 @@ app:
     costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
   storage:
     cv-upload-dir: ${CV_UPLOAD_DIR:uploads/cvs}
+    
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}

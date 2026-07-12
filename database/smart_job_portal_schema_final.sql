@@ -8,7 +8,7 @@
 -- - Partial unique index for one primary resume per candidate
 -- - Search indexes for job listing filters
 -- - OAuth, email verification, password reset, application history, notes, quotas, webhooks, audit logs
-
+    -- tk mt admin: admin@sjp.local/ Admin@123
 create extension if not exists pgcrypto;
 create extension if not exists citext;
 
@@ -74,10 +74,24 @@ create table companies (
   location text,
   company_size integer check (company_size is null or company_size >= 0),
   tax_code text unique,
-  is_verified boolean not null default false,
+  verification_status text not null default 'unverified' check (verification_status in ('unverified', 'pending', 'verified', 'rejected')),
   status text not null default 'pending' check (status in ('pending', 'active', 'rejected', 'suspended')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table company_documents (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies(id) on delete cascade,
+  file_name text not null,
+  file_url text not null,
+  file_type text not null,
+  public_id text,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  reject_reason text,
+  uploaded_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  reviewed_by uuid references users(id) on delete set null
 );
 
 create table job_seekers (
@@ -549,6 +563,8 @@ create index password_reset_tokens_user_id_idx on password_reset_tokens(user_id)
 create index job_seekers_user_id_idx on job_seekers(user_id);
 create index employers_user_id_idx on employers(user_id);
 create index employers_company_id_idx on employers(company_id);
+create index company_documents_company_id_idx on company_documents(company_id);
+create index company_documents_status_idx on company_documents(status);
 create index categories_parent_id_idx on categories(parent_id);
 create index jobs_company_id_idx on jobs(company_id);
 create index jobs_category_id_idx on jobs(category_id);
@@ -614,6 +630,10 @@ for each row execute function set_updated_at();
 
 create trigger companies_set_updated_at
 before update on companies
+for each row execute function set_updated_at();
+
+create trigger company_documents_set_updated_at
+before update on company_documents
 for each row execute function set_updated_at();
 
 create trigger job_seekers_set_updated_at

@@ -2,12 +2,17 @@ package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.model.dto.response.*;
 import com.sjp.recruitment.model.entity.*;
+import com.sjp.recruitment.repository.JobReviewHistoryRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
 public class DtoMapper {
+
+    @Autowired
+    private JobReviewHistoryRepository jobReviewHistoryRepository;
 
     public UserResponse toUserResponse(User user) {
         return new UserResponse(
@@ -65,10 +70,48 @@ public class DtoMapper {
     }
 
     public CompanyResponse toCompanyResponse(Company company) {
-        return new CompanyResponse(String.valueOf(company.getId()), company.getName(), company.getWebsite(), company.getLocation());
+        if (company == null) return null;
+        return new CompanyResponse(String.valueOf(company.getId()), company.getName(), company.getWebsite(), company.getLocation(), company.getLogoUrl());
+    }
+
+    public CompanyLocationResponse toCompanyLocationResponse(CompanyLocation location) {
+        if (location == null) {
+            return null;
+        }
+        return new CompanyLocationResponse(
+                String.valueOf(location.getId()),
+                location.getBranchName(),
+                location.getAddress(),
+                location.getCity(),
+                location.getDistrict(),
+                location.getCountry(),
+                location.isHeadquarter()
+        );
+    }
+
+    public CompanyDocumentResponse toCompanyDocumentResponse(CompanyDocument doc) {
+        if (doc == null) {
+            return null;
+        }
+        return new CompanyDocumentResponse(
+                String.valueOf(doc.getId()),
+                doc.getFileName(),
+                doc.getFileUrl(),
+                doc.getFileType(),
+                doc.getStatus(),
+                doc.getRejectReason(),
+                doc.getUploadedAt(),
+                doc.getReviewedAt()
+        );
     }
 
     public JobResponse toJobResponse(Job job, boolean saved, boolean applied, Integer matchScore) {
+        String rejectionReason = job.getRejectionReason();
+        if (rejectionReason == null && "rejected".equalsIgnoreCase(job.getStatus()) && jobReviewHistoryRepository != null && job.getId() != null) {
+            rejectionReason = jobReviewHistoryRepository.findFirstByJobIdAndActionOrderByReviewedAtDesc(job.getId(), "REJECTED")
+                    .map(JobReviewHistory::getReason)
+                    .orElse(null);
+        }
         return new JobResponse(
                 String.valueOf(job.getId()),
                 job.getTitle(),
@@ -82,9 +125,19 @@ public class DtoMapper {
                 job.getDeadline() == null ? null : job.getDeadline().atStartOfDay(),
                 toFrontendJobStatus(job.getStatus()),
                 toCompanyResponse(job.getCompany()),
+                job.getCompanyLocation() == null ? null : String.valueOf(job.getCompanyLocation().getId()),
+                toCompanyLocationResponse(job.getCompanyLocation()),
                 saved,
                 applied,
-                matchScore
+                matchScore,
+                job.getBenefits(),
+                job.getVacancies(),
+                job.getWorkingTime(),
+                job.getSalaryType(),
+                job.getJobType(),
+                job.getWorkMode(),
+                job.getViewsCount() != null ? job.getViewsCount() : 0,
+                rejectionReason
         );
     }
 
@@ -140,10 +193,12 @@ public class DtoMapper {
             return "DRAFT";
         }
         return switch (status.toLowerCase()) {
-            case "published" -> "ACTIVE";
+            case "published", "active" -> "PUBLISHED";
+            case "pending_review" -> "PENDING_REVIEW";
+            case "rejected" -> "REJECTED";
             case "closed" -> "CLOSED";
             case "expired" -> "EXPIRED";
-            default -> "DRAFT";
+            default -> status.toUpperCase();
         };
     }
 

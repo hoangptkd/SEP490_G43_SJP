@@ -47,13 +47,30 @@ public class Job {
     @Column(name = "requirements", columnDefinition = "TEXT")
     private String requirementsText;
 
+    @Column(columnDefinition = "TEXT")
+    private String benefits;
+
+    @Column(nullable = false)
+    private Integer vacancies = 1;
+
+    @Column(name = "working_time")
+    private String workingTime;
+
+    @Column(name = "salary_type")
+    private String salaryType;
+
     @Column(name = "salary_min")
     private BigDecimal salaryMin;
 
     @Column(name = "salary_max")
     private BigDecimal salaryMax;
 
+    // Cột location giữ nguyên để backend cũ hoạt động
     private String location;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "company_location_id")
+    private CompanyLocation companyLocation;
 
     @Column(name = "job_type")
     private String jobType;
@@ -67,6 +84,9 @@ public class Job {
     private String experienceLevel;
 
     private String status = "draft";
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
 
     @Column(name = "posted_at")
     private LocalDateTime postedAt;

@@ -4,6 +4,7 @@ public record CompanyResponse(
         String id,
         String name,
         String website,
-        String location
+        String location,
+        String logoUrl
 ) {
 }
