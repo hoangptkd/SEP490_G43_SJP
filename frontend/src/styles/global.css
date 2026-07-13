@@ -523,7 +523,8 @@ h2 {
 }
 
 .admin-main {
-  background: #f5f7f2;
+  background: #f4f7f4;
+  color: #18251d;
   padding: 30px;
 }
 
@@ -532,7 +533,73 @@ h2 {
 }
 
 .admin-page-header h1 {
+  color: #10231a;
+  font-size: clamp(2rem, 3vw, 2.65rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
   margin-bottom: 8px;
+}
+
+.admin-page-header .muted,
+.admin-main .muted {
+  color: #5f6f66;
+  font-size: 0.98rem;
+}
+
+.admin-dashboard-hero {
+  align-items: flex-end;
+  background: linear-gradient(135deg, #123327 0%, #245d43 58%, #d8a23a 160%);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(16, 35, 26, 0.16);
+  color: #fff;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  padding: 28px;
+}
+
+.admin-dashboard-hero h1 {
+  color: #fff;
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  margin: 0 0 10px;
+}
+
+.admin-dashboard-hero p {
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0;
+  max-width: 680px;
+}
+
+.admin-dashboard-eyebrow {
+  color: #f4d891 !important;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px !important;
+  text-transform: uppercase;
+}
+
+.admin-dashboard-refresh {
+  align-items: flex-end;
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+  min-width: 180px;
+}
+
+.admin-dashboard-refresh span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.admin-dashboard-refresh .outline {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: transparent;
+  color: #123327;
 }
 
 .admin-metric-grid {
@@ -540,6 +607,184 @@ h2 {
   gap: 14px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 22px;
+}
+
+.admin-dashboard-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+
+.admin-dashboard-card {
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 16px;
+  box-shadow: 0 10px 26px rgba(16, 35, 26, 0.07);
+  overflow: hidden;
+  padding: 20px;
+  position: relative;
+}
+
+.admin-dashboard-card::before {
+  background: #245d43;
+  content: "";
+  height: 5px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.admin-dashboard-card.primary::before { background: #245d43; }
+.admin-dashboard-card.green::before { background: #2f8f5b; }
+.admin-dashboard-card.amber::before { background: #d8a23a; }
+.admin-dashboard-card.blue::before { background: #2d6cdf; }
+
+.admin-dashboard-card span {
+  color: #5a6a61;
+  display: block;
+  font-size: 0.86rem;
+  font-weight: 900;
+  margin-bottom: 12px;
+}
+
+.admin-dashboard-card strong {
+  color: #10231a;
+  display: block;
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.admin-dashboard-card p {
+  color: #64756b;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.admin-dashboard-panels {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+}
+
+.admin-dashboard-panel {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 16px;
+  box-shadow: 0 10px 26px rgba(16, 35, 26, 0.06);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 22px;
+}
+
+.admin-dashboard-panel.compact {
+  align-items: stretch;
+  display: grid;
+}
+
+.admin-dashboard-panel h2 {
+  color: #10231a;
+  font-size: 1.1rem;
+  margin: 0 0 8px;
+}
+
+.admin-dashboard-panel p {
+  color: #607168;
+  margin: 0;
+}
+
+.admin-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.admin-dashboard-mini-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-dashboard-mini-grid div {
+  background: #f6faf7;
+  border: 1px solid #e2ece6;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.admin-dashboard-mini-grid span {
+  color: #607168;
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 850;
+  margin-bottom: 8px;
+}
+
+.admin-dashboard-mini-grid strong {
+  color: #10231a;
+  font-size: 1.6rem;
+  font-weight: 900;
+}
+
+.admin-user-tools {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 16px;
+  box-shadow: 0 10px 26px rgba(16, 35, 26, 0.06);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 20px;
+}
+
+.admin-user-tools h2 {
+  color: #10231a;
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+}
+
+.admin-user-tools p {
+  color: #607168;
+  margin: 0;
+}
+
+.admin-role-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.admin-role-card {
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(16, 35, 26, 0.05);
+  padding: 16px;
+}
+
+.admin-role-card ul {
+  color: #1b2c22;
+  display: grid;
+  gap: 7px;
+  line-height: 1.45;
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.admin-user-row {
+  grid-template-columns: minmax(260px, 1.2fr) minmax(280px, 1fr) auto;
 }
 
 .admin-metric-card,
@@ -608,12 +853,46 @@ h2 {
   grid-template-columns: 320px 1fr;
 }
 
+.admin-review-layout {
+  display: grid;
+  gap: 18px;
+}
+
 .admin-company-list-panel,
 .admin-company-detail-panel {
   background: #fff;
-  border: 1px solid #dfe7e1;
-  border-radius: 10px;
-  padding: 18px;
+  border: 1px solid #d9e4dd;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(16, 35, 26, 0.06);
+  padding: 20px;
+}
+
+.admin-review-list-panel {
+  overflow: hidden;
+}
+
+.admin-review-detail-panel {
+  min-height: 220px;
+}
+
+.admin-detail-topbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.admin-readable-detail {
+  margin: 0 auto;
+  max-width: 980px;
+}
+
+.admin-readable-detail .admin-company-detail-header h1 {
+  color: #10231a;
+  font-size: clamp(1.8rem, 3vw, 2.45rem);
+  font-weight: 850;
+  line-height: 1.15;
+  margin: 0 0 8px;
 }
 
 .admin-company-list-header {
@@ -626,7 +905,9 @@ h2 {
 .admin-company-list-header h2,
 .admin-company-detail-header h2,
 .admin-company-section h3 {
-  font-size: 1rem;
+  color: #15291f;
+  font-size: 1.05rem;
+  font-weight: 800;
   margin: 0;
 }
 
@@ -641,6 +922,89 @@ h2 {
   gap: 10px;
   max-height: 70vh;
   overflow: auto;
+}
+
+.admin-review-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-review-row {
+  align-items: center;
+  background: #fbfdfb;
+  border: 1px solid #dfe9e3;
+  border-radius: 12px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(240px, 1.4fr) minmax(220px, 1fr) auto;
+  padding: 16px;
+}
+
+.admin-review-row:hover,
+.admin-review-row.active {
+  background: #f0f7f2;
+  border-color: #a8c4b2;
+}
+
+.admin-review-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-review-title-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-review-title-line strong {
+  color: #10231a;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.admin-review-main p {
+  color: #53645a;
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.admin-review-meta {
+  color: #405147;
+  display: grid;
+  gap: 5px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.admin-review-row > button,
+.admin-review-row > .button-link {
+  justify-self: end;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.admin-pagination {
+  align-items: center;
+  border-top: 1px solid #e4ece7;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.admin-pagination span {
+  color: #405147;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.admin-pagination button {
+  min-height: 34px;
 }
 
 .admin-company-list-item {
@@ -732,9 +1096,16 @@ h2 {
 }
 
 .admin-company-info-grid span {
-  color: #68766e;
+  color: #5a6a61;
   font-size: 0.84rem;
   font-weight: 800;
+}
+
+.admin-company-info-grid strong,
+.admin-company-section p,
+.admin-company-section li {
+  color: #1b2c22;
+  line-height: 1.55;
 }
 
 .admin-company-section {
@@ -847,9 +1218,41 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .admin-dashboard-hero,
+  .admin-dashboard-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-dashboard-refresh {
+    justify-items: start;
+  }
+
+  .admin-dashboard-grid,
+  .admin-dashboard-panels,
+  .admin-dashboard-mini-grid,
+  .admin-role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-user-tools {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .admin-company-layout,
   .admin-company-info-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-review-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .admin-review-row > button,
+  .admin-review-row > .button-link {
+    justify-self: start;
   }
 
   .admin-company-doc {

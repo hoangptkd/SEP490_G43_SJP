@@ -87,6 +87,7 @@ public class JobService {
                     j.experience_level,
                     j.deadline,
                     j.status,
+                    j.rejection_reason,
                     j.company_location_id::text AS company_location_id,
                     cl.branch_name AS cl_branch_name,
                     cl.address AS cl_address,
@@ -110,7 +111,7 @@ public class JobService {
                 + """
                 GROUP BY
                     j.id, j.title, j.description, j.requirements, j.benefits, j.vacancies, j.working_time, j.salary_type, j.job_type, j.work_mode, j.views_count, j.salary_min, j.salary_max,
-                    j.location, j.experience_level, j.deadline, j.status, j.company_location_id,
+                    j.location, j.experience_level, j.deadline, j.status, j.rejection_reason, j.company_location_id,
                     cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
                     c.id, c.name, c.website, c.location, c.logo_url
                 """
