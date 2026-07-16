@@ -44,6 +44,7 @@ export interface ApplicationTimeline {
 export interface CandidateApplication {
   id: string;
   job: Job;
+  candidate?: CandidateProfile;
   cv?: CvFile;
   cvVersion?: CvVersion;
   status: string;

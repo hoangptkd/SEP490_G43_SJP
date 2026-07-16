@@ -1,6 +1,17 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import AdminCompanyDetailPage from './pages/admin/AdminCompanyDetailPage';
+import AdminCompanyReviewPage from './pages/admin/AdminCompanyReviewPage';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import AdminJobDetailPage from './pages/admin/AdminJobDetailPage';
+import AdminJobsPage from './pages/admin/AdminJobsPage';
+import AdminLayout, { AdminProtected } from './pages/admin/AdminLayout';
+import AdminLoginPage from './pages/admin/AdminLoginPage';
+import AdminProfilePage from './pages/admin/AdminProfilePage';
+import AdminSettingsPage from './pages/admin/AdminSettingsPage';
+import AdminStatisticsPage from './pages/admin/AdminStatisticsPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
 import { authService } from './services/authService';
 import { aiInterviewService } from './services/aiInterviewService';
 import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversation';
@@ -27,6 +38,8 @@ import type {
   AiInterviewQuestionSet,
   AiInterviewSession,
 } from './types/aiInterview';
+import EmployerJobsPage from './pages/employer/EmployerJobsPage';
+import EmployerApplicationsPage from './pages/Employer/EmployerApplicationsPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -106,13 +119,17 @@ function App() {
         <Route path="locations" element={<CompanyLocationsPage />} />
         <Route path="verification" element={<CompanyVerificationPage />} />
         <Route path="jobs" element={<EmployerJobsPage />} />
+        <Route path="applications" element={<EmployerApplicationsPage />} />
+        <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
       </Route>
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
         <Route index element={<AdminDashboardPage />} />
         <Route path="companies" element={<AdminCompanyReviewPage />} />
+        <Route path="companies/:id" element={<AdminCompanyDetailPage />} />
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="jobs" element={<AdminJobsPage />} />
+        <Route path="jobs/:id" element={<AdminJobDetailPage />} />
         <Route path="statistics" element={<AdminStatisticsPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />
         <Route path="profile" element={<AdminProfilePage />} />
@@ -1233,11 +1250,7 @@ function ProfilePage() {
 
   async function save() {
     if (!profile) return;
-    setSaving(true);
-    const saved = await candidateService.updateProfile({
-      ...profile,
-      skills: skills.split(',').map((s) => s.trim()).filter(Boolean),
-    });
+    const saved = await candidateService.updateProfile({ ...profile, skills: skills.split(',').map((s) => s.trim()).filter(Boolean) });
     setProfile(saved);
     setMessage('Đã lưu hồ sơ thành công!');
     setSaving(false);
@@ -1814,6 +1827,11 @@ function EmployerLayout() {
   return (
     <div className="employer-shell">
       <aside className="employer-nav">
+        <Link className="brand" to="/employer">Employer Portal</Link>
+        <NavLink to="/employer" end>Dashboard</NavLink>
+        <NavLink to="/employer/jobs">Quan ly Viec lam</NavLink>
+        <NavLink to="/employer/applications">Quan ly Ung vien</NavLink>
+
         <Link className="brand" to="/employer">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="var(--primary)" strokeWidth="2" fill="var(--primary-softer)"/>
@@ -1927,6 +1945,12 @@ function EmployerDashboard() {
   ];
 
   return (
+    <section className="content-card">
+      <div style={{ textAlign: 'center', padding: '30px 20px', marginBottom: '20px' }}>
+        <h1 style={{ color: '#245d43', marginBottom: '12px' }}>Employer Dashboard</h1>
+        <p style={{ color: '#4b5b52', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto' }}>
+          Chào mừng Nhà tuyển dụng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty, tin tuyển dụng và hồ sơ ứng viên.
+        </p>
     <motion.div variants={fadeUp} initial="initial" animate="animate"
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div className="page-header">
@@ -1934,6 +1958,30 @@ function EmployerDashboard() {
         <p>Chào mừng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty và tin tuyển dụng.</p>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', padding: '0 10px' }}>
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>📢 Quản lý & Đăng tin tuyển dụng</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Tạo mới các vị trí tuyển dụng, thiết lập mức lương, quyền lợi và theo dõi trạng thái các tin đăng.
+            </p>
+          </div>
+          <Link to="/employer/jobs" style={{ background: '#245d43', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Quản lý việc làm →
+          </Link>
+        </div>
+
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>👥 Quản lý hồ sơ ứng viên</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Xem danh sách đơn ứng tuyển theo từng vị trí, rà soát CV và chuyển đổi trạng thái vòng phỏng vấn.
+            </p>
+          </div>
+          <Link to="/employer/applications" style={{ background: '#2563eb', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Xem ứng viên →
+          </Link>
+        </div>
       <div className="employer-cards">
         {features.map(({ icon, title, desc, to, label, variant, note }, i) => (
           <motion.div

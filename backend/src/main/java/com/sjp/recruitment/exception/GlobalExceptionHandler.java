@@ -45,8 +45,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception exception) {
         log.error("Unexpected API error", exception);
+        String detail = exception.getMessage() != null ? exception.getMessage() : exception.getClass().getSimpleName();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiError("He thong dang gap loi, vui long thu lai", "INTERNAL_ERROR", Instant.now().toString()));
+                .body(new ApiError("Lỗi hệ thống: " + detail, "INTERNAL_ERROR", Instant.now().toString()));
     }
 
     public record ApiError(String message, String code, String timestamp) {

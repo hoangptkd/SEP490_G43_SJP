@@ -58,3 +58,34 @@ export interface AdminJobDetail {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface AdminDashboardStats {
+  totalUsers: number;
+  activeJobs: number;
+  pendingModeration: number;
+  applicationsToday: number;
+  pendingCompanies: number;
+  pendingJobs: number;
+  verifiedCompanies: number;
+  totalCompanies: number;
+  totalApplications: number;
+  totalEmployers: number;
+  totalCandidates: number;
+  updatedAt: string;
+}
+
+export type AdminUserRoleFilter = 'all' | 'candidate' | 'employer' | 'admin';
+export type AdminUserStatusFilter = 'all' | 'active' | 'suspended' | 'inactive';
+
+export interface AdminUserSummary {
+  id: string;
+  email: string;
+  fullName?: string;
+  phone?: string;
+  role: 'CANDIDATE' | 'EMPLOYER' | 'ADMIN' | string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION' | string;
+  emailVerified: boolean;
+  lastLoginAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -5,8 +5,10 @@ import com.sjp.recruitment.model.dto.request.CompanyReviewRequest;
 import com.sjp.recruitment.model.dto.response.AdminCompanyDetailResponse;
 import com.sjp.recruitment.model.dto.response.AdminCompanyOwnerResponse;
 import com.sjp.recruitment.model.dto.response.AdminCompanySummaryResponse;
+import com.sjp.recruitment.model.dto.response.AdminDashboardResponse;
 import com.sjp.recruitment.model.dto.response.AdminJobDetailResponse;
 import com.sjp.recruitment.model.dto.response.AdminJobSummaryResponse;
+import com.sjp.recruitment.model.dto.response.AdminUserSummaryResponse;
 import com.sjp.recruitment.model.dto.response.CompanyDocumentResponse;
 import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
@@ -51,6 +53,171 @@ public class AdminService {
     private final EmployerRepository employerRepository;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final DtoMapper dtoMapper;
+
+    @Transactional(readOnly = true)
+    public AdminDashboardResponse getDashboardStats() {
+        requireAdmin();
+
+        long totalUsers = count("SELECT COUNT(*) FROM users WHERE status <> 'deleted'");
+        long activeJobs = count("SELECT COUNT(*) FROM jobs WHERE status = 'published'");
+        long pendingCompanies = count("SELECT COUNT(*) FROM companies WHERE verification_status = 'pending'");
+        long pendingJobs = count("SELECT COUNT(*) FROM jobs WHERE status = 'pending_review'");
+        long applicationsToday = count("SELECT COUNT(*) FROM applications WHERE applied_at::date = CURRENT_DATE");
+        long verifiedCompanies = count("SELECT COUNT(*) FROM companies WHERE verification_status = 'verified'");
+        long totalCompanies = count("SELECT COUNT(*) FROM companies");
+        long totalApplications = count("SELECT COUNT(*) FROM applications");
+        long totalEmployers = count("SELECT COUNT(*) FROM users WHERE role = 'employer' AND status <> 'deleted'");
+        long totalCandidates = count("SELECT COUNT(*) FROM users WHERE role IN ('job_seeker', 'candidate') AND status <> 'deleted'");
+
+        return new AdminDashboardResponse(
+                totalUsers,
+                activeJobs,
+                pendingCompanies + pendingJobs,
+                applicationsToday,
+                pendingCompanies,
+                pendingJobs,
+                verifiedCompanies,
+                totalCompanies,
+                totalApplications,
+                totalEmployers,
+                totalCandidates,
+                LocalDateTime.now()
+        );
+    }
+
+    private long count(String sql) {
+        Long value = namedParameterJdbcTemplate.getJdbcTemplate().queryForObject(sql, Long.class);
+        return value == null ? 0 : value;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminUserSummaryResponse> listUsers(String role, String status) {
+        requireAdmin();
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    id::text AS id,
+                    email,
+                    full_name,
+                    phone,
+                    role,
+                    status,
+                    email_verified_at,
+                    last_login_at,
+                    created_at,
+                    updated_at
+                FROM users
+                WHERE status <> 'deleted'
+                """);
+
+        if (StringUtils.hasText(role) && !"all".equalsIgnoreCase(role)) {
+            sql.append(" AND LOWER(role) = :role\n");
+            params.addValue("role", normalizeUserRole(role));
+        }
+        if (StringUtils.hasText(status) && !"all".equalsIgnoreCase(status)) {
+            sql.append(" AND LOWER(status) = :status\n");
+            params.addValue("status", status.trim().toLowerCase(Locale.ROOT));
+        }
+        sql.append("""
+                ORDER BY
+                    CASE role WHEN 'admin' THEN 1 WHEN 'employer' THEN 2 ELSE 3 END,
+                    created_at DESC
+                """);
+
+        return namedParameterJdbcTemplate.query(sql.toString(), params, this::mapAdminUserSummary);
+    }
+
+    @Transactional
+    public AdminUserSummaryResponse suspendUser(String id) {
+        User currentAdmin = requireAdminUser();
+        User user = findUser(id);
+        if (user.getId().equals(currentAdmin.getId())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CANNOT_SUSPEND_SELF", "Bạn không thể tự khóa tài khoản của mình");
+        }
+        user.setStatus(User.UserStatus.SUSPENDED);
+        return toAdminUserSummary(userRepository.save(user));
+    }
+
+    @Transactional
+    public AdminUserSummaryResponse activateUser(String id) {
+        requireAdmin();
+        User user = findUser(id);
+        user.setStatus(User.UserStatus.ACTIVE);
+        return toAdminUserSummary(userRepository.save(user));
+    }
+
+    private String normalizeUserRole(String role) {
+        return switch (role.trim().toLowerCase(Locale.ROOT)) {
+            case "candidate", "job_seeker" -> "job_seeker";
+            case "employer" -> "employer";
+            case "admin" -> "admin";
+            default -> role.trim().toLowerCase(Locale.ROOT);
+        };
+    }
+
+    private User findUser(String id) {
+        UUID userId;
+        try {
+            userId = UUID.fromString(id);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ID", "ID người dùng không hợp lệ");
+        }
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Không tìm thấy người dùng"));
+    }
+
+    private AdminUserSummaryResponse mapAdminUserSummary(ResultSet rs, int rowNumber) throws SQLException {
+        return new AdminUserSummaryResponse(
+                rs.getString("id"),
+                rs.getString("email"),
+                rs.getString("full_name"),
+                rs.getString("phone"),
+                toFrontendUserRole(rs.getString("role")),
+                toFrontendUserStatus(rs.getString("status")),
+                rs.getTimestamp("email_verified_at") != null,
+                toLocalDateTime(rs, "last_login_at"),
+                toLocalDateTime(rs, "created_at"),
+                toLocalDateTime(rs, "updated_at")
+        );
+    }
+
+    private AdminUserSummaryResponse toAdminUserSummary(User user) {
+        return new AdminUserSummaryResponse(
+                String.valueOf(user.getId()),
+                user.getEmail(),
+                user.getFullName(),
+                user.getPhone(),
+                user.getRoleEnum() == null ? toFrontendUserRole(user.getRole()) : user.getRoleEnum().name(),
+                user.getStatusEnum() == null ? toFrontendUserStatus(user.getStatus()) : user.getStatusEnum().name(),
+                user.isEmailVerified(),
+                user.getLastLoginAt(),
+                user.getCreatedAt(),
+                user.getUpdatedAt()
+        );
+    }
+
+    private String toFrontendUserRole(String role) {
+        if (role == null) {
+            return "CANDIDATE";
+        }
+        return switch (role.trim().toLowerCase(Locale.ROOT)) {
+            case "job_seeker", "candidate" -> "CANDIDATE";
+            case "employer" -> "EMPLOYER";
+            case "admin" -> "ADMIN";
+            default -> role.trim().toUpperCase(Locale.ROOT);
+        };
+    }
+
+    private String toFrontendUserStatus(String status) {
+        if (status == null) {
+            return "PENDING_VERIFICATION";
+        }
+        return switch (status.trim().toLowerCase(Locale.ROOT)) {
+            case "active" -> "ACTIVE";
+            case "suspended" -> "SUSPENDED";
+            default -> "PENDING_VERIFICATION";
+        };
+    }
 
     @Transactional(readOnly = true)
     public List<AdminCompanySummaryResponse> listCompanies(String status) {
@@ -451,7 +618,8 @@ public class AdminService {
                 null,
                 null,
                 rs.getInt("views_count"),
-                rs.getString("rejection_reason")
+                rs.getString("rejection_reason"),
+                0L
         );
         return new AdminJobDetailResponse(
                 job,

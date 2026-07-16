@@ -19,7 +19,11 @@ import com.sjp.recruitment.model.entity.CompanyDocument;
 import com.sjp.recruitment.repository.CompanyDocumentRepository;
 import com.sjp.recruitment.model.dto.request.JobRequest;
 import com.sjp.recruitment.model.dto.response.JobResponse;
+import com.sjp.recruitment.model.entity.Job;
 import com.sjp.recruitment.repository.JobRepository;
+import com.sjp.recruitment.model.dto.response.ApplicationResponse;
+import com.sjp.recruitment.model.entity.Application;
+import com.sjp.recruitment.repository.ApplicationRepository;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +47,8 @@ public class EmployerService {
     private final CompanyDocumentRepository companyDocumentRepository;
     private final JobRepository jobRepository;
     private final JobService jobService;
+    private final ApplicationRepository applicationRepository;
+    private final ApplicationService applicationService;
     private final Cloudinary cloudinary;
     private final DtoMapper dtoMapper;
 
@@ -96,17 +102,24 @@ public class EmployerService {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ chủ sở hữu công ty mới có quyền chỉnh sửa");
         }
         Company company = employer.getCompany();
+
+        String oldName = company.getName() == null ? "" : company.getName().trim();
+        String newName = request.name() == null ? "" : request.name().trim();
+        String oldTax = company.getTaxCode() == null ? "" : company.getTaxCode().trim();
+        String newTax = request.taxCode() == null ? "" : request.taxCode().trim();
+
+        boolean legalInfoChanged = !oldName.equalsIgnoreCase(newName) || !oldTax.equals(newTax);
         
         // Kiểm tra tên công ty trùng lặp
-        if (!company.getName().equalsIgnoreCase(request.name())) {
-            companyRepository.findByName(request.name()).ifPresent(existing -> {
+        if (!oldName.equalsIgnoreCase(newName)) {
+            companyRepository.findByName(newName).ifPresent(existing -> {
                 if (!existing.getId().equals(company.getId())) {
                     throw new ApiException(HttpStatus.CONFLICT, "COMPANY_NAME_EXISTS", "Tên công ty đã tồn tại");
                 }
             });
         }
 
-        company.setName(request.name());
+        company.setName(newName);
         company.setDescription(request.description());
         company.setWebsite(request.website());
         company.setIndustry(request.industry());
@@ -130,12 +143,16 @@ public class EmployerService {
         }
 
         company.setCompanySize(request.companySize());
-        company.setTaxCode(request.taxCode());
+        company.setTaxCode(newTax);
         if (request.logoUrl() != null) {
             company.setLogoUrl(request.logoUrl());
         }
 
-        markCompanyPendingReviewIfNeeded(company);
+        if (legalInfoChanged && company.isVerified()) {
+            forceCompanyAndOwnerPending(company);
+        } else if (!company.isVerified()) {
+            markCompanyPendingReviewIfNeeded(company);
+        }
 
         return toCompanyProfileResponse(companyRepository.save(company));
     }
@@ -145,13 +162,22 @@ public class EmployerService {
         if (verificationStatus == null
                 || "unverified".equalsIgnoreCase(verificationStatus)
                 || "rejected".equalsIgnoreCase(verificationStatus)) {
-            company.setVerificationStatus("pending");
-            if (company.getStatus() == null
-                    || "pending".equalsIgnoreCase(company.getStatus())
-                    || "rejected".equalsIgnoreCase(company.getStatus())) {
-                company.setStatus("pending");
-            }
+            forceCompanyAndOwnerPending(company);
         }
+    }
+
+    private void forceCompanyAndOwnerPending(Company company) {
+        company.setVerificationStatus("pending");
+        if (company.getStatus() == null
+                || "pending".equalsIgnoreCase(company.getStatus())
+                || "rejected".equalsIgnoreCase(company.getStatus())) {
+            company.setStatus("pending");
+        }
+        employerRepository.findOwnerByCompanyId(company.getId())
+                .ifPresent(owner -> {
+                    owner.setVerificationStatus("pending");
+                    employerRepository.save(owner);
+                });
     }
 
     @Transactional
@@ -333,8 +359,12 @@ public class EmployerService {
 
         doc = companyDocumentRepository.save(doc);
 
-        // Cập nhật trạng thái xác thực công ty thành pending
-        markCompanyPendingReviewIfNeeded(company);
+        // Khi tải lên tài liệu mới, chuyển trạng thái xác thực công ty thành pending để Admin duyệt lại
+        if (company.isVerified()) {
+            forceCompanyAndOwnerPending(company);
+        } else {
+            markCompanyPendingReviewIfNeeded(company);
+        }
         companyRepository.save(company);
 
         return dtoMapper.toCompanyDocumentResponse(doc);
@@ -397,11 +427,43 @@ public class EmployerService {
 
     @Transactional(readOnly = true)
     public List<JobResponse> getCompanyJobs() {
+        return getCompanyJobs(null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<JobResponse> getCompanyJobs(String status, String search) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
-        return jobRepository.findByCompanyIdOrderByCreatedAtDesc(employer.getCompany().getId())
+        List<JobResponse> jobs = jobRepository.findByCompanyIdOrderByCreatedAtDesc(employer.getCompany().getId())
                 .stream()
+                .filter(job -> !"archived".equalsIgnoreCase(job.getStatus()))
                 .map(job -> dtoMapper.toJobResponse(job, false, false, null))
                 .toList();
+
+        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
+            jobs = jobs.stream()
+                    .filter(j -> {
+                        if ("PUBLISHED".equalsIgnoreCase(status)) {
+                            return "PUBLISHED".equalsIgnoreCase(j.status()) || "ACTIVE".equalsIgnoreCase(j.status());
+                        }
+                        if ("DRAFT".equalsIgnoreCase(status)) {
+                            return "DRAFT".equalsIgnoreCase(j.status()) || "REJECTED".equalsIgnoreCase(j.status());
+                        }
+                        return status.equalsIgnoreCase(j.status());
+                    })
+                    .toList();
+        }
+
+        if (search != null && !search.isBlank()) {
+            String q = search.toLowerCase();
+            jobs = jobs.stream()
+                    .filter(j -> (j.title() != null && j.title().toLowerCase().contains(q))
+                            || (j.description() != null && j.description().toLowerCase().contains(q))
+                            || (j.location() != null && j.location().toLowerCase().contains(q))
+                            || (j.skills() != null && j.skills().stream().anyMatch(s -> s.toLowerCase().contains(q))))
+                    .toList();
+        }
+
+        return jobs;
     }
 
     @Transactional
@@ -436,5 +498,100 @@ public class EmployerService {
     public void deleteJob(String id) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         jobService.deleteJobForEmployer(id, employer);
+    }
+
+    @Transactional
+    public JobResponse closeJob(String id) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        return jobService.closeJobForEmployer(id, employer);
+    }
+
+    @Transactional
+    public JobResponse reopenJob(String id, String newDeadline) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        return jobService.reopenJobForEmployer(id, employer, newDeadline);
+    }
+
+    @Transactional
+    public List<ApplicationResponse> getCompanyApplications(String jobId, String status, String search) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        if (employer.getCompany() == null || employer.getCompany().getId() == null) {
+            return List.of();
+        }
+
+        List<Application> list;
+        if (jobId != null && !jobId.trim().isEmpty()) {
+            UUID parsedJobId;
+            try {
+                parsedJobId = UUID.fromString(jobId.trim());
+            } catch (IllegalArgumentException e) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_ID_INVALID", "Mã việc làm không hợp lệ");
+            }
+            Job job = jobRepository.findById(parsedJobId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Không tìm thấy việc làm"));
+            if (job.getCompany() == null || !job.getCompany().getId().equals(employer.getCompany().getId())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền truy cập ứng viên của việc làm này");
+            }
+            list = applicationRepository.findByJobIdOrderBySubmittedAtDesc(job.getId());
+        } else {
+            list = applicationRepository.findByCompanyId(employer.getCompany().getId());
+        }
+
+        if (status != null && !status.trim().isEmpty()) {
+            list = list.stream()
+                    .filter(a -> status.equalsIgnoreCase(a.getStatus()))
+                    .toList();
+        }
+
+        if (search != null && !search.trim().isEmpty()) {
+            String kw = search.trim().toLowerCase();
+            list = list.stream()
+                    .filter(a -> {
+                        boolean matchCandidate = a.getCandidate() != null && (
+                                (a.getCandidate().getFullName() != null && a.getCandidate().getFullName().toLowerCase().contains(kw)) ||
+                                (a.getCandidate().getEmail() != null && a.getCandidate().getEmail().toLowerCase().contains(kw)) ||
+                                (a.getCandidate().getPhone() != null && a.getCandidate().getPhone().toLowerCase().contains(kw)) ||
+                                (a.getCandidate().getTitle() != null && a.getCandidate().getTitle().toLowerCase().contains(kw))
+                        );
+                        boolean matchJob = a.getJob() != null && a.getJob().getTitle() != null && a.getJob().getTitle().toLowerCase().contains(kw);
+                        return matchCandidate || matchJob;
+                    })
+                    .toList();
+        }
+
+        return list.stream()
+                .map(applicationService::toResponse)
+                .toList();
+    }
+
+    @Transactional
+    public ApplicationResponse updateApplicationStatus(String applicationId, String status, String note) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        if (employer.getCompany() == null || employer.getCompany().getId() == null) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Công ty chưa được thiết lập");
+        }
+        UUID appId;
+        try {
+            appId = UUID.fromString(applicationId);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "APPLICATION_ID_INVALID", "Mã đơn ứng tuyển không hợp lệ");
+        }
+        Application application = applicationRepository.findById(appId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy đơn ứng tuyển"));
+
+        if (application.getJob() == null || application.getJob().getCompany() == null || !application.getJob().getCompany().getId().equals(employer.getCompany().getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền cập nhật đơn ứng tuyển này");
+        }
+
+        Application.ApplicationStatus toStatus = Application.ApplicationStatus.fromDatabaseValue(status);
+        if (toStatus == null) {
+            try {
+                toStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "STATUS_INVALID", "Trạng thái không hợp lệ: " + status);
+            }
+        }
+
+        return applicationService.updateStatus(appId, toStatus, note);
     }
 }
