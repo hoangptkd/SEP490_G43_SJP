@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Candidate Dashboard - Nguyen Minh Anh</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#00507d",
+                        "on-secondary-container": "#5c647a",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#0b1c30",
+                        "surface-container-low": "#eef4ff",
+                        "surface-tint": "#006399",
+                        "on-background": "#0d1c2d",
+                        "surface": "#f8f9ff",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#38485d",
+                        "on-tertiary-container": "#d2e2fd",
+                        "outline-variant": "#c0c7d1",
+                        "secondary-container": "#dae2fd",
+                        "tertiary": "#3d4d62",
+                        "error-container": "#ffdad6",
+                        "background": "#f8f9ff",
+                        "outline": "#707881",
+                        "on-error": "#ffffff",
+                        "on-secondary-fixed": "#131b2e",
+                        "surface-dim": "#ccdbf2",
+                        "tertiary-container": "#55657b",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "primary-fixed": "#cde5ff",
+                        "secondary": "#565e74",
+                        "inverse-primary": "#94ccff",
+                        "surface-container-high": "#dbe9ff",
+                        "tertiary-fixed": "#d3e4fe",
+                        "inverse-on-surface": "#e9f1ff",
+                        "on-primary-fixed": "#001d32",
+                        "surface-container-highest": "#d4e4fa",
+                        "on-surface-variant": "#40474f",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#0369a1",
+                        "inverse-surface": "#233143",
+                        "primary-fixed-dim": "#94ccff",
+                        "surface-variant": "#d4e4fa",
+                        "secondary-fixed": "#dae2fd",
+                        "surface-container": "#e5efff",
+                        "on-surface": "#0d1c2d",
+                        "surface-bright": "#f8f9ff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-container": "#cbe4ff",
+                        "on-primary-fixed-variant": "#004b74",
+                        "tertiary-fixed-dim": "#b7c8e1"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "3xl": "64px",
+                        "lg": "24px",
+                        "2xl": "48px",
+                        "container-max": "1280px",
+                        "sm": "8px",
+                        "md": "16px",
+                        "gutter": "24px",
+                        "xs": "4px",
+                        "xl": "32px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "headline-sm": ["20px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "1.2", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .ambient-shadow {
+            box-shadow: 0px 1px 3px rgba(15, 23, 42, 0.08);
+        }
+        .hover-elevate:hover {
+            box-shadow: 0px 10px 15px -3px rgba(15, 23, 42, 0.1);
+            transform: translateY(-2px);
+            transition: all 0.2s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col h-full py-md px-sm bg-secondary dark:bg-inverse-surface shadow-md w-64 h-screen fixed left-0 top-0 z-40 transition-all duration-200 ease-in-out">
+<div class="flex items-center gap-sm px-md mb-lg">
+<div class="w-10 h-10 rounded-full bg-surface overflow-hidden flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary" data-icon="work" data-weight="fill">work</span>
+</div>
+<div>
+<h1 class="font-headline-sm text-headline-sm text-on-secondary dark:text-inverse-on-surface truncate">Recruitment Hub</h1>
+<p class="font-label-sm text-label-sm text-on-secondary/70 truncate">Role: Admin</p>
+</div>
+</div>
+<ul class="flex flex-col gap-xs flex-1 mt-md">
+<!-- Active State: Dashboard -->
+<li>
+<a class="flex items-center gap-sm px-md py-sm bg-secondary-container text-on-secondary-container dark:bg-secondary dark:text-on-secondary-fixed rounded-full transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined fill" data-icon="dashboard">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-md py-sm text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 rounded-full transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-md text-label-md">Profile</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-md py-sm text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 rounded-full transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-label-md text-label-md">CVs</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-md py-sm text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 rounded-full transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="bookmark">bookmark</span>
+<span class="font-label-md text-label-md">Saved Jobs</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-md py-sm text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 rounded-full transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="work">work</span>
+<span class="font-label-md text-label-md">Applications</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-md py-sm text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 rounded-full transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="smart_toy">smart_toy</span>
+<span class="font-label-md text-label-md">AI Interviews</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-md py-sm text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 rounded-full transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</li>
+</ul>
+<div class="mt-auto pt-md border-t border-secondary-fixed-dim/20">
+<button class="w-full mb-sm px-md py-sm bg-primary/20 text-on-secondary rounded-full font-label-md text-label-md hover:bg-primary/30 transition-colors">
+                Support Center
+            </button>
+<a class="flex items-center gap-sm px-md py-sm text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 rounded-full transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-label-md text-label-md">Logout</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 ml-0 md:ml-64 flex flex-col h-full overflow-hidden bg-background">
+<!-- TopAppBar (Mobile Only - Simplified for Context) -->
+<header class="md:hidden flex justify-between items-center px-lg h-16 bg-surface-container-lowest border-b border-outline-variant shadow-sm z-30 sticky top-0">
+<div class="font-headline-md text-headline-md text-primary font-bold">Smart Recruitment</div>
+<button class="material-symbols-outlined text-on-surface-variant">menu</button>
+</header>
+<!-- Scrollable Canvas -->
+<div class="flex-1 overflow-y-auto p-md md:p-xl">
+<div class="max-w-container-max mx-auto space-y-lg">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-md">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Welcome back, Nguyen</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs">Here is an overview of your career progression and matches.</p>
+</div>
+<div class="flex gap-sm">
+<button class="px-md py-sm border border-outline text-primary rounded-md font-label-md text-label-md hover:bg-surface-dim transition-colors">Update CV</button>
+<button class="px-md py-sm bg-primary text-on-primary rounded-md font-label-md text-label-md hover:opacity-90 transition-opacity">Find New Roles</button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-lg">
+<!-- Top Match Card (Spans 8 cols) -->
+<div class="md:col-span-8 bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-lg hover-elevate">
+<div class="flex justify-between items-start mb-md">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Top Recommended Role</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Based on your skills and experience</p>
+</div>
+<div class="bg-primary-container text-on-primary-container px-sm py-xs rounded-full flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]" data-icon="star">star</span>
+<span class="font-label-md text-label-md">92% Match</span>
+</div>
+</div>
+<div class="flex flex-col md:flex-row gap-md items-start mt-md">
+<div class="w-16 h-16 rounded-lg bg-surface-dim flex items-center justify-center shrink-0 border border-outline-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A modern tech company logo featuring a blue geometric shape on a white background, clean and professional design suitable for a light-mode corporate dashboard interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAr2gw5v2hKv-bgRFmOEYXgXABpQYNx0A24RAija2vIlVbaM9FZRDq4m3KACp5mCSpYKzhjHWoSThzIf-0cYY7DCA-Za48cvOngobSzEy127CWuqgookp6dbpn3yHiRGOWGS3nyi0ZPIEOhOdyZfb3z7HjdUzSnBvHcX4e8aM0YCYG_cqZgZF8ir4DAoDry0x3YYoqVFMLgdxwDyXwriPquq40f2T8S5p1vdCz2mMvQNKuZ882KcsJa"/>
+</div>
+<div class="flex-1">
+<h4 class="font-headline-md text-headline-md text-primary">Senior Java Developer</h4>
+<p class="font-body-md text-body-md text-on-surface mt-xs">FinTech Innovators Ltd. • Remote (APAC)</p>
+<div class="flex flex-wrap gap-xs mt-md">
+<span class="px-sm py-xs bg-surface-container text-on-surface-variant rounded font-label-sm text-label-sm border border-outline-variant">Java 17</span>
+<span class="px-sm py-xs bg-surface-container text-on-surface-variant rounded font-label-sm text-label-sm border border-outline-variant">Spring Boot</span>
+<span class="px-sm py-xs bg-surface-container text-on-surface-variant rounded font-label-sm text-label-sm border border-outline-variant">Microservices</span>
+<span class="px-sm py-xs bg-surface-container text-on-surface-variant rounded font-label-sm text-label-sm border border-outline-variant">AWS</span>
+</div>
+<div class="mt-md pt-md border-t border-outline-variant flex justify-between items-center">
+<span class="font-label-md text-label-md text-on-surface-variant">Posted 2 days ago</span>
+<button class="text-primary font-label-md text-label-md flex items-center gap-xs hover:underline">
+                                        View Details <span class="material-symbols-outlined text-[18px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Progress Chart (Spans 4 cols) -->
+<div class="md:col-span-4 bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-lg hover-elevate flex flex-col">
+<div class="mb-md">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Application Progress</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Last 30 days</p>
+</div>
+<div class="flex-1 flex items-center justify-center relative min-h-[150px]">
+<canvas id="progressChart"></canvas>
+<!-- Center text for donut chart -->
+<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+<span class="font-headline-lg text-headline-lg text-primary">12</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Active</span>
+</div>
+</div>
+<div class="flex justify-around mt-sm">
+<div class="flex items-center gap-xs">
+<div class="w-3 h-3 rounded-full bg-primary"></div>
+<span class="font-label-sm text-label-sm text-on-surface">Applied</span>
+</div>
+<div class="flex items-center gap-xs">
+<div class="w-3 h-3 rounded-full bg-surface-tint"></div>
+<span class="font-label-sm text-label-sm text-on-surface">Interview</span>
+</div>
+</div>
+</div>
+<!-- Upcoming Interviews List (Spans 6 cols) -->
+<div class="md:col-span-6 bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-lg hover-elevate">
+<div class="flex justify-between items-center mb-md pb-xs border-b border-outline-variant">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Upcoming Interviews</h3>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors" data-icon="more_horiz">more_horiz</button>
+</div>
+<div class="space-y-sm">
+<!-- Interview Item -->
+<div class="p-sm rounded-lg hover:bg-surface-container transition-colors flex items-center gap-md cursor-pointer border border-transparent hover:border-outline-variant">
+<div class="w-12 h-12 rounded bg-tertiary-container text-on-tertiary-container flex flex-col items-center justify-center shrink-0">
+<span class="font-label-md text-label-md leading-tight">Oct</span>
+<span class="font-headline-sm text-headline-sm leading-none mt-xs">24</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md text-on-surface">Technical Round - Java Core</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">TechCorp Global • Online</p>
+</div>
+<span class="material-symbols-outlined text-primary" data-icon="videocam">videocam</span>
+</div>
+<!-- Interview Item -->
+<div class="p-sm rounded-lg hover:bg-surface-container transition-colors flex items-center gap-md cursor-pointer border border-transparent hover:border-outline-variant">
+<div class="w-12 h-12 rounded bg-surface-variant text-on-surface-variant flex flex-col items-center justify-center shrink-0">
+<span class="font-label-md text-label-md leading-tight">Oct</span>
+<span class="font-headline-sm text-headline-sm leading-none mt-xs">28</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md text-on-surface">HR Screening</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Innovate Solutions • Phone</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="call">call</span>
+</div>
+</div>
+<button class="w-full mt-md py-xs text-center font-label-md text-label-md text-primary hover:underline">View Calendar</button>
+</div>
+<!-- Document Reference Panel (Spans 6 cols) -->
+<div class="md:col-span-6 bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-lg hover-elevate relative overflow-hidden group">
+<!-- Subtle Background Pattern/Gradient instead of raw image -->
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full -mr-8 -mt-8 pointer-events-none"></div>
+<div class="flex justify-between items-center mb-md pb-xs border-b border-outline-variant relative z-10">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Resume Insights</h3>
+<span class="material-symbols-outlined text-primary" data-icon="psychology">psychology</span>
+</div>
+<div class="relative z-10">
+<p class="font-body-md text-body-md text-on-surface-variant mb-md">AI analysis of your latest CV indicates strong alignment with backend engineering roles, but suggests adding more explicit keywords around cloud orchestration.</p>
+<div class="bg-surface-container rounded-lg p-md border border-outline-variant mb-md">
+<div class="flex items-center gap-sm mb-xs">
+<span class="material-symbols-outlined text-error" data-icon="warning">warning</span>
+<span class="font-label-md text-label-md text-on-surface">Missing Keywords Detected</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kubernetes, Terraform, CI/CD Pipelines</p>
+</div>
+<button class="flex items-center justify-center gap-xs w-full py-sm bg-surface text-primary border border-outline rounded-md font-label-md text-label-md hover:bg-surface-dim transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="edit_document">edit_document</span>
+                                Optimize Resume ({{DATA:DOCUMENT:DOCUMENT_2}})
+                            </button>
+</div>
+</div>
+</div> <!-- End Bento Grid -->
+</div>
+</div>
+</main>
+<script>
+        // Chart.js implementation for the Progress Donut Chart
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            
+            // Getting colors from Tailwind config equivalent
+            const primaryColor = '#00507d';
+            const surfaceTintColor = '#006399';
+            const outlineVariantColor = '#c0c7d1';
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Applied', 'Interviewing', 'Rejected/Closed'],
+                    datasets: [{
+                        data: [5, 3, 4],
+                        backgroundColor: [
+                            primaryColor,
+                            surfaceTintColor,
+                            outlineVariantColor
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%', // Creates the thin donut look
+                    plugins: {
+                        legend: {
+                            display: false // We built a custom legend below the chart
+                        },
+                        tooltip: {
+                            backgroundColor: '#233143', // inverse-surface
+                            titleFont: { family: 'Inter', size: 12 },
+                            bodyFont: { family: 'Inter', size: 14 }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body></html>

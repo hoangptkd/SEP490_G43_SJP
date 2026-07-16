@@ -22,7 +22,7 @@ function CompanyProfilePage() {
         setCategories(categoriesData);
         setLoading(false);
       })
-      .catch((err) => {
+      .catch(() => {
         setError('Không thể tải thông tin công ty.');
         setLoading(false);
       });

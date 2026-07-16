@@ -15,9 +15,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.time.Duration;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,13 +42,13 @@ public class ShopAiKeyClient {
                                           List<InterviewQuestion> previousQuestions,
                                           List<InterviewAnswer> previousAnswers) {
         String prompt = """
-                Tao 1 cau hoi phong van tiep theo bang tieng Viet.
-                Chi tra JSON hop le, khong markdown.
-                Yeu cau bat buoc:
-                - Cau hoi toi da 220 ky tu.
-                - Chi hoi 1 y chinh, khong yeu cau liet ke endpoint/schema/test day du.
-                - Phu hop tra loi bang giong noi trong 2-3 phut.
-                - Khong tao bai tap thiet ke he thong qua lon.
+                Tạo 1 câu hỏi phỏng vấn tiếp theo bằng tiếng Việt có dấu.
+                Chỉ trả JSON hợp lệ, không markdown.
+                Yêu cầu bắt buộc:
+                - Câu hỏi tối đa 220 ký tự.
+                - Chỉ hỏi 1 ý chính, không yêu cầu liệt kê endpoint/schema/test đầy đủ.
+                - Phù hợp trả lời bằng giọng nói trong 2-3 phút.
+                - Không tạo bài tập thiết kế hệ thống quá lớn.
                 JSON schema:
                 {
                   "questionType": "behavioral|technical|situational|general",
@@ -69,19 +76,20 @@ public class ShopAiKeyClient {
                                               InterviewQuestion question,
                                               String transcript) {
         String prompt = """
-                Ban la AI coach phong van. Danh gia cau tra loi bang tieng Viet.
-                Day chi la feedback luyen tap, khong phai quyet dinh tuyen dung.
-                Chi tra JSON hop le, khong markdown.
+                Bạn là AI coach phỏng vấn. Đánh giá câu trả lời bằng tiếng Việt có dấu.
+                Đây chỉ là feedback luyện tập, không phải quyết định tuyển dụng.
+                Chỉ trả JSON hợp lệ, không markdown.
+                Score bắt buộc là thang 0-100, không dùng thang 0-10.
                 JSON schema:
                 {
-                  "score": 0,
+                  "score": 0-100,
                   "feedback": "string",
                   "strengths": ["string"],
                   "weaknesses": ["string"],
                   "suggestions": ["string"]
                 }
-                Cau hoi: %s
-                Cau tra loi transcript: %s
+                Câu hỏi: %s
+                Câu trả lời transcript: %s
                 Context: %s
                 """.formatted(question.getContent(), transcript, buildSessionContext(session));
         JsonNode json = callJson(prompt, 900, 0.2);
@@ -99,8 +107,8 @@ public class ShopAiKeyClient {
                                                 List<InterviewAnswer> answers,
                                                 BigDecimal calculatedScore) {
         String prompt = """
-                Tong ket buoi phong van luyen tap bang tieng Viet.
-                Chi tra JSON hop le, khong markdown.
+                Tổng kết buổi phỏng vấn luyện tập bằng tiếng Việt có dấu.
+                Chỉ trả JSON hợp lệ, không markdown.
                 JSON schema:
                 {
                   "summary": "string",
@@ -108,7 +116,7 @@ public class ShopAiKeyClient {
                   "weaknesses": ["string"],
                   "improvementPlan": ["string"]
                 }
-                Overall score da tinh theo trung binh cau hoi: %s
+                Overall score đã tính theo trung bình câu hỏi: %s
                 Context: %s
                 Transcript history: %s
                 """.formatted(calculatedScore, buildSessionContext(session), buildHistory(questions, answers));
@@ -120,6 +128,59 @@ public class ShopAiKeyClient {
                 stringList(json.path("weaknesses")),
                 stringList(json.path("improvementPlan"))
         );
+    }
+
+    public void streamSpeech(String input, OutputStream outputStream) {
+        if (input == null || input.isBlank()) {
+            throw new AiProviderException("TTS_INPUT_REQUIRED", "Nội dung đọc không được để trống");
+        }
+        try {
+            Map<String, Object> body = Map.of(
+                    "model", properties.getShopaikeyTtsModel(),
+                    "voice", properties.getShopaikeyTtsVoice(),
+                    "input", input.trim(),
+                    "instructions", properties.getShopaikeyTtsInstructions(),
+                    "response_format", properties.getShopaikeyTtsFormat()
+            );
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(trimTrailingSlash(properties.getShopaikeyBaseUrl()) + "/audio/speech"))
+                    .timeout(Duration.ofMillis(Math.max(properties.getProviderReadTimeoutMs(), 30_000)))
+                    .header("Authorization", "Bearer " + properties.getShopaikeyApiKey())
+                    .header("Accept", speechContentType())
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
+                    .build();
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofMillis(properties.getProviderConnectTimeoutMs()))
+                    .build();
+            HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                try (InputStream errorStream = response.body()) {
+                    String errorBody = new String(errorStream.readNBytes(1_000));
+                    throw new AiProviderException("TTS_PROVIDER_FAILED", "ShopAIKey TTS không phản hồi thành công: " + response.statusCode() + " " + errorBody);
+                }
+            }
+            try (InputStream inputStream = response.body()) {
+                inputStream.transferTo(outputStream);
+                outputStream.flush();
+            }
+        } catch (IOException exception) {
+            throw new AiProviderException("TTS_PROVIDER_FAILED", "Không thể tạo audio tiếng Việt từ ShopAIKey TTS");
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AiProviderException("TTS_PROVIDER_INTERRUPTED", "Tác vụ tạo audio đã bị gián đoạn");
+        }
+    }
+
+    public String speechContentType() {
+        return switch (properties.getShopaikeyTtsFormat().toLowerCase()) {
+            case "wav" -> "audio/wav";
+            case "opus" -> "audio/ogg";
+            case "aac" -> "audio/aac";
+            case "flac" -> "audio/flac";
+            case "pcm" -> "audio/L16";
+            default -> "audio/mpeg";
+        };
     }
 
     @SuppressWarnings("unchecked")
@@ -145,19 +206,19 @@ public class ShopAiKeyClient {
                     .body(Map.class);
             List<Map<String, Object>> choices = response == null ? List.of() : (List<Map<String, Object>>) response.get("choices");
             if (choices == null || choices.isEmpty()) {
-                throw new AiProviderException("AI_EMPTY_RESPONSE", "ShopAIKey khong tra ket qua");
+                throw new AiProviderException("AI_EMPTY_RESPONSE", "ShopAIKey không trả kết quả");
             }
             Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
             Object content = message == null ? null : message.get("content");
             if (!(content instanceof String value) || value.isBlank()) {
-                throw new AiProviderException("AI_EMPTY_CONTENT", "ShopAIKey khong tra noi dung");
+                throw new AiProviderException("AI_EMPTY_CONTENT", "ShopAIKey không trả nội dung");
             }
             return objectMapper.readTree(extractJson(value));
         } catch (JsonProcessingException | RuntimeException exception) {
             if (exception instanceof AiProviderException aiProviderException) {
                 throw aiProviderException;
             }
-            throw new AiProviderException("AI_PROVIDER_FAILED", "He thong chua xu ly duoc cau tra loi nay, vui long thu lai.");
+            throw new AiProviderException("AI_PROVIDER_FAILED", "Hệ thống chưa xử lý được câu trả lời này, vui lòng thử lại.");
         }
     }
 
@@ -241,7 +302,11 @@ public class ShopAiKeyClient {
         if (score == null) {
             return BigDecimal.ZERO;
         }
-        return score.max(BigDecimal.ZERO).min(BigDecimal.valueOf(100));
+        BigDecimal normalized = score.compareTo(BigDecimal.ZERO) > 0
+                && score.compareTo(BigDecimal.TEN) <= 0
+                ? score.multiply(BigDecimal.TEN)
+                : score;
+        return normalized.max(BigDecimal.ZERO).min(BigDecimal.valueOf(100));
     }
 
     private int clampInt(int value, int min, int max) {

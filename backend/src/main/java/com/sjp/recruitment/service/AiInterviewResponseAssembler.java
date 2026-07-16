@@ -68,7 +68,12 @@ public class AiInterviewResponseAssembler {
                                                       Map<UUID, AiAnswerFeedback> feedbackByAnswer,
                                                       AiSessionFeedback sessionFeedback) {
         List<AiInterviewQuestionResponse> questionResponses = questions.stream()
-                .map(question -> toQuestionResponse(question, answers.get(question.getId()), feedbackByAnswer))
+                .map(question -> toQuestionResponse(
+                        question,
+                        answers.get(question.getId()),
+                        feedbackByAnswer,
+                        session.isCompleted()
+                ))
                 .toList();
         return new AiInterviewSessionResponse(
                 session.getId().toString(),
@@ -76,7 +81,7 @@ public class AiInterviewResponseAssembler {
                 session.getContextType(),
                 session.getStatus(),
                 session.getTotalQuestions() == null ? 0 : session.getTotalQuestions(),
-                session.getOverallScore(),
+                session.isCompleted() ? session.getOverallScore() : null,
                 session.getApplication() == null ? null : session.getApplication().getId().toString(),
                 session.getJob() == null ? null : jobService.toJobResponse(session.getJob(), session.getCandidate()),
                 session.getPracticeContext() == null ? Map.of() : session.getPracticeContext(),
@@ -85,13 +90,14 @@ public class AiInterviewResponseAssembler {
                 asString(session.getCreatedAt()),
                 asString(session.getUpdatedAt()),
                 questionResponses,
-                sessionFeedback == null ? null : toSummaryResponse(sessionFeedback)
+                !session.isCompleted() || sessionFeedback == null ? null : toSummaryResponse(sessionFeedback)
         );
     }
 
     private AiInterviewQuestionResponse toQuestionResponse(InterviewQuestion question,
                                                             InterviewAnswer answer,
-                                                            Map<UUID, AiAnswerFeedback> feedbackByAnswer) {
+                                                            Map<UUID, AiAnswerFeedback> feedbackByAnswer,
+                                                            boolean sessionCompleted) {
         return new AiInterviewQuestionResponse(
                 question.getId().toString(),
                 question.getOrderIndex(),
@@ -100,7 +106,10 @@ public class AiInterviewResponseAssembler {
                 question.getDifficulty(),
                 question.getSkillTag(),
                 question.getTimeLimitSeconds(),
-                answer == null ? null : toAnswerResponse(answer, feedbackByAnswer.get(answer.getId()))
+                answer == null ? null : toAnswerResponse(
+                        answer,
+                        sessionCompleted ? feedbackByAnswer.get(answer.getId()) : null
+                )
         );
     }
 

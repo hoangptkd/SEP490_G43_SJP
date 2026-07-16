@@ -81,7 +81,11 @@ app:
     gladia-base-url: ${GLADIA_BASE_URL:https://api.gladia.io}
     shopaikey-api-key: ${SHOPAIKEY_API_KEY:}
     shopaikey-base-url: ${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}
-    shopaikey-model: ${SHOPAIKEY_MODEL:gpt-5-mini-2025-08-07}
+    shopaikey-model: ${SHOPAIKEY_MODEL:gpt-4.1-mini}
+    shopaikey-tts-model: ${SHOPAIKEY_TTS_MODEL:gpt-4o-mini-tts}
+    shopaikey-tts-voice: ${SHOPAIKEY_TTS_VOICE:coral}
+    shopaikey-tts-format: ${SHOPAIKEY_TTS_FORMAT:mp3}
+    shopaikey-tts-instructions: ${SHOPAIKEY_TTS_INSTRUCTIONS:Đọc tiếng Việt rõ ràng, lưu loát, tốc độ vừa phải, giọng thân thiện và chuyên nghiệp của người phỏng vấn.}
     audio-max-seconds: ${AI_INTERVIEW_AUDIO_MAX_SECONDS:180}
     audio-max-size-mb: ${AI_INTERVIEW_AUDIO_MAX_SIZE_MB:25}
     question-count: ${AI_INTERVIEW_QUESTION_COUNT:5}
@@ -89,7 +93,9 @@ app:
     provider-read-timeout-ms: ${AI_INTERVIEW_PROVIDER_READ_TIMEOUT_MS:20000}
     voice-streaming-enabled: ${AI_INTERVIEW_VOICE_STREAMING_ENABLED:true}
     voice-provider: ${AI_INTERVIEW_VOICE_PROVIDER:browser_web_speech}
-    voice-silence-ms: ${AI_INTERVIEW_VOICE_SILENCE_MS:4000}
+    voice-silence-ms: ${AI_INTERVIEW_VOICE_SILENCE_MS:3000}
+    voice-confirmation-silence-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_SILENCE_MS:3000}
+    voice-unclear-confirmation-delay-ms: ${AI_INTERVIEW_VOICE_UNCLEAR_CONFIRMATION_DELAY_MS:1200}
     costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
   storage:
     cv-upload-dir: ${CV_UPLOAD_DIR:uploads/cvs}

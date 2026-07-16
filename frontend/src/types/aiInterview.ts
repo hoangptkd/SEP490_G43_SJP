@@ -9,6 +9,8 @@ export interface AiInterviewConfig {
   voiceStreamingEnabled: boolean;
   voiceProvider: string;
   voiceSilenceMs: number;
+  voiceConfirmationSilenceMs: number;
+  voiceUnclearConfirmationDelayMs: number;
 }
 
 export interface AiInterviewEligibleApplication {
@@ -16,6 +18,15 @@ export interface AiInterviewEligibleApplication {
   status: string;
   submittedAt?: string;
   job: Job;
+}
+
+export interface AiInterviewQuestionSet {
+  id: string;
+  code: string;
+  title: string;
+  description?: string;
+  targetRole?: string;
+  questionCount: number;
 }
 
 export interface AiInterviewFeedback {
@@ -84,4 +95,10 @@ export interface AiInterviewTranscript {
   questionId: string;
   transcript: string;
   transcriptStatus: string;
+}
+
+export interface AiInterviewSpeechTicket {
+  streamUrl: string;
+  contentType: string;
+  expiresAt: number;
 }

@@ -1,13 +1,18 @@
 package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.dto.request.AiInterviewApplicationSessionRequest;
+import com.sjp.recruitment.model.dto.request.AiInterviewFinishRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewPracticeSessionRequest;
+import com.sjp.recruitment.model.dto.request.AiInterviewSpeechRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewSubmitAnswerRequest;
 import com.sjp.recruitment.model.dto.response.AiInterviewConfigResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewEligibleApplicationResponse;
+import com.sjp.recruitment.model.dto.response.AiInterviewQuestionSetResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewSessionResponse;
+import com.sjp.recruitment.model.dto.response.AiInterviewSpeechTicketResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewTranscriptResponse;
 import com.sjp.recruitment.service.AiInterviewService;
+import com.sjp.recruitment.service.AiInterviewSpeechService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -26,6 +31,7 @@ import java.util.concurrent.Callable;
 public class AiInterviewController {
 
     private final AiInterviewService aiInterviewService;
+    private final AiInterviewSpeechService aiInterviewSpeechService;
 
     @GetMapping("/config-status")
     public ResponseEntity<AiInterviewConfigResponse> configStatus() {
@@ -35,6 +41,11 @@ public class AiInterviewController {
     @GetMapping("/eligible-applications")
     public ResponseEntity<List<AiInterviewEligibleApplicationResponse>> eligibleApplications() {
         return ResponseEntity.ok(aiInterviewService.eligibleApplications());
+    }
+
+    @GetMapping("/question-sets")
+    public ResponseEntity<List<AiInterviewQuestionSetResponse>> questionSets() {
+        return ResponseEntity.ok(aiInterviewService.questionSets());
     }
 
     @PostMapping("/sessions/application")
@@ -73,12 +84,39 @@ public class AiInterviewController {
         return () -> ResponseEntity.ok(aiInterviewService.transcribeCurrentQuestion(sessionId, file, durationSeconds));
     }
 
+    @PostMapping("/sessions/{sessionId}/speech")
+    public ResponseEntity<AiInterviewSpeechTicketResponse> createSpeechTicket(
+            @PathVariable String sessionId,
+            @Valid @RequestBody AiInterviewSpeechRequest request) {
+        aiInterviewService.session(sessionId);
+        return ResponseEntity.ok(aiInterviewSpeechService.createTicket(request.input()));
+    }
+
     @PostMapping("/sessions/{sessionId}/questions/{questionId}/answer")
     public ResponseEntity<AiInterviewSessionResponse> submitAnswer(
             @PathVariable String sessionId,
             @PathVariable String questionId,
             @Valid @RequestBody AiInterviewSubmitAnswerRequest request) {
         return ResponseEntity.ok(aiInterviewService.submitAnswer(sessionId, questionId, request.transcript()));
+    }
+
+    @PostMapping("/sessions/{sessionId}/questions/{questionId}/confirm")
+    public ResponseEntity<AiInterviewSessionResponse> confirmAnswer(
+            @PathVariable String sessionId,
+            @PathVariable String questionId,
+            @Valid @RequestBody AiInterviewSubmitAnswerRequest request) {
+        return ResponseEntity.ok(aiInterviewService.confirmAnswer(sessionId, questionId, request.transcript()));
+    }
+
+    @PostMapping("/sessions/{sessionId}/finish")
+    public ResponseEntity<AiInterviewSessionResponse> finishInterview(
+            @PathVariable String sessionId,
+            @Valid @RequestBody AiInterviewFinishRequest request) {
+        return ResponseEntity.ok(aiInterviewService.finishInterview(
+                sessionId,
+                request.questionId(),
+                request.transcript()
+        ));
     }
 
     @PostMapping("/sessions/{sessionId}/questions/{questionId}/skip")

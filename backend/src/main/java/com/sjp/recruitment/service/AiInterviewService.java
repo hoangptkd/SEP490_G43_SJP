@@ -43,6 +43,8 @@ public class AiInterviewService {
     private final InterviewAnswerRepository answerRepository;
     private final AiAnswerFeedbackRepository answerFeedbackRepository;
     private final AiSessionFeedbackRepository sessionFeedbackRepository;
+    private final AiQuestionSetRepository questionSetRepository;
+    private final AiQuestionBankRepository questionBankRepository;
     private final ShopAiKeyClient shopAiKeyClient;
     private final GladiaTranscriptionClient gladiaTranscriptionClient;
     private final JobService jobService;
@@ -59,7 +61,9 @@ public class AiInterviewService {
                 properties.getAudioMaxSizeMb(),
                 properties.isVoiceStreamingEnabled(),
                 properties.getVoiceProvider(),
-                properties.getVoiceSilenceMs()
+                properties.getVoiceSilenceMs(),
+                properties.getVoiceConfirmationSilenceMs(),
+                properties.getVoiceUnclearConfirmationDelayMs()
         );
     }
 
@@ -80,6 +84,28 @@ public class AiInterviewService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<AiInterviewQuestionSetResponse> questionSets() {
+        ensureEnabled();
+        return questionSetRepository.findByActiveTrueOrderByTitleAsc()
+                .stream()
+                .map(questionSet -> new AbstractMap.SimpleEntry<>(
+                        questionSet,
+                        questionBankRepository.countByQuestionSet_IdAndActiveTrue(questionSet.getId())
+                ))
+                .filter(entry -> entry.getValue() > 0)
+                .map(entry -> new AiInterviewQuestionSetResponse(
+                        entry.getKey().getId().toString(),
+                        entry.getKey().getCode(),
+                        entry.getKey().getTitle(),
+                        entry.getKey().getDescription(),
+                        entry.getKey().getTargetRole(),
+                        entry.getValue()
+                ))
+                .toList();
+    }
+
+    @Transactional
     public AiInterviewSessionResponse createApplicationSession(String applicationId) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
@@ -100,13 +126,14 @@ public class AiInterviewService {
         session.setTitle("Luyen phong van: " + application.getJob().getTitle());
         session.setStatus("created");
         session.setStartedAt(LocalDateTime.now());
-        sessionRepository.save(session);
+        session = sessionRepository.save(session);
         createNextQuestion(session);
         session.setStatus("in_progress");
-        sessionRepository.save(session);
+        session = sessionRepository.save(session);
         return responseAssembler.assemble(session);
     }
 
+    @Transactional
     public AiInterviewSessionResponse createPracticeSession(AiInterviewPracticeSessionRequest request) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
@@ -122,11 +149,25 @@ public class AiInterviewService {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_NOT_ACTIVE", "Viec lam da dong hoac het han");
             }
         }
+        AiQuestionSet questionSet = null;
+        List<AiQuestionBank> fixedQuestions = List.of();
+        boolean fixedQuestionMode = request.questionSetId() != null && !request.questionSetId().isBlank();
+        if (fixedQuestionMode) {
+            questionSet = questionSetRepository.findByIdAndActiveTrue(parseUuid(request.questionSetId(), "QUESTION_SET_ID_INVALID"))
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "QUESTION_SET_NOT_FOUND", "Khong tim thay bo cau hoi"));
+            fixedQuestions = questionBankRepository.findByQuestionSet_IdAndActiveTrueOrderByOrderIndexAsc(questionSet.getId());
+            if (fixedQuestions.isEmpty()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "QUESTION_SET_EMPTY", "Bo cau hoi chua co cau hoi kha dung");
+            }
+        }
 
         Map<String, Object> practiceContext = new LinkedHashMap<>();
         practiceContext.put("targetRole", request.targetRole().trim());
         practiceContext.put("skills", request.skills().stream().map(String::trim).filter(value -> !value.isBlank()).toList());
         practiceContext.put("jobId", job == null ? null : job.getId().toString());
+        practiceContext.put("questionMode", fixedQuestionMode ? "fixed" : "ai_generated");
+        practiceContext.put("questionSetId", questionSet == null ? null : questionSet.getId().toString());
+        practiceContext.put("questionSetCode", questionSet == null ? null : questionSet.getCode());
 
         InterviewSession session = new InterviewSession();
         session.setCandidate(candidate);
@@ -137,10 +178,14 @@ public class AiInterviewService {
         session.setTitle("Practice: " + request.targetRole().trim());
         session.setStatus("created");
         session.setStartedAt(LocalDateTime.now());
-        sessionRepository.save(session);
-        createNextQuestion(session);
+        session = sessionRepository.save(session);
+        if (fixedQuestionMode) {
+            copyFixedQuestions(session, fixedQuestions);
+        } else {
+            createNextQuestion(session);
+        }
         session.setStatus("in_progress");
-        sessionRepository.save(session);
+        session = sessionRepository.save(session);
         return responseAssembler.assemble(session);
     }
 
@@ -169,6 +214,7 @@ public class AiInterviewService {
         session.setDeletedAt(LocalDateTime.now());
     }
 
+    @Transactional
     public AiInterviewTranscriptResponse transcribeCurrentQuestion(String sessionId, MultipartFile file, Integer durationSeconds) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
@@ -200,47 +246,108 @@ public class AiInterviewService {
         }
     }
 
+    @Transactional
     public AiInterviewSessionResponse submitAnswer(String sessionId, String questionId, String transcript) {
+        return confirmAnswer(sessionId, questionId, transcript);
+    }
+
+    @Transactional
+    public AiInterviewSessionResponse confirmAnswer(String sessionId, String questionId, String transcript) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "answer");
         InterviewSession session = requireMutableSession(sessionId);
         InterviewQuestion question = requireQuestion(session, questionId);
+        confirmAnswer(session, question, transcript, true);
+        return responseAssembler.assemble(session);
+    }
+
+    @Transactional
+    public AiInterviewSessionResponse finishInterview(String sessionId, String questionId, String transcript) {
+        ensureEnabled();
+        CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
+        rateLimiter.check(candidate.getId(), "finish");
+        InterviewSession session = requireSession(sessionId);
+        if (session.isCompleted()) {
+            return responseAssembler.assemble(session);
+        }
+
+        if (hasText(transcript)) {
+            if (!hasText(questionId)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "QUESTION_ID_REQUIRED", "Cần xác định câu hỏi cho phần trả lời hiện tại");
+            }
+            InterviewQuestion question = requireQuestion(session, questionId);
+            confirmAnswer(session, question, transcript, false);
+        }
+
+        List<InterviewAnswer> answers = evaluableAnswers(session);
+        if (answers.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_ANSWER_REQUIRED", "Hãy trả lời ít nhất một câu trước khi kết thúc phỏng vấn");
+        }
+
+        for (InterviewAnswer answer : answers) {
+            if (!"completed".equals(answer.getFeedbackStatus())
+                    || answerFeedbackRepository.findByAnswerId(answer.getId()).isEmpty()) {
+                evaluateAnswer(session, answer);
+            }
+        }
+        generateSummary(session);
+        return responseAssembler.assemble(session);
+    }
+
+    private void confirmAnswer(InterviewSession session,
+                               InterviewQuestion question,
+                               String transcript,
+                               boolean advanceToNextQuestion) {
+        String normalizedTranscript = transcript == null ? "" : transcript.trim();
+        if (normalizedTranscript.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ANSWER_REQUIRED", "Câu trả lời không được để trống");
+        }
         InterviewAnswer answer = answerRepository.findBySessionIdAndQuestionId(session.getId(), question.getId())
                 .orElseGet(() -> draftAnswer(session, question));
         if (answer.getAnsweredAt() != null) {
-            if (!answer.isSkipped() && transcript.trim().equals(answer.getTranscriptText())) {
-                return responseAssembler.assemble(session);
+            if (!answer.isSkipped() && normalizedTranscript.equals(answer.getTranscriptText())) {
+                return;
             }
-            throw new ApiException(HttpStatus.CONFLICT, "QUESTION_ALREADY_ANSWERED", "Cau hoi nay da duoc chot cau tra loi");
+            throw new ApiException(HttpStatus.CONFLICT, "QUESTION_ALREADY_ANSWERED", "Câu hỏi này đã được chốt câu trả lời");
         }
-        answer.setTranscriptText(transcript.trim());
+        answer.setTranscriptText(normalizedTranscript);
         answer.setSkipped(false);
         answer.setTranscriptStatus("completed");
-        answer.setFeedbackStatus("processing");
+        answer.setFeedbackStatus("pending");
         answer.setAnsweredAt(LocalDateTime.now());
         answer.setErrorMessage(null);
         answer.setEvaluationSource("provider");
         answer.setEvaluationFallback(false);
         saveAnswerClaim(answer);
+
+        if (advanceToNextQuestion && !hasOpenQuestion(session)) {
+            createNextQuestion(session);
+        }
+    }
+
+    private void evaluateAnswer(InterviewSession session, InterviewAnswer answer) {
+        InterviewQuestion question = requireQuestion(session, answer.getQuestionId().toString());
+        answer.setFeedbackStatus("processing");
+        answer.setErrorMessage(null);
+        saveAnswerClaim(answer);
         try {
-            ShopAiKeyClient.AnswerFeedbackDraft draft = shopAiKeyClient.evaluateAnswer(session, question, transcript.trim());
+            ShopAiKeyClient.AnswerFeedbackDraft draft = shopAiKeyClient.evaluateAnswer(session, question, answer.getTranscriptText());
             saveFeedback(answer, draft);
             answer.setFeedbackStatus("completed");
+            answer.setEvaluationSource("provider");
+            answer.setEvaluationFallback(false);
             answerRepository.save(answer);
-            progressAfterResolvedAnswer(session);
-            return responseAssembler.assemble(session);
         } catch (AiProviderException exception) {
-            saveFeedback(answer, fallbackAnswerFeedback(transcript.trim()));
+            saveFeedback(answer, fallbackAnswerFeedback(answer.getTranscriptText()));
             answer.setFeedbackStatus("completed");
             answer.setEvaluationSource("fallback");
             answer.setEvaluationFallback(true);
             answerRepository.save(answer);
-            progressAfterResolvedAnswer(session);
-            return responseAssembler.assemble(session);
         }
     }
 
+    @Transactional
     public AiInterviewSessionResponse skipQuestion(String sessionId, String questionId) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
@@ -264,34 +371,37 @@ public class AiInterviewService {
         answer.setEvaluationSource("skipped");
         answer.setEvaluationFallback(false);
         saveAnswerClaim(answer);
-        saveFeedback(answer, new ShopAiKeyClient.AnswerFeedbackDraft(
-                BigDecimal.ZERO,
-                "Ban da bo qua cau hoi nay. Hay luyen tap tra loi ngan gon hon trong lan tiep theo.",
-                List.of(),
-                List.of("Chua co cau tra loi de danh gia."),
-                List.of("Thu tra loi theo cau truc: tinh huong, hanh dong, ket qua.")
-        ));
-        progressAfterResolvedAnswer(session);
+        if (!hasOpenQuestion(session)) {
+            createNextQuestion(session);
+        }
         return responseAssembler.assemble(session);
     }
 
+    @Transactional
     public AiInterviewSessionResponse retrySummary(String sessionId) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "summary");
         InterviewSession session = requireSession(sessionId);
-        if (resolvedAnswers(session).size() < properties.getQuestionCount()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "SESSION_NOT_READY_FOR_SUMMARY", "Chua du cau tra loi de tong ket");
+        if (!session.isCompleted()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_NOT_FINISHED", "Chỉ tạo tổng kết sau khi buổi phỏng vấn đã kết thúc");
+        }
+        if (evaluableAnswers(session).isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "SESSION_NOT_READY_FOR_SUMMARY", "Chưa có câu trả lời để tổng kết");
         }
         generateSummary(session);
         return responseAssembler.assemble(session);
     }
 
+    @Transactional
     public AiInterviewSessionResponse retryFeedback(String sessionId, String questionId) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "feedback");
         InterviewSession session = requireSession(sessionId);
+        if (!session.isCompleted()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_NOT_FINISHED", "Chỉ chấm lại sau khi buổi phỏng vấn đã kết thúc");
+        }
         InterviewQuestion question = requireQuestion(session, questionId);
         InterviewAnswer answer = answerRepository.findBySessionIdAndQuestionId(session.getId(), question.getId())
                 .filter(item -> item.getAnsweredAt() != null)
@@ -309,7 +419,7 @@ public class AiInterviewService {
             answer.setEvaluationSource("provider");
             answer.setEvaluationFallback(false);
             answerRepository.save(answer);
-            progressAfterResolvedAnswer(session);
+            generateSummary(session);
             return responseAssembler.assemble(session);
         } catch (AiProviderException exception) {
             saveFeedback(answer, fallbackAnswerFeedback(answer.getTranscriptText()));
@@ -317,16 +427,8 @@ public class AiInterviewService {
             answer.setEvaluationSource("fallback");
             answer.setEvaluationFallback(true);
             answerRepository.save(answer);
-            progressAfterResolvedAnswer(session);
-            return responseAssembler.assemble(session);
-        }
-    }
-
-    private void progressAfterResolvedAnswer(InterviewSession session) {
-        if (resolvedAnswers(session).size() >= properties.getQuestionCount()) {
             generateSummary(session);
-        } else if (!hasOpenQuestion(session)) {
-            createNextQuestion(session);
+            return responseAssembler.assemble(session);
         }
     }
 
@@ -334,11 +436,14 @@ public class AiInterviewService {
         return questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId())
                 .stream()
                 .anyMatch(question -> answerRepository.findBySessionIdAndQuestionId(session.getId(), question.getId())
-                        .map(answer -> answer.getAnsweredAt() == null || "failed".equals(answer.getFeedbackStatus()))
+                        .map(answer -> answer.getAnsweredAt() == null)
                         .orElse(true));
     }
 
     private void createNextQuestion(InterviewSession session) {
+        if (isFixedQuestionMode(session)) {
+            return;
+        }
         List<InterviewQuestion> questions = questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId());
         if (questions.size() >= properties.getQuestionCount()) {
             return;
@@ -363,9 +468,27 @@ public class AiInterviewService {
         sessionRepository.save(session);
     }
 
+    private void copyFixedQuestions(InterviewSession session, List<AiQuestionBank> fixedQuestions) {
+        int orderIndex = 1;
+        for (AiQuestionBank fixedQuestion : fixedQuestions) {
+            InterviewQuestion question = new InterviewQuestion();
+            question.setSession(session);
+            question.setOrderIndex(orderIndex++);
+            question.setQuestionType(fixedQuestion.getQuestionType());
+            question.setDifficulty(fixedQuestion.getDifficulty());
+            question.setSkillTag(fixedQuestion.getSkillTag());
+            question.setContent(fixedQuestion.getContent());
+            question.setTimeLimitSeconds(fixedQuestion.getTimeLimitSeconds());
+            question.setAiGenerated(false);
+            questionRepository.save(question);
+        }
+        session.setTotalQuestions(fixedQuestions.size());
+        sessionRepository.save(session);
+    }
+
     private void generateSummary(InterviewSession session) {
         List<InterviewQuestion> questions = questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId());
-        List<InterviewAnswer> answers = resolvedAnswers(session);
+        List<InterviewAnswer> answers = evaluableAnswers(session);
         BigDecimal average = averageScore(answers);
         try {
             ShopAiKeyClient.SessionSummaryDraft draft = shopAiKeyClient.summarizeSession(session, questions, answers, average);
@@ -405,11 +528,11 @@ public class AiInterviewService {
     private ShopAiKeyClient.QuestionDraft fallbackQuestion(InterviewSession session, List<InterviewQuestion> existingQuestions) {
         int next = existingQuestions.size() + 1;
         List<String> prompts = List.of(
-                "Hay gioi thieu ngan gon ve kinh nghiem cua ban va ly do ban phu hop voi vi tri nay.",
-                "Hay mo ta mot du an gan day ma ban tu hao nhat. Ban da dong gop gi va ket qua ra sao?",
-                "Khi gap mot yeu cau kho hoac thay doi gap, ban se phan tich va xu ly nhu the nao?",
-                "Hay chia se mot lan ban phai hoc cong nghe moi trong thoi gian ngan. Ban da hoc va ap dung ra sao?",
-                "Neu duoc nhan vao vai tro nay, 30 ngay dau tien ban se uu tien nhung viec gi?"
+                "Hãy giới thiệu ngắn gọn về kinh nghiệm của bạn và lý do bạn phù hợp với vị trí này.",
+                "Hãy mô tả một dự án gần đây mà bạn tự hào nhất. Bạn đã đóng góp gì và kết quả ra sao?",
+                "Khi gặp một yêu cầu khó hoặc thay đổi gấp, bạn sẽ phân tích và xử lý như thế nào?",
+                "Hãy chia sẻ một lần bạn phải học công nghệ mới trong thời gian ngắn. Bạn đã học và áp dụng ra sao?",
+                "Nếu được nhận vào vai trò này, 30 ngày đầu tiên bạn sẽ ưu tiên những việc gì?"
         );
         String jobTitle = session.getJob() == null ? session.getTitle() : session.getJob().getTitle();
         String baseQuestion = prompts.get(Math.min(next - 1, prompts.size() - 1));
@@ -427,10 +550,10 @@ public class AiInterviewService {
         BigDecimal score = BigDecimal.valueOf(Math.max(35, Math.min(75, 35 + wordCount)));
         return new ShopAiKeyClient.AnswerFeedbackDraft(
                 score,
-                "Feedback tam thoi: cau tra loi da co y chinh, nhung can them boi canh, hanh dong cu the va ket qua do luong duoc.",
-                wordCount >= 25 ? List.of("Cau tra loi co du thong tin de bat dau danh gia.") : List.of(),
-                wordCount < 25 ? List.of("Cau tra loi con ngan, can them boi canh va ket qua cu the.") : List.of("Nen lam ro hon tac dong va ket qua co the do luong."),
-                List.of("Tra loi theo cau truc: boi canh, hanh dong, ket qua.", "Bo sung vi du cu the va so lieu neu co.")
+                "Feedback tạm thời: câu trả lời đã có ý chính, nhưng cần thêm bối cảnh, hành động cụ thể và kết quả đo lường được.",
+                wordCount >= 25 ? List.of("Câu trả lời có đủ thông tin để bắt đầu đánh giá.") : List.of(),
+                wordCount < 25 ? List.of("Câu trả lời còn ngắn, cần thêm bối cảnh và kết quả cụ thể.") : List.of("Nên làm rõ hơn tác động và kết quả có thể đo lường."),
+                List.of("Trả lời theo cấu trúc: bối cảnh, hành động, kết quả.", "Bổ sung ví dụ cụ thể và số liệu nếu có.")
         );
     }
 
@@ -438,10 +561,10 @@ public class AiInterviewService {
         AiSessionFeedback summary = sessionFeedbackRepository.findBySessionId(session.getId()).orElseGet(AiSessionFeedback::new);
         summary.setSession(session);
         summary.setOverallScore(average);
-        summary.setAiSummary("Tong ket tam thoi: ban da hoan thanh buoi luyen tap. Hay tiep tuc cai thien do cu the, cau truc cau tra loi va ket qua do luong duoc.");
-        summary.setStrengths("Ban da hoan thanh day du cac cau hoi luyen tap.");
-        summary.setWeaknesses("Can tiep tuc bo sung vi du cu the va ket qua do luong duoc trong cau tra loi.");
-        summary.setSuggestions("On lai transcript tung cau.\nChuan bi cau tra loi theo cau truc boi canh, hanh dong, ket qua.\nThu luyen lai voi cac cau hoi kho hon.");
+        summary.setAiSummary("Tổng kết tạm thời: bạn đã hoàn thành buổi luyện tập. Hãy tiếp tục cải thiện độ cụ thể, cấu trúc câu trả lời và kết quả đo lường được.");
+        summary.setStrengths("Bạn đã hoàn thành đầy đủ các câu hỏi luyện tập.");
+        summary.setWeaknesses("Cần tiếp tục bổ sung ví dụ cụ thể và kết quả đo lường được trong câu trả lời.");
+        summary.setSuggestions("Ôn lại transcript từng câu.\nChuẩn bị câu trả lời theo cấu trúc bối cảnh, hành động, kết quả.\nThử luyện lại với các câu hỏi khó hơn.");
         summary.setModelUsed(properties.getShopaikeyModel());
         summary.setEvaluationSource("fallback");
         summary.setEvaluationFallback(true);
@@ -472,10 +595,12 @@ public class AiInterviewService {
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "NO_OPEN_QUESTION", "Khong co cau hoi dang mo"));
     }
 
-    private List<InterviewAnswer> resolvedAnswers(InterviewSession session) {
+    private List<InterviewAnswer> evaluableAnswers(InterviewSession session) {
         return answerRepository.findBySessionIdOrderByAnsweredAtAsc(session.getId())
                 .stream()
                 .filter(answer -> answer.getAnsweredAt() != null)
+                .filter(answer -> !answer.isSkipped())
+                .filter(answer -> hasText(answer.getTranscriptText()))
                 .toList();
     }
 
@@ -483,12 +608,17 @@ public class AiInterviewService {
         if (answers.isEmpty()) {
             return BigDecimal.ZERO;
         }
-        BigDecimal total = answers.stream()
+        List<BigDecimal> scores = answers.stream()
                 .map(answer -> answerFeedbackRepository.findByAnswerId(answer.getId())
                         .map(AiAnswerFeedback::getOverallScore)
-                        .orElse(BigDecimal.ZERO))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return total.divide(BigDecimal.valueOf(properties.getQuestionCount()), 2, RoundingMode.HALF_UP);
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .toList();
+        if (scores.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal total = scores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return total.divide(BigDecimal.valueOf(scores.size()), 2, RoundingMode.HALF_UP);
     }
 
     private boolean isEligibleApplication(Application application) {
@@ -512,6 +642,11 @@ public class AiInterviewService {
                 || hasText(profile.getBio())
                 || hasText(profile.getLocation())
                 || (profile.getSkills() != null && !profile.getSkills().isEmpty());
+    }
+
+    private boolean isFixedQuestionMode(InterviewSession session) {
+        Object questionMode = session.getPracticeContext() == null ? null : session.getPracticeContext().get("questionMode");
+        return "fixed".equals(questionMode);
     }
 
     private void validateAudio(MultipartFile file, Integer durationSeconds) {

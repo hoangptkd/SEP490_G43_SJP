@@ -47,7 +47,8 @@ public class SecurityConfig {
                     "/auth/diagnostic",
                     "/oauth2/**",
                     "/login/oauth2/**",
-                    "/actuator/health"
+                    "/actuator/health",
+                    "/candidate/ai-interviews/speech/**"
                 ).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**", "/categories", "/categories/**").permitAll()
                 .anyRequest().authenticated()
