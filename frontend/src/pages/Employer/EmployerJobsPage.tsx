@@ -16,6 +16,8 @@ function EmployerJobsPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT'>('ALL');
   const [skillsInput, setSkillsInput] = useState('');
   const [reqsInput, setReqsInput] = useState('');
   const [formData, setFormData] = useState({
@@ -140,9 +142,48 @@ function EmployerJobsPage() {
     try {
       const updated = await employerService.submitJobForReview(id);
       setJobs(jobs.map((j) => (j.id === id ? updated : j)));
-      setMessage(`Đã gửi duyệt tin "${title}" thành công. Vui lòng chờ Admin kiểm duyệt.`);
+      const isAutoPublished = updated.status?.toUpperCase() === 'PUBLISHED' || updated.status?.toUpperCase() === 'ACTIVE';
+      setMessage(
+        isAutoPublished
+          ? `Đã đăng tin "${title}" thành công! Do công ty đã có tin được duyệt trước đó nên tin mới được xuất bản ngay không cần chờ Admin.`
+          : `Đã gửi duyệt tin "${title}" thành công. Vui lòng chờ Admin kiểm duyệt.`
+      );
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Không thể gửi duyệt tin tuyển dụng này.');
+    }
+  }
+
+  async function handleCloseJob(id: string, title: string) {
+    if (!window.confirm(`Bạn có chắc chắn muốn ĐÓNG tin tuyển dụng "${title}" (ngừng nhận đơn ứng tuyển) không? Các ứng viên đã nộp đơn sẽ nhận được thông báo.`)) return;
+    try {
+      const updated = await employerService.closeJob(id);
+      setJobs(jobs.map((j) => (j.id === id ? updated : j)));
+      setMessage(`Đã đóng tin tuyển dụng "${title}" thành công.`);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Không thể đóng tin tuyển dụng này.');
+    }
+  }
+
+  async function handleReopenJob(job: Job) {
+    if (!window.confirm(`Bạn có muốn MỞ LẠI tin tuyển dụng "${job.title}" để tiếp tục nhận ứng viên không?`)) return;
+    let newDeadline: string | undefined = undefined;
+    if (job.deadline) {
+      const isExpired = new Date(job.deadline).getTime() < new Date().setHours(0, 0, 0, 0);
+      if (isExpired) {
+        const input = window.prompt('Tin tuyển dụng này đã hết hạn. Vui lòng nhập hạn nộp hồ sơ mới (YYYY-MM-DD):', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+        if (!input) {
+          alert('Bạn phải cập nhật hạn nộp hồ sơ mới để mở lại tin!');
+          return;
+        }
+        newDeadline = input;
+      }
+    }
+    try {
+      const updated = await employerService.reopenJob(job.id, newDeadline);
+      setJobs(jobs.map((j) => (j.id === job.id ? updated : j)));
+      setMessage(`Đã mở lại tin tuyển dụng "${job.title}" thành công.`);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Không thể mở lại tin tuyển dụng này.');
     }
   }
 
@@ -178,11 +219,27 @@ function EmployerJobsPage() {
       if (editingId) {
         const updated = await employerService.updateJob(editingId, payload);
         setJobs(jobs.map((j) => (j.id === editingId ? updated : j)));
-        setMessage('Cập nhật tin tuyển dụng thành công!');
+        const isAutoPublished = updated.status?.toUpperCase() === 'PUBLISHED' || updated.status?.toUpperCase() === 'ACTIVE';
+        const isPending = updated.status?.toUpperCase() === 'PENDING_REVIEW';
+        setMessage(
+          isAutoPublished
+            ? 'Cập nhật tin tuyển dụng thành công và đang được hiển thị ngay trên hệ thống!'
+            : isPending
+            ? 'Đã gửi duyệt tin tuyển dụng thành công. Vui lòng chờ Admin kiểm duyệt.'
+            : 'Cập nhật tin tuyển dụng thành công!'
+        );
       } else {
         const created = await employerService.createJob(payload);
         setJobs([created, ...jobs]);
-        setMessage('Đăng tin tuyển dụng mới thành công!');
+        const isAutoPublished = created.status?.toUpperCase() === 'PUBLISHED' || created.status?.toUpperCase() === 'ACTIVE';
+        const isPending = created.status?.toUpperCase() === 'PENDING_REVIEW';
+        setMessage(
+          isAutoPublished
+            ? 'Đăng tin tuyển dụng mới thành công! Do công ty đã có tin được duyệt trước đó nên tin mới được xuất bản ngay.'
+            : isPending
+            ? 'Đăng tin đầu tiên thành công! Tin tuyển dụng đang ở trạng thái Chờ duyệt bởi Admin.'
+            : 'Lưu tin tuyển dụng thành công!'
+        );
       }
       setShowForm(false);
     } catch (err: any) {
@@ -200,6 +257,10 @@ function EmployerJobsPage() {
   if (!company) return <div className="content-card"><p className="error">{error || 'Không tìm thấy thông tin công ty.'}</p></div>;
 
   const isVerified = company.verified || company.verificationStatus?.toLowerCase() === 'verified';
+  const hasApprovedJob = jobs.some((j) => {
+    const st = j.status?.toLowerCase();
+    return st === 'published' || st === 'active' || st === 'closed' || st === 'expired' || st === 'archived' || Boolean(j.publishedAt);
+  });
 
   return (
     <section className="content-card">
@@ -550,79 +611,112 @@ function EmployerJobsPage() {
                 }}
               >
                 <option value="draft">Bản nháp (Draft)</option>
-                <option value="pending_review">Gửi kiểm duyệt (Pending Review)</option>
-                {formData.status === 'published' || formData.status === 'active' ? (
+                {hasApprovedJob ? (
+                  <option value="published">Đang hiển thị / Đăng ngay (Published)</option>
+                ) : (
+                  <option value="pending_review">Gửi kiểm duyệt (Pending Review)</option>
+                )}
+                {editingId && (formData.status === 'published' || formData.status === 'active') && !hasApprovedJob ? (
                   <option value="published">Đang hiển thị (Published)</option>
                 ) : null}
               </select>
             </label>
 
             <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-              <button
-                type="submit"
-                disabled={saving}
-                onClick={() => {
-                  submitTargetRef.current = 'draft';
-                  setFormData((prev) => ({ ...prev, status: 'draft' }));
-                }}
-                style={{
-                  background: '#f1f5f9',
-                  color: '#334155',
-                  border: '1px solid #cbd5e1',
-                  padding: '10px 18px',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  cursor: saving ? 'wait' : 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                onClick={() => {
-                  submitTargetRef.current = 'pending_review';
-                  setFormData((prev) => ({ ...prev, status: 'pending_review' }));
-                }}
-                style={{
-                  background: '#2563eb',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '10px 22px',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  cursor: saving ? 'wait' : 'pointer',
-                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-                  transition: 'background-color 0.2s'
-                }}
-              >
-                {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
-              </button>
-              {formData.status === 'published' || formData.status === 'active' ? (
+              {editingId ? (
                 <button
                   type="submit"
                   disabled={saving}
                   onClick={() => {
-                    submitTargetRef.current = 'published';
-                    setFormData((prev) => ({ ...prev, status: 'published' }));
+                    submitTargetRef.current = formData.status;
                   }}
                   style={{
-                    background: '#059669',
+                    background: '#2563eb',
                     color: '#fff',
                     border: 'none',
-                    padding: '10px 18px',
+                    padding: '10px 24px',
                     borderRadius: '6px',
                     fontWeight: 600,
                     fontSize: '0.9rem',
-                    cursor: saving ? 'wait' : 'pointer'
+                    cursor: saving ? 'wait' : 'pointer',
+                    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                    transition: 'background-color 0.2s'
                   }}
                 >
-                  {saving ? 'Đang xử lý...' : 'Lưu & Công khai'}
+                  {saving ? 'Đang xử lý...' : 'Lưu lại'}
                 </button>
-              ) : null}
+              ) : (
+                <>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    onClick={() => {
+                      submitTargetRef.current = 'draft';
+                      setFormData((prev) => ({ ...prev, status: 'draft' }));
+                    }}
+                    style={{
+                      background: '#f1f5f9',
+                      color: '#334155',
+                      border: '1px solid #cbd5e1',
+                      padding: '10px 18px',
+                      borderRadius: '6px',
+                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      cursor: saving ? 'wait' : 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
+                  </button>
+                  {hasApprovedJob ? (
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      onClick={() => {
+                        submitTargetRef.current = 'published';
+                        setFormData((prev) => ({ ...prev, status: 'published' }));
+                      }}
+                      style={{
+                        background: '#059669',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '10px 22px',
+                        borderRadius: '6px',
+                        fontWeight: 600,
+                        fontSize: '0.9rem',
+                        cursor: saving ? 'wait' : 'pointer',
+                        boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)',
+                        transition: 'background-color 0.2s'
+                      }}
+                    >
+                      {saving ? 'Đang xử lý...' : '🚀 Đăng tin ngay (Miễn kiểm duyệt)'}
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      onClick={() => {
+                        submitTargetRef.current = 'pending_review';
+                        setFormData((prev) => ({ ...prev, status: 'pending_review' }));
+                      }}
+                      style={{
+                        background: '#2563eb',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '10px 22px',
+                        borderRadius: '6px',
+                        fontWeight: 600,
+                        fontSize: '0.9rem',
+                        cursor: saving ? 'wait' : 'pointer',
+                        boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                        transition: 'background-color 0.2s'
+                      }}
+                    >
+                      {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
+                    </button>
+                  )}
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
@@ -645,85 +739,198 @@ function EmployerJobsPage() {
       ) : null}
 
       <div>
-        <h2 style={{ fontSize: '1.3rem', color: '#1e293b', marginBottom: '16px' }}>
-          Danh sách tin tuyển dụng ({jobs.length})
-        </h2>
-
-        {jobs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-            <p style={{ color: '#64748b', fontSize: '1.05rem', margin: '0 0 16px 0' }}>
-              Công ty chưa có tin tuyển dụng nào được đăng trên hệ thống.
-            </p>
-            {isVerified && (
+        <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ flex: '1 1 300px', position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="🔍 Tìm kiếm theo tiêu đề vị trí, địa điểm, kỹ năng..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
+              />
+            </div>
+            {searchTerm && (
               <button
-                onClick={handleOpenAdd}
-                style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)' }}
+                type="button"
+                onClick={() => setSearchTerm('')}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.875rem' }}
               >
-                + Tạo tin tuyển dụng đầu tiên
+                ✕ Xóa tìm kiếm
               </button>
             )}
           </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '16px' }}>
-            {jobs.map((job) => {
-              const st = job.status?.toLowerCase() || 'draft';
-              const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'rejected' ? '#fef2f2' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
-              const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'rejected' ? '#b91c1c' : st === 'draft' ? '#475569' : '#64748b';
-              const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'rejected' ? '#fecaca' : st === 'draft' ? '#cbd5e1' : '#e2e8f0';
-              const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'rejected' ? '#ef4444' : st === 'draft' ? '#94a3b8' : '#64748b';
-              const statusLabel = st === 'published' || st === 'active' ? 'Đang hiển thị' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'draft' ? 'Bản nháp' : 'Đã đóng';
 
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {[
+              { key: 'ALL', label: 'Tất cả', count: jobs.length },
+              { key: 'PENDING_REVIEW', label: 'Chờ duyệt', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'PENDING_REVIEW').length },
+              { key: 'PUBLISHED', label: 'Đang tuyển', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'PUBLISHED' || (j.status?.toUpperCase() || '') === 'ACTIVE').length },
+              { key: 'CLOSED', label: 'Đã đóng', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'CLOSED').length },
+              { key: 'EXPIRED', label: 'Hết hạn', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'EXPIRED').length },
+              { key: 'DRAFT', label: 'Bản nháp / Yêu cầu sửa', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'DRAFT' || (j.status?.toUpperCase() || '') === 'REJECTED').length },
+            ].map((tab) => {
+              const active = statusFilter === tab.key;
               return (
-                <div key={job.id} style={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '22px',
-                  background: '#ffffff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  flexWrap: 'wrap',
-                  gap: '16px',
-                  transition: 'border-color 0.2s, box-shadow 0.2s'
-                }}>
-                  <div style={{ flex: '1 1 420px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' }}>
-                      <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a', fontWeight: 700 }}>
-                        {job.title}
-                      </h3>
-                      <span style={{
-                        background: statusBg,
-                        color: statusColor,
-                        border: `1px solid ${statusBorder}`,
-                        padding: '4px 12px',
-                        borderRadius: '20px',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusDot }}></span>
-                        {statusLabel}
-                      </span>
-                    </div>
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.key as any)}
+                  style={{
+                    background: active ? '#2563eb' : '#ffffff',
+                    color: active ? '#ffffff' : '#475569',
+                    border: active ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {tab.label}
+                  <span style={{
+                    background: active ? 'rgba(255,255,255,0.2)' : '#f1f5f9',
+                    color: active ? '#ffffff' : '#64748b',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontSize: '0.75rem'
+                  }}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', color: '#64748b', fontSize: '0.875rem', marginBottom: '14px', alignItems: 'center' }}>
-                      <span>Địa điểm: <strong style={{ color: '#334155' }}>{job.location || 'Hà Nội'}</strong></span>
-                      <span style={{ color: '#cbd5e1' }}>•</span>
-                      <span>Mức lương: <strong style={{ color: '#059669' }}>{job.salaryType === 'negotiable' ? 'Thỏa thuận' : `${job.salaryMin ? job.salaryMin.toLocaleString() : 0} - ${job.salaryMax ? job.salaryMax.toLocaleString() : 0} VNĐ`}</strong></span>
-                      <span style={{ color: '#cbd5e1' }}>•</span>
-                      <span>Số lượng: <strong style={{ color: '#334155' }}>{job.vacancies || 1}</strong></span>
-                      <span style={{ color: '#cbd5e1' }}>•</span>
-                      <span>Lượt xem: <strong style={{ color: '#334155' }}>{job.viewsCount || 0}</strong></span>
-                      {job.deadline && (
-                        <>
-                          <span style={{ color: '#cbd5e1' }}>•</span>
-                          <span>Hạn nộp: <strong style={{ color: '#334155' }}>{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong></span>
-                        </>
-                      )}
-                    </div>
+        {(() => {
+          const filteredJobs = jobs.filter((job) => {
+            const st = job.status?.toUpperCase() || 'DRAFT';
+            if (statusFilter !== 'ALL') {
+              if (statusFilter === 'PUBLISHED' && st !== 'PUBLISHED' && st !== 'ACTIVE') return false;
+              if (statusFilter === 'PENDING_REVIEW' && st !== 'PENDING_REVIEW') return false;
+              if (statusFilter === 'CLOSED' && st !== 'CLOSED') return false;
+              if (statusFilter === 'EXPIRED' && st !== 'EXPIRED') return false;
+              if (statusFilter === 'DRAFT' && st !== 'DRAFT' && st !== 'REJECTED') return false;
+            }
+            if (searchTerm.trim()) {
+              const q = searchTerm.toLowerCase();
+              const matchTitle = job.title?.toLowerCase().includes(q);
+              const matchLocation = job.location?.toLowerCase().includes(q);
+              const matchSkills = job.skills?.some((s) => s.toLowerCase().includes(q));
+              if (!matchTitle && !matchLocation && !matchSkills) return false;
+            }
+            return true;
+          });
+
+          return (
+            <>
+              <h2 style={{ fontSize: '1.3rem', color: '#1e293b', marginBottom: '16px' }}>
+                Danh sách tin tuyển dụng ({filteredJobs.length}/{jobs.length})
+              </h2>
+
+              {filteredJobs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <p style={{ color: '#64748b', fontSize: '1.05rem', margin: '0 0 16px 0' }}>
+                    {jobs.length === 0 ? 'Công ty chưa có tin tuyển dụng nào được đăng trên hệ thống.' : 'Không tìm thấy tin tuyển dụng nào phù hợp với điều kiện lọc.'}
+                  </p>
+                  {jobs.length === 0 && isVerified && (
+                    <button
+                      onClick={handleOpenAdd}
+                      style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)' }}
+                    >
+                      + Tạo tin tuyển dụng đầu tiên
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  {filteredJobs.map((job) => {
+                    const st = job.status?.toLowerCase() || 'draft';
+                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
+                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : '#64748b';
+                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : '#e2e8f0';
+                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : '#64748b';
+                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : 'Đã đóng';
+
+                    return (
+                      <div key={job.id} style={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '22px',
+                        background: '#ffffff',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        flexWrap: 'wrap',
+                        gap: '16px',
+                        transition: 'border-color 0.2s, box-shadow 0.2s'
+                      }}>
+                        <div style={{ flex: '1 1 420px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a', fontWeight: 700 }}>
+                              {job.title}
+                            </h3>
+                            <span style={{
+                              background: statusBg,
+                              color: statusColor,
+                              border: `1px solid ${statusBorder}`,
+                              padding: '4px 12px',
+                              borderRadius: '20px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}>
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusDot }}></span>
+                              {statusLabel}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', color: '#64748b', fontSize: '0.875rem', marginBottom: '14px', alignItems: 'center' }}>
+                            <span>Địa điểm: <strong style={{ color: '#334155' }}>{job.location || 'Hà Nội'}</strong></span>
+                            <span style={{ color: '#cbd5e1' }}>•</span>
+                            <span>Mức lương: <strong style={{ color: '#059669' }}>{job.salaryType === 'negotiable' ? 'Thỏa thuận' : `${job.salaryMin ? job.salaryMin.toLocaleString() : 0} - ${job.salaryMax ? job.salaryMax.toLocaleString() : 0} VNĐ`}</strong></span>
+                            <span style={{ color: '#cbd5e1' }}>•</span>
+                            <span>Số lượng: <strong style={{ color: '#334155' }}>{job.vacancies || 1}</strong></span>
+                            <span style={{ color: '#cbd5e1' }}>•</span>
+                            <span>Lượt xem: <strong style={{ color: '#334155' }}>{job.viewsCount || 0}</strong></span>
+                            <span style={{ color: '#cbd5e1' }}>•</span>
+                            <Link to={`/employer/jobs/${job.id}/applications`} style={{
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              padding: '3px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #bfdbfe',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              textDecoration: 'none'
+                            }}>
+                              📁 Đơn ứng tuyển: <strong style={{ fontSize: '0.95rem' }}>{job.applicationsCount || 0}</strong>
+                            </Link>
+                            {job.deadline && (
+                              <>
+                                <span style={{ color: '#cbd5e1' }}>•</span>
+                                <span>Hạn nộp: <strong style={{ color: '#334155' }}>{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong></span>
+                              </>
+                            )}
+                          </div>
 
                     {job.skills && job.skills.length > 0 && (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -753,11 +960,30 @@ function EmployerJobsPage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Link
+                      to={`/employer/jobs/${job.id}/applications`}
+                      style={{
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        color: '#1d4ed8',
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      👥 Xem ứng viên ({job.applicationsCount || 0})
+                    </Link>
                     {isVerified && st === 'draft' && (
                       <button
                         onClick={() => handleSubmitForReview(job.id, job.title)}
                         style={{
-                          background: '#2563eb',
+                          background: hasApprovedJob ? '#059669' : '#2563eb',
                           border: 'none',
                           color: '#fff',
                           padding: '8px 16px',
@@ -765,11 +991,11 @@ function EmployerJobsPage() {
                           fontWeight: 600,
                           fontSize: '0.875rem',
                           cursor: 'pointer',
-                          boxShadow: '0 2px 4px rgba(37, 99, 235, 0.15)',
+                          boxShadow: hasApprovedJob ? '0 2px 4px rgba(5, 150, 105, 0.15)' : '0 2px 4px rgba(37, 99, 235, 0.15)',
                           transition: 'background-color 0.2s'
                         }}
                       >
-                        Nộp kiểm duyệt
+                        {hasApprovedJob ? '🚀 Đăng tin ngay (Miễn kiểm duyệt)' : 'Nộp kiểm duyệt'}
                       </button>
                     )}
                     {isVerified && st === 'rejected' && (
@@ -809,6 +1035,42 @@ function EmployerJobsPage() {
                         Chỉnh sửa
                       </button>
                     )}
+                    {isVerified && (st === 'published' || st === 'active') && (
+                      <button
+                        onClick={() => handleCloseJob(job.id, job.title)}
+                        style={{
+                          background: '#fffbeb',
+                          border: '1px solid #fde68a',
+                          color: '#b45309',
+                          padding: '8px 14px',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        🔒 Đóng tin
+                      </button>
+                    )}
+                    {isVerified && (st === 'closed' || st === 'expired') && (
+                      <button
+                        onClick={() => handleReopenJob(job)}
+                        style={{
+                          background: '#ecfdf5',
+                          border: '1px solid #6ee7b7',
+                          color: '#047857',
+                          padding: '8px 14px',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        🔓 Mở lại tin
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(job.id, job.title)}
                       style={{
@@ -831,6 +1093,9 @@ function EmployerJobsPage() {
             })}
           </div>
         )}
+            </>
+          );
+        })()}
       </div>
     </section>
   );

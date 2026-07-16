@@ -6,6 +6,7 @@ import java.util.List;
 public record ApplicationResponse(
         String id,
         JobResponse job,
+        CandidateProfileResponse candidate,
         CvResponse cv,
         CvVersionResponse cvVersion,
         String status,

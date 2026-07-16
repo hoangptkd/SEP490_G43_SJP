@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { Company, CompanyLocation, CompanyDocument, Job } from '../types/job';
+import type { CandidateApplication } from '../types/candidateDomain';
 
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
@@ -84,5 +85,30 @@ export const employerService = {
 
   deleteJob: async (id: string): Promise<void> => {
     await api.delete(`/employer/jobs/${id}`);
+  },
+
+  closeJob: async (id: string): Promise<Job> => {
+    const response = await api.post<Job>(`/employer/jobs/${id}/close`);
+    return response.data;
+  },
+
+  reopenJob: async (id: string, newDeadline?: string): Promise<Job> => {
+    const response = await api.post<Job>(`/employer/jobs/${id}/reopen`, { deadline: newDeadline });
+    return response.data;
+  },
+
+  getApplications: async (params?: { jobId?: string; status?: string; search?: string }): Promise<CandidateApplication[]> => {
+    const response = await api.get<CandidateApplication[]>('/employer/applications', { params });
+    return response.data;
+  },
+
+  getJobApplications: async (jobId: string, params?: { status?: string; search?: string }): Promise<CandidateApplication[]> => {
+    const response = await api.get<CandidateApplication[]>(`/employer/jobs/${jobId}/applications`, { params });
+    return response.data;
+  },
+
+  updateApplicationStatus: async (id: string, status: string, note?: string): Promise<CandidateApplication> => {
+    const response = await api.put<CandidateApplication>(`/employer/applications/${id}/status`, { status, note });
+    return response.data;
   },
 };
