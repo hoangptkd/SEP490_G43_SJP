@@ -79,6 +79,14 @@ public class CandidateProfile {
         return user == null ? null : user.getFullName();
     }
 
+    public String getEmail() {
+        return user == null ? null : user.getEmail();
+    }
+
+    public String getTitle() {
+        return headline;
+    }
+
     public void setFullName(String fullName) {
         if (user != null) {
             user.setFullName(fullName);

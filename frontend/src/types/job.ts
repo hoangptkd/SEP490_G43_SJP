@@ -43,6 +43,7 @@ export interface Job {
   saved: boolean;
   applied: boolean;
   matchScore?: number;
+  applicationsCount?: number;
 }
 
 export interface Company {

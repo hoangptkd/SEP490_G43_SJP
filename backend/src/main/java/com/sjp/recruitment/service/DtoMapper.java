@@ -2,10 +2,12 @@ package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.model.dto.response.*;
 import com.sjp.recruitment.model.entity.*;
+import com.sjp.recruitment.repository.ApplicationRepository;
 import com.sjp.recruitment.repository.JobReviewHistoryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -13,6 +15,9 @@ public class DtoMapper {
 
     @Autowired
     private JobReviewHistoryRepository jobReviewHistoryRepository;
+
+    @Autowired
+    private ApplicationRepository applicationRepository;
 
     public UserResponse toUserResponse(User user) {
         return new UserResponse(
@@ -25,9 +30,18 @@ public class DtoMapper {
     }
 
     public CandidateProfileResponse toCandidateProfileResponse(CandidateProfile profile, boolean applyReady) {
+        if (profile == null) {
+            return null;
+        }
+        String userId = null;
+        try {
+            if (profile.getUser() != null && profile.getUser().getId() != null) {
+                userId = String.valueOf(profile.getUser().getId());
+            }
+        } catch (Exception ignored) {}
         return new CandidateProfileResponse(
                 String.valueOf(profile.getId()),
-                String.valueOf(profile.getUser().getId()),
+                userId,
                 profile.getFullName(),
                 profile.getPhone(),
                 profile.getLocation(),
@@ -112,6 +126,12 @@ public class DtoMapper {
                     .map(JobReviewHistory::getReason)
                     .orElse(null);
         }
+        String frontendStatus = toFrontendJobStatus(job.getStatus());
+        if (("PUBLISHED".equals(frontendStatus) || "ACTIVE".equals(frontendStatus))
+                && job.getDeadline() != null && job.getDeadline().isBefore(java.time.LocalDate.now())) {
+            frontendStatus = "EXPIRED";
+        }
+        long appsCount = (applicationRepository != null && job.getId() != null) ? applicationRepository.countByJobId(job.getId()) : 0L;
         return new JobResponse(
                 String.valueOf(job.getId()),
                 job.getTitle(),
@@ -123,7 +143,7 @@ public class DtoMapper {
                 job.getLocation(),
                 job.getExperienceLevel(),
                 job.getDeadline() == null ? null : job.getDeadline().atStartOfDay(),
-                toFrontendJobStatus(job.getStatus()),
+                frontendStatus,
                 toCompanyResponse(job.getCompany()),
                 job.getCompanyLocation() == null ? null : String.valueOf(job.getCompanyLocation().getId()),
                 toCompanyLocationResponse(job.getCompanyLocation()),
@@ -137,7 +157,8 @@ public class DtoMapper {
                 job.getJobType(),
                 job.getWorkMode(),
                 job.getViewsCount() != null ? job.getViewsCount() : 0,
-                rejectionReason
+                rejectionReason,
+                appsCount
         );
     }
 
@@ -158,6 +179,7 @@ public class DtoMapper {
         return new ApplicationResponse(
                 String.valueOf(application.getId()),
                 job,
+                application.getCandidate() != null ? toCandidateProfileResponse(application.getCandidate(), true) : null,
                 toCvResponse(application.getCv()),
                 toCvVersionResponse(application.getCvVersion()),
                 toFrontendApplicationStatus(application.getStatus()),
@@ -181,11 +203,19 @@ public class DtoMapper {
     }
 
     private List<String> safeList(List<String> values) {
-        return values == null ? List.of() : values;
+        try {
+            return values == null ? List.of() : new ArrayList<>(values);
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     private List<Object> safeObjectList(List<Object> values) {
-        return values == null ? List.of() : values;
+        try {
+            return values == null ? List.of() : new ArrayList<>(values);
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     private String toFrontendJobStatus(String status) {

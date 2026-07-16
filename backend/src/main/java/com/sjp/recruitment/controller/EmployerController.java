@@ -7,6 +7,7 @@ import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
 import com.sjp.recruitment.model.dto.request.JobRequest;
 import com.sjp.recruitment.model.dto.response.JobResponse;
+import com.sjp.recruitment.model.dto.response.ApplicationResponse;
 import com.sjp.recruitment.service.EmployerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/employer")
@@ -76,8 +78,10 @@ public class EmployerController {
     }
 
     @GetMapping("/jobs")
-    public ResponseEntity<List<JobResponse>> getCompanyJobs() {
-        return ResponseEntity.ok(employerService.getCompanyJobs());
+    public ResponseEntity<List<JobResponse>> getCompanyJobs(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search) {
+        return ResponseEntity.ok(employerService.getCompanyJobs(status, search));
     }
 
     @PostMapping("/jobs")
@@ -99,5 +103,44 @@ public class EmployerController {
     public ResponseEntity<Void> deleteJob(@PathVariable String id) {
         employerService.deleteJob(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/jobs/{id}/close")
+    public ResponseEntity<JobResponse> closeJob(@PathVariable String id) {
+        return ResponseEntity.ok(employerService.closeJob(id));
+    }
+
+    @PostMapping("/jobs/{id}/reopen")
+    public ResponseEntity<JobResponse> reopenJob(@PathVariable String id,
+                                                 @RequestParam(required = false) String deadline,
+                                                 @RequestBody(required = false) Map<String, String> body) {
+        String targetDeadline = body != null && body.get("deadline") != null ? body.get("deadline") : deadline;
+        return ResponseEntity.ok(employerService.reopenJob(id, targetDeadline));
+    }
+
+    @GetMapping("/applications")
+    public ResponseEntity<List<ApplicationResponse>> getCompanyApplications(
+            @RequestParam(required = false) String jobId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search) {
+        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, status, search));
+    }
+
+    @GetMapping("/jobs/{jobId}/applications")
+    public ResponseEntity<List<ApplicationResponse>> getJobApplications(
+            @PathVariable String jobId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search) {
+        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, status, search));
+    }
+
+    @PutMapping("/applications/{id}/status")
+    public ResponseEntity<ApplicationResponse> updateApplicationStatus(
+            @PathVariable String id,
+            @RequestParam(required = false) String status,
+            @RequestBody(required = false) Map<String, String> body) {
+        String targetStatus = body != null && body.get("status") != null ? body.get("status") : status;
+        String note = body != null ? body.get("note") : null;
+        return ResponseEntity.ok(employerService.updateApplicationStatus(id, targetStatus, note));
     }
 }

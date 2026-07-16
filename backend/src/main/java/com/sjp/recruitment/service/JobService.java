@@ -12,7 +12,10 @@ import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.Company;
 import com.sjp.recruitment.model.entity.CompanyLocation;
 import com.sjp.recruitment.model.entity.Employer;
+import com.sjp.recruitment.model.entity.Application;
+import com.sjp.recruitment.model.entity.ApplicationStatusHistory;
 import com.sjp.recruitment.model.entity.Job;
+import com.sjp.recruitment.model.entity.Notification;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.model.entity.Skill;
 import com.sjp.recruitment.model.entity.JobSkill;
@@ -50,6 +53,8 @@ public class JobService {
     private final EmployerRepository employerRepository;
     private final SkillRepository skillRepository;
     private final JobSkillRepository jobSkillRepository;
+    private final NotificationRepository notificationRepository;
+    private final ApplicationStatusHistoryRepository applicationStatusHistoryRepository;
     private final DtoMapper dtoMapper;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
@@ -244,17 +249,26 @@ public class JobService {
     @Transactional
     public JobResponse submitJobForReview(String id, Employer employer) {
         Job job = findById(id);
-        if (!job.getEmployer().getId().equals(employer.getId()) && (job.getCompany() == null || !job.getCompany().getId().equals(employer.getCompany().getId()))) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền thao tác với việc làm này");
-        }
+        checkEmployerPermission(job, employer, "Bạn không có quyền thao tác với việc làm này");
         if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực pháp lý.");
         }
         if ("rejected".equalsIgnoreCase(job.getStatus())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_REJECTED", "Tin tuyển dụng đã bị từ chối duyệt. Vui lòng chỉnh sửa nội dung tin tuyển dụng trước khi gửi duyệt lại.");
         }
-        job.setStatus("pending_review");
-        job.setRejectionReason(null);
+        if (hasCompanyHadApprovedJob(job.getCompany(), job.getId())) {
+            job.setStatus("published");
+            if (job.getPublishedAt() == null) {
+                job.setPublishedAt(LocalDateTime.now());
+            }
+            if (job.getPostedAt() == null) {
+                job.setPostedAt(LocalDateTime.now());
+            }
+            job.setRejectionReason(null);
+        } else {
+            job.setStatus("pending_review");
+            job.setRejectionReason(null);
+        }
         job = jobRepository.save(job);
         return dtoMapper.toJobResponse(job, false, false, null);
     }
@@ -266,14 +280,162 @@ public class JobService {
         jobRepository.deleteById(jobId);
     }
 
+    private void checkEmployerPermission(Job job, Employer employer, String errorMessage) {
+        if (job == null || employer == null) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", errorMessage);
+        }
+        boolean byEmployer = job.getEmployer() != null && job.getEmployer().getId() != null && job.getEmployer().getId().equals(employer.getId());
+        boolean byCompany = job.getCompany() != null && job.getCompany().getId() != null && employer.getCompany() != null && job.getCompany().getId().equals(employer.getCompany().getId());
+        if (!byEmployer && !byCompany) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", errorMessage);
+        }
+    }
+
     @Transactional
     public void deleteJobForEmployer(String id, Employer employer) {
         Job job = findById(id);
-        if (!job.getEmployer().getId().equals(employer.getId()) && (job.getCompany() == null || !job.getCompany().getId().equals(employer.getCompany().getId()))) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền xóa việc làm này");
+        checkEmployerPermission(job, employer, "Bạn không có quyền xóa việc làm này");
+
+        List<Application> applications = applicationRepository.findAllByJobId(job.getId());
+        if (applications != null && !applications.isEmpty()) {
+            job.setStatus("archived");
+            if (job.getClosedAt() == null) {
+                job.setClosedAt(LocalDateTime.now());
+            }
+            jobRepository.save(job);
+
+            for (Application app : applications) {
+                if (app != null && app.getStatusEnum() != null) {
+                    Application.ApplicationStatus currentStatus = app.getStatusEnum();
+                    boolean isPending = currentStatus == Application.ApplicationStatus.SUBMITTED
+                            || currentStatus == Application.ApplicationStatus.UNDER_REVIEW
+                            || currentStatus == Application.ApplicationStatus.SHORTLISTED
+                            || currentStatus == Application.ApplicationStatus.INTERVIEW_SCHEDULED;
+                    if (isPending) {
+                        app.setStatus(Application.ApplicationStatus.REJECTED);
+                        if (app.getReviewedAt() == null) {
+                            app.setReviewedAt(LocalDateTime.now());
+                        }
+                        applicationRepository.save(app);
+
+                        try {
+                            ApplicationStatusHistory history = new ApplicationStatusHistory();
+                            history.setApplication(app);
+                            history.setFromStatus(currentStatus);
+                            history.setToStatus(Application.ApplicationStatus.REJECTED);
+                            history.setPublicNote("Tin tuyển dụng đã bị xóa/lưu trữ (archive) bởi nhà tuyển dụng. Đơn ứng tuyển tự động chuyển sang trạng thái Từ chối.");
+                            applicationStatusHistoryRepository.save(history);
+                        } catch (Exception ex) {
+                            // ignore history log failure
+                        }
+
+                        if (app.getCandidate() != null && app.getCandidate().getUser() != null) {
+                            try {
+                                Notification note = new Notification();
+                                note.setRecipientUser(app.getCandidate().getUser());
+                                note.setType("JOB_DELETED");
+                                note.setTitle("Thông báo tin tuyển dụng bị xóa/lưu trữ");
+                                note.setMessage("Tin tuyển dụng [" + job.getTitle() + "] mà bạn ứng tuyển đã bị nhà tuyển dụng xóa (lưu trữ). Đơn ứng tuyển của bạn đã tự động chuyển sang trạng thái Từ chối.");
+                                note.setRelatedEntityType("JOB");
+                                note.setRelatedEntityId(job.getId());
+                                notificationRepository.save(note);
+                            } catch (Exception ex) {
+                                // ignore notification save failure
+                            }
+                        }
+                    } else if (app.getCandidate() != null && app.getCandidate().getUser() != null) {
+                        try {
+                            Notification note = new Notification();
+                            note.setRecipientUser(app.getCandidate().getUser());
+                            note.setType("JOB_DELETED");
+                            note.setTitle("Thông báo tin tuyển dụng bị xóa/lưu trữ");
+                            note.setMessage("Tin tuyển dụng [" + job.getTitle() + "] mà bạn đã ứng tuyển vừa được nhà tuyển dụng lưu trữ (archive).");
+                            note.setRelatedEntityType("JOB");
+                            note.setRelatedEntityId(job.getId());
+                            notificationRepository.save(note);
+                        } catch (Exception ex) {
+                            // ignore notification save failure
+                        }
+                    }
+                }
+            }
+        } else {
+            job.setStatus("archived");
+            if (job.getClosedAt() == null) {
+                job.setClosedAt(LocalDateTime.now());
+            }
+            jobRepository.save(job);
         }
-        jobSkillRepository.deleteByJobId(job.getId());
-        jobRepository.delete(job);
+    }
+
+    @Transactional
+    public JobResponse closeJobForEmployer(String id, Employer employer) {
+        Job job = findById(id);
+        checkEmployerPermission(job, employer, "Bạn không có quyền thao tác với việc làm này");
+        if ("closed".equalsIgnoreCase(job.getStatus())) {
+            return dtoMapper.toJobResponse(job, false, false, null);
+        }
+        job.setStatus("closed");
+        if (job.getClosedAt() == null) {
+            job.setClosedAt(LocalDateTime.now());
+        }
+        job = jobRepository.save(job);
+        notifyCandidatesJobClosed(job, "Tin tuyển dụng [" + job.getTitle() + "] mà bạn nộp đơn ứng tuyển đã được nhà tuyển dụng đóng (ngừng nhận đơn).");
+        return dtoMapper.toJobResponse(job, false, false, null);
+    }
+
+    @Transactional
+    public JobResponse reopenJobForEmployer(String id, Employer employer, String newDeadline) {
+        Job job = findById(id);
+        checkEmployerPermission(job, employer, "Bạn không có quyền thao tác với việc làm này");
+        if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực.");
+        }
+        if (newDeadline != null && !newDeadline.isBlank()) {
+            try {
+                job.setDeadline(LocalDate.parse(newDeadline));
+            } catch (Exception e) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_DEADLINE", "Hạn nộp hồ sơ mới không đúng định dạng (YYYY-MM-DD)");
+            }
+        }
+        if (job.getDeadline() != null && job.getDeadline().isBefore(LocalDate.now())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DEADLINE_EXPIRED", "Tin tuyển dụng đã hết hạn nộp hồ sơ. Vui lòng cập nhật hạn nộp hồ sơ mới trước khi mở lại tin.");
+        }
+        long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
+        if (job.getVacancies() != null && acceptedCount >= job.getVacancies()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VACANCIES_FILLED", "Tin tuyển dụng đã tuyển đủ số lượng chỉ tiêu (" + acceptedCount + "/" + job.getVacancies() + "). Vui lòng tăng số lượng tuyển dụng trước khi mở lại tin.");
+        }
+        job.setStatus("published");
+        job.setClosedAt(null);
+        job = jobRepository.save(job);
+        return dtoMapper.toJobResponse(job, false, false, null);
+    }
+
+    @Transactional
+    public void notifyCandidatesJobClosed(Job job, String message) {
+        if (job == null || job.getId() == null) return;
+        try {
+            List<Application> applications = applicationRepository.findAllByJobId(job.getId());
+            if (applications == null) return;
+            for (Application app : applications) {
+                if (app != null && app.getCandidate() != null && app.getCandidate().getUser() != null) {
+                    try {
+                        Notification note = new Notification();
+                        note.setRecipientUser(app.getCandidate().getUser());
+                        note.setType("JOB_CLOSED");
+                        note.setTitle("Thông báo đóng tin tuyển dụng");
+                        note.setMessage(message);
+                        note.setRelatedEntityType("JOB");
+                        note.setRelatedEntityId(job.getId());
+                        notificationRepository.save(note);
+                    } catch (Exception ex) {
+                        // ignore single notification save failure so transaction completes
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore overall notification save failure so transaction completes
+        }
     }
 
     private Employer resolveEmployer(String employerIdStr) {
@@ -314,9 +476,26 @@ public class JobService {
         }
 
         String targetStatus = request.getStatus() != null && !request.getStatus().isBlank() ? request.getStatus().toLowerCase() : "draft";
-        job.setStatus(targetStatus);
-        if ("pending_review".equals(targetStatus) || "published".equals(targetStatus)) {
+        boolean wasNotClosed = !"closed".equalsIgnoreCase(job.getStatus());
+
+        if ("pending_review".equals(targetStatus) || "published".equals(targetStatus) || "active".equals(targetStatus)) {
+            if (hasCompanyHadApprovedJob(company, job.getId())) {
+                targetStatus = "published";
+                if (job.getPublishedAt() == null) {
+                    job.setPublishedAt(LocalDateTime.now());
+                }
+                if (job.getPostedAt() == null) {
+                    job.setPostedAt(LocalDateTime.now());
+                }
+            } else {
+                targetStatus = "pending_review";
+            }
             job.setRejectionReason(null);
+            job.setClosedAt(null);
+        }
+        job.setStatus(targetStatus);
+        if ("closed".equals(targetStatus) && job.getClosedAt() == null) {
+            job.setClosedAt(LocalDateTime.now());
         }
         if ("published".equals(targetStatus) && job.getPublishedAt() == null) {
             job.setPublishedAt(LocalDateTime.now());
@@ -338,15 +517,20 @@ public class JobService {
         job.setCompany(company);
         job = jobRepository.save(job);
 
+        if ("closed".equals(targetStatus) && wasNotClosed && job.getId() != null) {
+            notifyCandidatesJobClosed(job, "Tin tuyển dụng [" + job.getTitle() + "] mà bạn nộp đơn ứng tuyển đã được nhà tuyển dụng đóng (ngừng nhận đơn).");
+        }
+
         jobSkillRepository.deleteByJobId(job.getId());
+        job.setJobSkills(new ArrayList<>());
         List<String> skillNames = request.getSkills() != null && !request.getSkills().isEmpty()
                 ? request.getSkills()
                 : (request.getRequirements() == null ? List.of() : request.getRequirements());
         Job finalJob = job;
+        Set<UUID> addedSkillIds = new HashSet<>();
         skillNames.stream()
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
-                .distinct()
                 .forEach(skillName -> {
                     Skill skill = skillRepository.findByNameIgnoreCase(skillName)
                             .orElseGet(() -> {
@@ -359,14 +543,38 @@ public class JobService {
                                     return skillRepository.save(created);
                                 });
                             });
-                    JobSkill jobSkill = new JobSkill();
-                    jobSkill.setJob(finalJob);
-                    jobSkill.setSkill(skill);
-                    jobSkill.setRequired(true);
-                    jobSkillRepository.save(jobSkill);
+                    if (skill != null && skill.getId() != null && addedSkillIds.add(skill.getId())) {
+                        JobSkill jobSkill = new JobSkill();
+                        jobSkill.setJob(finalJob);
+                        jobSkill.setSkill(skill);
+                        jobSkill.setRequired(true);
+                        jobSkill = jobSkillRepository.save(jobSkill);
+                        finalJob.getJobSkills().add(jobSkill);
+                    }
                 });
 
         return job;
+    }
+
+    private boolean hasCompanyHadApprovedJob(Company company, UUID excludeJobId) {
+        if (company == null || company.getId() == null) {
+            return false;
+        }
+        List<Job> companyJobs = jobRepository.findByCompanyIdOrderByCreatedAtDesc(company.getId());
+        if (companyJobs == null) {
+            return false;
+        }
+        for (Job j : companyJobs) {
+            if (excludeJobId != null && excludeJobId.equals(j.getId())) {
+                continue;
+            }
+            if (j.getPublishedAt() != null || "published".equalsIgnoreCase(j.getStatus())
+                    || "active".equalsIgnoreCase(j.getStatus()) || "closed".equalsIgnoreCase(j.getStatus())
+                    || "expired".equalsIgnoreCase(j.getStatus()) || "archived".equalsIgnoreCase(j.getStatus())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String slugifySkill(String value) {
@@ -587,7 +795,8 @@ public class JobService {
                 resultSet.getString("job_type"),
                 resultSet.getString("work_mode"),
                 resultSet.getInt("views_count"),
-                resultSet.getString("rejection_reason")
+                resultSet.getString("rejection_reason"),
+                0L
         );
     }
 
