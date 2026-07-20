@@ -22,15 +22,6 @@ import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
 import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
 import CompanyVerificationPage from './pages/Employer/CompanyVerificationPage';
 import EmployerJobsPage from './pages/Employer/EmployerJobsPage';
-import AdminLoginPage from './pages/admin/AdminLoginPage';
-import AdminLayout, { AdminProtected } from './pages/admin/AdminLayout';
-import AdminDashboardPage from './pages/admin/AdminDashboardPage';
-import AdminCompanyReviewPage from './pages/admin/AdminCompanyReviewPage';
-import AdminUsersPage from './pages/admin/AdminUsersPage';
-import AdminJobsPage from './pages/admin/AdminJobsPage';
-import AdminStatisticsPage from './pages/admin/AdminStatisticsPage';
-import AdminSettingsPage from './pages/admin/AdminSettingsPage';
-import AdminProfilePage from './pages/admin/AdminProfilePage';
 import type {
   AiInterviewConfig,
   AiInterviewEligibleApplication,
@@ -38,7 +29,6 @@ import type {
   AiInterviewQuestionSet,
   AiInterviewSession,
 } from './types/aiInterview';
-import EmployerJobsPage from './pages/employer/EmployerJobsPage';
 import EmployerApplicationsPage from './pages/Employer/EmployerApplicationsPage';
 import type {
   CandidateApplication,
@@ -94,7 +84,7 @@ const statusColors: Record<string, string> = {
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/jobs" replace />} />
+      <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
@@ -219,6 +209,346 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main>{children}</main>
+    </div>
+  );
+}
+
+// ─── HOME PAGE ──────────────────────────────────────────────────────────────
+function HomePage() {
+  const token = getToken();
+  const role = localStorage.getItem('role');
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 8);
+    window.addEventListener('scroll', handler, { passive: true });
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
+
+  const stats = [
+    { value: '10,000+', label: 'Việc làm đang tuyển' },
+    { value: '5,000+', label: 'Công ty đối tác' },
+    { value: '50,000+', label: 'Ứng viên thành công' },
+    { value: '98%', label: 'Tỷ lệ hài lòng' },
+  ];
+
+  const features = [
+    {
+      icon: '🤖',
+      title: 'AI Interview Luyện tập',
+      desc: 'Chuẩn bị phỏng vấn với AI thông minh, nhận phản hồi chi tiết để cải thiện kỹ năng.',
+      color: '#3b82f6',
+      bg: '#eff6ff',
+    },
+    {
+      icon: '⚡',
+      title: 'Gợi ý Việc làm Thông minh',
+      desc: 'Thuật toán AI phân tích hồ sơ và đề xuất việc làm phù hợp nhất với bạn.',
+      color: '#f59e0b',
+      bg: '#fffbeb',
+    },
+    {
+      icon: '🎯',
+      title: 'Ứng tuyển Một chạm',
+      desc: 'Nộp hồ sơ nhanh chóng với CV đã lưu sẵn. Theo dõi trạng thái ứng tuyển realtime.',
+      color: '#10b981',
+      bg: '#f0fdf4',
+    },
+    {
+      icon: '🏢',
+      title: 'Hệ thống Tuyển dụng Toàn diện',
+      desc: 'Nhà tuyển dụng quản lý tin đăng, duyệt hồ sơ, lên lịch phỏng vấn trên một nền tảng.',
+      color: '#8b5cf6',
+      bg: '#f5f3ff',
+    },
+  ];
+
+  return (
+    <div className="home-shell">
+      {/* Navbar */}
+      <header className={`home-topbar ${scrolled ? 'scrolled' : ''}`}>
+        <Link className="brand" to="/">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="7" width="20" height="14" rx="2" fill="var(--primary)" opacity="0.15"/>
+            <rect x="8" y="3" width="8" height="6" rx="1.5" stroke="var(--primary)" strokeWidth="2" fill="none"/>
+            <path d="M12 13v4M10 15h4" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          Smart Recruitment
+        </Link>
+
+        <nav className="home-topbar-nav">
+          <Link to="/jobs" className="home-nav-link">Việc làm</Link>
+          {token && role === 'CANDIDATE' && (
+            <Link to="/candidate" className="home-nav-link">Dashboard</Link>
+          )}
+          {token && role === 'EMPLOYER' && (
+            <Link to="/employer" className="home-nav-link">Nhà tuyển dụng</Link>
+          )}
+        </nav>
+
+        <div className="home-topbar-actions">
+          {!token ? (
+            <>
+              <Link to="/login" className="button-link outline" style={{ minHeight: 38 }}>
+                Đăng nhập
+              </Link>
+              <Link to="/register" className="button-link" style={{ minHeight: 38 }}>
+                Đăng ký miễn phí
+              </Link>
+            </>
+          ) : (
+            <>
+              {role === 'CANDIDATE' && (
+                <Link to="/candidate" className="button-link" style={{ minHeight: 38 }}>
+                  Vào Dashboard →
+                </Link>
+              )}
+              {role === 'EMPLOYER' && (
+                <Link to="/employer" className="button-link" style={{ minHeight: 38 }}>
+                  Employer Portal →
+                </Link>
+              )}
+            </>
+          )}
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <section className="home-hero">
+        <div className="home-hero-bg" aria-hidden="true" />
+        <div className="home-hero-content">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: EASE_OUT }}
+          >
+            <span className="home-hero-eyebrow">
+              🚀 Nền tảng tuyển dụng thông minh hàng đầu Việt Nam
+            </span>
+            <h1 className="home-hero-title">
+              Kết nối
+              <span className="home-hero-accent"> Tài năng</span>
+              {' '}với
+              <br />Cơ hội Nghề nghiệp
+            </h1>
+            <p className="home-hero-desc">
+              Smart Recruitment Portal giúp ứng viên tìm việc phù hợp với AI thông minh,
+              đồng thời hỗ trợ nhà tuyển dụng tìm kiếm nhân tài hiệu quả nhất.
+            </p>
+          </motion.div>
+
+          <motion.div
+            className="home-hero-actions"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.12 }}
+          >
+            <Link to="/jobs" className="button-link home-hero-btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              Tìm việc làm ngay
+            </Link>
+            {!token && (
+              <Link to="/register" className="button-link outline home-hero-btn-secondary">
+                Đăng ký miễn phí →
+              </Link>
+            )}
+          </motion.div>
+
+          {/* Search bar */}
+          <motion.div
+            className="home-search-bar"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.2 }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--outline)" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              placeholder="Tìm kiếm vị trí, kỹ năng, công ty..."
+              readOnly
+              onClick={() => window.location.href = '/jobs'}
+              style={{ cursor: 'pointer' }}
+            />
+            <Link to="/jobs" className="button-link home-search-btn">Tìm kiếm</Link>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Stats */}
+      <section className="home-stats">
+        {stats.map(({ value, label }, i) => (
+          <motion.div
+            key={label}
+            className="home-stat-item"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.25 + i * 0.07 }}
+          >
+            <strong className="home-stat-value">{value}</strong>
+            <span className="home-stat-label">{label}</span>
+          </motion.div>
+        ))}
+      </section>
+
+      {/* Features */}
+      <section className="home-section">
+        <div className="home-section-inner">
+          <div className="home-section-header">
+            <p className="eyebrow" style={{ textAlign: 'center', marginBottom: 8 }}>Tính năng nổi bật</p>
+            <h2 className="home-section-title">Tất cả những gì bạn cần</h2>
+            <p className="home-section-desc">
+              Từ AI luyện phỏng vấn đến quản lý tuyển dụng — mọi thứ trên một nền tảng duy nhất.
+            </p>
+          </div>
+
+          <div className="home-features-grid">
+            {features.map(({ icon, title, desc, color, bg }, i) => (
+              <motion.div
+                key={title}
+                className="home-feature-card"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.1 + i * 0.08 }}
+              >
+                <div className="home-feature-icon" style={{ background: bg, color }}>
+                  {icon}
+                </div>
+                <h3>{title}</h3>
+                <p>{desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* For Candidates & Employers */}
+      <section className="home-roles-section">
+        <div className="home-section-inner">
+          <div className="home-roles-grid">
+            {/* For Candidates */}
+            <motion.div
+              className="home-role-card home-role-candidate"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, ease: EASE_OUT }}
+            >
+              <div className="home-role-icon">👨‍💼</div>
+              <h3>Dành cho Ứng viên</h3>
+              <ul className="home-role-list">
+                <li>✅ Tìm việc làm phù hợp với AI</li>
+                <li>✅ Luyện phỏng vấn với AI thông minh</li>
+                <li>✅ Tạo và quản lý CV chuyên nghiệp</li>
+                <li>✅ Theo dõi trạng thái ứng tuyển</li>
+                <li>✅ Nhận thông báo realtime</li>
+              </ul>
+              <Link
+                to={token && role === 'CANDIDATE' ? '/candidate' : '/register'}
+                className="button-link home-role-btn"
+              >
+                {token && role === 'CANDIDATE' ? 'Vào Dashboard →' : 'Bắt đầu tìm việc →'}
+              </Link>
+            </motion.div>
+
+            {/* For Employers */}
+            <motion.div
+              className="home-role-card home-role-employer"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.1 }}
+            >
+              <div className="home-role-icon">🏢</div>
+              <h3>Dành cho Nhà tuyển dụng</h3>
+              <ul className="home-role-list">
+                <li>✅ Đăng tin tuyển dụng dễ dàng</li>
+                <li>✅ Quản lý hồ sơ ứng viên</li>
+                <li>✅ Xem xét và phê duyệt nhanh</li>
+                <li>✅ Báo cáo và thống kê chi tiết</li>
+                <li>✅ Xác thực pháp lý doanh nghiệp</li>
+              </ul>
+              <Link
+                to={token && role === 'EMPLOYER' ? '/employer' : '/register'}
+                className="button-link outline home-role-btn"
+              >
+                {token && role === 'EMPLOYER' ? 'Vào Employer Portal →' : 'Đăng ký tuyển dụng →'}
+              </Link>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Banner */}
+      {!token && (
+        <section className="home-cta-section">
+          <div className="home-section-inner" style={{ textAlign: 'center' }}>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: EASE_OUT }}
+            >
+              <h2 className="home-cta-title">Sẵn sàng bắt đầu hành trình của bạn?</h2>
+              <p className="home-cta-desc">
+                Tham gia cùng hàng nghìn người đã tìm được công việc mơ ước qua Smart Recruitment Portal.
+              </p>
+              <div className="home-cta-actions">
+                <Link to="/register" className="button-link home-cta-btn">
+                  Tạo tài khoản miễn phí
+                </Link>
+                <Link to="/jobs" className="button-link outline home-cta-btn">
+                  Xem việc làm →
+                </Link>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* Footer */}
+      <footer className="home-footer">
+        <div className="home-section-inner">
+          <div className="home-footer-grid">
+            <div>
+              <Link className="brand" to="/" style={{ marginBottom: 12, display: 'inline-flex' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <rect x="2" y="7" width="20" height="14" rx="2" fill="var(--primary)" opacity="0.2"/>
+                  <rect x="8" y="3" width="8" height="6" rx="1.5" stroke="var(--primary)" strokeWidth="2" fill="none"/>
+                  <path d="M12 13v4M10 15h4" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                Smart Recruitment
+              </Link>
+              <p style={{ color: 'var(--on-muted)', fontSize: '0.875rem', maxWidth: 280, margin: 0 }}>
+                Nền tảng tuyển dụng thông minh, kết nối tài năng với cơ hội nghề nghiệp tốt nhất.
+              </p>
+            </div>
+            <div>
+              <strong className="home-footer-heading">Ứng viên</strong>
+              <nav className="home-footer-nav">
+                <Link to="/jobs">Tìm việc làm</Link>
+                <Link to="/register">Đăng ký</Link>
+                <Link to="/login">Đăng nhập</Link>
+              </nav>
+            </div>
+            <div>
+              <strong className="home-footer-heading">Nhà tuyển dụng</strong>
+              <nav className="home-footer-nav">
+                <Link to="/register">Đăng ký tuyển dụng</Link>
+                <Link to="/login">Đăng nhập</Link>
+              </nav>
+            </div>
+            <div>
+              <strong className="home-footer-heading">Hệ thống</strong>
+              <nav className="home-footer-nav">
+                <Link to="/admin/login">Admin</Link>
+              </nav>
+            </div>
+          </div>
+          <div className="home-footer-bottom">
+            <p>© {new Date().getFullYear()} Smart Recruitment Portal. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -1154,6 +1484,7 @@ function CandidateLayout() {
 function CandidateHome() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
+  const userName = localStorage.getItem('email')?.split('@')[0] || 'bạn';
 
   useEffect(() => {
     jobService.recommendations()
@@ -1164,34 +1495,57 @@ function CandidateHome() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1>Dashboard Ứng viên</h1>
-        <p>Theo dõi hành trình tìm việc của bạn</p>
-      </div>
+      {/* Welcome Banner */}
+      <motion.div
+        className="candidate-welcome-banner"
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE_OUT }}
+      >
+        <div className="candidate-welcome-text">
+          <p className="eyebrow">Bảng điều khiển</p>
+          <h1>Xin chào, {userName} 👋</h1>
+          <p>Hôm nay là ngày tốt để tìm việc mơ ước của bạn!</p>
+        </div>
+        <Link to="/jobs" className="button-link candidate-welcome-cta">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          Tìm việc ngay
+        </Link>
+      </motion.div>
 
-      <div className="metric-grid">
+      <div className="metric-grid" style={{ marginTop: 24 }}>
         {[
-          { label: 'Việc đã lưu', value: '—', icon: '🔖' },
-          { label: 'Đang ứng tuyển', value: '—', icon: '📋' },
-          { label: 'Phỏng vấn AI', value: '—', icon: '🤖' },
-          { label: 'Thông báo mới', value: '—', icon: '🔔' },
-        ].map(({ label, value, icon }, i) => (
+          { label: 'Việc đã lưu', value: '—', icon: '🔖', to: '/candidate/saved-jobs' },
+          { label: 'Đang ứng tuyển', value: '—', icon: '📋', to: '/candidate/applications' },
+          { label: 'Phỏng vấn AI', value: '—', icon: '🤖', to: '/candidate/ai-interviews' },
+          { label: 'Thông báo mới', value: '—', icon: '🔔', to: '/candidate/notifications' },
+        ].map(({ label, value, icon, to }, i) => (
           <motion.div
             key={label}
-            className="metric-card"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, ease: EASE_OUT, delay: i * 0.06 }}
           >
-            <div style={{ fontSize: '1.6rem', marginBottom: 8 }}>{icon}</div>
-            <div className="metric-card-label">{label}</div>
-            <div className="metric-card-value">{value}</div>
+            <Link to={to} style={{ display: 'block', textDecoration: 'none' }}>
+              <div className="metric-card metric-card-link">
+                <div style={{ fontSize: '1.6rem', marginBottom: 8 }}>{icon}</div>
+                <div className="metric-card-label">{label}</div>
+                <div className="metric-card-value">{value}</div>
+              </div>
+            </Link>
           </motion.div>
         ))}
       </div>
 
-      <div>
-        <h2 style={{ marginBottom: 16 }}>Việc làm được gợi ý</h2>
+      <div style={{ marginTop: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h2 style={{ margin: 0 }}>Việc làm được gợi ý</h2>
+          <Link to="/jobs" className="button-link outline" style={{ minHeight: 34, fontSize: '0.82rem' }}>
+            Xem tất cả →
+          </Link>
+        </div>
         {loading ? (
           <div className="job-grid">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -1220,15 +1574,50 @@ function CandidateHome() {
             ))}
             {recommendations.length === 0 && (
               <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-                <div style={{ fontSize: '2rem', marginBottom: 8 }}>💡</div>
-                <p className="muted">Hoàn thiện hồ sơ để nhận gợi ý việc làm phù hợp.</p>
-                <Link to="/candidate/profile" className="button-link" style={{ marginTop: 12, display: 'inline-flex' }}>
-                  Cập nhật hồ sơ
-                </Link>
+                <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>💡</div>
+                <h3>Chưa có gợi ý việc làm</h3>
+                <p className="muted">Hoàn thiện hồ sơ để nhận gợi ý việc làm phù hợp với bạn.</p>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
+                  <Link to="/candidate/profile" className="button-link">
+                    Cập nhật hồ sơ
+                  </Link>
+                  <Link to="/jobs" className="button-link outline">
+                    Tìm việc thủ công
+                  </Link>
+                </div>
               </div>
             )}
           </div>
         )}
+      </div>
+
+      {/* Quick Actions */}
+      <div style={{ marginTop: 32 }}>
+        <h2 style={{ marginBottom: 16 }}>Hành động nhanh</h2>
+        <div className="quick-actions-grid">
+          {[
+            { icon: '👤', title: 'Cập nhật hồ sơ', desc: 'Tăng cơ hội được tuyển dụng', to: '/candidate/profile' },
+            { icon: '📄', title: 'Quản lý CV', desc: 'Tải lên hoặc tạo CV mới', to: '/candidate/cvs' },
+            { icon: '🤖', title: 'Luyện phỏng vấn AI', desc: 'Chuẩn bị cho buổi phỏng vấn thật', to: '/candidate/ai-interviews' },
+            { icon: '💎', title: 'Gói dịch vụ', desc: 'Xem quyền lợi của bạn', to: '/candidate/subscription' },
+          ].map(({ icon, title, desc, to }, i) => (
+            <motion.div key={to}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: EASE_OUT, delay: 0.15 + i * 0.05 }}
+            >
+              <Link to={to} style={{ display: 'block', textDecoration: 'none' }}>
+                <div className="quick-action-card">
+                  <span className="quick-action-icon">{icon}</span>
+                  <div>
+                    <strong>{title}</strong>
+                    <p className="muted" style={{ margin: '2px 0 0', fontSize: '0.8rem' }}>{desc}</p>
+                  </div>
+                </div>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1827,11 +2216,6 @@ function EmployerLayout() {
   return (
     <div className="employer-shell">
       <aside className="employer-nav">
-        <Link className="brand" to="/employer">Employer Portal</Link>
-        <NavLink to="/employer" end>Dashboard</NavLink>
-        <NavLink to="/employer/jobs">Quan ly Viec lam</NavLink>
-        <NavLink to="/employer/applications">Quan ly Ung vien</NavLink>
-
         <Link className="brand" to="/employer">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="var(--primary)" strokeWidth="2" fill="var(--primary-softer)"/>
@@ -1855,6 +2239,11 @@ function EmployerLayout() {
         <NavLink to="/employer/jobs" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <span className="sidebar-link-icon">💼</span>
           Quản lý Việc làm
+        </NavLink>
+
+        <NavLink to="/employer/applications" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <span className="sidebar-link-icon">👥</span>
+          Quản lý Ứng viên
         </NavLink>
 
         {/* Company dropdown */}
@@ -1897,7 +2286,11 @@ function EmployerLayout() {
           </AnimatePresence>
         </div>
 
-        <div style={{ marginTop: 12, borderTop: '1px solid var(--outline-variant)', paddingTop: 12 }}>
+        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--outline-variant)', paddingTop: 12 }}>
+          <NavLink to="/jobs" className="sidebar-link">
+            <span className="sidebar-link-icon">🔍</span>
+            Xem tin tuyển dụng
+          </NavLink>
           <button
             className="ghost"
             onClick={logout}
@@ -1945,12 +2338,6 @@ function EmployerDashboard() {
   ];
 
   return (
-    <section className="content-card">
-      <div style={{ textAlign: 'center', padding: '30px 20px', marginBottom: '20px' }}>
-        <h1 style={{ color: '#245d43', marginBottom: '12px' }}>Employer Dashboard</h1>
-        <p style={{ color: '#4b5b52', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto' }}>
-          Chào mừng Nhà tuyển dụng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty, tin tuyển dụng và hồ sơ ứng viên.
-        </p>
     <motion.div variants={fadeUp} initial="initial" animate="animate"
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div className="page-header">
@@ -1958,30 +2345,6 @@ function EmployerDashboard() {
         <p>Chào mừng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty và tin tuyển dụng.</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', padding: '0 10px' }}>
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>📢 Quản lý & Đăng tin tuyển dụng</h3>
-            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
-              Tạo mới các vị trí tuyển dụng, thiết lập mức lương, quyền lợi và theo dõi trạng thái các tin đăng.
-            </p>
-          </div>
-          <Link to="/employer/jobs" style={{ background: '#245d43', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
-            Quản lý việc làm →
-          </Link>
-        </div>
-
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>👥 Quản lý hồ sơ ứng viên</h3>
-            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
-              Xem danh sách đơn ứng tuyển theo từng vị trí, rà soát CV và chuyển đổi trạng thái vòng phỏng vấn.
-            </p>
-          </div>
-          <Link to="/employer/applications" style={{ background: '#2563eb', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
-            Xem ứng viên →
-          </Link>
-        </div>
       <div className="employer-cards">
         {features.map(({ icon, title, desc, to, label, variant, note }, i) => (
           <motion.div
