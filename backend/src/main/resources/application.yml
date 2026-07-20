@@ -15,22 +15,22 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: ${MAX_CV_UPLOAD_SIZE:5MB}
-      max-request-size: ${MAX_CV_UPLOAD_SIZE:5MB}
+      max-file-size: ${MAX_UPLOAD_SIZE:25MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:25MB}
 
   jpa:
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:none}
+    open-in-view: false
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
 
   flyway:
-    enabled: ${SPRING_FLYWAY_ENABLED:false}
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
     locations: classpath:db/migration
-    baseline-on-migrate: false
+    baseline-on-migrate: true
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
@@ -44,18 +44,6 @@ spring:
           starttls:
             enable: true
 
-  security:
-    oauth2:
-      client:
-        registration:
-          google:
-            client-id: ${GOOGLE_CLIENT_ID:google-client-id-placeholder}
-            client-secret: ${GOOGLE_CLIENT_SECRET:google-client-secret-placeholder}
-            scope:
-              - openid
-              - profile
-              - email
-
 server:
   port: 8080
   servlet:
@@ -66,17 +54,49 @@ logging:
     com.sjp.recruitment: DEBUG
     org.springframework.security: INFO
 
+management:
+  health:
+    mail:
+      enabled: ${MAIL_HEALTH_ENABLED:false}
+
 jwt:
   secret: ${JWT_SECRET:change-this-local-dev-secret-minimum-32-chars}
   expiration: ${JWT_EXPIRATION:86400000}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
 app:
+  data-seeder:
+    enabled: ${APP_DATA_SEEDER_ENABLED:true}
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
   backend-base-url: ${BACKEND_BASE_URL:http://localhost:8080/api}
+  oauth:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
   mail-from: ${MAIL_FROM:no-reply@smart-recruitment.local}
   email-verification-token-ttl-minutes: ${EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:1440}
   oauth-role-selection-token-ttl-minutes: ${OAUTH_ROLE_SELECTION_TOKEN_TTL_MINUTES:15}
+  ai-interview:
+    gladia-api-key: ${GLADIA_API_KEY:}
+    gladia-base-url: ${GLADIA_BASE_URL:https://api.gladia.io}
+    shopaikey-api-key: ${SHOPAIKEY_API_KEY:}
+    shopaikey-base-url: ${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}
+    shopaikey-model: ${SHOPAIKEY_MODEL:gpt-4.1-mini}
+    shopaikey-tts-model: ${SHOPAIKEY_TTS_MODEL:gpt-4o-mini-tts}
+    shopaikey-tts-voice: ${SHOPAIKEY_TTS_VOICE:coral}
+    shopaikey-tts-format: ${SHOPAIKEY_TTS_FORMAT:mp3}
+    shopaikey-tts-instructions: ${SHOPAIKEY_TTS_INSTRUCTIONS:Đọc tiếng Việt rõ ràng, lưu loát, tốc độ vừa phải, giọng thân thiện và chuyên nghiệp của người phỏng vấn.}
+    audio-max-seconds: ${AI_INTERVIEW_AUDIO_MAX_SECONDS:180}
+    audio-max-size-mb: ${AI_INTERVIEW_AUDIO_MAX_SIZE_MB:25}
+    question-count: ${AI_INTERVIEW_QUESTION_COUNT:5}
+    provider-connect-timeout-ms: ${AI_INTERVIEW_PROVIDER_CONNECT_TIMEOUT_MS:5000}
+    provider-read-timeout-ms: ${AI_INTERVIEW_PROVIDER_READ_TIMEOUT_MS:20000}
+    voice-streaming-enabled: ${AI_INTERVIEW_VOICE_STREAMING_ENABLED:true}
+    voice-provider: ${AI_INTERVIEW_VOICE_PROVIDER:browser_web_speech}
+    voice-silence-ms: ${AI_INTERVIEW_VOICE_SILENCE_MS:3000}
+    voice-confirmation-silence-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_SILENCE_MS:3000}
+    voice-unclear-confirmation-delay-ms: ${AI_INTERVIEW_VOICE_UNCLEAR_CONFIRMATION_DELAY_MS:1200}
+    costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
   storage:
     cv-upload-dir: ${CV_UPLOAD_DIR:uploads/cvs}
     

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-surface" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Application Detail &amp; Timeline - Nexus Recruit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lexend:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface": "#f8f9ff",
+                        "on-secondary-fixed": "#00210a",
+                        "on-tertiary-fixed-variant": "#6c3a00",
+                        "surface-container-highest": "#d3e4fe",
+                        "secondary-container": "#92f5a4",
+                        "surface-container": "#e5eeff",
+                        "on-surface-variant": "#40474f",
+                        "secondary": "#006d30",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#94ccff",
+                        "primary-fixed": "#cde5ff",
+                        "on-surface": "#0b1c30",
+                        "outline": "#707881",
+                        "tertiary": "#733f00",
+                        "on-secondary-fixed-variant": "#005323",
+                        "tertiary-fixed-dim": "#ffb878",
+                        "inverse-on-surface": "#eaf1ff",
+                        "background": "#f8f9ff",
+                        "tertiary-container": "#955301",
+                        "on-primary-fixed": "#001d32",
+                        "surface-container-low": "#eff4ff",
+                        "on-tertiary-fixed": "#2e1500",
+                        "on-primary": "#ffffff",
+                        "inverse-primary": "#94ccff",
+                        "on-primary-container": "#cbe4ff",
+                        "primary": "#00507d",
+                        "on-background": "#0b1c30",
+                        "on-tertiary-container": "#ffdbbe",
+                        "surface-dim": "#cbdbf5",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed-dim": "#79db8d",
+                        "outline-variant": "#c0c7d1",
+                        "surface-bright": "#f8f9ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-tint": "#006399",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed": "#95f8a7",
+                        "tertiary-fixed": "#ffdcc1",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#dce9ff",
+                        "inverse-surface": "#213145",
+                        "on-error": "#ffffff",
+                        "on-secondary-container": "#007233",
+                        "error": "#ba1a1a",
+                        "primary-container": "#0369a1",
+                        "on-primary-fixed-variant": "#004b74"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "xl": "32px",
+                        "sm": "8px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "container-max": "1440px",
+                        "sidebar-width": "280px",
+                        "base": "4px",
+                        "gutter": "24px",
+                        "md": "16px"
+                    },
+                    fontFamily: {
+                        "mono-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "display-lg": ["Lexend"],
+                        "label-md": ["Inter"],
+                        "headline-md": ["Lexend"],
+                        "headline-lg-mobile": ["Lexend"],
+                        "body-sm": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg": ["Lexend"],
+                        "body-lg": ["Inter"]
+                    },
+                    fontSize: {
+                        "mono-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        };
+    </script>
+<style>
+        .timeline-line::before {
+            content: '';
+            position: absolute;
+            left: 23px;
+            top: 24px;
+            bottom: -24px;
+            width: 2px;
+            background-color: theme('colors.outline-variant');
+            z-index: 0;
+        }
+        .timeline-line:last-child::before {
+            display: none;
+        }
+        .timeline-line.active::before {
+            background-color: theme('colors.primary');
+        }
+    </style>
+</head>
+<body class="h-full flex text-on-surface bg-surface font-body-md">
+<!-- Side Navigation Shell -->
+<nav class="h-screen w-64 fixed left-0 top-0 border-r border-outline-variant bg-surface flex flex-col gap-sm p-md hidden lg:flex z-40">
+<div class="mb-lg">
+<span class="text-headline-md font-headline-md text-primary font-bold tracking-tight">Nexus Recruit</span>
+</div>
+<div class="flex items-center gap-md p-sm bg-surface-container-highest rounded-xl mb-lg">
+<img class="w-10 h-10 rounded-full object-cover shadow-sm" data-alt="A professional headshot of a product designer in a bright, modern office space. The lighting is soft and flattering, highlighting the subject's confident expression. The background is slightly blurred, emphasizing the sleek, contemporary environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4l28Cj47qd4tHxI_6D9btxMZP3hMNBjyuB7ZNSJ_K7piTMfR7BxsizjEbvJw8Xv996qcLKps-6qV5U6rqX9TjHiDp90BUhTJ9sRRmDXipvpBV3B1ESMUWWolO3X85fS56SeHWvEXz3vEJVFH3N5LJBTAE4WnF9WJ65h6gJJ44VX8Inj-IBjFToB-JMZAx7644fnrz-UxplXur4Qwj9dZetNulmnHgJ1DUw2zNBZlQKFcEPY5w_yGs"/>
+<div>
+<div class="text-label-md font-label-md text-on-surface">Alex Thompson</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant">Product Designer</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto">
+<ul class="flex flex-col gap-xs">
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">dashboard</span>
+<span class="text-body-md font-body-md">Dashboard</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">person</span>
+<span class="text-body-md font-body-md">Profile</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">description</span>
+<span class="text-body-md font-body-md">CVs</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">bookmark</span>
+<span class="text-body-md font-body-md">Saved Jobs</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl bg-secondary-container text-on-secondary-container font-semibold transition-transform hover:scale-[0.98]" href="#">
+<div class="w-1 h-6 bg-secondary absolute left-0 rounded-r-full"></div>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">assignment</span>
+<span class="text-body-md font-body-md pl-2">Applications</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">psychology</span>
+<span class="text-body-md font-body-md">AI Interviews</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">notifications</span>
+<span class="text-body-md font-body-md">Notifications</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">settings</span>
+<span class="text-body-md font-body-md">Settings</span>
+</a>
+</li>
+</ul>
+</div>
+<div class="mt-auto pt-md border-t border-outline-variant">
+<button class="w-full bg-primary text-on-primary py-xs px-md rounded-xl text-label-md font-label-md hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm flex items-center justify-center gap-sm mb-sm">
+<span class="material-symbols-outlined">upload</span>
+                Upload New CV
+            </button>
+<ul class="flex flex-col gap-xs">
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">help</span>
+<span class="text-body-md font-body-md">Help Center</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-xs rounded-xl text-on-surface-variant hover:bg-surface-container-highest transition-all group" href="#">
+<span class="material-symbols-outlined group-hover:text-error transition-colors">logout</span>
+<span class="text-body-md font-body-md">Logout</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 lg:ml-[280px] min-h-screen flex flex-col bg-surface">
+<!-- Top App Bar (Mobile) -->
+<header class="lg:hidden sticky top-0 z-50 flex justify-between items-center w-full px-md py-sm bg-surface-container-lowest border-b border-outline-variant shadow-sm">
+<div class="text-headline-sm font-headline-sm font-bold text-primary tracking-tight">Nexus Recruit</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</header>
+<div class="flex-1 p-md md:p-lg lg:p-xl max-w-container-max mx-auto w-full">
+<!-- Breadcrumbs & Header -->
+<div class="mb-lg">
+<div class="flex items-center gap-sm text-body-sm font-body-sm text-on-surface-variant mb-xs">
+<a class="hover:text-primary transition-colors flex items-center gap-xs" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                        Back to Applications
+                    </a>
+</div>
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-md">
+<div>
+<h1 class="text-headline-lg font-headline-lg text-on-surface tracking-tight">Senior Java Spring Boot Developer</h1>
+<div class="flex items-center gap-md mt-sm text-on-surface-variant text-body-md font-body-md">
+<span class="flex items-center gap-xs"><span class="material-symbols-outlined text-[18px]">business</span> TechNova Solutions</span>
+<span class="flex items-center gap-xs"><span class="material-symbols-outlined text-[18px]">location_on</span> San Francisco, CA (Hybrid)</span>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-[#92f5a4]/20 text-on-secondary-container border border-[#92f5a4]/30">
+                            Interview Scheduled
+                        </span>
+</div>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-lg">
+<!-- Left Column: Timeline & Details -->
+<div class="lg:col-span-8 flex flex-col gap-lg">
+<!-- Application Timeline Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+<div class="px-md py-sm border-b border-outline-variant bg-surface/50">
+<h2 class="text-headline-md font-headline-md text-on-surface">Application Timeline</h2>
+</div>
+<div class="p-md md:p-lg">
+<div class="relative pl-sm">
+<!-- Step 1: Submitted -->
+<div class="relative timeline-line active pb-lg">
+<div class="flex items-start gap-md relative z-10">
+<div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="pt-1">
+<h3 class="text-label-md font-label-md text-on-surface">Application Submitted</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">October 12, 2023 - 09:45 AM</p>
+<div class="mt-sm p-sm bg-surface-container-low rounded-lg border border-outline-variant/50 text-body-sm font-body-sm">
+                                                Resume (Alex_Thompson_CV_2023.pdf) and Cover Letter successfully attached.
+                                            </div>
+</div>
+</div>
+</div>
+<!-- Step 2: Under Review -->
+<div class="relative timeline-line active pb-lg">
+<div class="flex items-start gap-md relative z-10">
+<div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">visibility</span>
+</div>
+<div class="pt-1">
+<h3 class="text-label-md font-label-md text-on-surface">Under Review</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">October 15, 2023 - 02:15 PM</p>
+<p class="text-body-sm font-body-sm text-on-surface mt-xs">Your application was viewed by the Hiring Team at TechNova Solutions.</p>
+</div>
+</div>
+</div>
+<!-- Step 3: Interview Scheduled -->
+<div class="relative timeline-line active pb-lg">
+<div class="flex items-start gap-md relative z-10">
+<div class="flex-shrink-0 w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center border border-secondary-fixed/50 shadow-sm">
+<span class="material-symbols-outlined text-on-secondary-container" style="font-variation-settings: 'FILL' 1;">event_available</span>
+</div>
+<div class="pt-1 w-full">
+<h3 class="text-label-md font-label-md text-on-surface">Interview Scheduled</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">October 18, 2023 - Action Required</p>
+<!-- Interview Details Box -->
+<div class="mt-md p-md bg-[#e5eeff]/50 rounded-xl border border-primary/20 shadow-sm relative overflow-hidden">
+<div class="absolute top-0 right-0 p-sm opacity-10">
+<span class="material-symbols-outlined text-[64px]">video_camera_front</span>
+</div>
+<div class="relative z-10">
+<h4 class="text-label-md font-label-md text-primary mb-sm">Technical Assessment &amp; Cultural Fit</h4>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-sm mb-md">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">calendar_today</span>
+<span class="text-body-sm font-body-sm text-on-surface">Thursday, Oct 26, 2023</span>
+</div>
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">schedule</span>
+<span class="text-body-sm font-body-sm text-on-surface">10:00 AM - 11:30 AM PST</span>
+</div>
+<div class="flex items-center gap-sm md:col-span-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">group</span>
+<span class="text-body-sm font-body-sm text-on-surface">Interviewers: Sarah Jenkins (Engineering Lead), David Kim (HR)</span>
+</div>
+</div>
+<div class="flex gap-sm">
+<button class="bg-primary text-on-primary px-md py-sm rounded-lg text-label-md font-label-md hover:bg-primary-container transition-colors shadow-sm flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">videocam</span>
+                                                            Join Video Call
+                                                        </button>
+<button class="bg-surface-container-lowest border border-outline-variant text-on-surface px-md py-sm rounded-lg text-label-md font-label-md hover:bg-surface-container-highest transition-colors flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">edit_calendar</span>
+                                                            Reschedule
+                                                        </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Step 4: Offer (Pending) -->
+<div class="relative timeline-line">
+<div class="flex items-start gap-md relative z-10 opacity-40">
+<div class="flex-shrink-0 w-12 h-12 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant border-dashed">
+<span class="material-symbols-outlined text-outline">handshake</span>
+</div>
+<div class="pt-1">
+<h3 class="text-label-md font-label-md text-on-surface">Final Decision</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">Pending completion of interview stages.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Employer Notes & Meta -->
+<div class="lg:col-span-4 flex flex-col gap-lg">
+<!-- Employer Notes Card (Glassmorphism inspired) -->
+<div class="bg-gradient-to-br from-[#eff4ff] to-surface-container-lowest border border-primary/10 rounded-xl shadow-sm p-md relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
+<div class="flex items-center gap-sm mb-md relative z-10">
+<span class="material-symbols-outlined text-primary">speaker_notes</span>
+<h2 class="text-headline-md font-headline-md text-on-surface">Employer Notes</h2>
+</div>
+<div class="space-y-sm relative z-10">
+<div class="p-sm bg-surface-container-lowest/80 backdrop-blur-sm rounded-lg border border-outline-variant/30">
+<div class="flex justify-between items-start mb-xs">
+<span class="text-label-sm font-label-sm text-on-surface-variant">From: David Kim (HR)</span>
+<span class="text-mono-sm font-mono-sm text-outline">Oct 16</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface">"Strong background in microservices architecture. Let's make sure to focus on the scaling challenges they faced at their previous role during the technical screen."</p>
+</div>
+<div class="p-sm bg-surface-container-lowest/80 backdrop-blur-sm rounded-lg border border-outline-variant/30">
+<div class="flex justify-between items-start mb-xs">
+<span class="text-label-sm font-label-sm text-on-surface-variant">System Automated</span>
+<span class="text-mono-sm font-mono-sm text-outline">Oct 15</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface">Candidate moved to 'Interview Scheduled' stage.</p>
+</div>
+</div>
+</div>
+<!-- Job Details Snapshot -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm p-md">
+<h3 class="text-label-md font-label-md text-on-surface mb-sm pb-sm border-b border-outline-variant">Job Snapshot</h3>
+<dl class="space-y-sm">
+<div class="flex justify-between">
+<dt class="text-body-sm font-body-sm text-on-surface-variant">Req ID:</dt>
+<dd class="text-mono-sm font-mono-sm text-on-surface font-medium">REQ-2023-089</dd>
+</div>
+<div class="flex justify-between">
+<dt class="text-body-sm font-body-sm text-on-surface-variant">Applied Date:</dt>
+<dd class="text-body-sm font-body-sm text-on-surface">Oct 12, 2023</dd>
+</div>
+<div class="flex justify-between">
+<dt class="text-body-sm font-body-sm text-on-surface-variant">Target Salary:</dt>
+<dd class="text-body-sm font-body-sm text-on-surface">$140k - $160k</dd>
+</div>
+<div class="flex justify-between pt-sm mt-sm border-t border-outline-variant/50">
+<dt class="text-body-sm font-body-sm text-on-surface-variant">Recruiter:</dt>
+<dd class="text-body-sm font-body-sm text-primary flex items-center gap-xs">
+<img class="w-5 h-5 rounded-full object-cover" data-alt="A small circular avatar of a professional corporate recruiter with a friendly smile, wearing a dark blazer, set against a neutral gray background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAKPmLSDsDQpVc7o-qG5OEWJz9_AyBcjhWG2yrnUXtjCgEtUJss1taSKsCJFnpnIVp1ZsArhiurwlc7zEV-ZiTuPvaXbYHHqek8xa464XoBnGgiz8f1kXSWu_XZpgWZCN8nrFwfFtgKa1yRa4JxIBp1GOx4KwdFmB6VWCI3jPrkDJ84X2nBiEkYWKwEzq3EotUTzp4DjkcCEAvZjBt6JFFUke7k5x2S-_5KtAhp7kMmRW1wEbNLf0Cb"/>
+                                    Emily Chen
+                                </dd>
+</div>
+</dl>
+<button class="w-full mt-md bg-surface border border-outline-variant text-on-surface py-xs rounded-lg text-label-md font-label-md hover:bg-surface-container-highest transition-colors">
+                            View Original Posting
+                        </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<footer class="w-full py-xl px-gutter flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto bg-surface-container-lowest border-t border-outline-variant mt-auto">
+<div class="text-label-md font-label-md font-bold text-on-surface mb-md md:mb-0">Nexus Recruit</div>
+<div class="flex flex-wrap justify-center gap-md mb-md md:mb-0">
+<a class="text-body-sm font-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="text-body-sm font-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="text-body-sm font-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">Cookie Policy</a>
+<a class="text-body-sm font-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">Accessibility</a>
+<a class="text-body-sm font-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#">Contact Us</a>
+</div>
+<div class="text-body-sm font-body-sm text-on-surface-variant">
+                © 2024 Nexus Recruit. All rights reserved.
+            </div>
+</footer>
+</main>
+</body></html>

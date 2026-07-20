@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Interview Coach - Nexus Recruit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lexend:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#f8f9ff",
+                        "on-secondary-fixed": "#00210a",
+                        "on-tertiary-fixed-variant": "#6c3a00",
+                        "surface-container-highest": "#d3e4fe",
+                        "secondary-container": "#92f5a4",
+                        "surface-container": "#e5eeff",
+                        "on-surface-variant": "#40474f",
+                        "secondary": "#006d30",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#94ccff",
+                        "primary-fixed": "#cde5ff",
+                        "on-surface": "#0b1c30",
+                        "outline": "#707881",
+                        "tertiary": "#733f00",
+                        "on-secondary-fixed-variant": "#005323",
+                        "tertiary-fixed-dim": "#ffb878",
+                        "inverse-on-surface": "#eaf1ff",
+                        "background": "#f8f9ff",
+                        "tertiary-container": "#955301",
+                        "on-primary-fixed": "#001d32",
+                        "surface-container-low": "#eff4ff",
+                        "on-tertiary-fixed": "#2e1500",
+                        "on-primary": "#ffffff",
+                        "inverse-primary": "#94ccff",
+                        "on-primary-container": "#cbe4ff",
+                        "primary": "#00507d",
+                        "on-background": "#0b1c30",
+                        "on-tertiary-container": "#ffdbbe",
+                        "surface-dim": "#cbdbf5",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed-dim": "#79db8d",
+                        "outline-variant": "#c0c7d1",
+                        "surface-bright": "#f8f9ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-tint": "#006399",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed": "#95f8a7",
+                        "tertiary-fixed": "#ffdcc1",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#dce9ff",
+                        "inverse-surface": "#213145",
+                        "on-error": "#ffffff",
+                        "on-secondary-container": "#007233",
+                        "error": "#ba1a1a",
+                        "primary-container": "#0369a1",
+                        "on-primary-fixed-variant": "#004b74"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "sm": "8px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "container-max": "1440px",
+                        "sidebar-width": "280px",
+                        "base": "4px",
+                        "gutter": "24px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "mono-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "display-lg": ["Lexend"],
+                        "label-md": ["Inter"],
+                        "headline-md": ["Lexend"],
+                        "headline-lg-mobile": ["Lexend"],
+                        "body-sm": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg": ["Lexend"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "mono-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Subtle scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased selection:bg-primary-container selection:text-on-primary-container font-body-md min-h-screen flex flex-col md:flex-row">
+<!-- Top Navigation (Mobile Only) -->
+<nav class="md:hidden sticky top-0 z-50 flex justify-between items-center w-full px-gutter bg-surface-container-lowest border-b border-outline-variant shadow-sm h-16">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[28px] icon-fill">work</span>
+<span class="text-headline-sm font-headline-sm font-bold text-primary">Nexus Recruit</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a young male professional, modern lighting, clear background, high quality corporate style photography suitable for an avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPY6ilHHO7VHK5PmQKgSapOe-x8dXD2zc5aHldjk9RTizI3-ZjDhJu06GG625OGJteSws6TZVBjdMwi6zQU1uHDC8UWKnuMFbBdMfwat2rAbG5McgvTh9lsCGzyWpJCPlIn8v5EKGft3WR42ez-cavgBRd4DJNIYE-spiGSLTClHwQqAB8LMeZqiJFESUT4ixmNsVRcXNvTLnNEUB9Vgm4UdgKVPfgIbjPryO98YOjQadgPZC6RZ-P"/>
+</button>
+</div>
+</nav>
+<!-- Side Navigation (Desktop) -->
+<aside class="hidden md:flex h-screen w-sidebar-width fixed left-0 top-0 border-r border-outline-variant bg-surface flex-col gap-sm p-md z-40">
+<div class="flex items-center gap-3 mb-xl px-sm py-2">
+<span class="material-symbols-outlined text-primary text-[32px] icon-fill">work</span>
+<span class="text-headline-md font-headline-md text-primary">Nexus Recruit</span>
+</div>
+<nav class="flex-1 overflow-y-auto flex flex-col gap-xs pr-2">
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">person</span>
+<span>Profile</span>
+</a>
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">description</span>
+<span>CVs</span>
+</a>
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">bookmark</span>
+<span>Saved Jobs</span>
+</a>
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">assignment</span>
+<span>Applications</span>
+</a>
+<a class="flex items-center gap-3 px-sm py-2 bg-secondary-container text-on-secondary-container rounded-xl font-semibold font-body-md text-body-md scale-[0.98] transition-transform relative" href="#">
+<div class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-3/4 bg-primary rounded-r-full"></div>
+<span class="material-symbols-outlined icon-fill">psychology</span>
+<span>AI Interviews</span>
+</a>
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">notifications</span>
+<span>Notifications</span>
+</a>
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-4 border-t border-outline-variant flex flex-col gap-xs">
+<button class="w-full py-2 px-4 bg-primary text-on-primary rounded-xl font-label-md text-label-md hover:bg-primary-fixed-dim transition-colors mb-4 flex justify-center items-center gap-2">
+<span class="material-symbols-outlined text-lg">upload</span>
+                Upload New CV
+            </button>
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">help</span>
+<span>Help Center</span>
+</a>
+<a class="flex items-center gap-3 px-sm py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">logout</span>
+<span>Logout</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 md:ml-[280px] w-full max-w-container-max mx-auto min-h-screen flex flex-col">
+<!-- Page Header -->
+<header class="px-gutter py-lg md:py-xl">
+<h1 class="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-on-surface mb-2">AI Interview Coach</h1>
+<p class="text-body-lg font-body-lg text-on-surface-variant max-w-3xl">Elevate your interview skills with real-time feedback and targeted practice sessions powered by advanced AI.</p>
+</header>
+<div class="px-gutter pb-xl flex-1 flex flex-col gap-lg">
+<!-- Hero / Action Grid (Bento Style) -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-lg">
+<!-- Main Practice CTA -->
+<div class="md:col-span-8 bg-surface-container-lowest border border-outline-variant rounded-xl p-lg md:p-xl relative overflow-hidden flex flex-col justify-between group hover:shadow-sm transition-shadow">
+<!-- Subtle background decoration -->
+<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary-fixed-dim/20 rounded-full blur-3xl pointer-events-none"></div>
+<div class="relative z-10 max-w-md">
+<div class="w-12 h-12 bg-primary-container text-on-primary-container rounded-lg flex items-center justify-center mb-6">
+<span class="material-symbols-outlined text-[28px] icon-fill">play_arrow</span>
+</div>
+<h2 class="text-headline-md font-headline-md text-on-surface mb-3">General Practice Session</h2>
+<p class="text-body-md font-body-md text-on-surface-variant mb-8">Hone your skills across standard behavioral and technical questions. Perfect for building foundational confidence.</p>
+<button class="bg-primary text-on-primary px-6 py-3 rounded-lg font-label-md text-label-md hover:bg-on-primary-fixed-variant transition-colors inline-flex items-center gap-2">
+                            Practice Now
+                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Application Specific CTA -->
+<div class="md:col-span-4 bg-surface-container border border-outline-variant rounded-xl p-lg flex flex-col hover:shadow-sm transition-shadow relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-secondary-container/30 rounded-bl-full pointer-events-none"></div>
+<div class="flex items-center gap-3 mb-4 z-10">
+<span class="material-symbols-outlined text-secondary icon-fill">work_history</span>
+<h3 class="text-label-md font-label-md text-on-surface uppercase tracking-wider">Targeted Prep</h3>
+</div>
+<h2 class="text-headline-md font-headline-md text-on-surface mb-2 z-10">Application Specific</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-6 z-10 flex-1">Tailor your mock interview to a specific job role or company you've saved.</p>
+<div class="z-10">
+<label class="block text-label-sm font-label-sm text-on-surface-variant mb-1 uppercase">Select Target Role</label>
+<div class="relative">
+<select class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-3 py-2 text-body-sm font-body-sm text-on-surface appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all pr-8 cursor-pointer">
+<option>Senior Frontend Engineer @ TechCorp</option>
+<option>Product Designer @ InnovateHub</option>
+<option>UX Researcher @ DesignWorks</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+<button class="w-full mt-4 bg-surface-container-lowest border border-outline-variant text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:bg-surface-container transition-colors flex items-center justify-center gap-2">
+                            Start Targeted Prep
+                        </button>
+</div>
+</div>
+</section>
+<!-- Metrics & Insights Section -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-lg mt-4">
+<h2 class="sr-only">Performance Insights</h2>
+<!-- Stat Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-start justify-between">
+<div>
+<p class="text-label-sm font-label-sm text-on-surface-variant uppercase mb-1">Avg. Confidence Score</p>
+<p class="text-headline-md font-headline-md text-on-surface">82/100</p>
+<div class="flex items-center gap-1 mt-1 text-secondary">
+<span class="material-symbols-outlined text-[16px]">trending_up</span>
+<span class="text-label-sm font-label-sm">+4 pts this week</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined icon-fill">emoji_events</span>
+</div>
+</div>
+<!-- Stat Card 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-start justify-between">
+<div>
+<p class="text-label-sm font-label-sm text-on-surface-variant uppercase mb-1">Clarity &amp; Pace</p>
+<p class="text-headline-md font-headline-md text-on-surface">Excellent</p>
+<p class="text-label-sm font-label-sm text-on-surface-variant mt-1">140 words/minute</p>
+</div>
+<div class="w-10 h-10 rounded-full bg-primary-fixed-dim text-on-primary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined icon-fill">graphic_eq</span>
+</div>
+</div>
+<!-- Stat Card 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-start justify-between">
+<div>
+<p class="text-label-sm font-label-sm text-on-surface-variant uppercase mb-1">Total Practice Time</p>
+<p class="text-headline-md font-headline-md text-on-surface">4h 15m</p>
+<p class="text-label-sm font-label-sm text-on-surface-variant mt-1">Across 7 sessions</p>
+</div>
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed-dim text-on-tertiary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined icon-fill">schedule</span>
+</div>
+</div>
+</section>
+<!-- Recent Sessions & Improvement Plan -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-lg mt-4 flex-1">
+<!-- Recent Sessions List (Dense Table alternative) -->
+<div class="lg:col-span-8 bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden flex flex-col">
+<div class="p-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+<h3 class="text-label-md font-label-md text-on-surface font-semibold">Recent Sessions</h3>
+<button class="text-primary text-label-sm font-label-sm hover:underline">View All</button>
+</div>
+<div class="flex-1 overflow-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-surface-container-highest bg-surface-bright/50">
+<th class="py-3 px-md text-label-sm font-label-sm text-on-surface-variant uppercase font-medium">Session Type</th>
+<th class="py-3 px-md text-label-sm font-label-sm text-on-surface-variant uppercase font-medium">Date</th>
+<th class="py-3 px-md text-label-sm font-label-sm text-on-surface-variant uppercase font-medium">Duration</th>
+<th class="py-3 px-md text-label-sm font-label-sm text-on-surface-variant uppercase font-medium">Score</th>
+<th class="py-3 px-md text-label-sm font-label-sm text-on-surface-variant uppercase font-medium text-right">Action</th>
+</tr>
+</thead>
+<tbody class="text-body-sm font-body-sm divide-y divide-surface-container-highest">
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="py-3 px-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline-variant text-[18px]">work</span>
+<span class="font-medium text-on-surface">Frontend Eng @ TechCorp</span>
+</div>
+</td>
+<td class="py-3 px-md text-on-surface-variant">Today, 10:30 AM</td>
+<td class="py-3 px-md text-on-surface-variant">25 min</td>
+<td class="py-3 px-md">
+<div class="inline-flex items-center gap-1 bg-secondary-container/20 text-on-secondary-container px-2 py-1 rounded-md text-label-sm font-label-sm">
+<span>88/100</span>
+</div>
+</td>
+<td class="py-3 px-md text-right">
+<button class="text-primary hover:text-primary-container p-1 rounded hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="py-3 px-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline-variant text-[18px]">psychology</span>
+<span class="font-medium text-on-surface">General Behavioral Prep</span>
+</div>
+</td>
+<td class="py-3 px-md text-on-surface-variant">Yesterday</td>
+<td class="py-3 px-md text-on-surface-variant">45 min</td>
+<td class="py-3 px-md">
+<div class="inline-flex items-center gap-1 bg-secondary-container/20 text-on-secondary-container px-2 py-1 rounded-md text-label-sm font-label-sm">
+<span>84/100</span>
+</div>
+</td>
+<td class="py-3 px-md text-right">
+<button class="text-primary hover:text-primary-container p-1 rounded hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="py-3 px-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline-variant text-[18px]">psychology</span>
+<span class="font-medium text-on-surface">System Design Focus</span>
+</div>
+</td>
+<td class="py-3 px-md text-on-surface-variant">Oct 24, 2023</td>
+<td class="py-3 px-md text-on-surface-variant">60 min</td>
+<td class="py-3 px-md">
+<div class="inline-flex items-center gap-1 bg-tertiary-container/10 text-on-tertiary-container px-2 py-1 rounded-md text-label-sm font-label-sm">
+<span>72/100</span>
+</div>
+</td>
+<td class="py-3 px-md text-right">
+<button class="text-primary hover:text-primary-container p-1 rounded hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="py-3 px-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline-variant text-[18px]">work</span>
+<span class="font-medium text-on-surface">Product Design @ InnovateHub</span>
+</div>
+</td>
+<td class="py-3 px-md text-on-surface-variant">Oct 20, 2023</td>
+<td class="py-3 px-md text-on-surface-variant">30 min</td>
+<td class="py-3 px-md">
+<div class="inline-flex items-center gap-1 bg-secondary-container/20 text-on-secondary-container px-2 py-1 rounded-md text-label-sm font-label-sm">
+<span>91/100</span>
+</div>
+</td>
+<td class="py-3 px-md text-right">
+<button class="text-primary hover:text-primary-container p-1 rounded hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Improvement Plan Snippets -->
+<div class="lg:col-span-4 bg-surface-container-low border border-outline-variant rounded-xl p-md flex flex-col h-full">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-tertiary">lightbulb</span>
+<h3 class="text-label-md font-label-md text-on-surface font-semibold">Active Improvement Plan</h3>
+</div>
+<div class="flex-1 flex flex-col gap-3">
+<!-- Goal 1 -->
+<div class="bg-surface-container-lowest rounded-lg p-3 border border-outline-variant/50 shadow-sm relative overflow-hidden group hover:border-primary/30 transition-colors">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary"></div>
+<h4 class="text-label-sm font-label-sm text-on-surface mb-1 ml-2">STAR Method Consistency</h4>
+<p class="text-mono-sm font-mono-sm text-on-surface-variant ml-2 mb-2 line-clamp-2">Ensure you explicitly state the Result in your behavioral examples. You missed this in 2 questions last session.</p>
+<div class="flex items-center justify-between ml-2">
+<span class="text-[10px] uppercase font-bold text-secondary">High Priority</span>
+<button class="text-primary text-[12px] font-medium hover:underline">Review Examples</button>
+</div>
+</div>
+<!-- Goal 2 -->
+<div class="bg-surface-container-lowest rounded-lg p-3 border border-outline-variant/50 shadow-sm relative overflow-hidden group hover:border-primary/30 transition-colors">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-tertiary"></div>
+<h4 class="text-label-sm font-label-sm text-on-surface mb-1 ml-2">Reduce Filler Words</h4>
+<p class="text-mono-sm font-mono-sm text-on-surface-variant ml-2 mb-2 line-clamp-2">"Um" and "like" usage increased during technical explanations. Pause instead of filling silence.</p>
+<div class="flex items-center justify-between ml-2">
+<span class="text-[10px] uppercase font-bold text-tertiary">Medium Priority</span>
+<button class="text-primary text-[12px] font-medium hover:underline">Practice Drill</button>
+</div>
+</div>
+<!-- Goal 3 -->
+<div class="bg-surface-container-lowest rounded-lg p-3 border border-outline-variant/50 shadow-sm relative overflow-hidden group hover:border-primary/30 transition-colors">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-outline"></div>
+<h4 class="text-label-sm font-label-sm text-on-surface mb-1 ml-2">Concise Intros</h4>
+<p class="text-mono-sm font-mono-sm text-on-surface-variant ml-2 mb-2 line-clamp-2">Keep "Tell me about yourself" under 90 seconds. Currently averaging 2m 15s.</p>
+<div class="flex items-center justify-between ml-2">
+<span class="text-[10px] uppercase font-bold text-outline">Low Priority</span>
+<button class="text-primary text-[12px] font-medium hover:underline">Record Intro</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Bottom Navigation (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-lowest border-t border-outline-variant flex justify-around items-center h-16 z-50 px-2 pb-safe">
+<a class="flex flex-col items-center gap-1 p-2 text-on-surface-variant min-w-[64px]" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 p-2 text-on-surface-variant min-w-[64px]" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="text-[10px] font-medium">CVs</span>
+</a>
+<a class="flex flex-col items-center gap-1 p-2 text-primary min-w-[64px] relative" href="#">
+<div class="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-b-full"></div>
+<span class="material-symbols-outlined icon-fill">psychology</span>
+<span class="text-[10px] font-semibold">Coach</span>
+</a>
+<a class="flex flex-col items-center gap-1 p-2 text-on-surface-variant min-w-[64px]" href="#">
+<span class="material-symbols-outlined">assignment</span>
+<span class="text-[10px] font-medium">Apps</span>
+</a>
+<a class="flex flex-col items-center gap-1 p-2 text-on-surface-variant min-w-[64px]" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</nav>
+</body></html>

@@ -97,7 +97,7 @@ function EmployerJobsPage() {
     setEditingId(job.id);
     setSkillsInput((job.skills || []).join(', '));
     setReqsInput((job.requirements || []).join('\n'));
-    
+
     let deadlineStr = '';
     if (job.deadline) {
       deadlineStr = job.deadline.split('T')[0];
@@ -259,7 +259,7 @@ function EmployerJobsPage() {
   const isVerified = company.verified || company.verificationStatus?.toLowerCase() === 'verified';
   const hasApprovedJob = jobs.some((j) => {
     const st = j.status?.toLowerCase();
-    return st === 'published' || st === 'active' || st === 'closed' || st === 'expired' || st === 'archived' || Boolean(j.publishedAt);
+    return st === 'published' || st === 'active' || st === 'closed' || st === 'expired' || st === 'archived';
   });
 
   return (

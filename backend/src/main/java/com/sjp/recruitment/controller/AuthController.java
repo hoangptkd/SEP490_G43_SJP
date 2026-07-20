@@ -5,12 +5,15 @@ import com.sjp.recruitment.model.dto.request.CompleteOauthRoleRequest;
 import com.sjp.recruitment.model.dto.request.LoginRequest;
 import com.sjp.recruitment.model.dto.request.RegisterRequest;
 import com.sjp.recruitment.model.dto.request.VerifyEmailRequest;
+import com.sjp.recruitment.model.dto.response.AuthConfigResponse;
 import com.sjp.recruitment.model.dto.response.AuthResponse;
 import com.sjp.recruitment.model.dto.response.UserResponse;
 import com.sjp.recruitment.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -20,6 +23,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public class AuthController {
 
     private final AuthService authService;
+    private final ObjectProvider<ClientRegistrationRepository> clientRegistrationRepository;
+
+    @GetMapping("/config")
+    public ResponseEntity<AuthConfigResponse> config() {
+        return ResponseEntity.ok(new AuthConfigResponse(clientRegistrationRepository.getIfAvailable() != null));
+    }
     private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/diagnostic")

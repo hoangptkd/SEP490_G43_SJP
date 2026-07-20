@@ -274,8 +274,12 @@ create table candidate_skills (
 
 create table interview_sessions (
   id uuid primary key default gen_random_uuid(),
+  version bigint not null default 0,
   job_seeker_id uuid not null references job_seekers(id) on delete cascade,
   job_id uuid references jobs(id) on delete set null,
+  application_id uuid references applications(id) on delete set null,
+  context_type text not null default 'practice' check (context_type in ('application', 'practice')),
+  practice_context_json jsonb not null default '{}'::jsonb,
   title text not null,
   session_type text not null check (session_type in ('mock', 'job_based', 'practice')),
   status text not null default 'created' check (status in ('created', 'in_progress', 'completed', 'cancelled')),
@@ -284,6 +288,7 @@ create table interview_sessions (
   ai_summary text,
   started_at timestamptz,
   completed_at timestamptz,
+  deleted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -304,6 +309,7 @@ create table interview_questions (
 
 create table interview_answers (
   id uuid primary key default gen_random_uuid(),
+  version bigint not null default 0,
   question_id uuid not null,
   session_id uuid not null references interview_sessions(id) on delete cascade,
   transcript_text text,
@@ -311,7 +317,13 @@ create table interview_answers (
   video_url text,
   duration_seconds integer check (duration_seconds is null or duration_seconds >= 0),
   is_skipped boolean not null default false,
+  transcript_status text not null default 'pending' check (transcript_status in ('pending', 'processing', 'completed', 'failed')),
+  feedback_status text not null default 'pending' check (feedback_status in ('pending', 'processing', 'completed', 'failed')),
+  error_message text,
+  evaluation_source text not null default 'provider' check (evaluation_source in ('provider', 'fallback', 'skipped')),
+  evaluation_fallback boolean not null default false,
   answered_at timestamptz,
+  constraint interview_answers_session_question_unique unique (session_id, question_id),
   constraint interview_answers_question_session_fk foreign key (question_id, session_id)
     references interview_questions(id, session_id) on delete cascade
 );
@@ -324,6 +336,7 @@ create table ai_answer_feedbacks (
   depth_score numeric(5,2) check (depth_score is null or depth_score between 0 and 100),
   confidence_score numeric(5,2) check (confidence_score is null or confidence_score between 0 and 100),
   overall_score numeric(5,2) check (overall_score is null or overall_score between 0 and 100),
+  feedback text,
   strengths text,
   weaknesses text,
   suggestions text,
@@ -340,6 +353,8 @@ create table ai_session_feedbacks (
   weaknesses text,
   suggestions text,
   model_used text,
+  evaluation_source text not null default 'provider',
+  evaluation_fallback boolean not null default false,
   generated_at timestamptz not null default now()
 );
 
@@ -581,6 +596,8 @@ create index job_skills_skill_id_idx on job_skills(skill_id);
 create index candidate_skills_skill_id_idx on candidate_skills(skill_id);
 create index interview_sessions_job_seeker_id_idx on interview_sessions(job_seeker_id);
 create index interview_sessions_job_id_idx on interview_sessions(job_id);
+create index interview_sessions_application_id_idx on interview_sessions(application_id);
+create index interview_sessions_deleted_at_idx on interview_sessions(deleted_at);
 create index interview_questions_session_id_idx on interview_questions(session_id);
 create index interview_answers_question_id_idx on interview_answers(question_id);
 create index interview_answers_session_id_idx on interview_answers(session_id);
