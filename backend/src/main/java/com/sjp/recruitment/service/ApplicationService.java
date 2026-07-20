@@ -146,19 +146,42 @@ public class ApplicationService {
     public void seedStatus(Application application, Application.ApplicationStatus toStatus, String note) {
         Application.ApplicationStatus from = application.getStatusEnum();
         application.setStatus(toStatus);
+        applicationRepository.save(application);
         addHistory(application, from, toStatus, note);
         createNotification(application.getCandidate().getUser(), "APPLICATION_STATUS_CHANGED",
                 "Trang thai ung tuyen da cap nhat", note, application.getId());
+        if (toStatus == Application.ApplicationStatus.ACCEPTED && application.getJob() != null) {
+            Job job = application.getJob();
+            long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
+            if (job.getVacancies() != null && acceptedCount >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
+                job.setStatus("closed");
+                job.setClosedAt(LocalDateTime.now());
+                jobRepository.save(job);
+                jobService.notifyCandidatesJobClosed(job, "Tin tuyển dụng [" + job.getTitle() + "] mà bạn nộp đơn ứng tuyển đã tuyển đủ số lượng chỉ tiêu và tự động đóng.");
+            }
+        }
     }
 
-    private ApplicationResponse toResponse(Application application) {
+    @Transactional
+    public ApplicationResponse updateStatus(UUID applicationId, Application.ApplicationStatus toStatus, String note) {
+        Application application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
+        seedStatus(application, toStatus, note != null ? note : "Cap nhat trang thai ung tuyen");
+        return toResponse(application);
+    }
+
+    @Transactional(readOnly = true)
+    public ApplicationResponse toResponse(Application application) {
+        if (application == null) {
+            return null;
+        }
         List<ApplicationTimelineResponse> timeline = historyRepository.findByApplicationIdOrderByCreatedAtAsc(application.getId())
                 .stream()
                 .map(dtoMapper::toTimelineResponse)
                 .toList();
         return dtoMapper.toApplicationResponse(
                 application,
-                jobService.toJobResponse(application.getJob(), application.getCandidate()),
+                application.getJob() != null ? jobService.toJobResponse(application.getJob(), application.getCandidate()) : null,
                 timeline);
     }
 

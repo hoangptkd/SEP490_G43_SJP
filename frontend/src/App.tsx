@@ -19,6 +19,7 @@ import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
 import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
 import CompanyVerificationPage from './pages/Employer/CompanyVerificationPage';
 import EmployerJobsPage from './pages/employer/EmployerJobsPage';
+import EmployerApplicationsPage from './pages/Employer/EmployerApplicationsPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -67,6 +68,8 @@ function App() {
         <Route path="locations" element={<CompanyLocationsPage />} />
         <Route path="verification" element={<CompanyVerificationPage />} />
         <Route path="jobs" element={<EmployerJobsPage />} />
+        <Route path="applications" element={<EmployerApplicationsPage />} />
+        <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
       </Route>
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
@@ -628,6 +631,7 @@ function EmployerLayout() {
         <Link className="brand" to="/employer">Employer Portal</Link>
         <NavLink to="/employer" end>Dashboard</NavLink>
         <NavLink to="/employer/jobs">Quan ly Viec lam</NavLink>
+        <NavLink to="/employer/applications">Quan ly Ung vien</NavLink>
         
         <div className="nav-dropdown">
           <button 
@@ -660,7 +664,7 @@ function EmployerDashboard() {
       <div style={{ textAlign: 'center', padding: '30px 20px', marginBottom: '20px' }}>
         <h1 style={{ color: '#245d43', marginBottom: '12px' }}>Employer Dashboard</h1>
         <p style={{ color: '#4b5b52', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto' }}>
-          Chào mừng Nhà tuyển dụng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty và tin tuyển dụng của bạn.
+          Chào mừng Nhà tuyển dụng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty, tin tuyển dụng và hồ sơ ứng viên.
         </p>
       </div>
 
@@ -669,11 +673,23 @@ function EmployerDashboard() {
           <div>
             <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>📢 Quản lý & Đăng tin tuyển dụng</h3>
             <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
-              Tạo mới các vị trí tuyển dụng, thiết lập mức lương, quyền lợi và theo dõi trạng thái các tin đăng. (Yêu cầu công ty đã xác thực)
+              Tạo mới các vị trí tuyển dụng, thiết lập mức lương, quyền lợi và theo dõi trạng thái các tin đăng.
             </p>
           </div>
           <Link to="/employer/jobs" style={{ background: '#245d43', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
             Quản lý việc làm →
+          </Link>
+        </div>
+
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.25rem' }}>👥 Quản lý hồ sơ ứng viên</h3>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              Xem danh sách đơn ứng tuyển theo từng vị trí, rà soát CV và chuyển đổi trạng thái vòng phỏng vấn.
+            </p>
+          </div>
+          <Link to="/employer/applications" style={{ background: '#2563eb', color: '#fff', padding: '10px 16px', borderRadius: '6px', textAlign: 'center', textDecoration: 'none', fontWeight: 600 }}>
+            Xem ứng viên →
           </Link>
         </div>
 

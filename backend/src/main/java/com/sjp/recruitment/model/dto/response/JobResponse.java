@@ -29,6 +29,7 @@ public record JobResponse(
         String jobType,
         String workMode,
         Integer viewsCount,
-        String rejectionReason
+        String rejectionReason,
+        Long applicationsCount
 ) {
 }

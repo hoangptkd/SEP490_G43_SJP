@@ -806,7 +806,8 @@ public class AdminService {
                 null,
                 null,
                 rs.getInt("views_count"),
-                rs.getString("rejection_reason")
+                rs.getString("rejection_reason"),
+                0L
         );
         return new AdminJobDetailResponse(
                 job,

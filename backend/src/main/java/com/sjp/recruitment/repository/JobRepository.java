@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -68,4 +69,7 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
 
     List<Job> findTop20ByStatusOrderByCreatedAtDesc(String status);
     List<Job> findByStatusAndSalaryMinGreaterThan(String status, BigDecimal minSalary);
+
+    @Query("SELECT j FROM Job j WHERE j.status = 'published' AND j.deadline < :today")
+    List<Job> findExpiredPublishedJobs(@Param("today") LocalDate today);
 }
