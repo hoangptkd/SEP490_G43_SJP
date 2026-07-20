@@ -8,6 +8,9 @@ import com.sjp.recruitment.model.dto.response.AdminCompanySummaryResponse;
 import com.sjp.recruitment.model.dto.response.AdminDashboardResponse;
 import com.sjp.recruitment.model.dto.response.AdminJobDetailResponse;
 import com.sjp.recruitment.model.dto.response.AdminJobSummaryResponse;
+import com.sjp.recruitment.model.dto.response.AdminStatItemResponse;
+import com.sjp.recruitment.model.dto.response.AdminStatisticsResponse;
+import com.sjp.recruitment.model.dto.response.AdminTrendPointResponse;
 import com.sjp.recruitment.model.dto.response.AdminUserSummaryResponse;
 import com.sjp.recruitment.model.dto.response.CompanyDocumentResponse;
 import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
@@ -35,7 +38,9 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -88,6 +93,189 @@ public class AdminService {
     private long count(String sql) {
         Long value = namedParameterJdbcTemplate.getJdbcTemplate().queryForObject(sql, Long.class);
         return value == null ? 0 : value;
+    }
+
+    @Transactional(readOnly = true)
+    public AdminStatisticsResponse getStatistics(String period, Integer year, Integer month, String date) {
+        requireAdmin();
+        TimeRange range = resolveStatisticsRange(period, year, month, date);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", range.start())
+                .addValue("end", range.end());
+
+        return new AdminStatisticsResponse(
+                count("SELECT COUNT(*) FROM users WHERE status <> 'deleted' AND created_at >= :start AND created_at < :end", params),
+                count("SELECT COUNT(*) FROM companies WHERE created_at >= :start AND created_at < :end", params),
+                count("SELECT COUNT(*) FROM jobs WHERE created_at >= :start AND created_at < :end", params),
+                count("SELECT COUNT(*) FROM applications WHERE applied_at >= :start AND applied_at < :end", params),
+                count("SELECT COALESCE(SUM(views_count), 0) FROM jobs WHERE created_at >= :start AND created_at < :end", params),
+                statItems("""
+                        SELECT role AS key, role AS label, COUNT(*) AS value
+                        FROM users
+                        WHERE status <> 'deleted'
+                          AND created_at >= :start AND created_at < :end
+                        GROUP BY role
+                        ORDER BY value DESC
+                        """, params),
+                statItems("""
+                        SELECT status AS key, status AS label, COUNT(*) AS value
+                        FROM users
+                        WHERE status <> 'deleted'
+                          AND created_at >= :start AND created_at < :end
+                        GROUP BY status
+                        ORDER BY value DESC
+                        """, params),
+                statItems("""
+                        SELECT verification_status AS key, verification_status AS label, COUNT(*) AS value
+                        FROM companies
+                        WHERE created_at >= :start AND created_at < :end
+                        GROUP BY verification_status
+                        ORDER BY value DESC
+                        """, params),
+                statItems("""
+                        SELECT status AS key, status AS label, COUNT(*) AS value
+                        FROM jobs
+                        WHERE created_at >= :start AND created_at < :end
+                        GROUP BY status
+                        ORDER BY value DESC
+                        """, params),
+                statItems("""
+                        SELECT status AS key, status AS label, COUNT(*) AS value
+                        FROM applications
+                        WHERE applied_at >= :start AND applied_at < :end
+                        GROUP BY status
+                        ORDER BY value DESC
+                        """, params),
+                trendPoints(userTrendSql(range.dailyBuckets(), null), params),
+                trendPoints(userTrendSql(range.dailyBuckets(), "job_seeker"), params),
+                trendPoints(userTrendSql(range.dailyBuckets(), "employer"), params),
+                trendPoints(applicationTrendSql(range.dailyBuckets()), params),
+                trendPoints(jobTrendSql(range.dailyBuckets()), params),
+                LocalDateTime.now()
+        );
+    }
+
+    private long count(String sql, MapSqlParameterSource params) {
+        Long value = namedParameterJdbcTemplate.queryForObject(sql, params, Long.class);
+        return value == null ? 0 : value;
+    }
+
+    private List<AdminStatItemResponse> statItems(String sql, MapSqlParameterSource params) {
+        return namedParameterJdbcTemplate.query(
+                sql,
+                params,
+                (rs, rowNum) -> new AdminStatItemResponse(
+                        rs.getString("key"),
+                        rs.getString("label"),
+                        rs.getLong("value")
+                )
+        );
+    }
+
+    private List<AdminTrendPointResponse> trendPoints(String sql, MapSqlParameterSource params) {
+        return namedParameterJdbcTemplate.query(
+                sql,
+                params,
+                (rs, rowNum) -> new AdminTrendPointResponse(
+                        rs.getString("date"),
+                        rs.getLong("value")
+                )
+        );
+    }
+
+    private TimeRange resolveStatisticsRange(String period, Integer year, Integer month, String date) {
+        String resolvedPeriod = period == null ? "week" : period.trim().toLowerCase(Locale.ROOT);
+        if ("year".equals(resolvedPeriod)) {
+            int resolvedYear = year == null ? LocalDate.now().getYear() : year;
+            LocalDate start = LocalDate.of(resolvedYear, 1, 1);
+            return new TimeRange(start, start.plusYears(1), false);
+        }
+
+        int resolvedYear = year == null ? LocalDate.now().getYear() : year;
+        if ("month".equals(resolvedPeriod)) {
+            int resolvedMonth = month != null && month >= 1 && month <= 12 ? month : LocalDate.now().getMonthValue();
+            YearMonth yearMonth = YearMonth.of(resolvedYear, resolvedMonth);
+            LocalDate start = yearMonth.atDay(1);
+            return new TimeRange(start, start.plusMonths(1), true);
+        }
+
+        LocalDate referenceDate;
+        try {
+            referenceDate = StringUtils.hasText(date) ? LocalDate.parse(date) : LocalDate.now();
+        } catch (Exception exception) {
+            referenceDate = LocalDate.now();
+        }
+        LocalDate start = referenceDate.minusDays(referenceDate.getDayOfWeek().getValue() - 1L);
+        return new TimeRange(start, start.plusDays(7), true);
+    }
+
+    private String applicationTrendSql(boolean byDay) {
+        if (byDay) {
+            return """
+                    SELECT bucket::date::text AS date, COUNT(a.id) AS value
+                    FROM generate_series(CAST(:start AS date), CAST(:end AS date) - INTERVAL '1 day', INTERVAL '1 day') bucket
+                    LEFT JOIN applications a ON a.applied_at::date = bucket::date
+                    GROUP BY bucket
+                    ORDER BY bucket
+                    """;
+        }
+        return """
+                SELECT bucket::date::text AS date, COUNT(a.id) AS value
+                FROM generate_series(CAST(:start AS date), CAST(:end AS date) - INTERVAL '1 month', INTERVAL '1 month') bucket
+                LEFT JOIN applications a ON a.applied_at >= bucket AND a.applied_at < bucket + INTERVAL '1 month'
+                GROUP BY bucket
+                ORDER BY bucket
+                """;
+    }
+
+    private String userTrendSql(boolean byDay, String role) {
+        String roleClause = role == null ? "" : " AND u.role = '" + role + "'\n";
+        if (byDay) {
+            return """
+                    SELECT bucket::date::text AS date, COUNT(u.id) AS value
+                    FROM generate_series(CAST(:start AS date), CAST(:end AS date) - INTERVAL '1 day', INTERVAL '1 day') bucket
+                    LEFT JOIN users u ON u.created_at::date = bucket::date
+                      AND u.status <> 'deleted'
+                    """
+                    + roleClause
+                    + """
+                    GROUP BY bucket
+                    ORDER BY bucket
+                    """;
+        }
+        return """
+                SELECT bucket::date::text AS date, COUNT(u.id) AS value
+                FROM generate_series(CAST(:start AS date), CAST(:end AS date) - INTERVAL '1 month', INTERVAL '1 month') bucket
+                LEFT JOIN users u ON u.created_at >= bucket AND u.created_at < bucket + INTERVAL '1 month'
+                  AND u.status <> 'deleted'
+                """
+                + roleClause
+                + """
+                GROUP BY bucket
+                ORDER BY bucket
+                """;
+    }
+
+    private String jobTrendSql(boolean byDay) {
+        if (byDay) {
+            return """
+                    SELECT bucket::date::text AS date, COUNT(j.id) AS value
+                    FROM generate_series(CAST(:start AS date), CAST(:end AS date) - INTERVAL '1 day', INTERVAL '1 day') bucket
+                    LEFT JOIN jobs j ON j.created_at::date = bucket::date
+                    GROUP BY bucket
+                    ORDER BY bucket
+                    """;
+        }
+        return """
+                SELECT bucket::date::text AS date, COUNT(j.id) AS value
+                FROM generate_series(CAST(:start AS date), CAST(:end AS date) - INTERVAL '1 month', INTERVAL '1 month') bucket
+                LEFT JOIN jobs j ON j.created_at >= bucket AND j.created_at < bucket + INTERVAL '1 month'
+                GROUP BY bucket
+                ORDER BY bucket
+                """;
+    }
+
+    private record TimeRange(LocalDate start, LocalDate end, boolean dailyBuckets) {
     }
 
     @Transactional(readOnly = true)

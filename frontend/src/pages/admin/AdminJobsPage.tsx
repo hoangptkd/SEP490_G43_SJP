@@ -39,11 +39,6 @@ function jobStatusLabel(status?: string) {
   }
 }
 
-function formatDate(value?: string) {
-  if (!value) return '—';
-  return new Date(value).toLocaleString('vi-VN');
-}
-
 function formatMoney(min?: number, max?: number) {
   if (!min && !max) return 'Thỏa thuận';
   if (min && max) {
