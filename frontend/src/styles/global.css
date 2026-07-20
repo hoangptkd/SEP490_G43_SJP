@@ -602,6 +602,33 @@ h2 {
   color: #123327;
 }
 
+.admin-stat-hero {
+  align-items: flex-end;
+  background: radial-gradient(circle at top left, #2f8f5b 0%, #123327 48%, #0b1f16 100%);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(16, 35, 26, 0.16);
+  color: #fff;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  padding: 28px;
+}
+
+.admin-stat-hero h1 {
+  color: #fff;
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  margin: 0 0 10px;
+}
+
+.admin-stat-hero p {
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0;
+  max-width: 680px;
+}
+
 .admin-metric-grid {
   display: grid;
   gap: 14px;
@@ -620,10 +647,19 @@ h2 {
   background: #fff;
   border: 1px solid #d9e4dd;
   border-radius: 16px;
+  color: inherit;
   box-shadow: 0 10px 26px rgba(16, 35, 26, 0.07);
   overflow: hidden;
   padding: 20px;
   position: relative;
+  text-decoration: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.admin-dashboard-card:hover {
+  border-color: #a8c4b2;
+  box-shadow: 0 16px 34px rgba(16, 35, 26, 0.12);
+  transform: translateY(-3px);
 }
 
 .admin-dashboard-card::before {
@@ -714,11 +750,21 @@ h2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.admin-dashboard-mini-grid div {
+.admin-dashboard-mini-grid div,
+.admin-dashboard-mini-grid a {
   background: #f6faf7;
   border: 1px solid #e2ece6;
   border-radius: 12px;
+  color: inherit;
   padding: 14px;
+  text-decoration: none;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.admin-dashboard-mini-grid a:hover {
+  background: #eef7f1;
+  border-color: #a8c4b2;
+  transform: translateY(-2px);
 }
 
 .admin-dashboard-mini-grid span {
@@ -733,6 +779,324 @@ h2 {
   color: #10231a;
   font-size: 1.6rem;
   font-weight: 900;
+}
+
+.admin-stat-card-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.admin-stat-focus-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.admin-stat-section-tabs {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.admin-stat-section-tabs button {
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(16, 35, 26, 0.05);
+  color: #10231a;
+  display: grid;
+  gap: 6px;
+  justify-content: start;
+  min-height: 82px;
+  padding: 14px;
+  text-align: left;
+}
+
+.admin-stat-section-tabs button.active,
+.admin-stat-section-tabs button:hover {
+  background: #edf7f0;
+  border-color: #95bda3;
+}
+
+.admin-stat-section-tabs strong {
+  font-size: 1rem;
+}
+
+.admin-stat-section-tabs span {
+  color: #607168;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.admin-stat-filter-panel {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 16px;
+  box-shadow: 0 10px 26px rgba(16, 35, 26, 0.06);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 20px;
+}
+
+.admin-stat-filter-panel h2 {
+  color: #10231a;
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+}
+
+.admin-stat-filter-panel p {
+  color: #607168;
+  margin: 0;
+}
+
+.admin-stat-filter-controls {
+  display: flex;
+  gap: 12px;
+}
+
+.admin-stat-filter-controls label {
+  color: #405147;
+  display: grid;
+  font-size: 0.84rem;
+  font-weight: 850;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.admin-stat-card {
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 16px;
+  box-shadow: 0 10px 26px rgba(16, 35, 26, 0.07);
+  overflow: hidden;
+  padding: 18px;
+  position: relative;
+}
+
+.admin-stat-card::before {
+  content: "";
+  height: 5px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.admin-stat-card.primary::before { background: #245d43; }
+.admin-stat-card.green::before { background: #2f8f5b; }
+.admin-stat-card.amber::before { background: #d8a23a; }
+.admin-stat-card.blue::before { background: #2d6cdf; }
+.admin-stat-card.purple::before { background: #6f42c1; }
+
+.admin-stat-card span {
+  color: #5a6a61;
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.admin-stat-card strong {
+  color: #10231a;
+  display: block;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.admin-stat-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.admin-stat-layout.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-stat-panel {
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 16px;
+  box-shadow: 0 10px 26px rgba(16, 35, 26, 0.06);
+  padding: 20px;
+}
+
+.admin-stat-panel.wide {
+  margin-bottom: 16px;
+}
+
+.admin-stat-panel-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.admin-stat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.admin-stat-legend span {
+  align-items: center;
+  color: #405147;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 6px;
+}
+
+.admin-stat-legend i {
+  border-radius: 999px;
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+}
+
+.admin-stat-legend i.primary,
+.admin-stat-multi-bar.primary {
+  background: #245d43;
+}
+
+.admin-stat-legend i.blue,
+.admin-stat-multi-bar.blue {
+  background: #2d6cdf;
+}
+
+.admin-stat-legend i.green,
+.admin-stat-multi-bar.green {
+  background: #2f8f5b;
+}
+
+.admin-stat-panel h2 {
+  color: #10231a;
+  font-size: 1.08rem;
+  margin: 0 0 16px;
+}
+
+.admin-stat-bars {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-stat-bar-row {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-stat-bar-label {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-stat-bar-label span {
+  color: #1b2c22;
+  font-weight: 800;
+}
+
+.admin-stat-bar-label strong {
+  color: #607168;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.admin-stat-bar-track {
+  background: #edf4ef;
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.admin-stat-bar-track div {
+  background: linear-gradient(90deg, #245d43, #6faf7f);
+  border-radius: inherit;
+  height: 100%;
+}
+
+.admin-stat-trend {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-height: 180px;
+}
+
+.admin-stat-trend-item {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.admin-stat-trend-item strong {
+  color: #10231a;
+  font-size: 0.9rem;
+}
+
+.admin-stat-trend-item div {
+  align-self: end;
+  background: linear-gradient(180deg, #2f8f5b, #245d43);
+  border-radius: 999px 999px 6px 6px;
+  min-height: 8px;
+  width: 24px;
+}
+
+.admin-stat-trend-item span {
+  color: #607168;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.admin-stat-multi-trend {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  min-height: 210px;
+}
+
+.admin-stat-multi-group {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.admin-stat-multi-bars {
+  align-items: end;
+  display: flex;
+  gap: 4px;
+  height: 150px;
+}
+
+.admin-stat-multi-bar {
+  border-radius: 999px 999px 5px 5px;
+  min-height: 8px;
+  width: 12px;
+}
+
+.admin-stat-multi-group > span {
+  color: #607168;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-align: center;
 }
 
 .admin-user-tools {
@@ -1219,9 +1583,16 @@ h2 {
   }
 
   .admin-dashboard-hero,
-  .admin-dashboard-panel {
+  .admin-dashboard-panel,
+  .admin-stat-hero,
+  .admin-stat-filter-panel {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .admin-stat-filter-controls {
+    flex-direction: column;
+    width: 100%;
   }
 
   .admin-dashboard-refresh {
@@ -1231,8 +1602,19 @@ h2 {
   .admin-dashboard-grid,
   .admin-dashboard-panels,
   .admin-dashboard-mini-grid,
-  .admin-role-grid {
+  .admin-role-grid,
+  .admin-stat-card-grid,
+  .admin-stat-focus-grid,
+  .admin-stat-section-tabs,
+  .admin-stat-layout,
+  .admin-stat-layout.two {
     grid-template-columns: 1fr;
+  }
+
+  .admin-stat-trend,
+  .admin-stat-multi-trend {
+    gap: 8px;
+    overflow-x: auto;
   }
 
   .admin-user-tools {

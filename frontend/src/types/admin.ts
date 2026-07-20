@@ -89,3 +89,33 @@ export interface AdminUserSummary {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface AdminStatItem {
+  key: string;
+  label: string;
+  value: number;
+}
+
+export interface AdminTrendPoint {
+  date: string;
+  value: number;
+}
+
+export interface AdminStatistics {
+  totalUsers: number;
+  totalCompanies: number;
+  totalJobs: number;
+  totalApplications: number;
+  totalViews: number;
+  usersByRole: AdminStatItem[];
+  usersByStatus: AdminStatItem[];
+  companiesByVerification: AdminStatItem[];
+  jobsByStatus: AdminStatItem[];
+  applicationsByStatus: AdminStatItem[];
+  usersTrend: AdminTrendPoint[];
+  candidateUsersTrend: AdminTrendPoint[];
+  employerUsersTrend: AdminTrendPoint[];
+  applicationsLast7Days: AdminTrendPoint[];
+  jobsLast7Days: AdminTrendPoint[];
+  updatedAt: string;
+}

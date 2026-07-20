@@ -81,26 +81,29 @@ export default function AdminDashboardPage() {
       {error && <p className="error admin-inline-message">{error}</p>}
 
       <div className="admin-dashboard-grid">
-        <article className="admin-dashboard-card primary">
+        <Link className="admin-dashboard-card primary" to="/admin/users?role=all&status=all&page=1">
           <span>Tổng người dùng</span>
           <strong>{formatNumber(stats.totalUsers)}</strong>
           <p>{formatNumber(stats.totalCandidates)} ứng viên · {formatNumber(stats.totalEmployers)} nhà tuyển dụng</p>
-        </article>
-        <article className="admin-dashboard-card green">
+        </Link>
+        <Link className="admin-dashboard-card green" to="/admin/jobs?status=published&page=1">
           <span>Việc làm đang hoạt động</span>
           <strong>{formatNumber(stats.activeJobs)}</strong>
           <p>Tin đã duyệt và đang hiển thị công khai</p>
-        </article>
-        <article className="admin-dashboard-card amber">
+        </Link>
+        <Link
+          className="admin-dashboard-card amber"
+          to={stats.pendingCompanies > 0 ? '/admin/companies?status=pending&page=1' : '/admin/jobs?status=pending_review&page=1'}
+        >
           <span>Chờ kiểm duyệt</span>
           <strong>{formatNumber(stats.pendingModeration)}</strong>
           <p>{formatNumber(stats.pendingCompanies)} hồ sơ công ty · {formatNumber(stats.pendingJobs)} tin tuyển dụng</p>
-        </article>
-        <article className="admin-dashboard-card blue">
+        </Link>
+        <Link className="admin-dashboard-card blue" to="/admin/statistics">
           <span>Ứng tuyển hôm nay</span>
           <strong>{formatNumber(stats.applicationsToday)}</strong>
           <p>Tổng ứng tuyển: {formatNumber(stats.totalApplications)}</p>
-        </article>
+        </Link>
       </div>
 
       <div className="admin-dashboard-panels">
@@ -122,8 +125,14 @@ export default function AdminDashboardPage() {
         <section className="admin-dashboard-panel compact">
           <h2>Tình hình công ty</h2>
           <div className="admin-dashboard-mini-grid">
-            <div><span>Tổng công ty</span><strong>{formatNumber(stats.totalCompanies)}</strong></div>
-            <div><span>Đã xác thực</span><strong>{formatNumber(stats.verifiedCompanies)}</strong></div>
+            <Link to="/admin/companies?status=pending&page=1">
+              <span>Đang chờ duyệt</span>
+              <strong>{formatNumber(stats.pendingCompanies)}</strong>
+            </Link>
+            <Link to="/admin/companies?status=verified&page=1">
+              <span>Đã xác thực</span>
+              <strong>{formatNumber(stats.verifiedCompanies)}</strong>
+            </Link>
           </div>
         </section>
       </div>

@@ -5,6 +5,7 @@ import type {
   AdminDashboardStats,
   AdminJobDetail,
   AdminJobSummary,
+  AdminStatistics,
   AdminUserRoleFilter,
   AdminUserStatusFilter,
   AdminUserSummary,
@@ -15,6 +16,18 @@ import type {
 export const adminService = {
   getDashboardStats: async (): Promise<AdminDashboardStats> => {
     const response = await api.get<AdminDashboardStats>('/admin/dashboard');
+    return response.data;
+  },
+
+  getStatistics: async (
+    period: 'week' | 'month' | 'year' = 'week',
+    year?: number,
+    month?: number,
+    date?: string,
+  ): Promise<AdminStatistics> => {
+    const response = await api.get<AdminStatistics>('/admin/dashboard/statistics', {
+      params: { period, year, month, date },
+    });
     return response.data;
   },
 
