@@ -1,6 +1,8 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import AdminAuditPage from './pages/admin/AdminAuditPage';
+import AdminBillingPage from './pages/admin/AdminBillingPage';
 import AdminCompanyDetailPage from './pages/admin/AdminCompanyDetailPage';
 import AdminCompanyReviewPage from './pages/admin/AdminCompanyReviewPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
@@ -8,6 +10,7 @@ import AdminJobDetailPage from './pages/admin/AdminJobDetailPage';
 import AdminJobsPage from './pages/admin/AdminJobsPage';
 import AdminLayout, { AdminProtected } from './pages/admin/AdminLayout';
 import AdminLoginPage from './pages/admin/AdminLoginPage';
+import AdminPlanFormPage from './pages/admin/AdminPlanFormPage';
 import AdminProfilePage from './pages/admin/AdminProfilePage';
 import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import AdminStatisticsPage from './pages/admin/AdminStatisticsPage';
@@ -120,7 +123,12 @@ function App() {
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="jobs" element={<AdminJobsPage />} />
         <Route path="jobs/:id" element={<AdminJobDetailPage />} />
+        <Route path="billing" element={<AdminBillingPage />} />
+        <Route path="billing/plans/new" element={<AdminPlanFormPage />} />
+        <Route path="billing/plans/:id/edit" element={<AdminPlanFormPage />} />
+        <Route path="categories" element={<Navigate to="/admin/settings?tab=categories" replace />} />
         <Route path="statistics" element={<AdminStatisticsPage />} />
+        <Route path="audit-logs" element={<AdminAuditPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />
         <Route path="profile" element={<AdminProfilePage />} />
       </Route>
@@ -762,8 +770,12 @@ function LoginPage() {
             Chưa có tài khoản?{' '}
             <Link to="/register">Đăng ký ngay</Link>
           </p>
-          <p style={{ marginTop: 8, fontSize: '0.78rem', color: 'var(--outline)' }}>
-            Demo: candidate.demo@sjp.local / Password123!
+          <p style={{ marginTop: 8, fontSize: '0.78rem', color: 'var(--outline)', lineHeight: 1.5 }}>
+            Demo — Ứng viên: candidate.demo@sjp.local / Password123!
+            <br />
+            Nhà tuyển dụng: employer.demo@sjp.local / Password123!
+            <br />
+            Admin: admin@sjp.local / Admin@123
           </p>
         </div>
       </motion.div>

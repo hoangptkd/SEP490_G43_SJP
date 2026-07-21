@@ -16,7 +16,7 @@ function jobStatusLabel(status?: string) {
     case 'draft':
       return { text: 'Bản nháp', className: 'status-unverified' };
     case 'closed':
-      return { text: 'Đã đóng', className: 'status-unverified' };
+      return { text: 'Đã ẩn', className: 'status-unverified' };
     default:
       return { text: status || '—', className: 'status-unverified' };
   }
@@ -108,8 +108,46 @@ export default function AdminJobDetailPage() {
     }
   }
 
+  async function handleClose() {
+    if (!id || !detail) return;
+    const reason = window.prompt('Nhập lý do ẩn tin tuyển dụng', 'Vi phạm nội dung / yêu cầu ẩn bởi admin') || '';
+    if (!reason.trim()) return;
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await adminService.closeJob(id, reason.trim());
+      setDetail(updated);
+      setSuccess('Đã ẩn tin tuyển dụng khỏi danh sách công khai.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleReopen() {
+    if (!id || !detail) return;
+    if (!window.confirm(`Mở lại tin "${detail.job.title}" lên trạng thái công khai?`)) return;
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await adminService.reopenJob(id);
+      setDetail(updated);
+      setSuccess('Đã mở lại tin tuyển dụng.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const status = jobStatusLabel(detail?.job.status);
-  const canReview = detail?.job.status?.toLowerCase() === 'pending_review';
+  const currentStatus = detail?.job.status?.toLowerCase() || '';
+  const canReview = currentStatus === 'pending_review';
+  const canClose = currentStatus === 'published' || currentStatus === 'active';
+  const canReopen = currentStatus === 'closed';
   const backStatus = searchParams.get('status') || 'pending_review';
   const backPage = searchParams.get('page') || '1';
   const backTo = `/admin/jobs?status=${backStatus}&page=${backPage}`;
@@ -210,6 +248,21 @@ export default function AdminJobDetailPage() {
               <button type="button" className="danger" onClick={() => setShowRejectForm((value) => !value)} disabled={submitting}>
                 Từ chối tin
               </button>
+            </div>
+          )}
+
+          {(canClose || canReopen) && (
+            <div className="admin-company-actions">
+              {canClose && (
+                <button type="button" className="danger" onClick={handleClose} disabled={submitting}>
+                  {submitting ? 'Đang xử lý...' : 'Ẩn tin công khai'}
+                </button>
+              )}
+              {canReopen && (
+                <button type="button" onClick={handleReopen} disabled={submitting}>
+                  {submitting ? 'Đang xử lý...' : 'Mở lại tin'}
+                </button>
+              )}
             </div>
           )}
 

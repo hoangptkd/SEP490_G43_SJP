@@ -24,7 +24,7 @@ public class AdminDashboardController {
 
     @GetMapping("/statistics")
     public ResponseEntity<AdminStatisticsResponse> getStatistics(
-            @RequestParam(required = false, defaultValue = "week") String period,
+            @RequestParam(required = false, defaultValue = "all") String period,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) String date

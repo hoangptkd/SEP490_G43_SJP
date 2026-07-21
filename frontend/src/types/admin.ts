@@ -34,7 +34,7 @@ export interface AdminCompanyDetail {
 
 export type CompanyReviewFilter = 'pending' | 'verified' | 'rejected';
 
-export type JobReviewFilter = 'pending_review' | 'published' | 'rejected';
+export type JobReviewFilter = 'pending_review' | 'published' | 'rejected' | 'closed';
 
 export interface AdminJobSummary {
   id: string;
@@ -71,6 +71,16 @@ export interface AdminDashboardStats {
   totalApplications: number;
   totalEmployers: number;
   totalCandidates: number;
+  revenueToday?: number;
+  revenueMonth?: number;
+  paidCountMonth?: number;
+  activeSubscriptions?: number;
+  interviewsToday?: number;
+  interviewsWeek?: number;
+  interviewsCompletedWeek?: number;
+  closedJobs?: number;
+  applicationsLast7Days?: AdminTrendPoint[];
+  revenueLast7Days?: AdminTrendPoint[];
   updatedAt: string;
 }
 
@@ -117,5 +127,104 @@ export interface AdminStatistics {
   employerUsersTrend: AdminTrendPoint[];
   applicationsLast7Days: AdminTrendPoint[];
   jobsLast7Days: AdminTrendPoint[];
+  interviewSessions?: number;
+  interviewCompleted?: number;
+  interviewInProgress?: number;
+  aiAnswersEvaluated?: number;
+  aiRecommendations?: number;
+  aiRankingJobs?: number;
+  averageInterviewScore?: number;
+  interviewsByStatus?: AdminStatItem[];
+  interviewsTrend?: AdminTrendPoint[];
+  updatedAt: string;
+}
+
+export interface AdminPlan {
+  id: string;
+  name: string;
+  targetRole: string;
+  description?: string;
+  price: number;
+  currency: string;
+  durationDays: number;
+  featuresJson?: string;
+  status: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminSubscription {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName?: string;
+  planId: string;
+  planName: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
+  cancelledAt?: string;
+  cancelledReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminPayment {
+  id: string;
+  subscriptionId?: string;
+  userId: string;
+  userEmail: string;
+  amount: number;
+  currency: string;
+  paymentMethod?: string;
+  gateway?: string;
+  status: string;
+  transactionId?: string;
+  failureReason?: string;
+  paidAt?: string;
+  createdAt: string;
+}
+
+export interface AdminRevenueSummary {
+  totalPaid: number;
+  totalPending: number;
+  totalRefunded: number;
+  paidCount: number;
+  pendingCount: number;
+  failedCount: number;
+  activeSubscriptions: number;
+  activePlans: number;
+  updatedAt: string;
+}
+
+export interface AdminAuditLog {
+  id: string;
+  actorUserId?: string;
+  actorEmail?: string;
+  action: string;
+  targetType: string;
+  targetId?: string;
+  oldValueJson?: string;
+  newValueJson?: string;
+  ipAddress?: string;
+  createdAt: string;
+}
+
+export interface AdminCategory {
+  id: string;
+  name: string;
+  slug: string;
+  parentId?: string;
+  description?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminSetting {
+  key: string;
+  value: string;
+  description?: string;
   updatedAt: string;
 }

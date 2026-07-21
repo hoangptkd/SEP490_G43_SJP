@@ -41,4 +41,17 @@ public class AdminJobController {
     ) {
         return ResponseEntity.ok(adminService.rejectJob(id, request));
     }
+
+    @PostMapping("/{id}/close")
+    public ResponseEntity<AdminJobDetailResponse> closeJob(
+            @PathVariable String id,
+            @RequestBody(required = false) CompanyReviewRequest request
+    ) {
+        return ResponseEntity.ok(adminService.closeJob(id, request));
+    }
+
+    @PostMapping("/{id}/reopen")
+    public ResponseEntity<AdminJobDetailResponse> reopenJob(@PathVariable String id) {
+        return ResponseEntity.ok(adminService.reopenJob(id));
+    }
 }
