@@ -31,10 +31,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.sjp.recruitment.model.dto.request.CompanyIndustryRequest;
+import com.sjp.recruitment.model.dto.response.CompanyIndustryResponse;
+import com.sjp.recruitment.model.entity.CompanyIndustry;
+import com.sjp.recruitment.model.entity.Category;
+import com.sjp.recruitment.repository.CompanyIndustryRepository;
+import com.sjp.recruitment.repository.CategoryRepository;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +53,8 @@ public class EmployerService {
     private final EmployerRepository employerRepository;
     private final CompanyRepository companyRepository;
     private final CompanyLocationRepository companyLocationRepository;
+    private final CompanyIndustryRepository companyIndustryRepository;
+    private final CategoryRepository categoryRepository;
     private final CompanyDocumentRepository companyDocumentRepository;
     private final JobRepository jobRepository;
     private final JobService jobService;
@@ -120,9 +131,57 @@ public class EmployerService {
         }
 
         company.setName(newName);
-        company.setDescription(request.description());
         company.setWebsite(request.website());
-        company.setIndustry(request.industry());
+        
+        if (request.industries() != null) {
+            List<CompanyIndustry> existingInds = companyIndustryRepository.findByCompanyId(company.getId());
+            Map<UUID, CompanyIndustry> existingMap = existingInds.stream()
+                    .collect(Collectors.toMap(ci -> ci.getCategory().getId(), ci -> ci, (ci1, ci2) -> ci1));
+            Set<UUID> reqCatIds = request.industries().stream()
+                    .map(CompanyIndustryRequest::categoryId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            List<CompanyIndustry> toDelete = existingInds.stream()
+                    .filter(ci -> !reqCatIds.contains(ci.getCategory().getId()))
+                    .toList();
+            if (!toDelete.isEmpty()) {
+                companyIndustryRepository.deleteAll(toDelete);
+            }
+
+            String primaryIndustryName = null;
+            for (CompanyIndustryRequest item : request.industries()) {
+                if (item.categoryId() == null) continue;
+                CompanyIndustry ci = existingMap.get(item.categoryId());
+                if (ci != null) {
+                    ci.setPrimary(item.primary());
+                    companyIndustryRepository.save(ci);
+                    if (item.primary() && ci.getCategory() != null) {
+                        primaryIndustryName = ci.getCategory().getName();
+                    }
+                } else {
+                    Optional<Category> catOpt = categoryRepository.findById(item.categoryId());
+                    if (catOpt.isPresent()) {
+                        Category cat = catOpt.get();
+                        CompanyIndustry newCi = new CompanyIndustry();
+                        newCi.setCompany(company);
+                        newCi.setCategory(cat);
+                        newCi.setPrimary(item.primary());
+                        companyIndustryRepository.save(newCi);
+                        if (item.primary()) {
+                            primaryIndustryName = cat.getName();
+                        }
+                    }
+                }
+            }
+            if (primaryIndustryName != null) {
+                company.setIndustry(primaryIndustryName);
+            } else if (request.industry() != null) {
+                company.setIndustry(request.industry());
+            }
+        } else {
+            company.setIndustry(request.industry());
+        }
         
         if (request.location() != null && !request.location().isBlank()) {
             List<CompanyLocation> locs = companyLocationRepository.findByCompanyId(company.getId());
@@ -291,6 +350,11 @@ public class EmployerService {
                                 .thenComparing(CompanyLocation::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                         .map(dtoMapper::toCompanyLocationResponse)
                         .toList();
+        List<CompanyIndustryResponse> indResponses = companyIndustryRepository
+                .findByCompanyIdOrderByPrimaryDescCreatedAtDesc(company.getId())
+                .stream()
+                .map(dtoMapper::toCompanyIndustryResponse)
+                .toList();
         return new CompanyProfileResponse(
                 String.valueOf(company.getId()),
                 company.getName(),
@@ -304,7 +368,8 @@ public class EmployerService {
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),
-                locResponses
+                locResponses,
+                indResponses
         );
     }
 

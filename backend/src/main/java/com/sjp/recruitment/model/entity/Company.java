@@ -43,6 +43,9 @@ public class Company {
     @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CompanyLocation> locations = new ArrayList<>();
 
+    @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CompanyIndustry> companyIndustries = new ArrayList<>();
+
     @Column(name = "company_size")
     private Integer companySize;
 
