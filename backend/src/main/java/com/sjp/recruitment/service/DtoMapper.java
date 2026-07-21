@@ -103,6 +103,20 @@ public class DtoMapper {
         );
     }
 
+    public CompanyIndustryResponse toCompanyIndustryResponse(CompanyIndustry companyIndustry) {
+        if (companyIndustry == null || companyIndustry.getCategory() == null) {
+            return null;
+        }
+        Category cat = companyIndustry.getCategory();
+        return new CompanyIndustryResponse(
+                companyIndustry.getId(),
+                cat.getId(),
+                cat.getName(),
+                cat.getSlug(),
+                companyIndustry.isPrimary()
+        );
+    }
+
     public CompanyDocumentResponse toCompanyDocumentResponse(CompanyDocument doc) {
         if (doc == null) {
             return null;

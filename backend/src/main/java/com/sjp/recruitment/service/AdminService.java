@@ -22,7 +22,9 @@ import com.sjp.recruitment.model.entity.Company;
 import com.sjp.recruitment.model.entity.CompanyDocument;
 import com.sjp.recruitment.model.entity.Employer;
 import com.sjp.recruitment.model.entity.User;
+import com.sjp.recruitment.model.dto.response.CompanyIndustryResponse;
 import com.sjp.recruitment.repository.CompanyDocumentRepository;
+import com.sjp.recruitment.repository.CompanyIndustryRepository;
 import com.sjp.recruitment.repository.CompanyLocationRepository;
 import com.sjp.recruitment.repository.CompanyRepository;
 import com.sjp.recruitment.repository.EmployerRepository;
@@ -55,6 +57,7 @@ public class AdminService {
     private final CompanyRepository companyRepository;
     private final CompanyDocumentRepository companyDocumentRepository;
     private final CompanyLocationRepository companyLocationRepository;
+    private final CompanyIndustryRepository companyIndustryRepository;
     private final EmployerRepository employerRepository;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final DtoMapper dtoMapper;
@@ -774,6 +777,12 @@ public class AdminService {
                 .map(dtoMapper::toCompanyLocationResponse)
                 .toList();
 
+        List<CompanyIndustryResponse> industries = companyIndustryRepository
+                .findByCompanyIdOrderByPrimaryDescCreatedAtDesc(company.getId())
+                .stream()
+                .map(dtoMapper::toCompanyIndustryResponse)
+                .toList();
+
         CompanyProfileResponse profile = new CompanyProfileResponse(
                 String.valueOf(company.getId()),
                 company.getName(),
@@ -787,7 +796,8 @@ public class AdminService {
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),
-                locations
+                locations,
+                industries
         );
 
         List<CompanyDocumentResponse> documents = companyDocumentRepository

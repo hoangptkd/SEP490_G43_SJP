@@ -170,7 +170,35 @@ export default function AdminCompanyDetailPage() {
           </div>
 
           <div className="admin-company-info-grid">
-            <div><span>Ngành nghề</span><strong>{detail.company.industry || '—'}</strong></div>
+            <div>
+              <span>Ngành nghề hoạt động</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                {detail.company.industries && detail.company.industries.length > 0 ? (
+                  detail.company.industries.map((ind) => (
+                    <span
+                      key={ind.categoryId || ind.categoryName}
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: '16px',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        background: ind.primary ? '#eff6ff' : '#f1f5f9',
+                        color: ind.primary ? '#1d4ed8' : '#475569',
+                        border: ind.primary ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {ind.categoryName || detail.company.industry}
+                      {ind.primary && <span style={{ fontSize: '0.75rem', color: '#2563eb' }}>★ Chính</span>}
+                    </span>
+                  ))
+                ) : (
+                  <strong>{detail.company.industry || '—'}</strong>
+                )}
+              </div>
+            </div>
             <div><span>Mã số thuế</span><strong>{detail.company.taxCode || '—'}</strong></div>
             <div><span>Quy mô</span><strong>{detail.company.companySize ? `${detail.company.companySize} nhân sự` : '—'}</strong></div>
             <div><span>Website</span><strong>{detail.company.website || '—'}</strong></div>

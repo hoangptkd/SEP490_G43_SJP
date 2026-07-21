@@ -3,6 +3,20 @@ import { employerService } from '../../services/employerService';
 import type { Company, CompanyLocation, Job } from '../../types/job';
 import { Link } from 'react-router-dom';
 
+const PRESET_WORKING_TIMES = [
+  'Thứ 2 - Thứ 6 (08:00 - 17:30)',
+  'Thứ 2 - Thứ 6 (08:30 - 18:00)',
+  'Thứ 2 - Thứ 6 (09:00 - 18:00)',
+  'Thứ 2 - Thứ 6 & Sáng Thứ 7 (08:00 - 17:30)',
+  'Thứ 2 - Thứ 6 & Sáng Thứ 7 (08:30 - 18:00)',
+  'Thứ 2 - Thứ 7 (08:00 - 17:00)',
+  'Thứ 2 - Thứ 7 (08:00 - 17:30)',
+  'Thứ 2 - Thứ 7 (08:30 - 18:00)',
+  'Thời gian linh hoạt (Flexible working hours)',
+  'Làm việc theo ca (Shift work)',
+  'Thỏa thuận / Theo dự án',
+];
+
 function EmployerJobsPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -117,7 +131,7 @@ function EmployerJobsPage() {
       experienceLevel: job.experienceLevel || 'fresher',
       deadline: deadlineStr,
       location: job.location || '',
-      companyLocationId: job.companyLocationId || '',
+      companyLocationId: job.companyLocationId || (job.companyLocation?.id || ''),
       status: job.status?.toLowerCase() === 'rejected' ? 'pending_review' : (job.status?.toLowerCase() || 'draft'),
     });
     submitTargetRef.current = job.status?.toLowerCase() === 'rejected' ? 'pending_review' : (job.status?.toLowerCase() || 'draft');
@@ -511,35 +525,48 @@ function EmployerJobsPage() {
               </div>
             )}
 
-            <label>
-              Địa điểm / Chi nhánh làm việc
-              {locations.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', gridColumn: 'span 2' }}>
+              <label>
+                Chọn chi nhánh (Branch)
                 <select
-                  value={formData.companyLocationId}
+                  value={formData.companyLocationId || ''}
                   onChange={(e) => {
                     const loc = locations.find((l) => l.id === e.target.value);
                     setFormData({
                       ...formData,
                       companyLocationId: e.target.value,
-                      location: loc ? loc.branchName : formData.location,
+                      location: loc ? `${loc.branchName}${loc.address ? ` (${loc.address})` : ''}` : formData.location,
                     });
                   }}
+                  style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', fontSize: '0.95rem' }}
                 >
-                  <option value="">-- Chọn chi nhánh --</option>
+                  <option value="">-- Chọn từ chi nhánh công ty --</option>
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
-                      {loc.branchName} ({loc.city || 'Chưa rõ thành phố'}) {loc.headquarter ? '★ HQ' : ''}
+                      {loc.branchName} {loc.city ? `(${loc.city})` : ''} {loc.headquarter ? '(Trụ sở chính)' : ''}
                     </option>
                   ))}
                 </select>
-              ) : (
+                {locations.length === 0 && (
+                  <span style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                    Chưa có chi nhánh nào. <a href="/employer/locations" target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 600 }}>+ Quản lý/Thêm chi nhánh</a>
+                  </span>
+                )}
+              </label>
+
+              <label>
+                Địa điểm hiển thị trên tin tuyển dụng *
                 <input
-                  value={formData.location}
+                  required
+                  value={formData.location || ''}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="Nhập địa điểm làm việc"
+                  placeholder="Ví dụ: TP. HCM, Hà Nội hoặc địa chỉ cụ thể"
                 />
-              )}
-            </label>
+                <span style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                  Tự động điền theo chi nhánh được chọn (hoặc tự chỉnh sửa)
+                </span>
+              </label>
+            </div>
 
             <label>
               Hạn nộp hồ sơ (Deadline) *
@@ -553,11 +580,33 @@ function EmployerJobsPage() {
 
             <label className="wide">
               Thời gian làm việc
-              <input
-                value={formData.workingTime}
-                onChange={(e) => setFormData({ ...formData, workingTime: e.target.value })}
-                placeholder="Ví dụ: Thứ 2 - Thứ 6 (08:00 - 17:30)"
-              />
+              <select
+                value={PRESET_WORKING_TIMES.includes(formData.workingTime) ? formData.workingTime : 'CUSTOM'}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'CUSTOM') {
+                    setFormData({ ...formData, workingTime: '' });
+                  } else {
+                    setFormData({ ...formData, workingTime: val });
+                  }
+                }}
+                style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', fontSize: '0.95rem' }}
+              >
+                {PRESET_WORKING_TIMES.map((time) => (
+                  <option key={time} value={time}>
+                    {time}
+                  </option>
+                ))}
+                <option value="CUSTOM">-- Khác (Tự nhập thời gian làm việc cụ thể) --</option>
+              </select>
+              {(!PRESET_WORKING_TIMES.includes(formData.workingTime) || formData.workingTime === '') && (
+                <input
+                  style={{ marginTop: '10px' }}
+                  value={formData.workingTime}
+                  onChange={(e) => setFormData({ ...formData, workingTime: e.target.value })}
+                  placeholder="Nhập thời gian làm việc chi tiết (VD: Thứ 2 - Thứ 6 (07:30 - 16:30))"
+                />
+              )}
             </label>
 
             <label className="wide">
