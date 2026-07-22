@@ -2806,6 +2806,45 @@ textarea {
   margin: 4px 0 0;
 }
 
+.admin-company-doc.is-pending {
+  border-color: rgb(217 119 6 / 0.28);
+  background: linear-gradient(180deg, #fffaf3 0%, var(--surface-lowest) 100%);
+}
+
+.admin-company-section-head {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.admin-company-section-head h3 {
+  margin: 0;
+}
+
+.admin-company-doc-reject {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.admin-company-doc-reject label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.admin-company-doc-reject textarea {
+  background: #fff;
+  border: 1.5px solid var(--outline-variant);
+  border-radius: var(--radius-control);
+  font: inherit;
+  min-height: 88px;
+  padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
 .admin-company-doc-actions,
 .admin-company-actions {
   display: flex;

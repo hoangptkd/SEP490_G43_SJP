@@ -8,11 +8,13 @@ function CompanyVerificationPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [replacingId, setReplacingId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
     loadData();
@@ -35,18 +37,23 @@ function CompanyVerificationPage() {
     }
   }
 
+  function validateFile(file: File) {
+    const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Chỉ chấp nhận định dạng file PDF hoặc hình ảnh (JPG, PNG)');
+      return false;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Dung lượng file tối đa là 10MB');
+      return false;
+    }
+    return true;
+  }
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-      if (!validTypes.includes(file.type) && !file.name.endsWith('.pdf')) {
-        setError('Chỉ chấp nhận định dạng file PDF hoặc hình ảnh (JPG, PNG)');
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) { // 10MB
-        setError('Dung lượng file tối đa là 10MB');
-        return;
-      }
+      if (!validateFile(file)) return;
       setSelectedFile(file);
       setError('');
     }
@@ -91,6 +98,24 @@ function CompanyVerificationPage() {
     }
   }
 
+  async function handleReplace(docId: string, file: File) {
+    if (!validateFile(file)) return;
+    setReplacingId(docId);
+    setError('');
+    setSuccess('');
+    try {
+      await employerService.replaceDocument(docId, file);
+      setSuccess('Đã cập nhật tài liệu. Hồ sơ chuyển sang Chờ duyệt để admin kiểm tra lại.');
+      await loadData();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Không thể cập nhật tài liệu. Vui lòng thử lại.');
+    } finally {
+      setReplacingId(null);
+      const input = replaceInputRefs.current[docId];
+      if (input) input.value = '';
+    }
+  }
+
   function getStatusBadge(status?: string) {
     const s = status?.toUpperCase() || 'UNVERIFIED';
     switch (s) {
@@ -121,7 +146,7 @@ function CompanyVerificationPage() {
           bg: '#fef2f2',
           border: '#fecaca',
           dot: '#ef4444',
-          desc: 'Tài liệu không đạt yêu cầu hoặc chưa đủ thông tin. Vui lòng kiểm tra phản hồi từ bộ phận kiểm duyệt và gửi lại hồ sơ hợp lệ.'
+          desc: 'Một hoặc nhiều tài liệu bị từ chối. Vui lòng dùng nút Cập nhật lại trên từng file bị từ chối rồi gửi lại để admin duyệt.'
         };
       default:
         return {
@@ -434,6 +459,41 @@ function CompanyVerificationPage() {
                     >
                       {deletingId === doc.id ? 'Đang xử lý...' : 'Xóa'}
                     </button>
+                  )}
+
+                  {docStatus === 'rejected' && (
+                    <>
+                      <input
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                        style={{ display: 'none' }}
+                        ref={(el) => {
+                          replaceInputRefs.current[doc.id] = el;
+                        }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleReplace(doc.id, file);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => replaceInputRefs.current[doc.id]?.click()}
+                        disabled={replacingId === doc.id}
+                        style={{
+                          background: '#2563eb',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '8px 14px',
+                          borderRadius: '6px',
+                          cursor: replacingId === doc.id ? 'not-allowed' : 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: 600,
+                          boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                        }}
+                      >
+                        {replacingId === doc.id ? 'Đang cập nhật...' : 'Cập nhật lại'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

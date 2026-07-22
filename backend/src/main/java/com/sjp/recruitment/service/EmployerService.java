@@ -436,6 +436,79 @@ public class EmployerService {
     }
 
     @Transactional
+    public CompanyDocumentResponse replaceCompanyDocument(String id, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EMPTY_FILE", "Vui lòng chọn file để tải lên");
+        }
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        if (!employer.isOwner()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ chủ sở hữu công ty mới có quyền cập nhật tài liệu xác thực");
+        }
+
+        UUID docId;
+        try {
+            docId = UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ID", "ID tài liệu không hợp lệ");
+        }
+
+        Company company = employer.getCompany();
+        CompanyDocument doc = companyDocumentRepository.findByIdAndCompanyId(docId, company.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Không tìm thấy tài liệu"));
+
+        if (!"rejected".equalsIgnoreCase(doc.getStatus())) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "CANNOT_REPLACE",
+                    "Chỉ có thể cập nhật lại tài liệu đã bị từ chối"
+            );
+        }
+
+        String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document.pdf";
+        String contentType = file.getContentType() != null ? file.getContentType() : "application/pdf";
+        String fileType = contentType.contains("pdf") ? "pdf" : "image";
+
+        String fileUrl;
+        String publicId = null;
+        try {
+            String resourceType = "pdf".equalsIgnoreCase(fileType) ? "raw" : "image";
+            if (doc.getPublicId() != null && !doc.getPublicId().startsWith("local_")) {
+                try {
+                    String oldType = "pdf".equalsIgnoreCase(doc.getFileType()) ? "raw" : "image";
+                    cloudinary.uploader().destroy(doc.getPublicId(), ObjectUtils.asMap("resource_type", oldType));
+                } catch (Exception ignored) {}
+            }
+            Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                    "folder", "sjp/company_docs",
+                    "resource_type", resourceType
+            ));
+            fileUrl = (String) uploadResult.get("secure_url");
+            publicId = (String) uploadResult.get("public_id");
+        } catch (Exception e) {
+            fileUrl = "pdf".equalsIgnoreCase(fileType)
+                    ? "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+                    : "https://res.cloudinary.com/demo/image/upload/sample.jpg";
+            publicId = "local_" + UUID.randomUUID();
+        }
+
+        doc.setFileName(fileName);
+        doc.setFileUrl(fileUrl);
+        doc.setFileType(fileType);
+        doc.setPublicId(publicId);
+        doc.setStatus("pending");
+        doc.setRejectReason(null);
+        doc.setReviewedAt(null);
+        doc.setReviewedBy(null);
+        doc.setUploadedAt(java.time.LocalDateTime.now());
+        doc = companyDocumentRepository.save(doc);
+
+        forceCompanyAndOwnerPending(company);
+        companyRepository.save(company);
+
+        return dtoMapper.toCompanyDocumentResponse(doc);
+    }
+
+    @Transactional
     public void deleteCompanyDocument(String id) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         if (!employer.isOwner()) {

@@ -41,4 +41,21 @@ public class AdminController {
     ) {
         return ResponseEntity.ok(adminService.rejectCompany(id, request));
     }
+
+    @PostMapping("/{id}/documents/{documentId}/approve")
+    public ResponseEntity<AdminCompanyDetailResponse> approveCompanyDocument(
+            @PathVariable String id,
+            @PathVariable String documentId
+    ) {
+        return ResponseEntity.ok(adminService.approveCompanyDocument(id, documentId));
+    }
+
+    @PostMapping("/{id}/documents/{documentId}/reject")
+    public ResponseEntity<AdminCompanyDetailResponse> rejectCompanyDocument(
+            @PathVariable String id,
+            @PathVariable String documentId,
+            @RequestBody CompanyReviewRequest request
+    ) {
+        return ResponseEntity.ok(adminService.rejectCompanyDocument(id, documentId, request));
+    }
 }

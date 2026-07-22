@@ -148,9 +148,9 @@ export default function AdminDashboardPage() {
       tone: 'amber' as const,
     },
     {
-      label: 'Tin vi phạm / tạm dừng',
+      label: 'Tin bị báo cáo',
       value: stats.closedJobs ?? 0,
-      to: '/admin/jobs?status=closed&page=1',
+      to: '/admin/jobs?status=reports&page=1',
       tone: 'danger' as const,
     },
     {
@@ -220,10 +220,10 @@ export default function AdminDashboardPage() {
             Hôm nay {formatNumber(stats.interviewsToday)} · hoàn thành {interviewRate}%
           </p>
         </Link>
-        <Link className="admin-dashboard-card dash-card-alert" to="/admin/jobs?status=closed&page=1">
-          <span>Tin vi phạm / tạm dừng</span>
+        <Link className="admin-dashboard-card dash-card-alert" to="/admin/jobs?status=reports&page=1">
+          <span>Tin bị báo cáo</span>
           <strong>{formatNumber(stats.closedJobs)}</strong>
-          <p>Cần theo dõi hoặc mở lại khi đã xử lý</p>
+          <p>Tiếp nhận báo cáo từ ứng viên để kiểm tra</p>
         </Link>
         <Link className="admin-dashboard-card dash-card-sub" to="/admin/billing?tab=subscriptions">
           <span>Đăng ký gói active</span>

@@ -31,7 +31,7 @@ function EmployerJobsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT' | 'AWAITING_COMPANY'>('ALL');
   const [skillsInput, setSkillsInput] = useState('');
   const [reqsInput, setReqsInput] = useState('');
   const [formData, setFormData] = useState({
@@ -132,9 +132,14 @@ function EmployerJobsPage() {
       deadline: deadlineStr,
       location: job.location || '',
       companyLocationId: job.companyLocationId || (job.companyLocation?.id || ''),
-      status: job.status?.toLowerCase() === 'rejected' ? 'pending_review' : (job.status?.toLowerCase() || 'draft'),
+      status: job.status?.toLowerCase() === 'rejected' || job.status?.toLowerCase() === 'awaiting_company'
+        ? 'pending_review'
+        : (job.status?.toLowerCase() || 'draft'),
     });
-    submitTargetRef.current = job.status?.toLowerCase() === 'rejected' ? 'pending_review' : (job.status?.toLowerCase() || 'draft');
+    submitTargetRef.current =
+      job.status?.toLowerCase() === 'rejected' || job.status?.toLowerCase() === 'awaiting_company'
+        ? 'pending_review'
+        : (job.status?.toLowerCase() || 'draft');
     setShowForm(true);
     setMessage('');
     setError('');
@@ -407,19 +412,25 @@ function EmployerJobsPage() {
               Hủy
             </button>
           </div>
-          {editingId && jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected' && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626', padding: '16px 20px', borderRadius: '8px', marginBottom: '24px' }}>
-              <div style={{ fontWeight: 600, color: '#991b1b', fontSize: '0.95rem', marginBottom: '8px' }}>
-                Phản hồi từ Bộ phận kiểm duyệt
+          {editingId && (() => {
+            const editingJob = jobs.find((j) => j.id === editingId);
+            const st = editingJob?.status?.toLowerCase();
+            if (st !== 'rejected' && st !== 'awaiting_company') return null;
+            const isReportFix = st === 'awaiting_company';
+            return (
+            <div style={{ background: isReportFix ? '#fff7ed' : '#fef2f2', border: `1px solid ${isReportFix ? '#fed7aa' : '#fecaca'}`, borderLeft: `4px solid ${isReportFix ? '#ea580c' : '#dc2626'}`, padding: '16px 20px', borderRadius: '8px', marginBottom: '24px' }}>
+              <div style={{ fontWeight: 600, color: isReportFix ? '#9a3412' : '#991b1b', fontSize: '0.95rem', marginBottom: '8px' }}>
+                {isReportFix ? 'Yêu cầu chỉnh sửa từ Admin (tin bị báo cáo)' : 'Phản hồi từ Bộ phận kiểm duyệt'}
               </div>
-              <div style={{ background: '#ffffff', padding: '12px 16px', borderRadius: '6px', border: '1px solid #fee2e2', color: '#7f1d1d', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '10px' }}>
-                {jobs.find((j) => j.id === editingId)?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
+              <div style={{ background: '#ffffff', padding: '12px 16px', borderRadius: '6px', border: `1px solid ${isReportFix ? '#ffedd5' : '#fee2e2'}`, color: isReportFix ? '#7c2d12' : '#7f1d1d', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '10px' }}>
+                {editingJob?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
               </div>
-              <div style={{ fontSize: '0.85rem', color: '#991b1b', opacity: 0.9, lineHeight: 1.5 }}>
-                Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để tiếp tục quy trình kiểm duyệt.
+              <div style={{ fontSize: '0.85rem', color: isReportFix ? '#9a3412' : '#991b1b', opacity: 0.9, lineHeight: 1.5 }}>
+                Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để gửi lại cho Admin duyệt.
               </div>
             </div>
-          )}
+            );
+          })()}
 
           <form onSubmit={handleSubmit} className="form-grid two">
             <label className="wide">
@@ -677,7 +688,13 @@ function EmployerJobsPage() {
                   type="submit"
                   disabled={saving}
                   onClick={() => {
-                    submitTargetRef.current = formData.status;
+                    const editingStatus = jobs.find((j) => j.id === editingId)?.status?.toLowerCase();
+                    if (editingStatus === 'awaiting_company' || editingStatus === 'rejected') {
+                      submitTargetRef.current = 'pending_review';
+                      setFormData((prev) => ({ ...prev, status: 'pending_review' }));
+                    } else {
+                      submitTargetRef.current = formData.status;
+                    }
                   }}
                   style={{
                     background: '#2563eb',
@@ -692,7 +709,12 @@ function EmployerJobsPage() {
                     transition: 'background-color 0.2s'
                   }}
                 >
-                  {saving ? 'Đang xử lý...' : 'Lưu lại'}
+                  {saving
+                    ? 'Đang xử lý...'
+                    : (jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'awaiting_company'
+                      || jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected')
+                      ? 'Lưu & Nộp kiểm duyệt'
+                      : 'Lưu lại'}
                 </button>
               ) : (
                 <>
@@ -821,6 +843,7 @@ function EmployerJobsPage() {
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[
               { key: 'ALL', label: 'Tất cả', count: jobs.length },
+              { key: 'AWAITING_COMPANY', label: 'Tin vi phạm cần sửa', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'AWAITING_COMPANY').length },
               { key: 'PENDING_REVIEW', label: 'Chờ duyệt', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'PENDING_REVIEW').length },
               { key: 'PUBLISHED', label: 'Đang tuyển', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'PUBLISHED' || (j.status?.toUpperCase() || '') === 'ACTIVE').length },
               { key: 'CLOSED', label: 'Đã đóng', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'CLOSED').length },
@@ -870,6 +893,7 @@ function EmployerJobsPage() {
             if (statusFilter !== 'ALL') {
               if (statusFilter === 'PUBLISHED' && st !== 'PUBLISHED' && st !== 'ACTIVE') return false;
               if (statusFilter === 'PENDING_REVIEW' && st !== 'PENDING_REVIEW') return false;
+              if (statusFilter === 'AWAITING_COMPANY' && st !== 'AWAITING_COMPANY') return false;
               if (statusFilter === 'CLOSED' && st !== 'CLOSED') return false;
               if (statusFilter === 'EXPIRED' && st !== 'EXPIRED') return false;
               if (statusFilter === 'DRAFT' && st !== 'DRAFT' && st !== 'REJECTED') return false;
@@ -908,11 +932,11 @@ function EmployerJobsPage() {
                 <div style={{ display: 'grid', gap: '16px' }}>
                   {filteredJobs.map((job) => {
                     const st = job.status?.toLowerCase() || 'draft';
-                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
-                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : '#64748b';
-                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : '#e2e8f0';
-                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : '#64748b';
-                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : 'Đã đóng';
+                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
+                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : '#64748b';
+                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : '#e2e8f0';
+                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : '#64748b';
+                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : 'Đã đóng';
 
                     return (
                       <div key={job.id} style={{
@@ -1006,6 +1030,22 @@ function EmployerJobsPage() {
                         </div>
                       </div>
                     )}
+
+                    {st === 'awaiting_company' && (
+                      <div style={{ marginTop: '16px', background: '#fff7ed', border: '1px solid #fed7aa', borderLeft: '3px solid #ea580c', padding: '14px 16px', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <span style={{ fontWeight: 600, color: '#9a3412', fontSize: '0.875rem' }}>
+                            Tin bị báo cáo — Admin yêu cầu chỉnh sửa
+                          </span>
+                        </div>
+                        <div style={{ background: '#ffffff', padding: '10px 12px', borderRadius: '4px', border: '1px solid #ffedd5', color: '#7c2d12', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '6px' }}>
+                          {job.rejectionReason || 'Vui lòng kiểm tra nội dung tin tuyển dụng theo phản hồi từ Admin.'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#9a3412', opacity: 0.9 }}>
+                          Chỉnh sửa tin rồi nhấn "Cập nhật & Gửi lại duyệt" để Admin kiểm tra lại.
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1047,11 +1087,11 @@ function EmployerJobsPage() {
                         {hasApprovedJob ? '🚀 Đăng tin ngay (Miễn kiểm duyệt)' : 'Nộp kiểm duyệt'}
                       </button>
                     )}
-                    {isVerified && st === 'rejected' && (
+                    {isVerified && (st === 'rejected' || st === 'awaiting_company') && (
                       <button
                         onClick={() => handleOpenEdit(job)}
                         style={{
-                          background: '#dc2626',
+                          background: st === 'awaiting_company' ? '#ea580c' : '#dc2626',
                           border: 'none',
                           color: '#fff',
                           padding: '8px 16px',
@@ -1059,14 +1099,14 @@ function EmployerJobsPage() {
                           fontWeight: 600,
                           fontSize: '0.875rem',
                           cursor: 'pointer',
-                          boxShadow: '0 2px 4px rgba(220, 38, 38, 0.15)',
+                          boxShadow: st === 'awaiting_company' ? '0 2px 4px rgba(234, 88, 12, 0.15)' : '0 2px 4px rgba(220, 38, 38, 0.15)',
                           transition: 'background-color 0.2s'
                         }}
                       >
-                        Cập nhật & Nộp lại
+                        {st === 'awaiting_company' ? 'Cập nhật & Gửi lại duyệt' : 'Cập nhật & Nộp lại'}
                       </button>
                     )}
-                    {isVerified && st !== 'rejected' && (
+                    {isVerified && st !== 'rejected' && st !== 'awaiting_company' && (
                       <button
                         onClick={() => handleOpenEdit(job)}
                         style={{

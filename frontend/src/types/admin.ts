@@ -34,7 +34,7 @@ export interface AdminCompanyDetail {
 
 export type CompanyReviewFilter = 'pending' | 'verified' | 'rejected';
 
-export type JobReviewFilter = 'pending_review' | 'published' | 'rejected' | 'closed';
+export type JobReviewFilter = 'pending_review' | 'published' | 'rejected' | 'closed' | 'removed' | 'reports';
 
 export interface AdminJobSummary {
   id: string;
@@ -48,6 +48,26 @@ export interface AdminJobSummary {
   salaryMax?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AdminJobReport {
+  id: string;
+  jobId: string;
+  jobTitle: string;
+  companyName: string;
+  jobStatus: string;
+  reporterUserId: string;
+  reporterEmail: string;
+  reporterName?: string;
+  reporterPhone?: string;
+  reporterDateOfBirth?: string;
+  reporterAge?: number;
+  reason: string;
+  description?: string;
+  status: string;
+  adminNote?: string;
+  createdAt: string;
+  resolvedAt?: string;
 }
 
 export interface AdminJobDetail {

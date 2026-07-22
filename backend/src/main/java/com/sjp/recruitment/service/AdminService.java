@@ -654,6 +654,28 @@ public class AdminService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "ALREADY_APPROVED", "Hồ sơ công ty đã được duyệt trước đó");
         }
 
+        List<CompanyDocument> documents = companyDocumentRepository.findByCompanyIdOrderByUploadedAtDesc(company.getId());
+        long pendingDocs = documents.stream()
+                .filter(doc -> "pending".equalsIgnoreCase(doc.getStatus()))
+                .count();
+        long rejectedDocs = documents.stream()
+                .filter(doc -> "rejected".equalsIgnoreCase(doc.getStatus()))
+                .count();
+        if (pendingDocs > 0) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "DOCUMENTS_PENDING",
+                    "Hãy phê duyệt hoặc từ chối từng tài liệu pháp lý trước khi duyệt hồ sơ công ty"
+            );
+        }
+        if (rejectedDocs > 0) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "DOCUMENTS_INCOMPLETE",
+                    "Còn tài liệu bị từ chối. Chờ nhà tuyển dụng cập nhật lại hoặc từ chối toàn bộ hồ sơ công ty"
+            );
+        }
+
         LocalDateTime now = LocalDateTime.now();
         company.setVerificationStatus("verified");
         company.setStatus("active");
@@ -686,6 +708,137 @@ public class AdminService {
         adminOpsService.writeAudit(admin.getId().toString(), "COMPANY_REJECT", "company", id, "pending", "rejected");
 
         return toDetailResponse(company);
+    }
+
+    @Transactional
+    public AdminCompanyDetailResponse approveCompanyDocument(String companyId, String documentId) {
+        User admin = requireAdminUser();
+        Company company = findCompany(companyId);
+        CompanyDocument document = findCompanyDocument(company.getId(), documentId);
+
+        if (!"pending".equalsIgnoreCase(document.getStatus())) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "INVALID_STATUS",
+                    "Chỉ có thể phê duyệt tài liệu đang chờ duyệt"
+            );
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        document.setStatus("approved");
+        document.setRejectReason(null);
+        document.setReviewedAt(now);
+        document.setReviewedBy(admin);
+        companyDocumentRepository.save(document);
+
+        adminOpsService.writeAudit(
+                admin.getId().toString(),
+                "COMPANY_DOCUMENT_APPROVE",
+                "company_document",
+                documentId,
+                "pending",
+                "approved"
+        );
+        syncCompanyVerificationFromDocuments(company, admin);
+
+        return toDetailResponse(company);
+    }
+
+    @Transactional
+    public AdminCompanyDetailResponse rejectCompanyDocument(String companyId, String documentId, CompanyReviewRequest request) {
+        User admin = requireAdminUser();
+        if (request == null || !StringUtils.hasText(request.reason())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "REASON_REQUIRED", "Vui lòng nhập lý do từ chối tài liệu");
+        }
+
+        Company company = findCompany(companyId);
+        CompanyDocument document = findCompanyDocument(company.getId(), documentId);
+        String reason = request.reason().trim();
+        LocalDateTime now = LocalDateTime.now();
+
+        document.setStatus("rejected");
+        document.setRejectReason(reason);
+        document.setReviewedAt(now);
+        document.setReviewedBy(admin);
+        companyDocumentRepository.save(document);
+
+        adminOpsService.writeAudit(
+                admin.getId().toString(),
+                "COMPANY_DOCUMENT_REJECT",
+                "company_document",
+                documentId,
+                "pending",
+                "rejected"
+        );
+        syncCompanyVerificationFromDocuments(company, admin);
+
+        return toDetailResponse(company);
+    }
+
+    private CompanyDocument findCompanyDocument(UUID companyId, String documentId) {
+        UUID docId;
+        try {
+            docId = UUID.fromString(documentId);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ID", "ID tài liệu không hợp lệ");
+        }
+        return companyDocumentRepository.findByIdAndCompanyId(docId, companyId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Không tìm thấy tài liệu pháp lý"));
+    }
+
+    private void syncCompanyVerificationFromDocuments(Company company, User admin) {
+        List<CompanyDocument> documents = companyDocumentRepository.findByCompanyIdOrderByUploadedAtDesc(company.getId());
+        if (documents.isEmpty()) {
+            return;
+        }
+
+        long pending = documents.stream().filter(doc -> "pending".equalsIgnoreCase(doc.getStatus())).count();
+        long approved = documents.stream().filter(doc -> "approved".equalsIgnoreCase(doc.getStatus())).count();
+        long rejected = documents.stream().filter(doc -> "rejected".equalsIgnoreCase(doc.getStatus())).count();
+
+        String previous = company.getVerificationStatus();
+
+        // Có ít nhất 1 tài liệu bị từ chối → hồ sơ rejected, employer cập nhật rồi gửi lại
+        if (rejected > 0) {
+            company.setVerificationStatus("rejected");
+            company.setStatus("rejected");
+            companyRepository.save(company);
+            updateEmployerVerification(company.getId(), "rejected");
+            adminOpsService.writeAudit(
+                    admin.getId().toString(),
+                    "COMPANY_REJECT",
+                    "company",
+                    company.getId().toString(),
+                    previous,
+                    "rejected"
+            );
+            return;
+        }
+
+        if (pending > 0) {
+            company.setVerificationStatus("pending");
+            if (!"active".equalsIgnoreCase(company.getStatus())) {
+                company.setStatus("pending");
+            }
+            companyRepository.save(company);
+            updateEmployerVerification(company.getId(), "pending");
+            return;
+        }
+
+        if (approved > 0) {
+            company.setVerificationStatus("verified");
+            company.setStatus("active");
+            companyRepository.save(company);
+            updateEmployerVerification(company.getId(), "verified");
+            adminOpsService.writeAudit(
+                    admin.getId().toString(),
+                    "COMPANY_APPROVE",
+                    "company",
+                    company.getId().toString(),
+                    previous,
+                    "verified"
+            );
+        }
     }
 
     private List<Company> resolveCompanies(String status) {
@@ -895,6 +1048,19 @@ public class AdminService {
                         .addValue("adminId", admin.getId().toString())
         );
         adminOpsService.writeAudit(admin.getId().toString(), "JOB_APPROVE", "job", id, "pending_review", "published");
+        namedParameterJdbcTemplate.update("""
+                UPDATE job_reports
+                SET status = 'dismissed',
+                    admin_note = COALESCE(admin_note, 'Đã duyệt lại sau khi công ty chỉnh sửa'),
+                    resolved_by = CAST(:adminId AS uuid),
+                    resolved_at = now()
+                WHERE job_id = CAST(:jobId AS uuid)
+                  AND status IN ('resubmitted', 'awaiting_company', 'pending')
+                """,
+                new MapSqlParameterSource()
+                        .addValue("jobId", id)
+                        .addValue("adminId", admin.getId().toString())
+        );
         return findJobDetail(id);
     }
 
@@ -986,7 +1152,9 @@ public class AdminService {
             case "pending", "pending_review" -> "pending_review";
             case "published", "active", "approved" -> "published";
             case "rejected" -> "rejected";
-            case "closed", "hidden", "violations", "violating" -> "closed";
+            case "closed", "hidden", "suspended" -> "closed";
+            case "removed", "deleted" -> "removed";
+            case "awaiting_company", "awaiting" -> "awaiting_company";
             default -> status.trim().toLowerCase(Locale.ROOT);
         };
     }
@@ -999,7 +1167,9 @@ public class AdminService {
             case "published", "active" -> "published";
             case "pending_review", "pending" -> "pending_review";
             case "rejected" -> "rejected";
-            case "closed", "hidden", "violations", "violating" -> "closed";
+            case "closed", "hidden", "suspended" -> "closed";
+            case "removed", "deleted" -> "removed";
+            case "awaiting_company", "awaiting" -> "awaiting_company";
             case "expired" -> "expired";
             case "draft" -> "draft";
             default -> status.trim().toLowerCase(Locale.ROOT);
@@ -1162,6 +1332,7 @@ public class AdminService {
             case "pending_review" -> "PENDING_REVIEW";
             case "rejected" -> "REJECTED";
             case "closed" -> "CLOSED";
+            case "removed" -> "REMOVED";
             case "expired" -> "EXPIRED";
             default -> status.toUpperCase(Locale.ROOT);
         };

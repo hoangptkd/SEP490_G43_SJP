@@ -5,6 +5,8 @@ export interface CandidateProfile {
   userId: string;
   fullName?: string;
   phone?: string;
+  dateOfBirth?: string;
+  age?: number;
   location?: string;
   bio?: string;
   skills: string[];

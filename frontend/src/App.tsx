@@ -1235,6 +1235,11 @@ function JobDetailPage() {
   const [cvId, setCvId] = useState<string | undefined>();
   const [message, setMessage] = useState('');
   const [applying, setApplying] = useState(false);
+  const [showReportForm, setShowReportForm] = useState(false);
+  const [reportReason, setReportReason] = useState('misleading');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reporting, setReporting] = useState(false);
+  const [reporterProfile, setReporterProfile] = useState<CandidateProfile | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -1244,6 +1249,7 @@ function JobDetailPage() {
         setCvs(items);
         setCvId(items.find((item) => item.defaultCv)?.id || items[0]?.id);
       }).catch(() => setCvs([]));
+      candidateService.getProfile().then(setReporterProfile).catch(() => setReporterProfile(null));
     }
   }, [id]);
 
@@ -1267,6 +1273,27 @@ function JobDetailPage() {
       setMessage(readError(err));
     } finally {
       setApplying(false);
+    }
+  }
+
+  async function submitReport(event: FormEvent) {
+    event.preventDefault();
+    if (!job) return;
+    if (!getToken()) {
+      setMessage('Vui lòng đăng nhập để gửi báo cáo.');
+      return;
+    }
+    setReporting(true);
+    setMessage('');
+    try {
+      await candidateService.reportJob(job.id, reportReason, reportDescription.trim());
+      setMessage('✅ Đã gửi báo cáo. Admin sẽ kiểm tra tin tuyển dụng này.');
+      setShowReportForm(false);
+      setReportDescription('');
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setReporting(false);
     }
   }
 
@@ -1405,6 +1432,66 @@ function JobDetailPage() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              <button
+                type="button"
+                className="outline"
+                onClick={() => setShowReportForm((value) => !value)}
+                style={{ width: '100%', marginTop: 4 }}
+              >
+                Báo cáo tin tuyển dụng
+              </button>
+
+              {showReportForm && (
+                <form onSubmit={submitReport} style={{ display: 'grid', gap: 10, marginTop: 8 }}>
+                  <div style={{
+                    background: 'var(--surface-container, #f8fafc)',
+                    border: '1px solid var(--outline-variant, #e2e8f0)',
+                    borderRadius: 8,
+                    padding: 12,
+                    fontSize: '0.85rem',
+                    lineHeight: 1.5,
+                  }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Thông tin người báo cáo</div>
+                    <div>Họ tên: <strong>{reporterProfile?.fullName || '—'}</strong></div>
+                    <div>Tuổi: <strong>{reporterProfile?.age != null ? reporterProfile.age : '—'}</strong></div>
+                    <div>SĐT: <strong>{reporterProfile?.phone || '—'}</strong></div>
+                    {(!reporterProfile?.fullName || !reporterProfile?.phone) && (
+                      <p className="muted" style={{ margin: '8px 0 0', fontSize: '0.8rem' }}>
+                        Vui lòng cập nhật họ tên và số điện thoại trong hồ sơ trước khi gửi báo cáo.
+                      </p>
+                    )}
+                  </div>
+                  <label className="filter-label">
+                    Lý do báo cáo
+                    <select value={reportReason} onChange={(e) => setReportReason(e.target.value)} required>
+                      <option value="misleading">Thông tin sai lệch</option>
+                      <option value="scam">Lừa đảo / nghi ngờ</option>
+                      <option value="spam">Spam / tin rác</option>
+                      <option value="offensive">Nội dung phản cảm</option>
+                      <option value="discrimination">Phân biệt đối xử</option>
+                      <option value="other">Khác</option>
+                    </select>
+                  </label>
+                  <label className="filter-label">
+                    Mô tả thêm
+                    <textarea
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value)}
+                      placeholder="Mô tả ngắn vấn đề bạn gặp phải..."
+                      rows={3}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="danger"
+                    disabled={reporting || !reporterProfile?.fullName || !reporterProfile?.phone}
+                    style={{ width: '100%' }}
+                  >
+                    {reporting ? 'Đang gửi...' : 'Gửi báo cáo'}
+                  </button>
+                </form>
+              )}
             </>
           ) : (
             <Link className="button-link" to="/login" style={{ width: '100%', textAlign: 'center' }}>
@@ -1714,6 +1801,14 @@ function ProfilePage() {
               value={profile.phone || ''}
               onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
               placeholder="0901 234 567"
+            />
+          </label>
+          <label>
+            Ngày sinh
+            <input
+              type="date"
+              value={profile.dateOfBirth ? profile.dateOfBirth.slice(0, 10) : ''}
+              onChange={(e) => setProfile({ ...profile, dateOfBirth: e.target.value || undefined })}
             />
           </label>
           <label>

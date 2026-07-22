@@ -6,6 +6,7 @@ import type {
   AdminCompanySummary,
   AdminDashboardStats,
   AdminJobDetail,
+  AdminJobReport,
   AdminJobSummary,
   AdminPayment,
   AdminPlan,
@@ -76,6 +77,25 @@ export const adminService = {
     return response.data;
   },
 
+  approveCompanyDocument: async (companyId: string, documentId: string): Promise<AdminCompanyDetail> => {
+    const response = await api.post<AdminCompanyDetail>(
+      `/admin/companies/${companyId}/documents/${documentId}/approve`,
+    );
+    return response.data;
+  },
+
+  rejectCompanyDocument: async (
+    companyId: string,
+    documentId: string,
+    reason: string,
+  ): Promise<AdminCompanyDetail> => {
+    const response = await api.post<AdminCompanyDetail>(
+      `/admin/companies/${companyId}/documents/${documentId}/reject`,
+      { reason },
+    );
+    return response.data;
+  },
+
   listJobs: async (status: JobReviewFilter = 'pending_review'): Promise<AdminJobSummary[]> => {
     const response = await api.get<AdminJobSummary[]>('/admin/jobs', { params: { status } });
     return response.data;
@@ -103,6 +123,32 @@ export const adminService = {
 
   reopenJob: async (id: string): Promise<AdminJobDetail> => {
     const response = await api.post<AdminJobDetail>(`/admin/jobs/${id}/reopen`);
+    return response.data;
+  },
+
+  listJobReports: async (status = 'pending'): Promise<AdminJobReport[]> => {
+    const response = await api.get<AdminJobReport[]>('/admin/jobs/reports', { params: { status } });
+    return response.data;
+  },
+
+  dismissJobReport: async (reportId: string, adminNote?: string): Promise<AdminJobReport> => {
+    const response = await api.post<AdminJobReport>(`/admin/jobs/reports/${reportId}/dismiss`, {
+      adminNote: adminNote || '',
+    });
+    return response.data;
+  },
+
+  notifyCompanyJobReport: async (reportId: string, adminNote?: string): Promise<AdminJobReport> => {
+    const response = await api.post<AdminJobReport>(`/admin/jobs/reports/${reportId}/notify-company`, {
+      adminNote: adminNote || '',
+    });
+    return response.data;
+  },
+
+  resolveJobReport: async (reportId: string, adminNote?: string): Promise<AdminJobReport> => {
+    const response = await api.post<AdminJobReport>(`/admin/jobs/reports/${reportId}/resolve`, {
+      adminNote: adminNote || '',
+    });
     return response.data;
   },
 

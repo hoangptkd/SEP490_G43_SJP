@@ -7,6 +7,8 @@ import com.sjp.recruitment.repository.JobReviewHistoryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.Period;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,6 +46,8 @@ public class DtoMapper {
                 userId,
                 profile.getFullName(),
                 profile.getPhone(),
+                profile.getDateOfBirth(),
+                profile.getDateOfBirth() == null ? null : Period.between(profile.getDateOfBirth(), LocalDate.now()).getYears(),
                 profile.getLocation(),
                 profile.getBio(),
                 safeList(profile.getSkills()),
@@ -239,8 +243,10 @@ public class DtoMapper {
         return switch (status.toLowerCase()) {
             case "published", "active" -> "PUBLISHED";
             case "pending_review" -> "PENDING_REVIEW";
+            case "awaiting_company" -> "AWAITING_COMPANY";
             case "rejected" -> "REJECTED";
             case "closed" -> "CLOSED";
+            case "removed" -> "REMOVED";
             case "expired" -> "EXPIRED";
             default -> status.toUpperCase();
         };

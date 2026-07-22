@@ -59,6 +59,7 @@ public class CandidateService {
         CandidateProfile profile = getCurrentCandidateProfile();
         profile.setFullName(request.fullName());
         profile.setPhone(request.phone());
+        profile.setDateOfBirth(request.dateOfBirth());
         profile.setLocation(request.location());
         profile.setBio(request.bio());
         updateCandidateSkills(profile, request.skills() == null ? List.of() : request.skills());
