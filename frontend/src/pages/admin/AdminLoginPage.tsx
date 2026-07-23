@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import { setAuthSession } from '../../utils/authStorage';
+import '../../styles/admin.css';
 
 function readError(error: unknown) {
   if (typeof error === 'object' && error && 'response' in error) {
