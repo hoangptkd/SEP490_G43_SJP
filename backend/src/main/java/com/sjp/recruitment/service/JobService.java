@@ -129,13 +129,18 @@ public class JobService {
         return new JobPageResponse(content, safePage, safeSize, total, totalPages);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public JobResponse findJobResponseById(String id) {
         try {
             UUID.fromString(id);
         } catch (IllegalArgumentException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_ID_INVALID", "Ma viec lam khong hop le");
         }
+
+        namedParameterJdbcTemplate.update(
+                "UPDATE jobs SET views_count = views_count + 1 WHERE id = CAST(:id AS uuid) AND status = 'published'",
+                new MapSqlParameterSource("id", id)
+        );
 
         String sql = """
                 SELECT

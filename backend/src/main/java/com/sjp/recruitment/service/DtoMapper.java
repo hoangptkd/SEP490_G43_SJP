@@ -193,7 +193,9 @@ public class DtoMapper {
     public ApplicationResponse toApplicationResponse(
             Application application,
             JobResponse job,
-            List<ApplicationTimelineResponse> timeline) {
+            List<ApplicationTimelineResponse> timeline,
+            List<InterviewScheduleResponse> interviews,
+            JobOfferResponse jobOffer) {
         return new ApplicationResponse(
                 String.valueOf(application.getId()),
                 job,
@@ -203,7 +205,9 @@ public class DtoMapper {
                 toFrontendApplicationStatus(application.getStatus()),
                 application.getSubmittedAt(),
                 application.getUpdatedAt(),
-                timeline
+                timeline,
+                interviews,
+                jobOffer
         );
     }
 
@@ -266,5 +270,53 @@ public class DtoMapper {
             case "withdrawn" -> "WITHDRAWN";
             default -> status.toUpperCase();
         };
+    }
+
+    public InterviewScheduleResponse toInterviewScheduleResponse(InterviewSchedule schedule) {
+        if (schedule == null) return null;
+        return new InterviewScheduleResponse(
+                schedule.getId(),
+                schedule.getApplication() != null ? schedule.getApplication().getId() : null,
+                schedule.getRoundNumber(),
+                schedule.getScheduledAt(),
+                schedule.getMeetingLink(),
+                schedule.getLocation(),
+                schedule.getStatus(),
+                schedule.getNote(),
+                schedule.getCandidateResponse(),
+                schedule.getCandidateResponseAt(),
+                schedule.getCandidateRescheduleNote(),
+                schedule.getEmployerRescheduleResponse(),
+                schedule.getEmployerRescheduleNote(),
+                schedule.getEmployerRescheduleAt(),
+                schedule.getInterviewResult(),
+                schedule.getInterviewResultNote(),
+                schedule.getCreatedAt(),
+                schedule.getUpdatedAt()
+        );
+    }
+
+    public JobOfferResponse toJobOfferResponse(JobOffer offer) {
+        if (offer == null) return null;
+        return new JobOfferResponse(
+                offer.getId(),
+                offer.getApplication() != null ? offer.getApplication().getId() : null,
+                offer.getPositionTitle(),
+                offer.getSalary(),
+                offer.getSalaryCurrency(),
+                offer.getSalaryType(),
+                offer.getStartDate(),
+                offer.getBenefits(),
+                offer.getWorkingLocation(),
+                offer.getOfferLetterUrl(),
+                offer.getStatus(),
+                offer.getSentAt(),
+                offer.getRespondedAt(),
+                offer.getExpiresAt(),
+                offer.getCandidateNote(),
+                offer.getEmployerNote(),
+                offer.getCreatedAt(),
+                offer.getUpdatedAt()
+        );
     }
 }

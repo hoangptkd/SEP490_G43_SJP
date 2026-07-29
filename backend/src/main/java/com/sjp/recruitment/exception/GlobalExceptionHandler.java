@@ -38,8 +38,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({ObjectOptimisticLockingFailureException.class, DataIntegrityViolationException.class})
     public ResponseEntity<ApiError> handleConcurrentWrite(Exception exception) {
+        String msg = exception.getMessage() != null ? exception.getMessage() : "Unknown error";
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiError("Dữ liệu vừa được cập nhật bởi yêu cầu khác", "CONCURRENT_UPDATE", Instant.now().toString()));
+                .body(new ApiError("Lỗi CSDL: " + msg, "CONCURRENT_UPDATE", Instant.now().toString()));
     }
 
     @ExceptionHandler(Exception.class)
