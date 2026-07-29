@@ -19,7 +19,10 @@ import com.sjp.recruitment.repository.CandidateProfileRepository;
 import com.sjp.recruitment.repository.CvVersionRepository;
 import com.sjp.recruitment.repository.JobRepository;
 import com.sjp.recruitment.repository.NotificationRepository;
+import com.sjp.recruitment.repository.InterviewScheduleRepository;
+import com.sjp.recruitment.repository.JobOfferRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -33,6 +36,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ApplicationService {
 
     private final ApplicationRepository applicationRepository;
@@ -42,6 +46,8 @@ public class ApplicationService {
     private final CvVersionRepository cvVersionRepository;
     private final ApplicationStatusHistoryRepository historyRepository;
     private final NotificationRepository notificationRepository;
+    private final InterviewScheduleRepository interviewScheduleRepository;
+    private final JobOfferRepository jobOfferRepository;
     private final CandidateService candidateService;
     private final JobService jobService;
     private final DtoMapper dtoMapper;
@@ -179,10 +185,22 @@ public class ApplicationService {
                 .stream()
                 .map(dtoMapper::toTimelineResponse)
                 .toList();
+                
+        List<com.sjp.recruitment.model.dto.response.InterviewScheduleResponse> interviews = interviewScheduleRepository.findByApplicationId(application.getId())
+                .stream()
+                .map(dtoMapper::toInterviewScheduleResponse)
+                .toList();
+                
+        com.sjp.recruitment.model.dto.response.JobOfferResponse jobOffer = jobOfferRepository.findByApplicationId(application.getId())
+                .map(dtoMapper::toJobOfferResponse)
+                .orElse(null);
+
         return dtoMapper.toApplicationResponse(
                 application,
                 application.getJob() != null ? jobService.toJobResponse(application.getJob(), application.getCandidate()) : null,
-                timeline);
+                timeline,
+                interviews,
+                jobOffer);
     }
 
     private void addHistory(Application application, Application.ApplicationStatus from, Application.ApplicationStatus to, String note) {

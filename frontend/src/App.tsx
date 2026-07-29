@@ -2168,6 +2168,103 @@ function ApplicationDetailPage() {
         </div>
       </div>
 
+      {application.interviews && application.interviews.length > 0 && (
+        <div className="card" style={{ marginBottom: 20, borderLeft: '4px solid #b45309' }}>
+          <h2 style={{ marginBottom: 12 }}>Lịch Phỏng Vấn</h2>
+          {application.interviews.map(interview => (
+            <div key={interview.id} style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 8 }}>
+              <p style={{ margin: '4px 0' }}><strong>Thời gian:</strong> {new Date(interview.scheduledAt).toLocaleString('vi-VN')}</p>
+              <p style={{ margin: '4px 0' }}><strong>Địa điểm:</strong> {interview.location || 'Chưa cập nhật'}</p>
+              {interview.meetingLink && <p style={{ margin: '4px 0' }}><strong>Link họp:</strong> <a href={interview.meetingLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>{interview.meetingLink}</a></p>}
+              {interview.note && <p style={{ margin: '4px 0' }}><strong>Ghi chú:</strong> {interview.note}</p>}
+              
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
+                  <strong>Phản hồi của bạn:</strong>{' '}
+                  {interview.candidateResponse === 'confirmed' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
+                   : interview.candidateResponse === 'request_reschedule' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
+                   : interview.candidateResponse === 'declined' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
+                   : 'Chưa phản hồi'}
+                </p>
+
+                {interview.candidateResponse === 'request_reschedule' && interview.employerRescheduleResponse && (
+                  <p style={{ margin: '4px 0', fontSize: '0.9rem', color: '#4338ca' }}>
+                    <strong>Phản hồi từ Nhà tuyển dụng:</strong> {interview.employerRescheduleResponse === 'accept_reschedule' ? 'Đã đồng ý đổi lịch' : 'Không đồng ý đổi lịch'}. 
+                    {interview.employerRescheduleNote && ` Lời nhắn: ${interview.employerRescheduleNote}`}
+                  </p>
+                )}
+
+                {interview.candidateResponse === 'request_reschedule' && interview.employerRescheduleResponse === 'reject_reschedule' && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button onClick={() => candidateService.respondToInterview(interview.id, 'confirmed').then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Đồng ý lịch cũ</button>
+                    <button onClick={() => candidateService.respondToInterview(interview.id, 'declined').then(() => window.location.reload())} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Hủy phỏng vấn</button>
+                  </div>
+                )}
+
+                {(!interview.candidateResponse || interview.candidateResponse === 'pending') && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button onClick={() => candidateService.respondToInterview(interview.id, 'confirmed').then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Đồng ý tham gia</button>
+                    <button onClick={() => {
+                      const note = prompt('Nhập lý do đổi lịch và thời gian đề xuất:');
+                      if (note) candidateService.respondToInterview(interview.id, 'request_reschedule', note).then(() => window.location.reload());
+                    }} style={{ background: '#f59e0b', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Xin đổi lịch</button>
+                    <button onClick={() => candidateService.respondToInterview(interview.id, 'declined').then(() => window.location.reload())} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Từ chối</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {application.jobOffer && (
+        <div className="card" style={{ marginBottom: 20, borderLeft: '4px solid #047857' }}>
+          <h2 style={{ marginBottom: 12 }}>🎉 Đề xuất công việc (Job Offer)</h2>
+          <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8 }}>
+            <p style={{ margin: '4px 0' }}><strong>Chức danh:</strong> {application.jobOffer.positionTitle}</p>
+            <p style={{ margin: '4px 0' }}><strong>Mức lương:</strong> {application.jobOffer.salary ? `${application.jobOffer.salary.toLocaleString()} ${application.jobOffer.salaryCurrency} (${application.jobOffer.salaryType})` : 'Thỏa thuận'}</p>
+            {application.jobOffer.startDate && <p style={{ margin: '4px 0' }}><strong>Ngày bắt đầu:</strong> {application.jobOffer.startDate}</p>}
+            {application.jobOffer.workingLocation && <p style={{ margin: '4px 0' }}><strong>Nơi làm việc:</strong> {application.jobOffer.workingLocation}</p>}
+            {application.jobOffer.benefits && <p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}><strong>Phúc lợi:</strong> {application.jobOffer.benefits}</p>}
+            {application.jobOffer.offerLetterUrl && <p style={{ margin: '4px 0' }}><strong>Link Offer Letter:</strong> <a href={application.jobOffer.offerLetterUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Xem chi tiết đính kèm</a></p>}
+            {application.jobOffer.employerNote && <p style={{ margin: '4px 0' }}><strong>Lời nhắn từ Nhà tuyển dụng:</strong> {application.jobOffer.employerNote}</p>}
+            
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+              <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
+                <strong>Phản hồi của bạn:</strong>{' '}
+                {application.jobOffer.status === 'sent' ? 'Chưa phản hồi' : 
+                 application.jobOffer.status === 'accepted' ? <span style={{ color: '#047857' }}>Đã chấp nhận Offer</span> : 
+                 application.jobOffer.status === 'rejected' ? <span style={{ color: '#b45309' }}>Đã từ chối Offer (Đang chờ phản hồi từ NTD)</span> : 
+                 application.jobOffer.status === 'employer_declined_negotiation' ? <span style={{ color: '#b91c1c' }}>NTD từ chối thay đổi Offer</span> :
+                 application.jobOffer.status === 'withdrawn_by_candidate' ? <span style={{ color: '#b91c1c' }}>Bạn đã hủy bỏ Offer</span> :
+                 application.jobOffer.status}
+              </p>
+              {application.jobOffer.status === 'sent' && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => candidateService.respondToOffer(application.jobOffer!.id, true).then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Chấp nhận Offer</button>
+                  <button onClick={() => {
+                    const note = prompt('Nhập lý do từ chối và đề xuất thay đổi (Ví dụ: Tôi muốn lương 20tr):');
+                    if (note !== null) {
+                        candidateService.respondToOffer(application.jobOffer!.id, false, note || '').then(() => window.location.reload());
+                    }
+                  }} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Từ chối Offer / Đề xuất sửa đổi</button>
+                </div>
+              )}
+              {application.jobOffer.status === 'employer_declined_negotiation' && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => candidateService.finalRespondToOffer(application.jobOffer!.id, true).then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Chấp nhận Offer cũ</button>
+                  <button onClick={() => {
+                    if (window.confirm('Bạn có chắc chắn muốn hủy bỏ toàn bộ Job Offer này không?')) {
+                        candidateService.finalRespondToOffer(application.jobOffer!.id, false).then(() => window.location.reload());
+                    }
+                  }} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Hủy bỏ hoàn toàn</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h2 style={{ marginBottom: 0 }}>Lịch sử trạng thái</h2>
         <div className="timeline">

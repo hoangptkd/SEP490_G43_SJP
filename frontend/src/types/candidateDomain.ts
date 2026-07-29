@@ -53,6 +53,8 @@ export interface CandidateApplication {
   submittedAt: string;
   updatedAt: string;
   timeline: ApplicationTimeline[];
+  interviews?: InterviewScheduleResponse[];
+  jobOffer?: JobOfferResponse;
 }
 
 export interface NotificationItem {
@@ -77,4 +79,63 @@ export interface SubscriptionView {
   savedJobsCount: number;
   cvCount: number;
   unreadNotificationsCount: number;
+}
+
+export interface InterviewScheduleRequest {
+  scheduledAt: string;
+  meetingLink?: string;
+  location?: string;
+  note?: string;
+}
+
+export interface InterviewResultRequest {
+  result: 'pass' | 'fail';
+  note?: string;
+}
+
+export interface InterviewScheduleResponse {
+  id: string;
+  applicationId: string;
+  employerId: string;
+  candidateId: string;
+  roundNumber: number;
+  scheduledAt: string;
+  meetingLink?: string;
+  location?: string;
+  note?: string;
+  candidateResponse?: string;
+  candidateRescheduleNote?: string;
+  employerRescheduleResponse?: string;
+  employerRescheduleNote?: string;
+  interviewResult?: string;
+  interviewResultNote?: string;
+  status: string;
+}
+
+export interface JobOfferRequest {
+  positionTitle: string;
+  salary?: number;
+  salaryCurrency?: string;
+  salaryType?: string;
+  startDate?: string;
+  benefits?: string;
+  workingLocation?: string;
+  offerLetterUrl?: string;
+  employerNote?: string;
+}
+
+export interface JobOfferResponse {
+  id: string;
+  applicationId: string;
+  positionTitle: string;
+  salary?: number;
+  salaryCurrency?: string;
+  salaryType?: string;
+  startDate?: string;
+  benefits?: string;
+  workingLocation?: string;
+  offerLetterUrl?: string;
+  status: string;
+  candidateNote?: string;
+  employerNote?: string;
 }

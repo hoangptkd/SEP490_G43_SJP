@@ -721,13 +721,16 @@ public class EmployerService {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền cập nhật đơn ứng tuyển này");
         }
 
-        Application.ApplicationStatus toStatus = Application.ApplicationStatus.fromDatabaseValue(status);
-        if (toStatus == null) {
-            try {
-                toStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "STATUS_INVALID", "Trạng thái không hợp lệ: " + status);
-            }
+        Application.ApplicationStatus toStatus = null;
+        try {
+            toStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            toStatus = Application.ApplicationStatus.fromDatabaseValue(status);
+        }
+        
+        // fromDatabaseValue returns SUBMITTED by default, we want to reject completely invalid strings
+        if (toStatus == Application.ApplicationStatus.SUBMITTED && !status.equalsIgnoreCase("SUBMITTED") && !status.equalsIgnoreCase("applied")) {
+             throw new ApiException(HttpStatus.BAD_REQUEST, "STATUS_INVALID", "Trạng thái không hợp lệ: " + status);
         }
 
         return applicationService.updateStatus(appId, toStatus, note);

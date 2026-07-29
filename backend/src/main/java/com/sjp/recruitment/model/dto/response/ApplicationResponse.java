@@ -12,6 +12,9 @@ public record ApplicationResponse(
         String status,
         LocalDateTime submittedAt,
         LocalDateTime updatedAt,
-        List<ApplicationTimelineResponse> timeline
+        List<ApplicationTimelineResponse> timeline,
+        List<InterviewScheduleResponse> interviews,
+        JobOfferResponse jobOffer
 ) {
 }
+

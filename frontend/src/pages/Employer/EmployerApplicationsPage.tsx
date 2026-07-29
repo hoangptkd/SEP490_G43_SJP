@@ -35,8 +35,35 @@ export default function EmployerApplicationsPage() {
   const [note, setNote] = useState<string>('');
   const [updating, setUpdating] = useState(false);
 
+  // Interview fields
+  const [scheduledAt, setScheduledAt] = useState<string>('');
+  const [location, setLocation] = useState<string>('');
+  const [meetingLink, setMeetingLink] = useState<string>('');
+
+  // Job Offer fields
+  const [positionTitle, setPositionTitle] = useState<string>('');
+  const [salary, setSalary] = useState<number | ''>('');
+  const [salaryCurrency, setSalaryCurrency] = useState<string>('VND');
+  const [salaryType, setSalaryType] = useState<string>('monthly');
+  const [startDate, setStartDate] = useState<string>('');
+  const [benefits, setBenefits] = useState<string>('');
+  const [workingLocation, setWorkingLocation] = useState<string>('');
+  const [offerLetterUrl, setOfferLetterUrl] = useState<string>('');
+
+
   // Candidate detail modal
   const [selectedAppDetail, setSelectedAppDetail] = useState<CandidateApplication | null>(null);
+  const [manageInterviewApp, setManageInterviewApp] = useState<CandidateApplication | null>(null);
+  const [manageOfferApp, setManageOfferApp] = useState<CandidateApplication | null>(null);
+  const [manageRejectApp, setManageRejectApp] = useState<CandidateApplication | null>(null);
+
+  // Reschedule Action
+  const [rescheduleInterviewId, setRescheduleInterviewId] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState<string>('');
+
+  // Interview Evaluation Action
+  const [evaluatingInterviewId, setEvaluatingInterviewId] = useState<string | null>(null);
+  const [interviewResult, setInterviewResult] = useState<'pass' | 'fail'>('pass');
 
   useEffect(() => {
     loadJobs();
@@ -83,29 +110,77 @@ export default function EmployerApplicationsPage() {
     setUpdatingApp(app);
     setTargetStatus(defaultStatus || app.status || 'UNDER_REVIEW');
     setNote('');
+    setScheduledAt('');
+    setLocation('');
+    setMeetingLink('');
+    setPositionTitle(defaultStatus === 'UPDATE_OFFER' && app.jobOffer ? app.jobOffer.positionTitle : app.job.title || '');
+    setSalary(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salary ? app.jobOffer.salary : '');
+    setSalaryCurrency(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salaryCurrency ? app.jobOffer.salaryCurrency : 'VND');
+    setSalaryType(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salaryType ? app.jobOffer.salaryType : 'monthly');
+    setStartDate(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.startDate ? app.jobOffer.startDate : '');
+    setBenefits(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.benefits ? app.jobOffer.benefits : '');
+    setWorkingLocation(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.workingLocation ? app.jobOffer.workingLocation : '');
+    setOfferLetterUrl(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.offerLetterUrl ? app.jobOffer.offerLetterUrl : '');
   }
 
   async function handleConfirmUpdate() {
     if (!updatingApp) return;
     setUpdating(true);
     try {
-      const updated = await employerService.updateApplicationStatus(
-        updatingApp.id,
-        targetStatus,
-        note
-      );
-      setApplications((prev) =>
-        prev.map((item) => (item.id === updated.id ? updated : item))
-      );
-      if (selectedAppDetail && selectedAppDetail.id === updated.id) {
-        setSelectedAppDetail(updated);
+      if (targetStatus === 'INTERVIEW_SCHEDULED') {
+        if (!scheduledAt) throw new Error('Vui lòng chọn ngày giờ phỏng vấn');
+        await employerService.scheduleInterview(updatingApp.id, {
+          scheduledAt,
+          location,
+          meetingLink,
+          note
+        });
+      } else if (targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') {
+        if (!positionTitle) throw new Error('Vui lòng nhập chức danh');
+        
+        const offerData = {
+          positionTitle,
+          salary: salary ? Number(salary) : undefined,
+          salaryCurrency,
+          salaryType,
+          startDate: startDate || undefined,
+          benefits,
+          workingLocation,
+          offerLetterUrl,
+          employerNote: note
+        };
+
+        if (targetStatus === 'UPDATE_OFFER') {
+           if (!updatingApp.jobOffer) throw new Error('Không tìm thấy Job Offer để sửa');
+           await employerService.employerRespondToOfferRejection(updatingApp.jobOffer.id, true, offerData);
+        } else {
+           await employerService.createJobOffer(updatingApp.id, offerData);
+        }
+      } else if (targetStatus === 'DECLINE_OFFER_NEGOTIATION') {
+         if (!updatingApp.jobOffer) throw new Error('Không tìm thấy Job Offer để thao tác');
+         await employerService.employerRespondToOfferRejection(updatingApp.jobOffer.id, false, { employerNote: note } as any);
+      } else if (targetStatus === 'REJECTED') {
+        await employerService.rejectApplication(updatingApp.id, note);
+      } else if (targetStatus === 'EVALUATE_INTERVIEW') {
+        if (!evaluatingInterviewId) throw new Error('Thiếu Interview ID');
+        await employerService.employerUpdateInterviewResult(evaluatingInterviewId, interviewResult, note);
+      } else {
+        await employerService.updateApplicationStatus(
+          updatingApp.id,
+          targetStatus,
+          note
+        );
       }
+      
+      // Reload applications to get latest data
+      await loadApplications();
       setUpdatingApp(null);
-    } catch (err: unknown) {
+      if (selectedAppDetail) {
+        setSelectedAppDetail(null); // Just close detail modal to avoid stale data
+      }
+    } catch (err: any) {
       const message =
-        typeof err === 'object' && err && 'response' in err
-          ? ((err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Có lỗi xảy ra')
-          : 'Có lỗi xảy ra khi cập nhật trạng thái';
+        err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi cập nhật trạng thái';
       alert(message);
     } finally {
       setUpdating(false);
@@ -398,75 +473,52 @@ export default function EmployerApplicationsPage() {
                   >
                     👁️ Xem chi tiết hồ sơ
                   </button>
-
-                  <button
-                    onClick={() => openUpdateModal(app, 'UNDER_REVIEW')}
-                    style={{
-                      background: '#2563eb',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '8px 14px',
-                      borderRadius: '6px',
-                      fontWeight: 600,
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                      textAlign: 'center',
-                    }}
-                  >
-                    ⚡ Chuyển trạng thái / Ghi chú
-                  </button>
-
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    {app.status !== 'INTERVIEW_SCHEDULED' && app.status !== 'ACCEPTED' && (
+                  
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    {app.status === 'SUBMITTED' && (
+                      <button
+                        onClick={() => openUpdateModal(app, 'UNDER_REVIEW')}
+                        style={{ flex: 1, background: '#2563eb', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
+                      >
+                        ⚡ Duyệt
+                      </button>
+                    )}
+                    {(app.status === 'UNDER_REVIEW' || app.status === 'INTERVIEW_SCHEDULED') && !app.interviews?.some(iv => iv.interviewResult === 'pending') && !app.interviews?.some(iv => iv.interviewResult === 'pass') && (
                       <button
                         onClick={() => openUpdateModal(app, 'INTERVIEW_SCHEDULED')}
-                        style={{
-                          flex: 1,
-                          background: '#fef3c7',
-                          color: '#b45309',
-                          border: '1px solid #fde68a',
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.8rem',
-                          cursor: 'pointer',
-                        }}
+                        style={{ flex: 1, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
                       >
-                        Mời PV
+                        📅 Lịch PV
                       </button>
                     )}
-                    {app.status !== 'ACCEPTED' && (
+                    {app.interviews && app.interviews.length > 0 && !app.interviews?.some(iv => iv.interviewResult === 'pass') && (
+                      <button
+                        onClick={() => setManageInterviewApp(app)}
+                        style={{ flex: 1, background: '#e0e7ff', color: '#4338ca', border: '1px solid #c7d2fe', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
+                      >
+                        🎤 Quản lý PV
+                      </button>
+                    )}
+                    {app.status === 'INTERVIEW_SCHEDULED' && app.interviews?.some(iv => iv.interviewResult === 'pass') && (
                       <button
                         onClick={() => openUpdateModal(app, 'ACCEPTED')}
-                        style={{
-                          flex: 1,
-                          background: '#d1fae5',
-                          color: '#047857',
-                          border: '1px solid #a7f3d0',
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.8rem',
-                          cursor: 'pointer',
-                        }}
+                        style={{ flex: 1, background: '#d1fae5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
                       >
-                        Duyệt
+                        Gửi Offer
                       </button>
                     )}
-                    {app.status !== 'REJECTED' && (
+                    {app.status === 'ACCEPTED' && app.jobOffer && (
+                      <button
+                        onClick={() => setManageOfferApp(app)}
+                        style={{ flex: 1, background: '#10b981', color: '#fff', border: '1px solid #059669', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
+                      >
+                        💼 Quản lý Offer
+                      </button>
+                    )}
+                    {app.status !== 'REJECTED' && app.status !== 'ACCEPTED' && (
                       <button
                         onClick={() => openUpdateModal(app, 'REJECTED')}
-                        style={{
-                          flex: 1,
-                          background: '#fee2e2',
-                          color: '#b91c1c',
-                          border: '1px solid #fecaca',
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.8rem',
-                          cursor: 'pointer',
-                        }}
+                        style={{ flex: 1, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
                       >
                         Từ chối
                       </button>
@@ -498,39 +550,117 @@ export default function EmployerApplicationsPage() {
         >
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <h3 style={{ margin: '0 0 16px 0', color: '#0f172a', fontSize: '1.25rem' }}>
-              Cập nhật trạng thái ứng viên: {updatingApp.candidate?.fullName}
+              {targetStatus === 'UNDER_REVIEW' && 'Duyệt hồ sơ (Đưa vào vòng xem xét)'}
+              {targetStatus === 'INTERVIEW_SCHEDULED' && 'Lên lịch phỏng vấn'}
+              {targetStatus === 'ACCEPTED' && 'Gửi Lời mời làm việc (Job Offer)'}
+              {targetStatus === 'UPDATE_OFFER' && 'Cập nhật Lời mời làm việc (Sửa Offer)'}
+              {targetStatus === 'DECLINE_OFFER_NEGOTIATION' && 'Từ chối thay đổi Offer'}
+              {targetStatus === 'REJECTED' && 'Từ chối ứng viên'}
+              {targetStatus === 'EVALUATE_INTERVIEW' && 'Đánh giá kết quả phỏng vấn'}
+              {targetStatus !== 'UNDER_REVIEW' && targetStatus !== 'INTERVIEW_SCHEDULED' && targetStatus !== 'ACCEPTED' && targetStatus !== 'UPDATE_OFFER' && targetStatus !== 'DECLINE_OFFER_NEGOTIATION' && targetStatus !== 'REJECTED' && targetStatus !== 'EVALUATE_INTERVIEW' && 'Thao tác hồ sơ'}
             </h3>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                Trạng thái mới
-              </label>
-              <select
-                value={targetStatus}
-                onChange={(e) => setTargetStatus(e.target.value)}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
-              >
-                <option value="SUBMITTED">Mới nộp (Submitted)</option>
-                <option value="UNDER_REVIEW">Đang xem xét (Under Review)</option>
-                <option value="SHORTLISTED">Rút gọn danh sách (Shortlisted)</option>
-                <option value="INTERVIEW_SCHEDULED">Hẹn phỏng vấn (Interview Scheduled)</option>
-                <option value="ACCEPTED">Chấp nhận trúng tuyển (Accepted)</option>
-                <option value="REJECTED">Từ chối hồ sơ (Rejected)</option>
-              </select>
+            <div style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '16px' }}>
+              Ứng viên: <strong>{updatingApp.candidate?.fullName}</strong>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                Ghi chú / Lời nhắn cho ứng viên (Hệ thống sẽ gửi thông báo tự động)
-              </label>
-              <textarea
-                rows={4}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="VD: Chúc mừng bạn đã trúng tuyển. Hoặc: Mời bạn đến phỏng vấn vào lúc 9:00 ngày..."
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem', fontFamily: 'inherit' }}
-              />
-            </div>
+            {targetStatus === 'EVALUATE_INTERVIEW' && (
+              <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>Đánh giá kết quả</h4>
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                    <input type="radio" name="interviewResult" value="pass" checked={interviewResult === 'pass'} onChange={() => setInterviewResult('pass')} />
+                    <span style={{ fontWeight: 600, color: '#166534' }}>Đạt (Pass)</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                    <input type="radio" name="interviewResult" value="fail" checked={interviewResult === 'fail'} onChange={() => setInterviewResult('fail')} />
+                    <span style={{ fontWeight: 600, color: '#991b1b' }}>Không đạt (Fail)</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {targetStatus === 'INTERVIEW_SCHEDULED' && (
+              <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>Thông tin Phỏng vấn</h4>
+                
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Thời gian (*)</label>
+                  <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Địa điểm</label>
+                  <input type="text" placeholder="VD: Tầng 3, Tòa nhà ABC" value={location} onChange={e => setLocation(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Link họp trực tuyến (Nếu có)</label>
+                  <input type="text" placeholder="VD: https://meet.google.com/..." value={meetingLink} onChange={e => setMeetingLink(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                </div>
+              </div>
+            )}
+
+            {(targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') && (
+              <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px', maxHeight: '300px', overflowY: 'auto' }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>{targetStatus === 'UPDATE_OFFER' ? 'Cập nhật Job Offer' : 'Thông tin Job Offer'}</h4>
+                
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Chức danh (*)</label>
+                  <input type="text" value={positionTitle} onChange={e => setPositionTitle(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ flex: 2 }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Mức lương</label>
+                    <input type="number" placeholder="VD: 15000000" value={salary} onChange={e => setSalary(e.target.value ? Number(e.target.value) : '')} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Tiền tệ</label>
+                    <select value={salaryCurrency} onChange={e => setSalaryCurrency(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                      <option value="VND">VND</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Kỳ lương</label>
+                    <select value={salaryType} onChange={e => setSalaryType(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                      <option value="monthly">Tháng</option>
+                      <option value="yearly">Năm</option>
+                      <option value="negotiable">Thỏa thuận</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Ngày bắt đầu</label>
+                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Nơi làm việc</label>
+                  <input type="text" value={workingLocation} onChange={e => setWorkingLocation(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Phúc lợi</label>
+                  <textarea rows={2} value={benefits} onChange={e => setBenefits(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Link Offer Letter (Google Drive / PDF)</label>
+                  <input type="text" value={offerLetterUrl} onChange={e => setOfferLetterUrl(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                </div>
+              </div>
+            )}
+
+            {targetStatus !== 'UNDER_REVIEW' && (
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                  Ghi chú / Lời nhắn cho ứng viên (Hệ thống sẽ gửi email tự động)
+                </label>
+                <textarea
+                  rows={3}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Lời nhắn kèm theo thông báo..."
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem', fontFamily: 'inherit' }}
+                />
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button
@@ -870,6 +1000,31 @@ export default function EmployerApplicationsPage() {
                 ) : null;
               })()}
 
+
+
+              {selectedAppDetail.jobOffer && (
+                <div>
+                  <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                    🎉 Job Offer
+                  </h4>
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '16px', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontWeight: 600, color: '#166534', fontSize: '0.95rem' }}>{selectedAppDetail.jobOffer.positionTitle}</span>
+                      <span style={{ fontSize: '0.8rem', background: '#86efac', color: '#14532d', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                        {selectedAppDetail.jobOffer.status === 'accepted' ? 'Ứng viên đã nhận' : selectedAppDetail.jobOffer.status === 'rejected' ? 'Ứng viên từ chối' : 'Đã gửi Offer'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: '#14532d', marginBottom: '4px' }}><strong>Mức lương:</strong> {selectedAppDetail.jobOffer.salary.toLocaleString()} {selectedAppDetail.jobOffer.salaryCurrency}</div>
+                    <div style={{ fontSize: '0.9rem', color: '#14532d', marginBottom: '4px' }}><strong>Ngày bắt đầu:</strong> {selectedAppDetail.jobOffer.startDate}</div>
+                    {selectedAppDetail.jobOffer.candidateNote && (
+                      <div style={{ marginTop: '12px', padding: '10px', background: '#fff', borderRadius: '8px', border: '1px solid #dcfce3', fontSize: '0.85rem', color: '#166534' }}>
+                        <strong>Phản hồi của ứng viên:</strong> {selectedAppDetail.jobOffer.candidateNote}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Timeline Section */}
               {selectedAppDetail.timeline && selectedAppDetail.timeline.length > 0 && (
                 <div>
@@ -913,38 +1068,41 @@ export default function EmployerApplicationsPage() {
               }}
             >
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => openUpdateModal(selectedAppDetail, 'UNDER_REVIEW')}
-                  style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
-                >
-                  ⚡ Cập nhật trạng thái / Ghi chú
-                </button>
-                {selectedAppDetail.status !== 'INTERVIEW_SCHEDULED' && selectedAppDetail.status !== 'ACCEPTED' && (
+                {selectedAppDetail.status === 'SUBMITTED' && (
+                  <button
+                    type="button"
+                    onClick={() => openUpdateModal(selectedAppDetail, 'UNDER_REVIEW')}
+                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    ⚡ Duyệt hồ sơ (Đưa vào vòng xem xét)
+                  </button>
+                )}
+                {(selectedAppDetail.status === 'UNDER_REVIEW' || selectedAppDetail.status === 'INTERVIEW_SCHEDULED') && !selectedAppDetail.interviews?.some(iv => iv.interviewResult === 'pending') && !selectedAppDetail.interviews?.some(iv => iv.interviewResult === 'pass') && (
                   <button
                     type="button"
                     onClick={() => openUpdateModal(selectedAppDetail, 'INTERVIEW_SCHEDULED')}
                     style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
                   >
-                    Mời PV
+                    Lên lịch phỏng vấn
                   </button>
                 )}
-                {selectedAppDetail.status !== 'ACCEPTED' && (
+                {/* Job Offer button is now triggered after passing an interview */}
+                {selectedAppDetail.status === 'INTERVIEW_SCHEDULED' && selectedAppDetail.interviews?.some(iv => iv.interviewResult === 'pass') && (
                   <button
                     type="button"
                     onClick={() => openUpdateModal(selectedAppDetail, 'ACCEPTED')}
                     style={{ background: '#d1fae5', color: '#047857', border: '1px solid #a7f3d0', padding: '10px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
                   >
-                    Duyệt trúng tuyển
+                    Gửi Lời mời làm việc (Offer)
                   </button>
                 )}
-                {selectedAppDetail.status !== 'REJECTED' && (
+                {selectedAppDetail.status !== 'REJECTED' && selectedAppDetail.status !== 'ACCEPTED' && (
                   <button
                     type="button"
                     onClick={() => openUpdateModal(selectedAppDetail, 'REJECTED')}
                     style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
                   >
-                    Từ chối
+                    Từ chối ứng viên
                   </button>
                 )}
               </div>
@@ -956,6 +1114,208 @@ export default function EmployerApplicationsPage() {
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Job Offer Management Modal */}
+      {manageOfferApp && manageOfferApp.jobOffer && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '0', width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderRadius: '12px 12px 0 0' }}>
+              <div>
+                <h2 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem' }}>💼 Quản lý Lời mời làm việc</h2>
+                <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '4px' }}>Ứng viên: <strong>{manageOfferApp.candidate?.fullName}</strong></div>
+              </div>
+              <button onClick={() => setManageOfferApp(null)} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+            </div>
+
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h4 style={{ margin: 0, color: '#b45309' }}>Chi tiết Offer</h4>
+                  <span style={{ fontSize: '0.8rem', background: manageOfferApp.jobOffer.status === 'accepted' ? '#d1fae5' : manageOfferApp.jobOffer.status === 'rejected' ? '#fee2e2' : '#fef3c7', color: manageOfferApp.jobOffer.status === 'accepted' ? '#047857' : manageOfferApp.jobOffer.status === 'rejected' ? '#b91c1c' : '#b45309', padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>
+                    {manageOfferApp.jobOffer.status === 'accepted' ? 'Đã đồng ý' : manageOfferApp.jobOffer.status === 'rejected' ? 'Bị từ chối' : 'Chờ phản hồi'}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.9rem', color: '#334155' }}>
+                  <div><strong>Vị trí:</strong> {manageOfferApp.jobOffer.positionTitle}</div>
+                  <div><strong>Mức lương:</strong> {manageOfferApp.jobOffer.salary ? `${manageOfferApp.jobOffer.salary.toLocaleString()} ${manageOfferApp.jobOffer.salaryCurrency}` : 'Thỏa thuận'}</div>
+                  <div><strong>Ngày bắt đầu:</strong> {manageOfferApp.jobOffer.startDate || 'Chưa rõ'}</div>
+                  <div><strong>Nơi làm việc:</strong> {manageOfferApp.jobOffer.workingLocation || 'Theo công ty'}</div>
+                </div>
+                {manageOfferApp.jobOffer.offerLetterUrl && (
+                  <div style={{ marginTop: '12px', fontSize: '0.9rem' }}>
+                    <strong>Link thư mời:</strong> <a href={manageOfferApp.jobOffer.offerLetterUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Xem thư mời</a>
+                  </div>
+                )}
+              </div>
+
+              {manageOfferApp.jobOffer.candidateNote && (
+                <div style={{ background: manageOfferApp.jobOffer.status === 'accepted' ? '#f0fdf4' : '#fef2f2', padding: '16px', borderRadius: '8px', border: `1px solid ${manageOfferApp.jobOffer.status === 'accepted' ? '#bbf7d0' : '#fecaca'}` }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: manageOfferApp.jobOffer.status === 'accepted' ? '#166534' : '#991b1b', fontSize: '0.95rem' }}>
+                    Phản hồi từ ứng viên
+                  </h4>
+                  <div style={{ fontSize: '0.9rem', color: '#475569' }}>
+                    {manageOfferApp.jobOffer.candidateNote}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                {manageOfferApp.jobOffer.status === 'rejected' && (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => { openUpdateModal(manageOfferApp, 'UPDATE_OFFER'); setManageOfferApp(null); }} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Sửa Offer</button>
+                    <button onClick={() => { openUpdateModal(manageOfferApp, 'DECLINE_OFFER_NEGOTIATION'); setManageOfferApp(null); }} style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Từ chối (Giữ nguyên)</button>
+                  </div>
+                )}
+              </div>
+              <button onClick={() => setManageOfferApp(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interview Management Modal */}
+      {manageInterviewApp && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '0', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            
+            {/* Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderRadius: '12px 12px 0 0' }}>
+              <div>
+                <h2 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem' }}>🎤 Quản lý Phỏng vấn</h2>
+                <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '4px' }}>Ứng viên: <strong>{manageInterviewApp.candidate?.fullName}</strong></div>
+              </div>
+              <button onClick={() => setManageInterviewApp(null)} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+              {manageInterviewApp.interviews && manageInterviewApp.interviews.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {manageInterviewApp.interviews.map((iv, idx) => (
+                    <div key={idx} style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: '16px', borderRadius: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 600, color: '#9a3412', fontSize: '1rem' }}>Phỏng vấn Vòng {iv.roundNumber}</span>
+                        <span style={{ fontSize: '0.8rem', background: '#fdba74', color: '#9a3412', padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>
+                          {iv.status === 'rescheduled' ? 'Đổi lịch' : iv.status}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px', background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #ffedd5' }}>
+                        <div style={{ fontSize: '0.9rem', color: '#431407' }}><strong>🕒 Thời gian:</strong> {new Date(iv.scheduledAt).toLocaleString('vi-VN')}</div>
+                        {iv.location && <div style={{ fontSize: '0.9rem', color: '#431407' }}><strong>📍 Địa điểm:</strong> {iv.location}</div>}
+                        {iv.meetingLink && <div style={{ fontSize: '0.9rem', color: '#431407', gridColumn: '1 / -1' }}><strong>🔗 Link họp:</strong> <a href={iv.meetingLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Tham gia ngay</a></div>}
+                      </div>
+                      
+                      {iv.candidateResponse === 'request_reschedule' && iv.status === 'rescheduled' && (
+                        <div style={{ marginTop: '12px', padding: '12px', background: '#fee2e2', borderRadius: '8px', border: '1px solid #fca5a5' }}>
+                          <div style={{ fontWeight: 600, color: '#991b1b', marginBottom: '4px', fontSize: '0.9rem' }}>⚠️ Ứng viên xin đổi lịch</div>
+                          <div style={{ color: '#7f1d1d', fontSize: '0.85rem', marginBottom: '12px' }}><strong>Lý do/Đề xuất:</strong> {iv.candidateRescheduleNote}</div>
+                          {rescheduleInterviewId === iv.id ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151' }}>Chọn Ngày/Giờ mới:</label>
+                              <input
+                                type="datetime-local"
+                                value={rescheduleDate}
+                                onChange={(e) => setRescheduleDate(e.target.value)}
+                                style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                              />
+                              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                <button
+                                  onClick={() => {
+                                    if (!rescheduleDate) return alert('Vui lòng chọn ngày/giờ mới');
+                                    const scheduledAtIso = new Date(rescheduleDate).toISOString();
+                                    employerService.employerRespondToReschedule(iv.id, 'accept_reschedule', 'Đồng ý đổi lịch', scheduledAtIso).then(() => {
+                                      alert('Đã chốt lịch mới thành công!');
+                                      window.location.reload();
+                                    }).catch(console.error);
+                                  }}
+                                  style={{ background: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
+                                >
+                                  Xác nhận
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setRescheduleInterviewId(null);
+                                    setRescheduleDate('');
+                                  }}
+                                  style={{ background: '#e5e7eb', color: '#4b5563', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
+                                >
+                                  Hủy
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={() => setRescheduleInterviewId(iv.id)}
+                                style={{ background: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
+                              >
+                                Đồng ý đổi lịch
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const note = prompt('Lý do từ chối đổi lịch:');
+                                  if (note) {
+                                    employerService.employerRespondToReschedule(iv.id, 'reject_reschedule', note).then(() => {
+                                      alert('Đã từ chối yêu cầu đổi lịch!');
+                                      window.location.reload();
+                                    }).catch(console.error);
+                                  }
+                                }}
+                                style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
+                              >
+                                Từ chối
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Check if we should allow evaluation */}
+                      {(!iv.interviewResult || iv.interviewResult === 'pending') && (iv.status === 'scheduled' || iv.status === 'confirmed' || iv.status === 'completed') && (
+                        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #fdba74' }}>
+                          {iv.candidateResponse !== 'confirmed' ? (
+                            <div style={{ color: '#b45309', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center' }}>
+                              ⏳ Đang chờ Ứng viên xác nhận lịch phỏng vấn...
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setEvaluatingInterviewId(iv.id); setManageInterviewApp(null); openUpdateModal(manageInterviewApp, 'EVALUATE_INTERVIEW'); }}
+                              style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', width: '100%' }}
+                            >
+                              📋 Đánh giá kết quả phỏng vấn
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {iv.interviewResult && iv.interviewResult !== 'pending' && (
+                        <div style={{ marginTop: '16px', padding: '16px', background: iv.interviewResult === 'pass' ? '#f0fdf4' : '#fef2f2', borderRadius: '8px', border: `1px solid ${iv.interviewResult === 'pass' ? '#bbf7d0' : '#fecaca'}` }}>
+                          <div style={{ fontWeight: 600, color: iv.interviewResult === 'pass' ? '#166534' : '#991b1b', fontSize: '1rem', marginBottom: '8px' }}>
+                            Kết quả: {iv.interviewResult === 'pass' ? '🎉 Đạt (Pass)' : '❌ Không đạt (Fail)'}
+                          </div>
+                          {iv.interviewResultNote && <div style={{ fontSize: '0.9rem', color: iv.interviewResult === 'pass' ? '#14532d' : '#7f1d1d' }}>Nhận xét: {iv.interviewResultNote}</div>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Chưa có lịch phỏng vấn nào</div>
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '0 0 12px 12px', textAlign: 'right' }}>
+              <button onClick={() => setManageInterviewApp(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Đóng</button>
             </div>
           </div>
         </div>
