@@ -2348,6 +2348,26 @@ function NotificationsPage() {
 
   useEffect(() => { load(); }, []);
 
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'JOB_UPDATED': return '📝';
+      case 'APPLICATION_STATUS_CHANGED': return '🔄';
+      case 'JOB_OFFER_SENT': return '🎉';
+      case 'INTERVIEW_SCHEDULED': return '📅';
+      default: return '🔔';
+    }
+  };
+
+  const getNotificationLink = (item: NotificationItem) => {
+    if (item.relatedEntityType === 'JOB' && item.relatedEntityId) {
+      return `/jobs/${item.relatedEntityId}`;
+    }
+    if (item.relatedEntityType === 'APPLICATION' && item.relatedEntityId) {
+      return `/candidate/applications/${item.relatedEntityId}`;
+    }
+    return null;
+  };
+
   return (
     <motion.div variants={fadeUp} initial="initial" animate="animate"
       transition={{ duration: 0.25, ease: EASE_OUT }}>
@@ -2365,29 +2385,58 @@ function NotificationsPage() {
         </div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔔</div>
+          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📭</div>
           <h3>Không có thông báo mới</h3>
           <p className="muted">Bạn sẽ nhận thông báo khi có cập nhật từ nhà tuyển dụng.</p>
         </div>
       ) : (
-        <div className="data-table">
-          {items.map((item, i) => (
-            <motion.div key={item.id} className="data-row"
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2, ease: EASE_OUT, delay: i * 0.04 }}
-              style={{ gridTemplateColumns: '1fr auto auto', opacity: item.read ? 0.7 : 1 }}>
-              <div>
-                <strong style={{ display: 'block', marginBottom: 4 }}>{item.title}</strong>
-                <span className="muted">{item.message}</span>
-              </div>
-              {!item.read && <span className="chip">Mới</span>}
-              <button className="outline sm"
-                onClick={() => candidateService.markNotificationRead(item.id).then(load)}>
-                {item.read ? 'Đã đọc' : 'Đánh dấu đọc'}
-              </button>
-            </motion.div>
-          ))}
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {items.map((item, i) => {
+            const link = getNotificationLink(item);
+            return (
+              <motion.div key={item.id} 
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, ease: EASE_OUT, delay: i * 0.04 }}
+                style={{ 
+                  display: 'flex', 
+                  padding: '16px 20px', 
+                  borderBottom: i < items.length - 1 ? '1px solid var(--outline-variant)' : 'none',
+                  background: item.read ? 'transparent' : 'var(--primary-softer)',
+                  alignItems: 'center',
+                  gap: 16
+                }}>
+                <div style={{ fontSize: '1.5rem', minWidth: 40, textAlign: 'center' }}>
+                  {getIcon(item.type)}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <strong style={{ display: 'block', color: 'var(--on-surface)' }}>{item.title}</strong>
+                    {!item.read && <span className="chip primary sm">Mới</span>}
+                  </div>
+                  <p style={{ margin: 0, color: 'var(--on-muted)', fontSize: '0.9rem', lineHeight: 1.4 }}>
+                    {item.message}
+                  </p>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--outline)', marginTop: 8, display: 'block' }}>
+                    {new Date(item.createdAt).toLocaleString('vi-VN')}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexDirection: 'column', alignItems: 'flex-end' }}>
+                  {!item.read && (
+                    <button className="outline sm"
+                      onClick={() => candidateService.markNotificationRead(item.id).then(load)}>
+                      Đánh dấu đọc
+                    </button>
+                  )}
+                  {link && (
+                    <Link to={link} className="button-link sm">
+                      Xem chi tiết
+                    </Link>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
     </motion.div>
