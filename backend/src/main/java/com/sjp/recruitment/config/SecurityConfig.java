@@ -41,16 +41,18 @@ public class SecurityConfig {
                     "/auth/register",
                     "/auth/config",
                     "/auth/login",
+                    "/auth/forgot-password",
+                    "/auth/reset-password",
                     "/auth/verify-email",
                     "/auth/oauth/complete-role",
-                    "/auth/refresh",
-                    "/auth/diagnostic",
                     "/oauth2/**",
                     "/login/oauth2/**",
                     "/actuator/health",
                     "/candidate/ai-interviews/speech/**"
                 ).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**", "/categories", "/categories/**").permitAll()
+                .requestMatchers("/candidate/**", "/applications/**").hasRole("CANDIDATE")
+                .requestMatchers("/employer/**").hasRole("EMPLOYER")
                 .anyRequest().authenticated()
             );
 
@@ -72,7 +74,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of("http://localhost:5173"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
 

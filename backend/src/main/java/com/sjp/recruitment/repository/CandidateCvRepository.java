@@ -11,6 +11,8 @@ import java.util.UUID;
 @Repository
 public interface CandidateCvRepository extends JpaRepository<CandidateCv, UUID> {
     List<CandidateCv> findByCandidateIdOrderByCreatedAtDesc(UUID candidateId);
+    List<CandidateCv> findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(UUID candidateId, String sourceType);
     Optional<CandidateCv> findByIdAndCandidateId(UUID id, UUID candidateId);
-    boolean existsByCandidateId(UUID candidateId);
+    Optional<CandidateCv> findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID id, UUID candidateId, String sourceType);
+    boolean existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID candidateId, String sourceType);
 }

@@ -56,16 +56,20 @@ public class CandidateProfile {
     @Transient
     private List<String> skills;
 
-    @Transient
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "education_json", nullable = false)
     private List<Object> education = List.of();
 
-    @Transient
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "work_experience_json", nullable = false)
     private List<Object> workExperience = List.of();
 
-    @Transient
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "projects_json", nullable = false)
     private List<Object> projects = List.of();
 
-    @Transient
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "certifications_json", nullable = false)
     private List<Object> certifications = List.of();
 
     @CreatedDate

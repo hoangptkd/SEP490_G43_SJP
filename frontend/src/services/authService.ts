@@ -12,6 +12,15 @@ export interface RegisterRequest {
   role: 'CANDIDATE' | 'EMPLOYER';
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
 export interface AuthResponse {
   token: string | null;
   user: User;
@@ -34,6 +43,16 @@ export const authService = {
 
   register: async (userData: RegisterRequest): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/auth/register', userData);
+    return response.data;
+  },
+
+  forgotPassword: async (data: ForgotPasswordRequest): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/forgot-password', data);
+    return response.data;
+  },
+
+  resetPassword: async (data: ResetPasswordRequest): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/reset-password', data);
     return response.data;
   },
 

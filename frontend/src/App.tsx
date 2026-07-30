@@ -87,12 +87,14 @@ function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="/select-role" element={<SelectRolePage />} />
       <Route path="/jobs" element={<JobsPage />} />
       <Route path="/jobs/:id" element={<JobDetailPage />} />
-      <Route path="/candidate" element={<Protected><CandidateLayout /></Protected>}>
+      <Route path="/candidate" element={<Protected role="CANDIDATE"><CandidateLayout /></Protected>}>
         <Route index element={<CandidateHome />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="cvs" element={<CvPage />} />
@@ -103,7 +105,7 @@ function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
       </Route>
-      <Route path="/employer" element={<Protected><EmployerLayout /></Protected>}>
+      <Route path="/employer" element={<Protected role="EMPLOYER"><EmployerLayout /></Protected>}>
         <Route index element={<EmployerDashboard />} />
         <Route path="company-profile" element={<CompanyProfilePage />} />
         <Route path="locations" element={<CompanyLocationsPage />} />
@@ -142,8 +144,74 @@ function readError(error: unknown) {
   return 'Có lỗi xảy ra';
 }
 
-function Protected({ children }: { children: JSX.Element }) {
+function isSuccessMessage(message: string) {
+  return message.startsWith('✅')
+    || message.startsWith('Đã')
+    || message.startsWith('Da ')
+    || message.includes('đã được')
+    || message.includes('da duoc')
+    || message.includes('thành công')
+    || message.includes('thanh cong')
+    || message.startsWith('Neu email')
+    || message.startsWith('Mat khau')
+    || message.includes('Upload CV')
+    || message.includes('CV Builder');
+}
+
+function openBlobInNewTab(blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+type ProfileSectionKey = 'education' | 'workExperience' | 'projects' | 'certifications';
+
+const profileSectionLabels: Record<ProfileSectionKey, string> = {
+  education: 'Học vấn',
+  workExperience: 'Kinh nghiệm làm việc',
+  projects: 'Dự án',
+  certifications: 'Chứng chỉ',
+};
+
+function asProfileItem(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function getItemText(item: Record<string, unknown>, key: string) {
+  const value = item[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function buildProfileSnapshot(profile: CandidateProfile | null, skillsText?: string): Record<string, unknown> {
+  if (!profile) return {};
+  return {
+    fullName: profile.fullName || '',
+    phone: profile.phone || '',
+    location: profile.location || '',
+    bio: profile.bio || '',
+    skills: skillsText
+      ? skillsText.split(',').map((skill) => skill.trim()).filter(Boolean)
+      : profile.skills,
+    education: profile.education || [],
+    workExperience: profile.workExperience || [],
+    projects: profile.projects || [],
+    certifications: profile.certifications || [],
+  };
+}
+
+function Protected({ children, role }: { children: JSX.Element; role?: 'CANDIDATE' | 'EMPLOYER' | 'ADMIN' }) {
   if (!getToken()) return <Navigate to="/login" replace />;
+  const currentRole = localStorage.getItem('role');
+  if (role && currentRole !== role) {
+    const fallback = currentRole === 'CANDIDATE'
+      ? '/candidate'
+      : currentRole === 'EMPLOYER'
+        ? '/employer'
+        : currentRole === 'ADMIN'
+          ? '/admin'
+          : '/login';
+    return <Navigate to={fallback} replace />;
+  }
   return children;
 }
 
@@ -557,8 +625,8 @@ function HomePage() {
 function LoginPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [email, setEmail] = useState('candidate.demo@sjp.local');
-  const [password, setPassword] = useState('Password123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -667,7 +735,7 @@ function LoginPage() {
           <label>
             <div className="field-header">
               <span>Mật khẩu</span>
-              <a href="#">Quên mật khẩu?</a>
+              <Link to="/forgot-password">Quên mật khẩu?</Link>
             </div>
             <div className="input-icon-wrap">
               <span className="input-icon">
@@ -762,9 +830,6 @@ function LoginPage() {
             Chưa có tài khoản?{' '}
             <Link to="/register">Đăng ký ngay</Link>
           </p>
-          <p style={{ marginTop: 8, fontSize: '0.78rem', color: 'var(--outline)' }}>
-            Demo: candidate.demo@sjp.local / Password123!
-          </p>
         </div>
       </motion.div>
     </div>
@@ -775,6 +840,7 @@ function LoginPage() {
 function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'CANDIDATE' | 'EMPLOYER'>('CANDIDATE');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -784,6 +850,10 @@ function RegisterPage() {
     event.preventDefault();
     setMessage('');
     setError('');
+    if (password !== confirmPassword) {
+      setError('Mật khẩu nhập lại không khớp.');
+      return;
+    }
     setLoading(true);
     try {
       await authService.register({ email, password, role });
@@ -849,6 +919,26 @@ function RegisterPage() {
           </label>
 
           <label>
+            Nhap lai mat khau
+            <div className="input-icon-wrap">
+              <span className="input-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Nhap lai mat khau"
+                required
+                autoComplete="new-password"
+              />
+            </div>
+          </label>
+
+          <label>
             Vai trò
             <select value={role} onChange={(e) => setRole(e.target.value as 'CANDIDATE' | 'EMPLOYER')}>
               <option value="CANDIDATE">Ứng viên</option>
@@ -858,7 +948,7 @@ function RegisterPage() {
 
           <AnimatePresence>
             {message && (
-              <motion.div className="success-panel" variants={scaleIn} initial="initial" animate="animate" exit="exit"
+              <motion.div className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'} variants={scaleIn} initial="initial" animate="animate" exit="exit"
                 transition={{ duration: 0.18, ease: EASE_OUT }}>
                 {message}
               </motion.div>
@@ -878,6 +968,185 @@ function RegisterPage() {
 
         <div className="auth-footer">
           <p>Đã có tài khoản? <Link to="/login">Đăng nhập</Link></p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── FORGOT PASSWORD ─────────────────────────────────────────────────────────
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setMessage('');
+    setError('');
+    setLoading(true);
+    try {
+      const response = await authService.forgotPassword({ email });
+      setMessage(response.message || 'Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="auth-shell">
+      <motion.div className="auth-card" variants={scaleIn} initial="initial" animate="animate"
+        transition={{ duration: 0.25, ease: EASE_OUT }}>
+        <div className="auth-logo">
+          <h1>Quên mật khẩu</h1>
+          <p>Nhập email để nhận link đặt lại mật khẩu</p>
+        </div>
+
+        <form className="auth-form" onSubmit={submit}>
+          <label>
+            Email
+            <div className="input-icon-wrap">
+              <span className="input-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="4" width="20" height="16" rx="2"/>
+                  <path d="m2 7 10 7 10-7"/>
+                </svg>
+              </span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="ten@congty.com"
+                required
+                autoComplete="email"
+              />
+            </div>
+          </label>
+
+          <AnimatePresence>
+            {message && (
+              <motion.div className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'}
+                variants={scaleIn} initial="initial" animate="animate" exit="exit"
+                transition={{ duration: 0.18, ease: EASE_OUT }}>
+                {message}
+              </motion.div>
+            )}
+            {error && (
+              <motion.div className="error-panel" variants={scaleIn} initial="initial" animate="animate" exit="exit"
+                transition={{ duration: 0.18, ease: EASE_OUT }}>
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <button type="submit" disabled={loading} style={{ width: '100%', minHeight: 44 }}>
+            {loading ? 'Đang gửi...' : 'Gửi link đặt lại mật khẩu'}
+          </button>
+        </form>
+
+        <div className="auth-footer">
+          <p><Link to="/login">Về trang đăng nhập</Link></p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── RESET PASSWORD ──────────────────────────────────────────────────────────
+function ResetPasswordPage() {
+  const [params] = useSearchParams();
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const token = params.get('token') || '';
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setMessage('');
+    setError('');
+    if (!token) {
+      setError('Thiếu token đặt lại mật khẩu.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Mật khẩu nhập lại không khớp.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await authService.resetPassword({ token, password });
+      setMessage(response.message || 'Mật khẩu đã được cập nhật.');
+      setPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="auth-shell">
+      <motion.div className="auth-card" variants={scaleIn} initial="initial" animate="animate"
+        transition={{ duration: 0.25, ease: EASE_OUT }}>
+        <div className="auth-logo">
+          <h1>Đặt lại mật khẩu</h1>
+          <p>Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số</p>
+        </div>
+
+        <form className="auth-form" onSubmit={submit}>
+          <label>
+            Mật khẩu mới
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Password123"
+              required
+              autoComplete="new-password"
+            />
+          </label>
+
+          <label>
+            Nhập lại mật khẩu
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="Password123"
+              required
+              autoComplete="new-password"
+            />
+          </label>
+
+          <AnimatePresence>
+            {message && (
+              <motion.div className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'}
+                variants={scaleIn} initial="initial" animate="animate" exit="exit"
+                transition={{ duration: 0.18, ease: EASE_OUT }}>
+                {message}
+              </motion.div>
+            )}
+            {error && (
+              <motion.div className="error-panel" variants={scaleIn} initial="initial" animate="animate" exit="exit"
+                transition={{ duration: 0.18, ease: EASE_OUT }}>
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <button type="submit" disabled={loading || !token} style={{ width: '100%', minHeight: 44 }}>
+            {loading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}
+          </button>
+        </form>
+
+        <div className="auth-footer">
+          <p><Link to="/login">Về trang đăng nhập</Link></p>
         </div>
       </motion.div>
     </div>
@@ -1220,20 +1489,29 @@ function JobDetailPage() {
   const { id } = useParams();
   const [job, setJob] = useState<Job | null>(null);
   const [cvs, setCvs] = useState<CvFile[]>([]);
-  const [cvId, setCvId] = useState<string | undefined>();
+  const [versions, setVersions] = useState<CvVersion[]>([]);
+  const [selectedResume, setSelectedResume] = useState('');
   const [message, setMessage] = useState('');
   const [applying, setApplying] = useState(false);
+  const token = getToken();
+  const role = localStorage.getItem('role');
+  const isCandidate = Boolean(token && role === 'CANDIDATE');
 
   const load = useCallback(async () => {
     if (!id) return;
     setJob(await jobService.getById(id));
-    if (getToken()) {
-      candidateService.getCvs().then((items) => {
-        setCvs(items);
-        setCvId(items.find((item) => item.defaultCv)?.id || items[0]?.id);
-      }).catch(() => setCvs([]));
+    if (isCandidate) {
+      Promise.all([
+        candidateService.getCvs().catch(() => []),
+        candidateService.getCvVersions().catch(() => []),
+      ]).then(([uploadedCvs, builderVersions]) => {
+        setCvs(uploadedCvs);
+        setVersions(builderVersions);
+        const defaultCv = uploadedCvs.find((item) => item.defaultCv) || uploadedCvs[0];
+        setSelectedResume(defaultCv ? `uploaded:${defaultCv.id}` : builderVersions[0] ? `builder:${builderVersions[0].id}` : '');
+      });
     }
-  }, [id]);
+  }, [id, isCandidate]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -1246,9 +1524,14 @@ function JobDetailPage() {
 
   async function apply() {
     if (!job) return;
+    const [resumeType, resumeId] = selectedResume.split(':');
     setApplying(true);
     try {
-      await candidateService.apply(job.id, cvId);
+      await candidateService.apply(
+        job.id,
+        resumeType === 'uploaded' ? resumeId : undefined,
+        resumeType === 'builder' ? resumeId : undefined,
+      );
       setMessage('✅ Đã nộp hồ sơ ứng tuyển thành công!');
       await load();
     } catch (err) {
@@ -1352,7 +1635,7 @@ function JobDetailPage() {
             </div>
           )}
 
-          {getToken() ? (
+          {isCandidate ? (
             <>
               <button
                 className="outline"
@@ -1362,13 +1645,16 @@ function JobDetailPage() {
                 {job.saved ? '🔖 Bỏ lưu' : '🔖 Lưu việc làm'}
               </button>
 
-              {cvs.length > 0 && (
+              {(cvs.length > 0 || versions.length > 0) && (
                 <div>
                   <label className="filter-label" style={{ marginBottom: 8 }}>Chọn CV</label>
-                  <select value={cvId || ''} onChange={(e) => setCvId(e.target.value || undefined)}>
+                  <select value={selectedResume} onChange={(e) => setSelectedResume(e.target.value)}>
                     <option value="">Chọn CV của bạn</option>
                     {cvs.map((cv) => (
-                      <option key={cv.id} value={cv.id}>{cv.originalFileName}</option>
+                      <option key={cv.id} value={`uploaded:${cv.id}`}>{cv.originalFileName}</option>
+                    ))}
+                    {versions.map((version) => (
+                      <option key={version.id} value={`builder:${version.id}`}>{version.title} (CV Builder)</option>
                     ))}
                   </select>
                 </div>
@@ -1376,7 +1662,7 @@ function JobDetailPage() {
 
               <button
                 onClick={apply}
-                disabled={job.applied || applying}
+                disabled={job.applied || applying || !selectedResume}
                 style={{ width: '100%', minHeight: 44 }}
               >
                 {applying ? 'Đang gửi...' : job.applied ? '✓ Đã ứng tuyển' : 'Ứng tuyển ngay'}
@@ -1385,7 +1671,7 @@ function JobDetailPage() {
               <AnimatePresence>
                 {message && (
                   <motion.div
-                    className={message.startsWith('✅') ? 'success-panel' : 'error-panel'}
+                    className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'}
                     variants={scaleIn} initial="initial" animate="animate" exit="exit"
                     transition={{ duration: 0.18, ease: EASE_OUT }}
                   >
@@ -1394,6 +1680,10 @@ function JobDetailPage() {
                 )}
               </AnimatePresence>
             </>
+          ) : token ? (
+            <Link className="button-link outline" to={role === 'EMPLOYER' ? '/employer' : '/'} style={{ width: '100%', textAlign: 'center' }}>
+              Vao dashboard cua ban
+            </Link>
           ) : (
             <Link className="button-link" to="/login" style={{ width: '100%', textAlign: 'center' }}>
               Đăng nhập để ứng tuyển
@@ -1483,14 +1773,37 @@ function CandidateLayout() {
 // ─── CANDIDATE HOME ──────────────────────────────────────────────────────────
 function CandidateHome() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [metrics, setMetrics] = useState({
+    savedJobs: 0,
+    applications: 0,
+    aiSessions: 0,
+    unreadNotifications: 0,
+  });
   const [loading, setLoading] = useState(true);
   const userName = localStorage.getItem('email')?.split('@')[0] || 'bạn';
 
   useEffect(() => {
-    jobService.recommendations()
-      .then(setRecommendations)
-      .catch(() => setRecommendations([]))
-      .finally(() => setLoading(false));
+    async function loadHome() {
+      try {
+        const [recommendedJobs, savedJobs, applications, aiSessions, notifications] = await Promise.all([
+          jobService.recommendations().catch(() => []),
+          candidateService.getSavedJobs().catch(() => []),
+          candidateService.getApplications().catch(() => []),
+          aiInterviewService.sessions().catch(() => []),
+          candidateService.getNotifications().catch(() => []),
+        ]);
+        setRecommendations(recommendedJobs);
+        setMetrics({
+          savedJobs: savedJobs.length,
+          applications: applications.length,
+          aiSessions: aiSessions.length,
+          unreadNotifications: notifications.filter((item) => !item.read).length,
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadHome();
   }, []);
 
   return (
@@ -1517,10 +1830,10 @@ function CandidateHome() {
 
       <div className="metric-grid" style={{ marginTop: 24 }}>
         {[
-          { label: 'Việc đã lưu', value: '—', icon: '🔖', to: '/candidate/saved-jobs' },
-          { label: 'Đang ứng tuyển', value: '—', icon: '📋', to: '/candidate/applications' },
-          { label: 'Phỏng vấn AI', value: '—', icon: '🤖', to: '/candidate/ai-interviews' },
-          { label: 'Thông báo mới', value: '—', icon: '🔔', to: '/candidate/notifications' },
+          { label: 'Việc đã lưu', value: metrics.savedJobs, icon: '🔖', to: '/candidate/saved-jobs' },
+          { label: 'Đang ứng tuyển', value: metrics.applications, icon: '📋', to: '/candidate/applications' },
+          { label: 'Phỏng vấn AI', value: metrics.aiSessions, icon: '🤖', to: '/candidate/ai-interviews' },
+          { label: 'Thông báo mới', value: metrics.unreadNotifications, icon: '🔔', to: '/candidate/notifications' },
         ].map(({ label, value, icon, to }, i) => (
           <motion.div
             key={label}
@@ -1639,11 +1952,40 @@ function ProfilePage() {
 
   async function save() {
     if (!profile) return;
-    const saved = await candidateService.updateProfile({ ...profile, skills: skills.split(',').map((s) => s.trim()).filter(Boolean) });
-    setProfile(saved);
-    setMessage('Đã lưu hồ sơ thành công!');
-    setSaving(false);
-    setTimeout(() => setMessage(''), 3000);
+    setSaving(true);
+    try {
+      const saved = await candidateService.updateProfile({ ...profile, skills: skills.split(',').map((s) => s.trim()).filter(Boolean) });
+      setProfile(saved);
+      setMessage('Da luu ho so thanh cong!');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateSectionItem(section: ProfileSectionKey, index: number, field: string, value: string) {
+    if (!profile) return;
+    const items = [...(profile[section] || [])].map(asProfileItem);
+    items[index] = { ...items[index], [field]: value };
+    setProfile({ ...profile, [section]: items });
+  }
+
+  function addSectionItem(section: ProfileSectionKey) {
+    if (!profile) return;
+    setProfile({
+      ...profile,
+      [section]: [
+        ...(profile[section] || []),
+        { title: '', organization: '', time: '', description: '' },
+      ],
+    });
+  }
+
+  function removeSectionItem(section: ProfileSectionKey, index: number) {
+    if (!profile) return;
+    setProfile({ ...profile, [section]: (profile[section] || []).filter((_, itemIndex) => itemIndex !== index) });
   }
 
   if (!profile) {
@@ -1730,6 +2072,75 @@ function ProfilePage() {
           </label>
         </div>
 
+        <div style={{ display: 'grid', gap: 16, marginTop: 24 }}>
+          {(Object.keys(profileSectionLabels) as ProfileSectionKey[]).map((section) => (
+            <div key={section} style={{
+              border: '1px solid var(--outline-variant)',
+              borderRadius: 'var(--radius-control)',
+              padding: 16,
+              background: 'var(--surface-container)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                <h3 style={{ margin: 0, fontSize: '1rem' }}>{profileSectionLabels[section]}</h3>
+                <button type="button" className="outline sm" onClick={() => addSectionItem(section)}>
+                  + Thêm
+                </button>
+              </div>
+
+              {(profile[section] || []).length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>Chưa có thông tin.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {(profile[section] || []).map((rawItem, index) => {
+                    const item = asProfileItem(rawItem);
+                    return (
+                      <div key={index} className="form-grid two" style={{ paddingTop: 12, borderTop: '1px solid var(--outline-variant)' }}>
+                        <label>
+                          Tiêu đề
+                          <input
+                            value={getItemText(item, 'title')}
+                            onChange={(e) => updateSectionItem(section, index, 'title', e.target.value)}
+                            placeholder="Ví dụ: Software Engineer"
+                          />
+                        </label>
+                        <label>
+                          Đơn vị
+                          <input
+                            value={getItemText(item, 'organization')}
+                            onChange={(e) => updateSectionItem(section, index, 'organization', e.target.value)}
+                            placeholder="Công ty, trường học, tổ chức"
+                          />
+                        </label>
+                        <label>
+                          Thời gian
+                          <input
+                            value={getItemText(item, 'time')}
+                            onChange={(e) => updateSectionItem(section, index, 'time', e.target.value)}
+                            placeholder="2023 - nay"
+                          />
+                        </label>
+                        <label className="wide">
+                          Mô tả
+                          <textarea
+                            value={getItemText(item, 'description')}
+                            onChange={(e) => updateSectionItem(section, index, 'description', e.target.value)}
+                            placeholder="Kết quả, trách nhiệm hoặc thành tựu nổi bật"
+                          />
+                        </label>
+                        <div className="wide" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button type="button" className="danger sm" onClick={() => removeSectionItem(section, index)}>
+                            Xóa mục
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20, paddingTop: 16,
           borderTop: '1px solid var(--outline-variant)' }}>
           <button onClick={save} disabled={saving}>
@@ -1755,6 +2166,8 @@ function CvPage() {
   const [versions, setVersions] = useState<CvVersion[]>([]);
   const [message, setMessage] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [editingVersionId, setEditingVersionId] = useState('');
+  const [draftVersionTitle, setDraftVersionTitle] = useState('');
 
   async function load() {
     setCvs(await candidateService.getCvs());
@@ -1778,8 +2191,65 @@ function CvPage() {
   }
 
   async function createVersion() {
-    await candidateService.createCvVersion(`CV Builder ${versions.length + 1}`, {});
-    await load();
+    try {
+      const profile = await candidateService.getProfile();
+      await candidateService.createCvVersion(`CV Builder ${versions.length + 1}`, buildProfileSnapshot(profile));
+      setMessage('Đã tạo CV Builder từ hồ sơ hiện tại.');
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    }
+  }
+
+  function startEditVersion(version: CvVersion) {
+    setEditingVersionId(version.id);
+    setDraftVersionTitle(version.title);
+  }
+
+  async function saveVersionTitle(version: CvVersion) {
+    const title = draftVersionTitle.trim();
+    if (!title) {
+      setMessage('Tên CV Builder không được để trống.');
+      return;
+    }
+    try {
+      await candidateService.updateCvVersion(version.id, title, version.snapshot, version.templateKey);
+      setEditingVersionId('');
+      setDraftVersionTitle('');
+      setMessage('Đã cập nhật CV Builder.');
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    }
+  }
+
+  async function refreshVersionSnapshot(version: CvVersion) {
+    try {
+      const profile = await candidateService.getProfile();
+      await candidateService.updateCvVersion(version.id, version.title, buildProfileSnapshot(profile), version.templateKey);
+      setMessage('Đã cập nhật nội dung CV Builder từ hồ sơ.');
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    }
+  }
+
+  async function deleteVersion(id: string) {
+    try {
+      await candidateService.deleteCvVersion(id);
+      setMessage('Đã xóa CV Builder.');
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    }
+  }
+
+  async function openCv(id: string) {
+    try {
+      openBlobInNewTab(await candidateService.downloadCv(id));
+    } catch (err) {
+      setMessage(readError(err));
+    }
   }
 
   return (
@@ -1822,7 +2292,7 @@ function CvPage() {
         <AnimatePresence>
           {message && (
             <motion.div
-              className={message.startsWith('✅') ? 'success-panel' : 'error-panel'}
+              className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'}
               variants={scaleIn} initial="initial" animate="animate" exit="exit"
               transition={{ duration: 0.18, ease: EASE_OUT }}
               style={{ marginTop: 12 }}
@@ -1839,17 +2309,18 @@ function CvPage() {
           <h2 style={{ marginBottom: 16 }}>CV đã tải lên</h2>
           <div className="data-table">
             <div className="data-table-header" style={{
-              gridTemplateColumns: '1fr auto auto auto auto'
+              gridTemplateColumns: '1fr auto auto auto auto auto'
             }}>
               <span>Tên file</span>
               <span>Kích thước</span>
               <span>Trạng thái</span>
               <span></span>
               <span></span>
+              <span></span>
             </div>
             {cvs.map((cv) => (
               <div className="data-row" key={cv.id}
-                style={{ gridTemplateColumns: '1fr auto auto auto auto' }}>
+                style={{ gridTemplateColumns: '1fr auto auto auto auto auto' }}>
                 <strong style={{ fontSize: '0.925rem' }}>📄 {cv.originalFileName}</strong>
                 <span className="muted">{Math.round(cv.fileSize / 1024)} KB</span>
                 <span>
@@ -1858,6 +2329,9 @@ function CvPage() {
                     : <span className="chip neutral">PDF</span>
                   }
                 </span>
+                <button className="outline sm" onClick={() => openCv(cv.id)}>
+                  Xem
+                </button>
                 <button className="outline sm"
                   onClick={() => candidateService.setDefaultCv(cv.id).then(load)}>
                   Đặt mặc định
@@ -1884,10 +2358,35 @@ function CvPage() {
           <div className="data-table">
             {versions.map((version) => (
               <div className="data-row" key={version.id}
-                style={{ gridTemplateColumns: '1fr auto auto' }}>
-                <strong>📝 {version.title}</strong>
+                style={{ gridTemplateColumns: 'minmax(180px, 1fr) auto auto auto auto' }}>
+                {editingVersionId === version.id ? (
+                  <input
+                    value={draftVersionTitle}
+                    onChange={(e) => setDraftVersionTitle(e.target.value)}
+                    aria-label="Ten CV Builder"
+                  />
+                ) : (
+                  <strong>CV {version.title}</strong>
+                )}
                 <span className="chip neutral">{version.templateKey}</span>
                 <span className="muted">{new Date(version.updatedAt).toLocaleDateString('vi-VN')}</span>
+                {editingVersionId === version.id ? (
+                  <button className="outline sm" onClick={() => saveVersionTitle(version)}>
+                    Luu
+                  </button>
+                ) : (
+                  <button className="outline sm" onClick={() => startEditVersion(version)}>
+                    Doi ten
+                  </button>
+                )}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="outline sm" onClick={() => refreshVersionSnapshot(version)}>
+                    Cap nhat
+                  </button>
+                  <button className="danger sm" onClick={() => deleteVersion(version.id)}>
+                    Xoa
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -2101,12 +2600,24 @@ function NotificationsPage() {
 
   useEffect(() => { load(); }, []);
 
+  const unreadCount = items.filter((item) => !item.read).length;
+
+  async function markAllRead() {
+    await candidateService.markAllNotificationsRead();
+    await load();
+  }
+
   return (
     <motion.div variants={fadeUp} initial="initial" animate="animate"
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div className="page-header">
         <h1>Thông báo</h1>
         <p>Cập nhật từ nhà tuyển dụng và hệ thống</p>
+        {unreadCount > 0 && (
+          <button className="outline" onClick={markAllRead} style={{ marginTop: 12 }}>
+            Danh dau tat ca da doc
+          </button>
+        )}
       </div>
 
       {loading ? (

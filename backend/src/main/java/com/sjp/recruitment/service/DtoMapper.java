@@ -176,12 +176,15 @@ public class DtoMapper {
             Application application,
             JobResponse job,
             List<ApplicationTimelineResponse> timeline) {
+        CandidateCv submittedCv = application.getCv();
+        CvVersion submittedVersion = application.getCvVersion();
+        boolean builderResume = submittedVersion != null && "builder".equalsIgnoreCase(submittedVersion.getSourceType());
         return new ApplicationResponse(
                 String.valueOf(application.getId()),
                 job,
                 application.getCandidate() != null ? toCandidateProfileResponse(application.getCandidate(), true) : null,
-                toCvResponse(application.getCv()),
-                toCvVersionResponse(application.getCvVersion()),
+                builderResume ? null : toCvResponse(submittedCv),
+                builderResume ? toCvVersionResponse(submittedVersion) : null,
                 toFrontendApplicationStatus(application.getStatus()),
                 application.getSubmittedAt(),
                 application.getUpdatedAt(),

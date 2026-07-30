@@ -4,12 +4,9 @@ import com.sjp.recruitment.service.ApplicationService;
 import com.sjp.recruitment.model.dto.request.ApplicationSubmitRequest;
 import com.sjp.recruitment.model.dto.response.ApplicationResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import com.sjp.recruitment.model.entity.Application;
 
 import jakarta.validation.Valid;
 import java.util.List;
@@ -17,25 +14,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/applications")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('CANDIDATE')")
 public class ApplicationController {
 
     private final ApplicationService applicationService;
-
-    @GetMapping("/candidate/{candidateId}")
-    public ResponseEntity<Page<Application>> getByCandidate(
-            @PathVariable String candidateId,
-            Pageable pageable) {
-        Page<Application> applications = applicationService.findByCandidateId(candidateId, pageable);
-        return ResponseEntity.ok(applications);
-    }
-
-    @PostMapping("/apply")
-    public ResponseEntity<Application> apply(
-            @RequestParam String candidateId,
-            @RequestParam String jobId) {
-        Application application = applicationService.apply(candidateId, jobId);
-        return ResponseEntity.ok(application);
-    }
 
     @PostMapping
     public ResponseEntity<ApplicationResponse> submit(@Valid @RequestBody ApplicationSubmitRequest request) {

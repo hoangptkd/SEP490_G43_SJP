@@ -15,12 +15,10 @@ import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.repository.ApplicationRepository;
 import com.sjp.recruitment.repository.ApplicationStatusHistoryRepository;
 import com.sjp.recruitment.repository.CandidateCvRepository;
-import com.sjp.recruitment.repository.CandidateProfileRepository;
 import com.sjp.recruitment.repository.CvVersionRepository;
 import com.sjp.recruitment.repository.JobRepository;
 import com.sjp.recruitment.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -35,9 +33,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ApplicationService {
 
+    private static final String SOURCE_UPLOADED = "uploaded";
+    private static final String SOURCE_BUILDER = "builder";
+
     private final ApplicationRepository applicationRepository;
     private final JobRepository jobRepository;
-    private final CandidateProfileRepository candidateRepository;
     private final CandidateCvRepository candidateCvRepository;
     private final CvVersionRepository cvVersionRepository;
     private final ApplicationStatusHistoryRepository historyRepository;
@@ -45,33 +45,6 @@ public class ApplicationService {
     private final CandidateService candidateService;
     private final JobService jobService;
     private final DtoMapper dtoMapper;
-
-    @Transactional(readOnly = true)
-    public Page<Application> findByCandidateId(String candidateId, Pageable pageable) {
-        return applicationRepository.findByCandidateId(parseUuid(candidateId, "CANDIDATE_ID_INVALID"), pageable);
-    }
-
-    @Transactional
-    public Application apply(String candidateId, String jobId) {
-        UUID parsedCandidateId = parseUuid(candidateId, "CANDIDATE_ID_INVALID");
-        UUID parsedJobId = parseUuid(jobId, "JOB_ID_INVALID");
-        Job job = jobRepository.findById(parsedJobId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Khong tim thay viec lam"));
-
-        CandidateProfile candidate = candidateRepository.findById(parsedCandidateId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CANDIDATE_NOT_FOUND", "Khong tim thay ung vien"));
-
-        if (applicationRepository.existsByCandidateIdAndJobId(parsedCandidateId, parsedJobId)) {
-            throw new ApiException(HttpStatus.CONFLICT, "APPLICATION_DUPLICATED", "Ban da ung tuyen viec lam nay");
-        }
-
-        Application application = new Application();
-        application.setJob(job);
-        application.setCandidate(candidate);
-        application.setStatus(Application.ApplicationStatus.SUBMITTED);
-
-        return applicationRepository.save(application);
-    }
 
     @Transactional
     public ApplicationResponse submit(ApplicationSubmitRequest request) {
@@ -95,14 +68,16 @@ public class ApplicationService {
         CandidateCv cv = null;
         CvVersion cvVersion = null;
         if (request.cvId() != null) {
-            cv = candidateCvRepository.findByIdAndCandidateId(parseUuid(request.cvId(), "CV_ID_INVALID"), candidate.getId())
-                    .filter(candidateCv -> !candidateCv.isDeleted())
+            cv = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(request.cvId(), "CV_ID_INVALID"), candidate.getId(), SOURCE_UPLOADED)
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
         } else if (request.cvVersionId() != null) {
-            cvVersion = cvVersionRepository.findByIdAndCandidateId(parseUuid(request.cvVersionId(), "CV_VERSION_ID_INVALID"), candidate.getId())
+            UUID cvVersionId = parseUuid(request.cvVersionId(), "CV_VERSION_ID_INVALID");
+            cvVersion = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(cvVersionId, candidate.getId(), SOURCE_BUILDER)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
+            cv = candidateCvRepository.findByIdAndCandidateId(cvVersion.getId(), candidate.getId())
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
         } else {
-            cv = candidateCvRepository.findByCandidateIdOrderByCreatedAtDesc(candidate.getId()).stream()
+            cv = candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(candidate.getId(), SOURCE_UPLOADED).stream()
                     .filter(CandidateCv::isDefaultCv)
                     .findFirst()
                     .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "CV_REQUIRED", "Vui long chon CV de ung tuyen"));

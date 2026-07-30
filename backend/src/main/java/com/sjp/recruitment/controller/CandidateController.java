@@ -7,11 +7,15 @@ import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.JobService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -51,6 +55,19 @@ public class CandidateController {
     public ResponseEntity<Void> deleteCv(@PathVariable String id) {
         candidateService.deleteCv(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/cvs/{id}/download")
+    public ResponseEntity<Resource> downloadCv(@PathVariable String id) {
+        CandidateService.CvDownload download = candidateService.downloadCv(id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(download.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline()
+                                .filename(download.fileName(), StandardCharsets.UTF_8)
+                                .build()
+                                .toString())
+                .body(download.resource());
     }
 
     @GetMapping("/cv-versions")

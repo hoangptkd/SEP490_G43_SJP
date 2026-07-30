@@ -140,7 +140,7 @@ class AiInterviewDeferredEvaluationTest {
         when(questionSetRepository.findByIdAndActiveTrue(questionSetId)).thenReturn(Optional.of(questionSet));
         when(questionBankRepository.findByQuestionSet_IdAndActiveTrueOrderByOrderIndexAsc(questionSetId))
                 .thenReturn(List.of(first, second));
-        when(candidateCvRepository.existsByCandidateId(candidateId)).thenReturn(true);
+        when(candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(candidateId, "uploaded")).thenReturn(true);
 
         service.createPracticeSession(new AiInterviewPracticeSessionRequest(
                 "Backend Developer",

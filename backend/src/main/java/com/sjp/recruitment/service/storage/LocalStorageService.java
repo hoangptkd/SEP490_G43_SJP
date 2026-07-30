@@ -1,6 +1,8 @@
 package com.sjp.recruitment.service.storage;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -32,5 +34,14 @@ public class LocalStorageService implements StorageService {
         }
         file.transferTo(target);
         return new StoredFile(uploadRoot.relativize(target).toString().replace('\\', '/'), file.getSize(), file.getContentType());
+    }
+
+    @Override
+    public Resource loadCandidateCv(String storageKey) throws IOException {
+        Path target = uploadRoot.resolve(storageKey == null ? "" : storageKey).normalize();
+        if (!target.startsWith(uploadRoot) || !Files.isRegularFile(target)) {
+            throw new IOException("CV file not found");
+        }
+        return new UrlResource(target.toUri());
     }
 }

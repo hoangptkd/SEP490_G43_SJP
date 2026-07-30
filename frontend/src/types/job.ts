@@ -80,6 +80,7 @@ export interface JobFilters {
   maxSalary?: number;
   experienceLevel?: string;
   skills?: string;
+  category?: string;
   sort?: string;
 }
 

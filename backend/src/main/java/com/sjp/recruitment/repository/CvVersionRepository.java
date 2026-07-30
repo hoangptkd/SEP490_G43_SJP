@@ -10,6 +10,7 @@ import java.util.UUID;
 
 @Repository
 public interface CvVersionRepository extends JpaRepository<CvVersion, UUID> {
-    List<CvVersion> findByCandidateIdOrderByUpdatedAtDesc(UUID candidateId);
+    List<CvVersion> findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByUpdatedAtDesc(UUID candidateId, String sourceType);
     Optional<CvVersion> findByIdAndCandidateId(UUID id, UUID candidateId);
+    Optional<CvVersion> findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID id, UUID candidateId, String sourceType);
 }

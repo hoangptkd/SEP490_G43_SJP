@@ -2,11 +2,14 @@ package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.model.dto.request.CompleteOauthRoleRequest;
+import com.sjp.recruitment.model.dto.request.ForgotPasswordRequest;
 import com.sjp.recruitment.model.dto.request.LoginRequest;
 import com.sjp.recruitment.model.dto.request.RegisterRequest;
+import com.sjp.recruitment.model.dto.request.ResetPasswordRequest;
 import com.sjp.recruitment.model.dto.request.VerifyEmailRequest;
 import com.sjp.recruitment.model.dto.response.AuthConfigResponse;
 import com.sjp.recruitment.model.dto.response.AuthResponse;
+import com.sjp.recruitment.model.dto.response.MessageResponse;
 import com.sjp.recruitment.model.dto.response.UserResponse;
 import com.sjp.recruitment.service.AuthService;
 import jakarta.validation.Valid;
@@ -15,7 +18,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 @RestController
 @RequestMapping("/auth")
@@ -29,37 +31,6 @@ public class AuthController {
     public ResponseEntity<AuthConfigResponse> config() {
         return ResponseEntity.ok(new AuthConfigResponse(clientRegistrationRepository.getIfAvailable() != null));
     }
-    private final JdbcTemplate jdbcTemplate;
-
-    @GetMapping("/diagnostic")
-    public ResponseEntity<String> diagnostic() {
-        StringBuilder sb = new StringBuilder();
-        try {
-            sb.append("DB Connection Test: ");
-            jdbcTemplate.execute("SELECT 1");
-            sb.append("Success\n");
-        } catch (Exception e) {
-            sb.append("Failed: ").append(e.toString()).append("\n");
-        }
-
-        try {
-            sb.append("Query companies table: ");
-            jdbcTemplate.execute("SELECT count(*) FROM companies");
-            sb.append("Exists\n");
-        } catch (Exception e) {
-            sb.append("Failed: ").append(e.toString()).append("\n");
-        }
-
-        try {
-            sb.append("Query employers table: ");
-            jdbcTemplate.execute("SELECT count(*) FROM employers");
-            sb.append("Exists\n");
-        } catch (Exception e) {
-            sb.append("Failed: ").append(e.toString()).append("\n");
-        }
-
-        return ResponseEntity.ok(sb.toString());
-    }
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -71,6 +42,18 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<MessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(new MessageResponse("Neu email ton tai, huong dan dat lai mat khau da duoc gui"));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(new MessageResponse("Mat khau da duoc cap nhat"));
     }
 
     @PostMapping("/verify-email")

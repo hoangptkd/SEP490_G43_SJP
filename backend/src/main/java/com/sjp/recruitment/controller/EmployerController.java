@@ -8,13 +8,19 @@ import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
 import com.sjp.recruitment.model.dto.request.JobRequest;
 import com.sjp.recruitment.model.dto.response.JobResponse;
 import com.sjp.recruitment.model.dto.response.ApplicationResponse;
+import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.EmployerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -142,5 +148,18 @@ public class EmployerController {
         String targetStatus = body != null && body.get("status") != null ? body.get("status") : status;
         String note = body != null ? body.get("note") : null;
         return ResponseEntity.ok(employerService.updateApplicationStatus(id, targetStatus, note));
+    }
+
+    @GetMapping("/applications/{id}/cv")
+    public ResponseEntity<Resource> downloadApplicationCv(@PathVariable String id) {
+        CandidateService.CvDownload download = employerService.downloadApplicationCv(id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(download.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline()
+                                .filename(download.fileName(), StandardCharsets.UTF_8)
+                                .build()
+                                .toString())
+                .body(download.resource());
     }
 }

@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "app.data-seeder.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.data-seeder.enabled", havingValue = "true")
 public class DataSeeder implements CommandLineRunner {
 
     private static final String DEMO_CANDIDATE_EMAIL = "candidate.demo@sjp.local";

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Locale;
 import java.util.function.Function;
 
 @Component
@@ -61,7 +62,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(user.getEmail())
                 .claim("id", user.getId())
-                .claim("role", user.getRole())
+                .claim("role", user.getRoleEnum() == null ? normalizeRole(user.getRole()) : user.getRoleEnum().name())
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())
@@ -72,7 +73,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(user.email())
                 .claim("id", user.id())
-                .claim("role", user.role())
+                .claim("role", normalizeRole(user.role()))
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())
@@ -85,5 +86,17 @@ public class JwtUtil {
 
     public Boolean validateToken(String token) {
         return !isTokenExpired(token) && extractUsername(token) != null;
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null) {
+            return null;
+        }
+        return switch (role.trim().toLowerCase(Locale.ROOT)) {
+            case "job_seeker", "candidate" -> "CANDIDATE";
+            case "employer" -> "EMPLOYER";
+            case "admin" -> "ADMIN";
+            default -> role.trim().toUpperCase(Locale.ROOT);
+        };
     }
 }

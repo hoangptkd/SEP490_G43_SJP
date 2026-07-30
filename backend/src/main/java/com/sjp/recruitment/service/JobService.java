@@ -50,7 +50,6 @@ public class JobService {
     private final CandidateProfileRepository candidateProfileRepository;
     private final SavedJobRepository savedJobRepository;
     private final ApplicationRepository applicationRepository;
-    private final EmployerRepository employerRepository;
     private final SkillRepository skillRepository;
     private final JobSkillRepository jobSkillRepository;
     private final NotificationRepository notificationRepository;
@@ -60,7 +59,7 @@ public class JobService {
 
     @Transactional(readOnly = true)
     public JobPageResponse search(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
-                                  String experienceLevel, String skills, String sort, int page, int size) {
+                                  String experienceLevel, String skills, String category, String sort, int page, int size) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -68,7 +67,7 @@ public class JobService {
                 .addValue("offset", (long) safePage * safeSize);
 
         String whereClause = buildRemoteJobWhereClause(
-                search, location, minSalary, maxSalary, experienceLevel, skills, params);
+                search, location, minSalary, maxSalary, experienceLevel, skills, category, params);
 
         String countSql = "SELECT COUNT(*) FROM jobs j JOIN companies c ON c.id = j.company_id\n" + whereClause;
         Long totalElements = namedParameterJdbcTemplate.queryForObject(countSql, params, Long.class);
@@ -213,8 +212,10 @@ public class JobService {
     }
 
     @Transactional
-    public Job create(JobRequest request) {
-        Employer employer = resolveEmployer(request.getEmployerId());
+    public Job create(JobRequest request, Employer employer) {
+        if (employer == null) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "EMPLOYER_REQUIRED", "Khong tim thay tai khoan nha tuyen dung");
+        }
         Company company = employer.getCompany();
         if (company == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "COMPANY_REQUIRED", "Cần có công ty trước khi tạo việc làm");
@@ -226,14 +227,15 @@ public class JobService {
     }
 
     @Transactional
-    public JobResponse createJobResponse(JobRequest request) {
-        Job job = create(request);
+    public JobResponse createJobResponse(JobRequest request, Employer employer) {
+        Job job = create(request, employer);
         return dtoMapper.toJobResponse(job, false, false, null);
     }
 
     @Transactional
-    public Job update(String id, JobRequest request) {
+    public Job update(String id, JobRequest request, Employer employer) {
         Job job = findById(id);
+        checkEmployerPermission(job, employer, "Ban khong co quyen cap nhat viec lam nay");
         if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực.");
         }
@@ -241,8 +243,8 @@ public class JobService {
     }
 
     @Transactional
-    public JobResponse updateJobResponse(String id, JobRequest request) {
-        Job job = update(id, request);
+    public JobResponse updateJobResponse(String id, JobRequest request, Employer employer) {
+        Job job = update(id, request, employer);
         return dtoMapper.toJobResponse(job, false, false, null);
     }
 
@@ -438,19 +440,6 @@ public class JobService {
         }
     }
 
-    private Employer resolveEmployer(String employerIdStr) {
-        if (employerIdStr != null && !employerIdStr.isBlank()) {
-            return employerRepository.findById(parseUuid(employerIdStr, "EMPLOYER_ID_INVALID"))
-                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "EMPLOYER_NOT_FOUND", "Không tìm thấy nhà tuyển dụng"));
-        }
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof User user) {
-            return employerRepository.findByUserId(user.getId())
-                    .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "EMPLOYER_REQUIRED", "Không tìm thấy tài khoản nhà tuyển dụng"));
-        }
-        throw new ApiException(HttpStatus.BAD_REQUEST, "EMPLOYER_ID_REQUIRED", "Cần thông tin nhà tuyển dụng");
-    }
-
     private Job buildAndSaveJob(Job job, Employer employer, Company company, JobRequest request) {
         job.setTitle(request.getTitle());
         job.setDescription(request.getDescription());
@@ -464,7 +453,7 @@ public class JobService {
         job.setJobType(request.getJobType() != null ? request.getJobType() : "full_time");
         job.setWorkMode(request.getWorkMode() != null ? request.getWorkMode() : "onsite");
         job.setExperienceLevel(request.getExperienceLevel() != null ? request.getExperienceLevel() : "fresher");
-        
+
         if (request.getDeadline() != null && !request.getDeadline().isBlank()) {
             try {
                 job.setDeadline(LocalDate.parse(request.getDeadline()));
@@ -507,6 +496,9 @@ public class JobService {
         if (request.getCompanyLocationId() != null && !request.getCompanyLocationId().isBlank()) {
             CompanyLocation loc = companyLocationRepository.findById(parseUuid(request.getCompanyLocationId(), "LOCATION_ID_INVALID"))
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "LOCATION_NOT_FOUND", "Không tìm thấy địa điểm làm việc"));
+            if (loc.getCompany() == null || company == null || !loc.getCompany().getId().equals(company.getId())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "LOCATION_FORBIDDEN", "Dia diem lam viec khong thuoc cong ty cua ban");
+            }
             job.setCompanyLocation(loc);
             job.setLocation(loc.getBranchName());
         } else {
@@ -682,7 +674,7 @@ public class JobService {
     }
 
     private String buildRemoteJobWhereClause(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
-                                             String experienceLevel, String skills, MapSqlParameterSource params) {
+                                             String experienceLevel, String skills, String category, MapSqlParameterSource params) {
         StringBuilder where = new StringBuilder("""
                 WHERE j.status = 'published'
                   AND (j.deadline IS NULL OR j.deadline >= CURRENT_DATE)
@@ -723,6 +715,36 @@ public class JobService {
         if (experienceLevel != null && !experienceLevel.isBlank()) {
             where.append("  AND LOWER(COALESCE(j.experience_level, '')) = :experienceLevel\n");
             params.addValue("experienceLevel", experienceLevel.trim().toLowerCase(Locale.ROOT));
+        }
+
+        if (category != null && !category.isBlank()) {
+            where.append("""
+                  AND (
+                    EXISTS (
+                      SELECT 1
+                      FROM categories cat
+                      WHERE cat.id = j.category_id
+                        AND (
+                          cat.id::text = :categoryRaw
+                          OR LOWER(cat.slug) = :category
+                          OR LOWER(cat.name) = :category
+                        )
+                    )
+                    OR EXISTS (
+                      SELECT 1
+                      FROM job_skills jsc
+                      JOIN skills sc ON sc.id = jsc.skill_id
+                      WHERE jsc.job_id = j.id
+                        AND (
+                          LOWER(COALESCE(sc.category, '')) = :category
+                          OR LOWER(sc.name) = :category
+                        )
+                    )
+                    OR LOWER(COALESCE(c.industry, '')) = :category
+                  )
+                """);
+            params.addValue("categoryRaw", category.trim());
+            params.addValue("category", category.trim().toLowerCase(Locale.ROOT));
         }
 
         Set<String> skillFilters = parseSkillFilter(skills);

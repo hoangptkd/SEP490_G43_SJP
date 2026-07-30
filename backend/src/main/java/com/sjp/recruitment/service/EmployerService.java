@@ -49,6 +49,7 @@ public class EmployerService {
     private final JobService jobService;
     private final ApplicationRepository applicationRepository;
     private final ApplicationService applicationService;
+    private final CandidateService candidateService;
     private final Cloudinary cloudinary;
     private final DtoMapper dtoMapper;
 
@@ -473,8 +474,7 @@ public class EmployerService {
         if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền đăng tin tuyển dụng.");
         }
-        request.setEmployerId(String.valueOf(employer.getId()));
-        return jobService.createJobResponse(request);
+        return jobService.createJobResponse(request, employer);
     }
 
     @Transactional
@@ -484,8 +484,7 @@ public class EmployerService {
         if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền quản lý và đăng tin tuyển dụng.");
         }
-        request.setEmployerId(String.valueOf(employer.getId()));
-        return jobService.updateJobResponse(id, request);
+        return jobService.updateJobResponse(id, request, employer);
     }
 
     @Transactional
@@ -593,5 +592,27 @@ public class EmployerService {
         }
 
         return applicationService.updateStatus(appId, toStatus, note);
+    }
+
+    @Transactional(readOnly = true)
+    public CandidateService.CvDownload downloadApplicationCv(String applicationId) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        if (employer.getCompany() == null || employer.getCompany().getId() == null) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Cong ty chua duoc thiet lap");
+        }
+        UUID appId;
+        try {
+            appId = UUID.fromString(applicationId);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "APPLICATION_ID_INVALID", "Ma don ung tuyen khong hop le");
+        }
+        Application application = applicationRepository.findById(appId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay don ung tuyen"));
+        if (application.getJob() == null
+                || application.getJob().getCompany() == null
+                || !application.getJob().getCompany().getId().equals(employer.getCompany().getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen truy cap CV cua don ung tuyen nay");
+        }
+        return candidateService.toCvDownload(application.getCv());
     }
 }

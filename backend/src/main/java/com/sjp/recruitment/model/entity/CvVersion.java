@@ -33,15 +33,18 @@ public class CvVersion {
     @Column(nullable = false)
     private String title;
 
-    @Transient
+    @Column(name = "template_key", nullable = false)
     private String templateKey = "classic";
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "content_json", columnDefinition = "jsonb", nullable = false)
     private Map<String, Object> snapshot;
 
-    @Transient
-    private boolean deleted = false;
+    @Column(name = "source_type", nullable = false)
+    private String sourceType = "builder";
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @Column(name = "parse_status", nullable = false)
     private String parseStatus = "parsed";
@@ -52,4 +55,8 @@ public class CvVersion {
 
     @LastModifiedDate
     private LocalDateTime updatedAt;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
 }

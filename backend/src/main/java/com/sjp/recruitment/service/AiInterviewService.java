@@ -138,7 +138,8 @@ public class AiInterviewService {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "session-create");
-        if (!hasBasicProfile(candidate) && !candidateCvRepository.existsByCandidateId(candidate.getId())) {
+        if (!hasBasicProfile(candidate)
+                && !candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(candidate.getId(), "uploaded")) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRACTICE_CONTEXT_REQUIRED", "Can co ho so co ban hoac it nhat 1 CV de luyen phong van AI");
         }
         Job job = null;

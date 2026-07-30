@@ -25,6 +25,8 @@ import java.util.UUID;
 public class CandidateService {
 
     private static final long MAX_CV_SIZE = 5L * 1024 * 1024;
+    private static final String SOURCE_UPLOADED = "uploaded";
+    private static final String SOURCE_BUILDER = "builder";
 
     private final AuthService authService;
     private final DtoMapper dtoMapper;
@@ -39,6 +41,9 @@ public class CandidateService {
     private final SkillRepository skillRepository;
     private final CandidateSkillRepository candidateSkillRepository;
     private final StorageService storageService;
+
+    public record CvDownload(String fileName, String contentType, org.springframework.core.io.Resource resource) {
+    }
 
     @Transactional(readOnly = true)
     public CandidateProfile getCurrentCandidateProfile() {
@@ -77,13 +82,13 @@ public class CandidateService {
                 && hasText(profile.getLocation())
                 && profile.getSkills() != null
                 && !profile.getSkills().isEmpty()
-                && candidateCvRepository.existsByCandidateId(profile.getId());
+                && candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(profile.getId(), SOURCE_UPLOADED);
     }
 
     @Transactional(readOnly = true)
     public List<CvResponse> getCvs() {
         CandidateProfile profile = getCurrentCandidateProfile();
-        return candidateCvRepository.findByCandidateIdOrderByCreatedAtDesc(profile.getId())
+        return candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(profile.getId(), SOURCE_UPLOADED)
                 .stream()
                 .map(dtoMapper::toCvResponse)
                 .toList();
@@ -102,7 +107,8 @@ public class CandidateService {
             cv.setStorageKey(stored.storageKey());
             cv.setContentType(stored.contentType() == null ? "application/pdf" : stored.contentType());
             cv.setFileSize(stored.fileSize());
-            boolean firstCv = !candidateCvRepository.existsByCandidateId(profile.getId());
+            cv.setSourceType(SOURCE_UPLOADED);
+            boolean firstCv = !candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(profile.getId(), SOURCE_UPLOADED);
             cv.setDefaultCv(firstCv);
             return dtoMapper.toCvResponse(candidateCvRepository.save(cv));
         } catch (IOException exception) {
@@ -113,10 +119,9 @@ public class CandidateService {
     @Transactional
     public CvResponse setDefaultCv(String cvId) {
         CandidateProfile profile = getCurrentCandidateProfile();
-        CandidateCv target = candidateCvRepository.findByIdAndCandidateId(parseUuid(cvId, "CV_ID_INVALID"), profile.getId())
-                .filter(cv -> !cv.isDeleted())
+        CandidateCv target = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(cvId, "CV_ID_INVALID"), profile.getId(), SOURCE_UPLOADED)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
-        candidateCvRepository.findByCandidateIdOrderByCreatedAtDesc(profile.getId())
+        candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(profile.getId(), SOURCE_UPLOADED)
                 .forEach(cv -> cv.setDefaultCv(cv.getId().equals(target.getId())));
         return dtoMapper.toCvResponse(target);
     }
@@ -124,20 +129,31 @@ public class CandidateService {
     @Transactional
     public void deleteCv(String cvId) {
         CandidateProfile profile = getCurrentCandidateProfile();
-        CandidateCv cv = candidateCvRepository.findByIdAndCandidateId(parseUuid(cvId, "CV_ID_INVALID"), profile.getId())
+        CandidateCv cv = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(cvId, "CV_ID_INVALID"), profile.getId(), SOURCE_UPLOADED)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
         if (applicationRepository.existsByCvId(cv.getId())) {
-            cv.setDeleted(true);
+            cv.setDeletedAt(java.time.LocalDateTime.now());
             cv.setDefaultCv(false);
+            ensureDefaultUploadedCv(profile.getId());
             return;
         }
         candidateCvRepository.delete(cv);
+        ensureDefaultUploadedCv(profile.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public CvDownload downloadCv(String cvId) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        CandidateCv cv = candidateCvRepository.findByIdAndCandidateId(parseUuid(cvId, "CV_ID_INVALID"), profile.getId())
+                .filter(this::isUploadedCv)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
+        return toCvDownload(cv);
     }
 
     @Transactional(readOnly = true)
     public List<CvVersionResponse> getCvVersions() {
         CandidateProfile profile = getCurrentCandidateProfile();
-        return cvVersionRepository.findByCandidateIdOrderByUpdatedAtDesc(profile.getId())
+        return cvVersionRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByUpdatedAtDesc(profile.getId(), SOURCE_BUILDER)
                 .stream()
                 .map(dtoMapper::toCvVersionResponse)
                 .toList();
@@ -149,6 +165,7 @@ public class CandidateService {
         CvVersion version = new CvVersion();
         version.setCandidate(profile);
         version.setTitle(request.title());
+        version.setSourceType(SOURCE_BUILDER);
         version.setTemplateKey(request.templateKey() == null || request.templateKey().isBlank() ? "classic" : request.templateKey());
         version.setSnapshot(request.snapshot() == null ? defaultSnapshot(profile) : request.snapshot());
         return dtoMapper.toCvVersionResponse(cvVersionRepository.save(version));
@@ -157,7 +174,7 @@ public class CandidateService {
     @Transactional
     public CvVersionResponse updateCvVersion(String id, CvVersionRequest request) {
         CandidateProfile profile = getCurrentCandidateProfile();
-        CvVersion version = cvVersionRepository.findByIdAndCandidateId(parseUuid(id, "CV_VERSION_ID_INVALID"), profile.getId())
+        CvVersion version = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(id, "CV_VERSION_ID_INVALID"), profile.getId(), SOURCE_BUILDER)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
         version.setTitle(request.title());
         version.setTemplateKey(request.templateKey() == null || request.templateKey().isBlank() ? "classic" : request.templateKey());
@@ -168,9 +185,9 @@ public class CandidateService {
     @Transactional
     public void deleteCvVersion(String id) {
         CandidateProfile profile = getCurrentCandidateProfile();
-        CvVersion version = cvVersionRepository.findByIdAndCandidateId(parseUuid(id, "CV_VERSION_ID_INVALID"), profile.getId())
+        CvVersion version = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(id, "CV_VERSION_ID_INVALID"), profile.getId(), SOURCE_BUILDER)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
-        version.setDeleted(true);
+        version.setDeletedAt(java.time.LocalDateTime.now());
     }
 
     @Transactional(readOnly = true)
@@ -243,7 +260,7 @@ public class CandidateService {
                 subscription == null ? null : subscription.getStartedAt(),
                 subscription == null ? null : subscription.getExpiresAt(),
                 getCurrentProfileIdIfCandidate(user) == null ? 0 : savedJobRepository.countByCandidateId(getCurrentProfileIdIfCandidate(user)),
-                getCurrentProfileIdIfCandidate(user) == null ? 0 : candidateCvRepository.findByCandidateIdOrderByCreatedAtDesc(getCurrentProfileIdIfCandidate(user)).size(),
+                getCurrentProfileIdIfCandidate(user) == null ? 0 : candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(getCurrentProfileIdIfCandidate(user), SOURCE_UPLOADED).size(),
                 notificationRepository.countByRecipientUserIdAndReadFalse(user.getId())
         );
     }
@@ -253,6 +270,33 @@ public class CandidateService {
             return null;
         }
         return candidateProfileRepository.findByUserId(user.getId()).map(CandidateProfile::getId).orElse(null);
+    }
+
+    private void ensureDefaultUploadedCv(UUID candidateId) {
+        List<CandidateCv> activeUploaded = candidateCvRepository
+                .findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(candidateId, SOURCE_UPLOADED);
+        if (!activeUploaded.isEmpty() && activeUploaded.stream().noneMatch(CandidateCv::isDefaultCv)) {
+            activeUploaded.get(0).setDefaultCv(true);
+        }
+    }
+
+    public CvDownload toCvDownload(CandidateCv cv) {
+        if (cv == null || !isUploadedCv(cv) || cv.getStorageKey() == null || cv.getStorageKey().isBlank()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");
+        }
+        try {
+            return new CvDownload(
+                    cv.getOriginalFileName() == null || cv.getOriginalFileName().isBlank() ? "cv.pdf" : cv.getOriginalFileName(),
+                    cv.getContentType() == null || cv.getContentType().isBlank() ? "application/pdf" : cv.getContentType(),
+                    storageService.loadCandidateCv(cv.getStorageKey())
+            );
+        } catch (IOException exception) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");
+        }
+    }
+
+    private boolean isUploadedCv(CandidateCv cv) {
+        return cv != null && SOURCE_UPLOADED.equalsIgnoreCase(cv.getSourceType());
     }
 
     public void requireCandidate(User user) {

@@ -9,6 +9,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -45,8 +46,18 @@ public class CandidateCv {
     @Column(name = "is_primary", nullable = false)
     private boolean defaultCv = false;
 
-    @Transient
-    private boolean deleted = false;
+    @Column(name = "source_type", nullable = false)
+    private String sourceType = "uploaded";
+
+    @Column(name = "template_key", nullable = false)
+    private String templateKey = "classic";
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "content_json", columnDefinition = "jsonb", nullable = false)
+    private Map<String, Object> snapshot = Map.of();
 
     @Column(name = "parse_status", nullable = false)
     private String parseStatus = "parsed";
@@ -57,4 +68,8 @@ public class CandidateCv {
 
     @LastModifiedDate
     private LocalDateTime updatedAt;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
 }

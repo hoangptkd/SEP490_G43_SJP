@@ -111,4 +111,9 @@ export const employerService = {
     const response = await api.put<CandidateApplication>(`/employer/applications/${id}/status`, { status, note });
     return response.data;
   },
+
+  downloadApplicationCv: async (id: string): Promise<Blob> => {
+    const response = await api.get<Blob>(`/employer/applications/${id}/cv`, { responseType: 'blob' });
+    return response.data;
+  },
 };

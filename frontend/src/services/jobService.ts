@@ -17,6 +17,7 @@ export const jobService = {
       ...(filters.maxSalary && { maxSalary: filters.maxSalary.toString() }),
       ...(filters.experienceLevel && { experienceLevel: filters.experienceLevel }),
       ...(filters.skills && { skills: filters.skills }),
+      ...(filters.category && { category: filters.category }),
       ...(filters.sort && { sort: filters.sort }),
     });
     const response = await api.get<JobApiResponse>(`/jobs?${params}`);
@@ -33,17 +34,4 @@ export const jobService = {
     return response.data;
   },
 
-  create: async (jobData: Partial<Job>): Promise<Job> => {
-    const response = await api.post<Job>('/jobs', jobData);
-    return response.data;
-  },
-
-  update: async (id: string, jobData: Partial<Job>): Promise<Job> => {
-    const response = await api.put<Job>(`/jobs/${id}`, jobData);
-    return response.data;
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/jobs/${id}`);
-  },
 };

@@ -36,7 +36,8 @@ public class Application {
     @JoinColumn(name = "resume_id")
     private CandidateCv cv;
 
-    @Transient
+    @ManyToOne
+    @JoinColumn(name = "resume_id", insertable = false, updatable = false)
     private CvVersion cvVersion;
 
     @Column(nullable = false)

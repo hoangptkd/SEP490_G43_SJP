@@ -66,7 +66,7 @@ jwt:
 
 app:
   data-seeder:
-    enabled: ${APP_DATA_SEEDER_ENABLED:true}
+    enabled: ${APP_DATA_SEEDER_ENABLED:false}
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
   backend-base-url: ${BACKEND_BASE_URL:http://localhost:8080/api}
   oauth:
@@ -75,6 +75,7 @@ app:
       client-secret: ${GOOGLE_CLIENT_SECRET:}
   mail-from: ${MAIL_FROM:no-reply@smart-recruitment.local}
   email-verification-token-ttl-minutes: ${EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:1440}
+  password-reset-token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
   oauth-role-selection-token-ttl-minutes: ${OAUTH_ROLE_SELECTION_TOKEN_TTL_MINUTES:15}
   ai-interview:
     gladia-api-key: ${GLADIA_API_KEY:}

@@ -39,4 +39,27 @@ public class EmailService {
                     email, e.getMessage(), verificationLink);
         }
     }
+
+    public void sendPasswordResetEmail(String email, String resetLink) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
+        message.setTo(email);
+        message.setSubject("Dat lai mat khau Smart Recruitment Portal");
+        message.setText("""
+                Chao ban,
+
+                Vui long bam link sau de dat lai mat khau:
+                %s
+
+                Neu ban khong yeu cau dat lai mat khau, hay bo qua email nay.
+                """.formatted(resetLink));
+
+        try {
+            mailSender.send(message);
+            log.info("Email dat lai mat khau da duoc gui toi {}", email);
+        } catch (Exception e) {
+            log.error("Khong the gui email dat lai mat khau toi {}. Loi: {}. Link reset de test: {}",
+                    email, e.getMessage(), resetLink);
+        }
+    }
 }

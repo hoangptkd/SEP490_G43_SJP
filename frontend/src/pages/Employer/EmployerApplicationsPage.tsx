@@ -71,6 +71,21 @@ export default function EmployerApplicationsPage() {
     }
   }
 
+  function openBlobInNewTab(blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  async function openApplicationCv(id: string) {
+    try {
+      openBlobInNewTab(await employerService.downloadApplicationCv(id));
+    } catch (err) {
+      console.error('Failed to open CV', err);
+      setError('Khong the mo CV ung tuyen');
+    }
+  }
+
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
     loadApplications();
@@ -329,6 +344,7 @@ export default function EmployerApplicationsPage() {
                   {/* CV Document Link */}
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     {app.cv ? (
+                      <>
                       <span
                         style={{
                           display: 'inline-flex',
@@ -344,6 +360,23 @@ export default function EmployerApplicationsPage() {
                       >
                         📄 CV đính kèm: {app.cv.originalFileName}
                       </span>
+                        <button
+                          type="button"
+                          onClick={() => openApplicationCv(app.id)}
+                          style={{
+                            background: '#fff',
+                            color: '#2563eb',
+                            border: '1px solid #bfdbfe',
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            fontWeight: 600,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Xem CV
+                        </button>
+                      </>
                     ) : app.cvVersion ? (
                       <span
                         style={{

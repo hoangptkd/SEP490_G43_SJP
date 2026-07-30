@@ -43,14 +43,33 @@ export const candidateService = {
     await api.delete(`/candidate/cvs/${id}`);
   },
 
+  downloadCv: async (id: string): Promise<Blob> => {
+    const response = await api.get<Blob>(`/candidate/cvs/${id}/download`, { responseType: 'blob' });
+    return response.data;
+  },
+
   getCvVersions: async (): Promise<CvVersion[]> => {
     const response = await api.get<CvVersion[]>('/candidate/cv-versions');
     return response.data;
   },
 
-  createCvVersion: async (title: string, snapshot: Record<string, unknown>): Promise<CvVersion> => {
-    const response = await api.post<CvVersion>('/candidate/cv-versions', { title, templateKey: 'classic', snapshot });
+  createCvVersion: async (title: string, snapshot: Record<string, unknown>, templateKey = 'classic'): Promise<CvVersion> => {
+    const response = await api.post<CvVersion>('/candidate/cv-versions', { title, templateKey, snapshot });
     return response.data;
+  },
+
+  updateCvVersion: async (
+    id: string,
+    title: string,
+    snapshot: Record<string, unknown>,
+    templateKey = 'classic',
+  ): Promise<CvVersion> => {
+    const response = await api.put<CvVersion>(`/candidate/cv-versions/${id}`, { title, templateKey, snapshot });
+    return response.data;
+  },
+
+  deleteCvVersion: async (id: string): Promise<void> => {
+    await api.delete(`/candidate/cv-versions/${id}`);
   },
 
   getSavedJobs: async (): Promise<Job[]> => {
@@ -88,6 +107,10 @@ export const candidateService = {
 
   markNotificationRead: async (id: string): Promise<void> => {
     await api.patch(`/candidate/notifications/${id}/read`);
+  },
+
+  markAllNotificationsRead: async (): Promise<void> => {
+    await api.patch('/candidate/notifications/read-all');
   },
 
   getSubscription: async (): Promise<SubscriptionView> => {

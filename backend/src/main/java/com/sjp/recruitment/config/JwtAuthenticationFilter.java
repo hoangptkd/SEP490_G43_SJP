@@ -18,6 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 
 @Component
 @RequiredArgsConstructor
@@ -50,7 +51,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (email != null && jwtUtil.validateToken(token)
                     && SecurityContextHolder.getContext().getAuthentication() == null) {
                 String id = jwtUtil.extractStringClaim(token, "id");
-                String role = jwtUtil.extractStringClaim(token, "role");
+                String role = normalizeRole(jwtUtil.extractStringClaim(token, "role"));
                 authenticate(request, new UserResponse(id, email, role, "ACTIVE", true));
             }
         } catch (JwtException | IllegalArgumentException ignored) {
@@ -62,11 +63,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private void authenticate(HttpServletRequest request, UserResponse user) {
         List<SimpleGrantedAuthority> authorities = List.of(
-                new SimpleGrantedAuthority("ROLE_" + user.role())
+                new SimpleGrantedAuthority("ROLE_" + normalizeRole(user.role()))
         );
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(user, null, authorities);
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null) {
+            return "UNKNOWN";
+        }
+        return switch (role.trim().toLowerCase(Locale.ROOT)) {
+            case "job_seeker", "candidate" -> "CANDIDATE";
+            case "employer" -> "EMPLOYER";
+            case "admin" -> "ADMIN";
+            default -> role.trim().toUpperCase(Locale.ROOT);
+        };
     }
 }

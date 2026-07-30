@@ -2,16 +2,20 @@ package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.CompleteOauthRoleRequest;
+import com.sjp.recruitment.model.dto.request.ForgotPasswordRequest;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.model.dto.request.LoginRequest;
 import com.sjp.recruitment.model.dto.request.RegisterRequest;
+import com.sjp.recruitment.model.dto.request.ResetPasswordRequest;
 import com.sjp.recruitment.model.dto.response.AuthResponse;
 import com.sjp.recruitment.model.dto.response.UserResponse;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.EmailVerificationToken;
 import com.sjp.recruitment.model.entity.OauthRoleSelectionToken;
+import com.sjp.recruitment.model.entity.PasswordResetToken;
 import com.sjp.recruitment.repository.CandidateProfileRepository;
 import com.sjp.recruitment.repository.EmailVerificationTokenRepository;
+import com.sjp.recruitment.repository.PasswordResetTokenRepository;
 import com.sjp.recruitment.repository.UserRepository;
 import com.sjp.recruitment.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +29,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -42,6 +49,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final CandidateProfileRepository candidateProfileRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final DtoMapper dtoMapper;
@@ -54,6 +62,9 @@ public class AuthService {
     @Value("${app.email-verification-token-ttl-minutes}")
     private long verificationTtlMinutes;
 
+    @Value("${app.password-reset-token-ttl-minutes:30}")
+    private long passwordResetTtlMinutes;
+
     private final Map<String, OauthRoleSelectionToken> oauthRoleSelectionTokens = new ConcurrentHashMap<>();
 
     @Transactional
@@ -61,6 +72,7 @@ public class AuthService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "Email da ton tai");
         }
+        validatePassword(request.getPassword());
 
         User user = new User();
         user.setEmail(request.getEmail());
@@ -74,13 +86,14 @@ public class AuthService {
             ensureCandidateProfile(savedUser);
         }
 
+        String tokenValue = UUID.randomUUID().toString();
         EmailVerificationToken token = new EmailVerificationToken();
         token.setUser(savedUser);
-        token.setToken(UUID.randomUUID().toString());
+        token.setToken(hashToken(tokenValue));
         token.setExpiresAt(LocalDateTime.now().plusMinutes(verificationTtlMinutes));
         emailVerificationTokenRepository.save(token);
 
-        String verificationLink = frontendBaseUrl + "/verify-email?token=" + token.getToken();
+        String verificationLink = frontendBaseUrl + "/verify-email?token=" + tokenValue;
         emailService.sendVerificationEmail(savedUser.getEmail(), verificationLink);
 
         return new AuthResponse(dtoMapper.toUserResponse(savedUser), null);
@@ -88,7 +101,8 @@ public class AuthService {
 
     @Transactional
     public UserResponse verifyEmail(String tokenValue) {
-        EmailVerificationToken token = emailVerificationTokenRepository.findByToken(tokenValue)
+        EmailVerificationToken token = emailVerificationTokenRepository.findByToken(hashToken(tokenValue))
+                .or(() -> emailVerificationTokenRepository.findByToken(tokenValue))
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_VERIFICATION_TOKEN", "Link xac minh khong hop le"));
         if (token.getUsedAt() != null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_TOKEN_USED", "Link xac minh da duoc su dung");
@@ -104,7 +118,7 @@ public class AuthService {
         return dtoMapper.toUserResponse(userRepository.save(user));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         RemoteUser user = findRemoteUserByEmail(request.getEmail())
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email hoac mat khau khong dung"));
@@ -116,8 +130,46 @@ public class AuthService {
             throw new ApiException(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", "Email chua duoc xac minh");
         }
 
+        namedParameterJdbcTemplate.update(
+                "UPDATE users SET last_login_at = now(), updated_at = now() WHERE id = :id",
+                new MapSqlParameterSource("id", UUID.fromString(user.id()))
+        );
+
         UserResponse response = user.toUserResponse();
         return new AuthResponse(response, jwtUtil.generateToken(response));
+    }
+
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        userRepository.findByEmail(request.email()).ifPresent(user -> {
+            if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+                return;
+            }
+            String tokenValue = UUID.randomUUID().toString();
+            PasswordResetToken token = new PasswordResetToken();
+            token.setUser(user);
+            token.setTokenHash(hashToken(tokenValue));
+            token.setExpiresAt(LocalDateTime.now().plusMinutes(passwordResetTtlMinutes));
+            passwordResetTokenRepository.save(token);
+            emailService.sendPasswordResetEmail(user.getEmail(), frontendBaseUrl + "/reset-password?token=" + tokenValue);
+        });
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        PasswordResetToken token = passwordResetTokenRepository.findByTokenHash(hashToken(request.token()))
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_RESET_TOKEN", "Link dat lai mat khau khong hop le"));
+        if (token.getUsedAt() != null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RESET_TOKEN_USED", "Link dat lai mat khau da duoc su dung");
+        }
+        if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RESET_TOKEN_EXPIRED", "Link dat lai mat khau da het han");
+        }
+        validatePassword(request.password());
+        User user = token.getUser();
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        token.setUsedAt(LocalDateTime.now());
+        userRepository.save(user);
     }
 
     @Transactional
@@ -249,6 +301,29 @@ public class AuthService {
             return passwordEncoder.matches(rawPassword, passwordHash);
         } catch (IllegalArgumentException exception) {
             return false;
+        }
+    }
+
+    private void validatePassword(String password) {
+        if (password == null || password.length() < 8
+                || password.chars().noneMatch(Character::isUpperCase)
+                || password.chars().noneMatch(Character::isLowerCase)
+                || password.chars().noneMatch(Character::isDigit)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "WEAK_PASSWORD", "Mat khau phai co it nhat 8 ky tu, gom chu hoa, chu thuong va so");
+        }
+    }
+
+    private String hashToken(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(token.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(hashed.length * 2);
+            for (byte value : hashed) {
+                builder.append(String.format("%02x", value));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
         }
     }
 
