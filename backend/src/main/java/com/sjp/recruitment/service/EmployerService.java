@@ -63,6 +63,7 @@ public class EmployerService {
     private final Cloudinary cloudinary;
     private final DtoMapper dtoMapper;
     private final FeatureLimitService featureLimitService;
+    private final SystemSettingsService systemSettingsService;
 
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {
@@ -609,21 +610,22 @@ public class EmployerService {
     public JobResponse createJob(JobRequest request) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         Company company = employer.getCompany();
-        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && !company.isVerified()
+                && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền đăng tin tuyển dụng.");
         }
-        featureLimitService.requireJobPost(employer.getUser());
         request.setEmployerId(String.valueOf(employer.getId()));
-        JobResponse created = jobService.createJobResponse(request);
-        featureLimitService.consumeJobPost(employer.getUser());
-        return created;
+        return jobService.createJobResponse(request);
     }
 
     @Transactional
     public JobResponse updateJob(String id, JobRequest request) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         Company company = employer.getCompany();
-        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && !company.isVerified()
+                && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền quản lý và đăng tin tuyển dụng.");
         }
         request.setEmployerId(String.valueOf(employer.getId()));

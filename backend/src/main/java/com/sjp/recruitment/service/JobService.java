@@ -57,6 +57,9 @@ public class JobService {
     private final ApplicationStatusHistoryRepository applicationStatusHistoryRepository;
     private final DtoMapper dtoMapper;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final SystemSettingsService systemSettingsService;
+    private final FeatureLimitService featureLimitService;
+    private final AuthService authService;
 
     @Transactional(readOnly = true)
     public JobPageResponse search(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
@@ -224,10 +227,16 @@ public class JobService {
         if (company == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "COMPANY_REQUIRED", "Cần có công ty trước khi tạo việc làm");
         }
-        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && !company.isVerified()
+                && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền đăng tin tuyển dụng.");
         }
-        return buildAndSaveJob(new Job(), employer, company, request);
+        User currentUser = authService.getCurrentUser();
+        featureLimitService.requireJobPost(currentUser);
+        Job saved = buildAndSaveJob(new Job(), employer, company, request);
+        featureLimitService.consumeJobPost(currentUser);
+        return saved;
     }
 
     @Transactional
@@ -239,7 +248,9 @@ public class JobService {
     @Transactional
     public Job update(String id, JobRequest request) {
         Job job = findById(id);
-        if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && job.getCompany() != null
+                && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực.");
         }
         return buildAndSaveJob(job, job.getEmployer(), job.getCompany(), request);
@@ -255,7 +266,9 @@ public class JobService {
     public JobResponse submitJobForReview(String id, Employer employer) {
         Job job = findById(id);
         checkEmployerPermission(job, employer, "Bạn không có quyền thao tác với việc làm này");
-        if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && job.getCompany() != null
+                && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực pháp lý.");
         }
         if ("rejected".equalsIgnoreCase(job.getStatus())) {

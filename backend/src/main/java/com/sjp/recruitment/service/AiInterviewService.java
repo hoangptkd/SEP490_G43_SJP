@@ -51,12 +51,22 @@ public class AiInterviewService {
     private final AiInterviewRateLimiter rateLimiter;
     private final AiInterviewResponseAssembler responseAssembler;
     private final FeatureLimitService featureLimitService;
+    private final SystemSettingsService systemSettingsService;
 
     @Transactional(readOnly = true)
     public AiInterviewConfigResponse configStatus() {
+        boolean configured = properties.isEnabled();
+        boolean enabledByAdmin = systemSettingsService.isAiInterviewEnabled();
+        boolean enabled = configured && enabledByAdmin;
+        String message = null;
+        if (!configured) {
+            message = "AI Interview chua duoc cau hinh API key.";
+        } else if (!enabledByAdmin) {
+            message = "Phỏng vấn AI đang bị tắt bởi quản trị viên.";
+        }
         return new AiInterviewConfigResponse(
-                properties.isEnabled(),
-                properties.isEnabled() ? null : "AI Interview chua duoc cau hinh.",
+                enabled,
+                message,
                 properties.getQuestionCount(),
                 properties.getAudioMaxSeconds(),
                 properties.getAudioMaxSizeMb(),
@@ -724,6 +734,9 @@ public class AiInterviewService {
     private void ensureEnabled() {
         if (!properties.isEnabled()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI_INTERVIEW_NOT_CONFIGURED", "AI Interview chua duoc cau hinh.");
+        }
+        if (!systemSettingsService.isAiInterviewEnabled()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI_INTERVIEW_DISABLED", "Phỏng vấn AI đang bị tắt bởi quản trị viên.");
         }
     }
 

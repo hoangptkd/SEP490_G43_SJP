@@ -234,7 +234,7 @@ public class FeatureLimitService {
                         FROM applications a
                         JOIN job_seekers js ON js.id = a.job_seeker_id
                         WHERE js.user_id = CAST(:userId AS uuid)
-                          AND a.submitted_at >= date_trunc('day', now())
+                          AND a.applied_at >= date_trunc('day', now())
                         """,
                 new MapSqlParameterSource("userId", userId.toString()),
                 Long.class);

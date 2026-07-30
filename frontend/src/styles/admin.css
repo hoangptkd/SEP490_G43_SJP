@@ -1161,14 +1161,239 @@
   margin: 0;
 }
 
+.admin-profile-page {
+  max-width: 960px;
+}
+
+.admin-profile-hero {
+  border: 1px solid rgb(192 199 209 / 0.55);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+  margin-bottom: 18px;
+  overflow: hidden;
+  position: relative;
+}
+
+.admin-profile-hero-bg {
+  background:
+    radial-gradient(circle at 12% 20%, rgb(56 132 196 / 0.35), transparent 42%),
+    radial-gradient(circle at 88% 10%, rgb(14 90 140 / 0.28), transparent 38%),
+    linear-gradient(135deg, #0b1c30 0%, #163a5f 55%, #1f567f 100%);
+  height: 118px;
+}
+
+.admin-profile-hero-body {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 20px;
+  padding: 0 22px 22px;
+  position: relative;
+}
+
+.admin-profile-avatar {
+  align-items: center;
+  background: linear-gradient(160deg, #e8f3ff, #ffffff);
+  border: 4px solid #fff;
+  border-radius: 22px;
+  box-shadow: 0 10px 28px rgb(11 28 48 / 0.18);
+  color: var(--primary-strong, #0b4f78);
+  display: grid;
+  flex: 0 0 auto;
+  font-family: "Lexend", sans-serif;
+  font-size: 1.45rem;
+  font-weight: 700;
+  height: 88px;
+  letter-spacing: 0.04em;
+  margin-top: -44px;
+  place-items: center;
+  width: 88px;
+}
+
+.admin-profile-hero-text {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding-top: 10px;
+}
+
+.admin-profile-eyebrow {
+  color: var(--on-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.admin-profile-hero-text h2 {
+  font-family: "Lexend", sans-serif;
+  font-size: 1.25rem;
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+
+.admin-profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-profile-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+}
+
+.admin-profile-panel {
+  background: var(--surface-lowest);
+  border: 1px solid rgb(192 199 209 / 0.55);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+  padding: 20px 22px;
+}
+
+.admin-profile-panel h3 {
+  font-family: "Lexend", sans-serif;
+  font-size: 1rem;
+  margin: 0 0 14px;
+}
+
+.admin-profile-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-profile-field {
+  align-items: start;
+  background: linear-gradient(180deg, #f7fafc 0%, #ffffff 100%);
+  border: 1px solid rgb(192 199 209 / 0.45);
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+}
+
+.admin-profile-field span {
+  color: var(--on-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.admin-profile-field strong {
+  font-size: 0.95rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.admin-profile-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+}
+
+.admin-profile-aside {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  background:
+    linear-gradient(180deg, #f4f8fd 0%, #ffffff 55%);
+}
+
+.admin-profile-perms {
+  color: var(--on-surface, #1c2430);
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.admin-profile-perms li {
+  line-height: 1.45;
+}
+
+.admin-profile-aside-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.admin-profile-aside-actions .button-link {
+  justify-content: center;
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .admin-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-profile-hero-body {
+    padding-bottom: 18px;
+  }
+}
+
 .admin-settings-form {
   display: grid;
   gap: 18px;
 }
 
 .admin-plan-form {
-  max-width: 760px;
+  max-width: 860px;
   padding: 24px;
+}
+
+.admin-plan-features {
+  border-top: 1px solid rgb(192 199 209 / 0.55);
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 18px;
+}
+
+.admin-plan-features-header h2 {
+  font-family: "Lexend", sans-serif;
+  font-size: 1.05rem;
+  margin: 0 0 4px;
+}
+
+.admin-plan-features-header p {
+  margin: 0;
+}
+
+.admin-plan-benefit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-plan-benefit-item {
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1px solid rgb(192 199 209 / 0.55);
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  transition:
+    border-color 140ms var(--ease-out),
+    background-color 140ms var(--ease-out);
+}
+
+.admin-plan-benefit-item input {
+  margin-top: 2px;
+}
+
+.admin-plan-benefit-item.checked {
+  background: #eef6ff;
+  border-color: rgb(0 80 125 / 0.35);
+}
+
+.admin-plan-benefit-item span {
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .admin-settings-grid {

@@ -23,9 +23,10 @@ import SubscriptionPlansPage from './pages/billing/SubscriptionPlansPage';
 import { authService } from './services/authService';
 import { aiInterviewService } from './services/aiInterviewService';
 import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversation';
-import { clearAuthSession, getToken, setAuthSession } from './utils/authStorage';
+import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './utils/authStorage';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
+import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
 import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
 import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
 import CompanyVerificationPage from './pages/Employer/CompanyVerificationPage';
@@ -90,6 +91,37 @@ const statusColors: Record<string, string> = {
 
 // ─── App routes ────────────────────────────────────────────────────────────
 function App() {
+  const [publicSettings, setPublicSettings] = useState<PublicSettings>(publicSettingsService.defaults);
+
+  useEffect(() => {
+    publicSettingsService.get()
+      .then((settings) => {
+        setPublicSettings(settings);
+        document.documentElement.style.setProperty('--primary', settings.themePrimaryColor || '#00507d');
+        document.title = settings.siteName || 'Smart Recruitment Portal';
+      })
+      .catch(() => {
+        // keep defaults
+      });
+  }, []);
+
+  const user = getStoredUser();
+  const isAdmin = user?.role === 'ADMIN';
+  const showMaintenance = publicSettings.maintenanceMode && !isAdmin && !window.location.pathname.startsWith('/admin');
+
+  if (showMaintenance) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#f8fafc' }}>
+        <section style={{ maxWidth: 480, textAlign: 'center', background: '#fff', padding: 28, borderRadius: 16, boxShadow: '0 8px 30px rgba(15,23,42,0.08)' }}>
+          <h1 style={{ marginTop: 0 }}>{publicSettings.siteName}</h1>
+          <p>Hệ thống đang bảo trì. Vui lòng quay lại sau.</p>
+          <p className="muted">Hỗ trợ: {publicSettings.supportEmail}</p>
+          <Link to="/admin/login" className="button-link outline">Đăng nhập Admin</Link>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />

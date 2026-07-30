@@ -42,6 +42,7 @@ public class BillingService {
     private final VnPayPaymentGateway vnPayPaymentGateway;
     private final BankTransferProperties bankTransferProperties;
     private final FeatureLimitService featureLimitService;
+    private final SystemSettingsService systemSettingsService;
     private final ObjectMapper objectMapper;
 
     @Value("${app.frontend-base-url}")
@@ -77,7 +78,7 @@ public class BillingService {
         PlanRow plan = findActivePlan(request.planId().trim(), resolveTargetRole(user));
         String paymentMethod = StringUtils.hasText(request.paymentMethod())
                 ? request.paymentMethod().trim().toLowerCase(Locale.ROOT)
-                : "momo";
+                : systemSettingsService.defaultPaymentProvider();
         if (!List.of("momo", "vnpay", "bank_transfer").contains(paymentMethod)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "UNSUPPORTED_GATEWAY",
                     "Phương thức thanh toán không hỗ trợ. Chọn momo, vnpay hoặc bank_transfer");
@@ -92,6 +93,11 @@ public class BillingService {
             activatePaidSubscription(subscriptionId, plan);
             markPaymentPaid(paymentId, "FREE-" + paymentId, Map.of("type", "free"));
             return CheckoutResponse.paid(paymentId, subscriptionId, "Kích hoạt gói miễn phí thành công");
+        }
+
+        if (!systemSettingsService.isPaymentGatewayEnabled()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "PAYMENT_DISABLED",
+                    "Cổng thanh toán đang tắt. Vui lòng liên hệ quản trị viên.");
         }
 
         long amountVnd = plan.price().setScale(0, RoundingMode.HALF_UP).longValue();

@@ -40,6 +40,7 @@ public class AdminOpsService {
     private final UserRepository userRepository;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final BillingService billingService;
+    private final SystemSettingsService systemSettingsService;
 
     @Transactional(readOnly = true)
     public List<AdminPlanResponse> listPlans(String status) {
@@ -514,7 +515,9 @@ public class AdminOpsService {
             if (!StringUtils.hasText(entry.getKey())) {
                 continue;
             }
-            namedParameterJdbcTemplate.update("""
+            String key = entry.getKey().trim();
+            String value = entry.getValue() == null ? "" : entry.getValue().trim();
+            int updated = namedParameterJdbcTemplate.update("""
                     UPDATE system_settings
                     SET setting_value = :value,
                         updated_at = now(),
@@ -522,10 +525,26 @@ public class AdminOpsService {
                     WHERE setting_key = :key
                     """,
                     new MapSqlParameterSource()
-                            .addValue("key", entry.getKey().trim())
-                            .addValue("value", entry.getValue() == null ? "" : entry.getValue().trim())
+                            .addValue("key", key)
+                            .addValue("value", value)
                             .addValue("actor", admin.getId().toString())
             );
+            if (updated == 0) {
+                namedParameterJdbcTemplate.update("""
+                        INSERT INTO system_settings (setting_key, setting_value, description, updated_at, updated_by)
+                        VALUES (:key, :value, :description, now(), CAST(:actor AS uuid))
+                        ON CONFLICT (setting_key) DO UPDATE
+                        SET setting_value = EXCLUDED.setting_value,
+                            updated_at = now(),
+                            updated_by = EXCLUDED.updated_by
+                        """,
+                        new MapSqlParameterSource()
+                                .addValue("key", key)
+                                .addValue("value", value)
+                                .addValue("description", "Cập nhật từ admin")
+                                .addValue("actor", admin.getId().toString()));
+            }
+            systemSettingsService.clearCache(key);
         }
         writeAudit(admin.getId().toString(), "SETTINGS_UPDATE", "system_settings", admin.getId().toString(), null, "updated");
         return listSettings();

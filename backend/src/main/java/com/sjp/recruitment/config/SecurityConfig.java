@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -27,6 +28,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final MaintenanceModeFilter maintenanceModeFilter;
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     private final ObjectProvider<ClientRegistrationRepository> clientRegistrationRepository;
 
@@ -48,6 +50,7 @@ public class SecurityConfig {
                     "/oauth2/**",
                     "/login/oauth2/**",
                     "/actuator/health",
+                    "/settings/public",
                     "/candidate/ai-interviews/speech/**",
                     "/payments/momo/ipn",
                     "/payments/vnpay/ipn",
@@ -62,8 +65,16 @@ public class SecurityConfig {
         }
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(maintenanceModeFilter, JwtAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public FilterRegistrationBean<MaintenanceModeFilter> maintenanceModeFilterRegistration(MaintenanceModeFilter filter) {
+        FilterRegistrationBean<MaintenanceModeFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean

@@ -9,9 +9,11 @@ import com.sjp.recruitment.model.entity.InterviewAnswer;
 import com.sjp.recruitment.model.entity.InterviewQuestion;
 import com.sjp.recruitment.model.entity.InterviewSession;
 import com.sjp.recruitment.model.entity.Job;
+import com.sjp.recruitment.service.SystemSettingsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
@@ -36,12 +38,13 @@ public class ShopAiKeyClient {
     private final AiInterviewProperties properties;
     private final ObjectMapper objectMapper;
     private final RestClient.Builder restClientBuilder;
+    private final SystemSettingsService systemSettingsService;
 
     public QuestionDraft generateQuestion(InterviewSession session,
                                           CandidateProfile candidate,
                                           List<InterviewQuestion> previousQuestions,
                                           List<InterviewAnswer> previousAnswers) {
-        String prompt = """
+        String prompt = withSystemPrompt("""
                 Tạo 1 câu hỏi phỏng vấn tiếp theo bằng tiếng Việt có dấu.
                 Chỉ trả JSON hợp lệ, không markdown.
                 Yêu cầu bắt buộc:
@@ -61,7 +64,7 @@ public class ShopAiKeyClient {
                 %s
                 Previous:
                 %s
-                """.formatted(buildContext(session, candidate), buildHistory(previousQuestions, previousAnswers));
+                """.formatted(buildContext(session, candidate), buildHistory(previousQuestions, previousAnswers)));
         JsonNode json = callJson(prompt, 700, 0.3);
         return new QuestionDraft(
                 oneOf(json.path("questionType").asText("general"), List.of("behavioral", "technical", "situational", "general"), "general"),
@@ -75,7 +78,7 @@ public class ShopAiKeyClient {
     public AnswerFeedbackDraft evaluateAnswer(InterviewSession session,
                                               InterviewQuestion question,
                                               String transcript) {
-        String prompt = """
+        String prompt = withFeedbackPrompt("""
                 Bạn là AI coach phỏng vấn. Đánh giá câu trả lời bằng tiếng Việt có dấu.
                 Đây chỉ là feedback luyện tập, không phải quyết định tuyển dụng.
                 Chỉ trả JSON hợp lệ, không markdown.
@@ -91,7 +94,7 @@ public class ShopAiKeyClient {
                 Câu hỏi: %s
                 Câu trả lời transcript: %s
                 Context: %s
-                """.formatted(question.getContent(), transcript, buildSessionContext(session));
+                """.formatted(question.getContent(), transcript, buildSessionContext(session)));
         JsonNode json = callJson(prompt, 900, 0.2);
         return new AnswerFeedbackDraft(
                 clampScore(json.path("score").decimalValue()),
@@ -250,6 +253,22 @@ public class ShopAiKeyClient {
                             .append("\n"));
         }
         return builder.toString();
+    }
+
+    private String withSystemPrompt(String prompt) {
+        String custom = systemSettingsService.getString(SystemSettingsService.AI_SYSTEM_PROMPT, "");
+        if (!StringUtils.hasText(custom)) {
+            return prompt;
+        }
+        return "Hướng dẫn hệ thống từ admin:\n" + custom.trim() + "\n\n" + prompt;
+    }
+
+    private String withFeedbackPrompt(String prompt) {
+        String custom = systemSettingsService.getString(SystemSettingsService.AI_FEEDBACK_PROMPT, "");
+        if (!StringUtils.hasText(custom)) {
+            return prompt;
+        }
+        return "Hướng dẫn đánh giá từ admin:\n" + custom.trim() + "\n\n" + prompt;
     }
 
     private String extractJson(String content) {
