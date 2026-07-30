@@ -19,7 +19,7 @@ function emptyForm(): Omit<AdminPlan, 'id' | 'createdAt' | 'updatedAt'> & { id?:
     price: 0,
     currency: 'VND',
     durationDays: 30,
-    featuresJson: '{\n  "benefits": []\n}',
+    featuresJson: '{\n  "benefits": [],\n  "maxJobs": 20,\n  "maxCv": 10,\n  "maxApplicationsPerDay": 50,\n  "maxAiSessionsPerDay": 20\n}',
     status: 'active',
     sortOrder: 0,
   };
@@ -196,7 +196,7 @@ export default function AdminPlanFormPage() {
             Quyền lợi gói (Features JSON)
             <small className="muted">
               Dữ liệu cấu trúc của gói: danh sách quyền lợi hiển thị cho user, hạn mức tin đăng, v.v.
-              Ví dụ: {'{"benefits":["Đăng tin không giới hạn","Ưu tiên hiển thị"],"maxJobs":20}'}
+              Ví dụ: {'{"benefits":["Đăng tin không giới hạn"],"maxJobs":20,"maxCv":10,"maxApplicationsPerDay":50,"maxAiSessionsPerDay":20}'}
             </small>
             <textarea
               rows={6}

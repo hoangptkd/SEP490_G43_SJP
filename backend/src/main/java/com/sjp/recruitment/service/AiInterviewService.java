@@ -50,6 +50,7 @@ public class AiInterviewService {
     private final JobService jobService;
     private final AiInterviewRateLimiter rateLimiter;
     private final AiInterviewResponseAssembler responseAssembler;
+    private final FeatureLimitService featureLimitService;
 
     @Transactional(readOnly = true)
     public AiInterviewConfigResponse configStatus() {
@@ -110,6 +111,7 @@ public class AiInterviewService {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "session-create");
+        featureLimitService.requireAiSession(candidate.getUser());
         Application application = applicationRepository.findById(parseUuid(applicationId, "APPLICATION_ID_INVALID"))
                 .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
@@ -130,6 +132,7 @@ public class AiInterviewService {
         createNextQuestion(session);
         session.setStatus("in_progress");
         session = sessionRepository.save(session);
+        featureLimitService.consumeAiSession(candidate.getUser());
         return responseAssembler.assemble(session);
     }
 
@@ -138,6 +141,7 @@ public class AiInterviewService {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "session-create");
+        featureLimitService.requireAiSession(candidate.getUser());
         if (!hasBasicProfile(candidate) && !candidateCvRepository.existsByCandidateId(candidate.getId())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRACTICE_CONTEXT_REQUIRED", "Can co ho so co ban hoac it nhat 1 CV de luyen phong van AI");
         }
@@ -186,6 +190,7 @@ public class AiInterviewService {
         }
         session.setStatus("in_progress");
         session = sessionRepository.save(session);
+        featureLimitService.consumeAiSession(candidate.getUser());
         return responseAssembler.assemble(session);
     }
 

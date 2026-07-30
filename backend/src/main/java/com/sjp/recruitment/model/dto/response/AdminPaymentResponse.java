@@ -8,6 +8,7 @@ public record AdminPaymentResponse(
         String subscriptionId,
         String userId,
         String userEmail,
+        String planName,
         BigDecimal amount,
         String currency,
         String paymentMethod,
@@ -15,7 +16,10 @@ public record AdminPaymentResponse(
         String status,
         String transactionId,
         String failureReason,
+        String transferContent,
+        String qrUrl,
         LocalDateTime paidAt,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        LocalDateTime expiresAt
 ) {
 }

@@ -15,6 +15,11 @@ import AdminProfilePage from './pages/admin/AdminProfilePage';
 import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import AdminStatisticsPage from './pages/admin/AdminStatisticsPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
+import EmployerSubscriptionPage from './pages/billing/EmployerSubscriptionPage';
+import PaymentResultPage from './pages/billing/PaymentResultPage';
+import BankTransferCheckoutPage from './pages/billing/BankTransferCheckoutPage';
+import PaymentCheckoutPage from './pages/billing/PaymentCheckoutPage';
+import SubscriptionPlansPage from './pages/billing/SubscriptionPlansPage';
 import { authService } from './services/authService';
 import { aiInterviewService } from './services/aiInterviewService';
 import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversation';
@@ -105,7 +110,11 @@ function App() {
         <Route path="ai-interviews" element={<AiInterviewPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
+        <Route path="subscription/plans" element={<SubscriptionPlansPage backTo="/candidate/subscription" backLabel="Quay lại gói dịch vụ" />} />
       </Route>
+      <Route path="/payment/result" element={<Protected><PaymentResultPage /></Protected>} />
+      <Route path="/payment/checkout" element={<Protected><PaymentCheckoutPage /></Protected>} />
+      <Route path="/payment/bank/:paymentId" element={<Protected><BankTransferCheckoutPage /></Protected>} />
       <Route path="/employer" element={<Protected><EmployerLayout /></Protected>}>
         <Route index element={<EmployerDashboard />} />
         <Route path="company-profile" element={<CompanyProfilePage />} />
@@ -114,6 +123,8 @@ function App() {
         <Route path="jobs" element={<EmployerJobsPage />} />
         <Route path="applications" element={<EmployerApplicationsPage />} />
         <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
+        <Route path="subscription" element={<EmployerSubscriptionPage />} />
+        <Route path="subscription/plans" element={<SubscriptionPlansPage backTo="/employer/subscription" backLabel="Quay lại gói dịch vụ" title="Gói dành cho nhà tuyển dụng" />} />
       </Route>
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
@@ -2370,17 +2381,97 @@ function SubscriptionPage() {
     );
   }
 
+  const statusValue = (subscription.status || '').toLowerCase();
+  const isActivePaid = statusValue === 'active' && subscription.planCode !== 'FREE' && subscription.planName?.toLowerCase() !== 'free';
+  const statusLabel =
+    statusValue === 'active' ? (isActivePaid ? 'Đang sử dụng' : 'Gói miễn phí')
+      : statusValue === 'pending' ? 'Chờ kích hoạt'
+        : statusValue === 'expired' ? 'Hết hạn'
+          : statusValue === 'cancelled' ? 'Đã hủy'
+            : subscription.status || '—';
+  const statusStyle =
+    statusValue === 'active'
+      ? { background: isActivePaid ? '#dcfce7' : '#f3f4f6', color: isActivePaid ? '#166534' : '#374151' }
+      : statusValue === 'pending'
+        ? { background: '#fef3c7', color: '#92400e' }
+        : ['expired', 'cancelled'].includes(statusValue)
+          ? { background: '#fee2e2', color: '#991b1b' }
+          : { background: '#f3f4f6', color: '#374151' };
+
   return (
     <motion.div variants={fadeUp} initial="initial" animate="animate"
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div className="page-header">
         <h1>Gói dịch vụ</h1>
-        <p>Quản lý gói đăng ký của bạn</p>
+        <p>Xem gói bạn đang dùng và nâng cấp khi cần</p>
       </div>
+
+      <article
+        className="card"
+        style={{
+          marginBottom: 20,
+          border: isActivePaid ? '2px solid #16a34a' : undefined,
+          background: isActivePaid ? 'linear-gradient(180deg, #f0fdf4 0%, #fff 55%)' : undefined,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <p className="muted" style={{ margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.8rem' }}>
+              Gói đang dùng
+            </p>
+            <h2 style={{ margin: '6px 0 0', fontSize: '1.6rem' }}>{subscription.planName}</h2>
+          </div>
+          <span
+            style={{
+              display: 'inline-block',
+              padding: '6px 12px',
+              borderRadius: 999,
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              ...statusStyle,
+            }}
+          >
+            {statusLabel}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginTop: 18 }}>
+          <div>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>Giá gói</div>
+            <strong>
+              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(subscription.price || 0)}
+            </strong>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>Ngày bắt đầu</div>
+            <strong>{subscription.startedAt ? new Date(subscription.startedAt).toLocaleString('vi-VN') : '—'}</strong>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>Ngày hết hạn</div>
+            <strong>{subscription.expiresAt ? new Date(subscription.expiresAt).toLocaleString('vi-VN') : '—'}</strong>
+          </div>
+        </div>
+
+        {subscription.benefits.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div className="muted" style={{ marginBottom: 8, fontSize: '0.85rem' }}>Quyền lợi đang có</div>
+            <div className="chip-row">
+              {subscription.benefits.map((benefit) => (
+                <span key={benefit} className="chip match">✓ {benefit}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 20 }}>
+          <Link to="/candidate/subscription/plans" className="button-link">
+            {isActivePaid ? 'Đổi / gia hạn gói' : 'Mua gói'}
+          </Link>
+        </div>
+      </article>
 
       <div className="metric-grid">
         {[
-          { label: 'Gói hiện tại', value: subscription.planName, icon: '💎' },
           { label: 'CV đã tải', value: subscription.cvCount, icon: '📄' },
           { label: 'Việc đã lưu', value: subscription.savedJobsCount, icon: '🔖' },
           { label: 'Thông báo chưa đọc', value: subscription.unreadNotificationsCount, icon: '🔔' },
@@ -2395,17 +2486,6 @@ function SubscriptionPage() {
           </motion.div>
         ))}
       </div>
-
-      {subscription.benefits.length > 0 && (
-        <div className="card">
-          <h2 style={{ marginBottom: 16 }}>Quyền lợi của bạn</h2>
-          <div className="chip-row">
-            {subscription.benefits.map((benefit) => (
-              <span key={benefit} className="chip match">✓ {benefit}</span>
-            ))}
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -2448,6 +2528,11 @@ function EmployerLayout() {
         <NavLink to="/employer/applications" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <span className="sidebar-link-icon">👥</span>
           Quản lý Ứng viên
+        </NavLink>
+
+        <NavLink to="/employer/subscription" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <span className="sidebar-link-icon">💎</span>
+          Gói dịch vụ
         </NavLink>
 
         {/* Company dropdown */}

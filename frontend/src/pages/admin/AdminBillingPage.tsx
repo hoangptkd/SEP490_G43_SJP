@@ -138,6 +138,17 @@ export default function AdminBillingPage() {
     }
   }
 
+  async function confirmPayment(item: AdminPayment) {
+    if (!window.confirm(`Xác nhận đã nhận chuyển khoản ${money(item.amount, item.currency)} từ ${item.userEmail}?`)) return;
+    try {
+      await adminService.confirmPayment(item.id);
+      setSuccess('Đã xác nhận thanh toán và kích hoạt gói.');
+      await load();
+    } catch (err) {
+      setError(readError(err));
+    }
+  }
+
   return (
     <section className="admin-page">
       <header className="admin-page-header">
@@ -314,6 +325,7 @@ export default function AdminBillingPage() {
               </button>
             ))}
           </div>
+
           <section className="admin-company-list-panel">
             <div className="admin-company-list-header">
               <h2>Giao dịch thanh toán</h2>
@@ -322,21 +334,38 @@ export default function AdminBillingPage() {
             <div className="admin-review-list">
               {payments.map((item) => {
                 const badge = statusBadge(item.status);
+                const needsBankConfirm =
+                  item.status?.toLowerCase() === 'pending' && item.paymentMethod === 'bank_transfer';
                 return (
-                  <article key={item.id} className="admin-review-row">
+                  <article
+                    key={item.id}
+                    className="admin-review-row"
+                    style={needsBankConfirm ? { borderColor: '#f59e0b', background: '#fffbeb' } : undefined}
+                  >
                     <div className="admin-review-main">
                       <div className="admin-review-title-line">
-                        <strong>{money(item.amount, item.currency)}</strong>
-                        <span className={`admin-status-badge ${badge.className}`}>{badge.text}</span>
+                        <strong>{item.planName || 'Gói dịch vụ'} — {money(item.amount, item.currency)}</strong>
+                        <span className={`admin-status-badge ${badge.className}`}>
+                          {needsBankConfirm ? 'Chờ xác nhận CK' : badge.text}
+                        </span>
                       </div>
                       <div className="admin-review-meta">
                         <span>{item.userEmail}</span>
                         <span>{item.paymentMethod || '—'}</span>
-                        <span>{item.gateway || '—'}</span>
+                        {item.transferContent && <span>Nội dung: <strong>{item.transferContent}</strong></span>}
+                        {!item.transferContent && item.gateway && <span>{item.gateway}</span>}
                         <span>{formatDate(item.paidAt || item.createdAt)}</span>
                       </div>
+                      {needsBankConfirm && (
+                        <p className="muted">Đối chiếu sao kê ngân hàng với đúng nội dung CK rồi bấm xác nhận.</p>
+                      )}
                       {item.failureReason && <p className="muted">{item.failureReason}</p>}
                     </div>
+                    {needsBankConfirm && (
+                      <button type="button" onClick={() => confirmPayment(item)}>
+                        Xác nhận đã nhận tiền
+                      </button>
+                    )}
                   </article>
                 );
               })}

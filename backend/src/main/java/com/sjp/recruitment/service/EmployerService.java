@@ -62,6 +62,7 @@ public class EmployerService {
     private final ApplicationService applicationService;
     private final Cloudinary cloudinary;
     private final DtoMapper dtoMapper;
+    private final FeatureLimitService featureLimitService;
 
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {
@@ -611,8 +612,11 @@ public class EmployerService {
         if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền đăng tin tuyển dụng.");
         }
+        featureLimitService.requireJobPost(employer.getUser());
         request.setEmployerId(String.valueOf(employer.getId()));
-        return jobService.createJobResponse(request);
+        JobResponse created = jobService.createJobResponse(request);
+        featureLimitService.consumeJobPost(employer.getUser());
+        return created;
     }
 
     @Transactional

@@ -51,6 +51,7 @@ public class ApplicationService {
     private final CandidateService candidateService;
     private final JobService jobService;
     private final DtoMapper dtoMapper;
+    private final FeatureLimitService featureLimitService;
 
     @Transactional(readOnly = true)
     public Page<Application> findByCandidateId(String candidateId, Pageable pageable) {
@@ -84,6 +85,7 @@ public class ApplicationService {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         User user = candidate.getUser();
         candidateService.requireCandidate(user);
+        featureLimitService.requireApplication(user);
         if (!candidateService.isApplyReady(candidate)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PROFILE_INCOMPLETE", "Can hoan thien ho so va co it nhat 1 CV truoc khi ung tuyen");
         }
@@ -125,6 +127,7 @@ public class ApplicationService {
         addHistory(saved, null, Application.ApplicationStatus.SUBMITTED, "Ho so ung tuyen da duoc gui thanh cong.");
         createNotification(user, "APPLICATION_SUBMITTED", "Da gui ho so ung tuyen",
                 "Ban da ung tuyen thanh cong vao vi tri " + job.getTitle() + ".", saved.getId());
+        featureLimitService.consumeApplication(user);
 
         return toResponse(saved);
     }

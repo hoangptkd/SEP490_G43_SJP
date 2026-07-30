@@ -39,6 +39,7 @@ public class AdminOpsService {
     private final AuthService authService;
     private final UserRepository userRepository;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final BillingService billingService;
 
     @Transactional(readOnly = true)
     public List<AdminPlanResponse> listPlans(String status) {
@@ -290,6 +291,18 @@ public class AdminOpsService {
         return findSubscription(id);
     }
 
+    @Transactional
+    public AdminPaymentResponse confirmBankPayment(String id) {
+        User admin = requireAdminUser();
+        ensureUuid(id, "Thanh toán");
+        billingService.confirmBankTransferAsAdmin(id);
+        writeAudit(admin.getId().toString(), "PAYMENT_CONFIRM", "payment", id, "pending", "paid");
+        return listPayments("all").stream()
+                .filter(item -> item.id().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy giao dịch"));
+    }
+
     @Transactional(readOnly = true)
     public List<AdminPaymentResponse> listPayments(String status) {
         requireAdmin();
@@ -298,6 +311,7 @@ public class AdminOpsService {
                        p.subscription_id::text AS subscription_id,
                        p.user_id::text AS user_id,
                        u.email AS user_email,
+                       pl.name AS plan_name,
                        p.amount,
                        p.currency,
                        p.payment_method,
@@ -305,10 +319,14 @@ public class AdminOpsService {
                        p.status,
                        p.transaction_id,
                        p.failure_reason,
+                       p.gateway_order_id,
+                       p.gateway_response::text AS gateway_response,
                        p.paid_at,
                        p.created_at
                 FROM payments p
                 JOIN users u ON u.id = p.user_id
+                LEFT JOIN subscriptions s ON s.id = p.subscription_id
+                LEFT JOIN plans pl ON pl.id = s.plan_id
                 """);
         MapSqlParameterSource params = new MapSqlParameterSource();
         if (StringUtils.hasText(status) && !"all".equalsIgnoreCase(status)) {
@@ -598,11 +616,31 @@ public class AdminOpsService {
     }
 
     private AdminPaymentResponse mapPayment(ResultSet rs, int rowNum) throws SQLException {
+        String gatewayResponse = rs.getString("gateway_response");
+        String transferContent = rs.getString("gateway_order_id");
+        String qrUrl = null;
+        LocalDateTime expiresAt = null;
+        if (StringUtils.hasText(gatewayResponse)) {
+            try {
+                var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(gatewayResponse);
+                if (node.hasNonNull("transferContent")) {
+                    transferContent = node.get("transferContent").asText();
+                }
+                if (node.hasNonNull("qrUrl")) {
+                    qrUrl = node.get("qrUrl").asText();
+                }
+                if (node.hasNonNull("expiresAt")) {
+                    expiresAt = LocalDateTime.parse(node.get("expiresAt").asText().replace("Z", ""));
+                }
+            } catch (Exception ignored) {
+            }
+        }
         return new AdminPaymentResponse(
                 rs.getString("id"),
                 rs.getString("subscription_id"),
                 rs.getString("user_id"),
                 rs.getString("user_email"),
+                rs.getString("plan_name"),
                 rs.getBigDecimal("amount"),
                 rs.getString("currency"),
                 rs.getString("payment_method"),
@@ -610,8 +648,11 @@ public class AdminOpsService {
                 rs.getString("status"),
                 rs.getString("transaction_id"),
                 rs.getString("failure_reason"),
+                transferContent,
+                qrUrl,
                 toLocalDateTime(rs, "paid_at"),
-                toLocalDateTime(rs, "created_at")
+                toLocalDateTime(rs, "created_at"),
+                expiresAt
         );
     }
 

@@ -101,6 +101,30 @@ app:
     costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
   storage:
     cv-upload-dir: ${CV_UPLOAD_DIR:uploads/cvs}
+  payment:
+    momo:
+      enabled: ${MOMO_ENABLED:true}
+      partner-code: ${MOMO_PARTNER_CODE:MOMO}
+      access-key: ${MOMO_ACCESS_KEY:F8BBA842ECF85}
+      secret-key: ${MOMO_SECRET_KEY:K951B6PT2tD7wFGf5gct9wDu}
+      endpoint: ${MOMO_ENDPOINT:https://test-payment.momo.vn/v2/gateway/api/create}
+      sandbox: ${MOMO_SANDBOX:true}
+    vnpay:
+      enabled: ${VNPAY_ENABLED:true}
+      tmn-code: ${VNPAY_TMN_CODE:}
+      hash-secret: ${VNPAY_HASH_SECRET:}
+      pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+      version: ${VNPAY_VERSION:2.1.0}
+      sandbox: ${VNPAY_SANDBOX:true}
+    bank-transfer:
+      enabled: ${BANK_TRANSFER_ENABLED:true}
+      bank-name: ${BANK_TRANSFER_BANK_NAME:TPBank}
+      bank-code: ${BANK_TRANSFER_BANK_CODE:970423}
+      account-number: ${BANK_TRANSFER_ACCOUNT_NUMBER:18167888888}
+      account-name: ${BANK_TRANSFER_ACCOUNT_NAME:DAM HUY HOA}
+      branch: ${BANK_TRANSFER_BRANCH:}
+      expire-minutes: ${BANK_TRANSFER_EXPIRE_MINUTES:15}
     
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}
