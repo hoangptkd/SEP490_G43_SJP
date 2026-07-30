@@ -224,8 +224,8 @@ public class ApplicationWorkflowService {
         JobOffer saved = jobOfferRepository.save(offer);
         
         if (accepted) {
-            // Application is already ACCEPTED, maybe add a timeline note
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã chấp nhận Job Offer");
+            // Application is now HIRED
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Job Offer");
         } else {
             // Do NOT change Application status to REJECTED yet, to allow negotiation.
             applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã từ chối Job Offer (Chờ phản hồi): " + note);
@@ -321,7 +321,7 @@ public class ApplicationWorkflowService {
         if (accepted) {
             offer.setStatus("accepted");
             offer.setRespondedAt(LocalDateTime.now());
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã chấp nhận Job Offer cũ");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Job Offer cũ");
         } else {
             offer.setStatus("withdrawn_by_candidate"); // or just rejected
             offer.setRespondedAt(LocalDateTime.now());

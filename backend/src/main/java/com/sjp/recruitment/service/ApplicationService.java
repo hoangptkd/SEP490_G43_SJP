@@ -10,6 +10,7 @@ import com.sjp.recruitment.model.entity.CandidateCv;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.CvVersion;
 import com.sjp.recruitment.model.entity.Job;
+import com.sjp.recruitment.model.dto.JobSnapshot;
 import com.sjp.recruitment.model.entity.Notification;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.repository.ApplicationRepository;
@@ -76,6 +77,7 @@ public class ApplicationService {
         application.setJob(job);
         application.setCandidate(candidate);
         application.setStatus(Application.ApplicationStatus.SUBMITTED);
+        application.setJobSnapshotJson(JobSnapshot.fromJob(job));
 
         return applicationRepository.save(application);
     }
@@ -122,6 +124,7 @@ public class ApplicationService {
         application.setCv(cv);
         application.setCvVersion(cvVersion);
         application.setStatus(Application.ApplicationStatus.SUBMITTED);
+        application.setJobSnapshotJson(JobSnapshot.fromJob(job));
         Application saved = applicationRepository.save(application);
 
         addHistory(saved, null, Application.ApplicationStatus.SUBMITTED, "Ho so ung tuyen da duoc gui thanh cong.");
@@ -159,10 +162,10 @@ public class ApplicationService {
         addHistory(application, from, toStatus, note);
         createNotification(application.getCandidate().getUser(), "APPLICATION_STATUS_CHANGED",
                 "Trang thai ung tuyen da cap nhat", note, application.getId());
-        if (toStatus == Application.ApplicationStatus.ACCEPTED && application.getJob() != null) {
+        if (toStatus == Application.ApplicationStatus.HIRED && application.getJob() != null) {
             Job job = application.getJob();
-            long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
-            if (job.getVacancies() != null && acceptedCount >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
+            long hiredCount = applicationRepository.countByJobIdAndStatus(job.getId(), "hired");
+            if (job.getVacancies() != null && hiredCount >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
                 job.setStatus("closed");
                 job.setClosedAt(LocalDateTime.now());
                 jobRepository.save(job);
@@ -198,9 +201,45 @@ public class ApplicationService {
                 .map(dtoMapper::toJobOfferResponse)
                 .orElse(null);
 
+        com.sjp.recruitment.model.dto.response.JobResponse jobResponse = application.getJob() != null 
+                ? jobService.toJobResponse(application.getJob(), application.getCandidate()) 
+                : null;
+
+        if (jobResponse != null && application.getJobSnapshotJson() != null) {
+            JobSnapshot snap = application.getJobSnapshotJson();
+            jobResponse = new com.sjp.recruitment.model.dto.response.JobResponse(
+                    jobResponse.id(),
+                    snap.getTitle() != null ? snap.getTitle() : jobResponse.title(),
+                    snap.getDescription() != null ? snap.getDescription() : jobResponse.description(),
+                    snap.getRequirements() != null ? snap.getRequirements() : jobResponse.requirements(),
+                    jobResponse.skills(),
+                    snap.getSalaryMin() != null ? snap.getSalaryMin() : jobResponse.salaryMin(),
+                    snap.getSalaryMax() != null ? snap.getSalaryMax() : jobResponse.salaryMax(),
+                    snap.getLocation() != null ? snap.getLocation() : jobResponse.location(),
+                    snap.getExperienceLevel() != null ? snap.getExperienceLevel() : jobResponse.experienceLevel(),
+                    snap.getDeadline() != null ? snap.getDeadline().atStartOfDay() : jobResponse.deadline(),
+                    jobResponse.status(),
+                    jobResponse.company(),
+                    jobResponse.companyLocationId(),
+                    jobResponse.companyLocation(),
+                    jobResponse.saved(),
+                    jobResponse.applied(),
+                    jobResponse.matchScore(),
+                    snap.getBenefits() != null ? snap.getBenefits() : jobResponse.benefits(),
+                    snap.getVacancies() != null ? snap.getVacancies() : jobResponse.vacancies(),
+                    snap.getWorkingTime() != null ? snap.getWorkingTime() : jobResponse.workingTime(),
+                    snap.getSalaryType() != null ? snap.getSalaryType() : jobResponse.salaryType(),
+                    snap.getJobType() != null ? snap.getJobType() : jobResponse.jobType(),
+                    snap.getWorkMode() != null ? snap.getWorkMode() : jobResponse.workMode(),
+                    jobResponse.viewsCount(),
+                    jobResponse.rejectionReason(),
+                    jobResponse.applicationsCount()
+            );
+        }
+
         return dtoMapper.toApplicationResponse(
                 application,
-                application.getJob() != null ? jobService.toJobResponse(application.getJob(), application.getCandidate()) : null,
+                jobResponse,
                 timeline,
                 interviews,
                 jobOffer);
