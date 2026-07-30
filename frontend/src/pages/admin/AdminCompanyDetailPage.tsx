@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import type { AdminCompanyDetail } from '../../types/admin';
@@ -38,14 +38,39 @@ function readError(error: unknown) {
   return 'Có lỗi xảy ra';
 }
 
-function DocumentRow({ doc }: { doc: CompanyDocument }) {
+type DocumentRowProps = {
+  doc: CompanyDocument;
+  canReviewDoc: boolean;
+  reviewingId: string | null;
+  rejectDocId: string | null;
+  rejectDocReason: string;
+  onApprove: (doc: CompanyDocument) => void;
+  onToggleReject: (docId: string | null) => void;
+  onRejectReasonChange: (value: string) => void;
+  onRejectSubmit: (doc: CompanyDocument) => void;
+};
+
+function DocumentRow({
+  doc,
+  canReviewDoc,
+  reviewingId,
+  rejectDocId,
+  rejectDocReason,
+  onApprove,
+  onToggleReject,
+  onRejectReasonChange,
+  onRejectSubmit,
+}: DocumentRowProps) {
   const status = documentStatusLabel(doc.status);
+  const isPending = (doc.status || 'pending').toLowerCase() === 'pending';
+  const busy = reviewingId === doc.id;
+  const showRejectForm = rejectDocId === doc.id;
   const viewUrl = doc.fileType === 'pdf' || doc.fileName?.toLowerCase().endsWith('.pdf')
     ? `https://docs.google.com/gview?url=${encodeURIComponent(doc.fileUrl)}`
     : doc.fileUrl;
 
   return (
-    <article className="admin-company-doc">
+    <article className={`admin-company-doc ${isPending ? 'is-pending' : ''}`}>
       <div className="admin-company-doc-icon">{doc.fileType === 'pdf' ? 'PDF' : 'IMG'}</div>
       <div className="admin-company-doc-body">
         <strong>{doc.fileName}</strong>
@@ -56,6 +81,34 @@ function DocumentRow({ doc }: { doc: CompanyDocument }) {
         {doc.rejectReason && (
           <p className="admin-company-doc-reason">Lý do từ chối: {doc.rejectReason}</p>
         )}
+
+        {showRejectForm && (
+          <form
+            className="admin-company-doc-reject"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onRejectSubmit(doc);
+            }}
+          >
+            <label>
+              Lý do từ chối tài liệu này
+              <textarea
+                value={rejectDocReason}
+                onChange={(e) => onRejectReasonChange(e.target.value)}
+                placeholder="Ví dụ: Ảnh mờ, giấy hết hạn, sai MST..."
+                required
+              />
+            </label>
+            <div className="admin-company-doc-actions">
+              <button type="submit" className="danger" disabled={busy}>
+                {busy ? 'Đang xử lý...' : 'Xác nhận từ chối'}
+              </button>
+              <button type="button" className="outline" onClick={() => onToggleReject(null)} disabled={busy}>
+                Hủy
+              </button>
+            </div>
+          </form>
+        )}
       </div>
       <div className="admin-company-doc-actions">
         <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="button-link outline">
@@ -64,6 +117,16 @@ function DocumentRow({ doc }: { doc: CompanyDocument }) {
         <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="button-link outline">
           Tải về
         </a>
+        {canReviewDoc && isPending && !showRejectForm && (
+          <>
+            <button type="button" onClick={() => onApprove(doc)} disabled={busy}>
+              {busy ? '...' : 'Phê duyệt'}
+            </button>
+            <button type="button" className="danger" onClick={() => onToggleReject(doc.id)} disabled={busy}>
+              Từ chối
+            </button>
+          </>
+        )}
       </div>
     </article>
   );
@@ -76,8 +139,11 @@ export default function AdminCompanyDetailPage() {
   const [detail, setDetail] = useState<AdminCompanyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectDocId, setRejectDocId] = useState<string | null>(null);
+  const [rejectDocReason, setRejectDocReason] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -91,8 +157,26 @@ export default function AdminCompanyDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  const pendingDocs = useMemo(
+    () => (detail?.documents || []).filter((doc) => (doc.status || 'pending').toLowerCase() === 'pending'),
+    [detail],
+  );
+  const hasMultipleDocs = (detail?.documents.length || 0) >= 2;
+  const canReviewCompany = detail?.company.verificationStatus?.toLowerCase() === 'pending'
+    || detail?.company.verificationStatus?.toLowerCase() === 'rejected';
+  const canReviewDocuments =
+    detail?.company.verificationStatus?.toLowerCase() === 'pending'
+    || detail?.company.verificationStatus?.toLowerCase() === 'rejected';
+  const companyApproveBlocked =
+    pendingDocs.length > 0
+    || (detail?.documents || []).some((doc) => (doc.status || '').toLowerCase() === 'rejected');
+
   async function handleApprove() {
     if (!id || !detail) return;
+    if (companyApproveBlocked) {
+      setError('Hãy phê duyệt hoặc từ chối từng tài liệu pháp lý trước khi duyệt hồ sơ công ty.');
+      return;
+    }
     if (!window.confirm(`Phê duyệt hồ sơ công ty "${detail.company.name}"?`)) return;
 
     setSubmitting(true);
@@ -133,8 +217,50 @@ export default function AdminCompanyDetailPage() {
     }
   }
 
+  async function handleApproveDocument(doc: CompanyDocument) {
+    if (!id) return;
+    if (!window.confirm(`Phê duyệt tài liệu "${doc.fileName}"?`)) return;
+
+    setReviewingId(doc.id);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await adminService.approveCompanyDocument(id, doc.id);
+      setDetail(updated);
+      setSuccess(`Đã phê duyệt tài liệu "${doc.fileName}".`);
+      setRejectDocId(null);
+      setRejectDocReason('');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setReviewingId(null);
+    }
+  }
+
+  async function handleRejectDocument(doc: CompanyDocument) {
+    if (!id) return;
+    if (!rejectDocReason.trim()) {
+      setError('Vui lòng nhập lý do từ chối tài liệu.');
+      return;
+    }
+
+    setReviewingId(doc.id);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await adminService.rejectCompanyDocument(id, doc.id, rejectDocReason.trim());
+      setDetail(updated);
+      setSuccess(`Đã từ chối tài liệu "${doc.fileName}".`);
+      setRejectDocId(null);
+      setRejectDocReason('');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setReviewingId(null);
+    }
+  }
+
   const verification = verificationLabel(detail?.company.verificationStatus);
-  const canReview = detail?.company.verificationStatus?.toLowerCase() === 'pending';
   const backStatus = searchParams.get('status') || 'pending';
   const backPage = searchParams.get('page') || '1';
   const backTo = `/admin/companies?status=${backStatus}&page=${backPage}`;
@@ -170,7 +296,35 @@ export default function AdminCompanyDetailPage() {
           </div>
 
           <div className="admin-company-info-grid">
-            <div><span>Ngành nghề</span><strong>{detail.company.industry || '—'}</strong></div>
+            <div>
+              <span>Ngành nghề hoạt động</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                {detail.company.industries && detail.company.industries.length > 0 ? (
+                  detail.company.industries.map((ind) => (
+                    <span
+                      key={ind.categoryId || ind.categoryName}
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: '16px',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        background: ind.primary ? '#eff6ff' : '#f1f5f9',
+                        color: ind.primary ? '#1d4ed8' : '#475569',
+                        border: ind.primary ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      {ind.categoryName || detail.company.industry}
+                      {ind.primary && <span style={{ fontSize: '0.75rem', color: '#2563eb' }}>★ Chính</span>}
+                    </span>
+                  ))
+                ) : (
+                  <strong>{detail.company.industry || '—'}</strong>
+                )}
+              </div>
+            </div>
             <div><span>Mã số thuế</span><strong>{detail.company.taxCode || '—'}</strong></div>
             <div><span>Quy mô</span><strong>{detail.company.companySize ? `${detail.company.companySize} nhân sự` : '—'}</strong></div>
             <div><span>Website</span><strong>{detail.company.website || '—'}</strong></div>
@@ -198,33 +352,70 @@ export default function AdminCompanyDetailPage() {
           )}
 
           <div className="admin-company-section">
-            <h3>Tài liệu pháp lý ({detail.documents.length})</h3>
+            <div className="admin-company-section-head">
+              <h3>Tài liệu pháp lý ({detail.documents.length})</h3>
+              {hasMultipleDocs && canReviewDocuments && (
+                <p className="muted">
+                  Có từ 2 tài liệu trở lên — hãy phê duyệt / từ chối từng file.
+                  {pendingDocs.length > 0
+                    ? ` Còn ${pendingDocs.length} tài liệu chờ xử lý.`
+                    : ' Đã xử lý hết tài liệu. Bạn có thể quyết định cuối ở cấp hồ sơ công ty nếu cần.'}
+                </p>
+              )}
+            </div>
             {detail.documents.length === 0 ? (
               <p className="muted">Công ty chưa tải lên tài liệu xác thực.</p>
             ) : (
               <div className="admin-company-doc-list">
                 {detail.documents.map((doc) => (
-                  <DocumentRow key={doc.id} doc={doc} />
+                  <DocumentRow
+                    key={doc.id}
+                    doc={doc}
+                    canReviewDoc={canReviewDocuments}
+                    reviewingId={reviewingId}
+                    rejectDocId={rejectDocId}
+                    rejectDocReason={rejectDocReason}
+                    onApprove={handleApproveDocument}
+                    onToggleReject={(docId) => {
+                      setRejectDocId(docId);
+                      setRejectDocReason('');
+                      setError('');
+                    }}
+                    onRejectReasonChange={setRejectDocReason}
+                    onRejectSubmit={handleRejectDocument}
+                  />
                 ))}
               </div>
             )}
           </div>
 
-          {canReview && (
+          {canReviewCompany && (
             <div className="admin-company-actions">
-              <button type="button" onClick={handleApprove} disabled={submitting}>
-                {submitting ? 'Đang xử lý...' : 'Phê duyệt hồ sơ'}
+              <button type="button" onClick={handleApprove} disabled={submitting || companyApproveBlocked}>
+                {submitting ? 'Đang xử lý...' : 'Phê duyệt hồ sơ công ty'}
               </button>
-              <button type="button" className="danger" onClick={() => setShowRejectForm((value) => !value)} disabled={submitting}>
-                Từ chối hồ sơ
+              <button
+                type="button"
+                className="danger"
+                onClick={() => setShowRejectForm((value) => !value)}
+                disabled={submitting}
+              >
+                Từ chối hồ sơ công ty
               </button>
             </div>
           )}
 
-          {showRejectForm && canReview && (
+          {companyApproveBlocked && (
+            <p className="muted admin-inline-message">
+              Không thể duyệt hồ sơ khi còn tài liệu chờ xử lý hoặc bị từ chối.
+              Hãy duyệt từng tài liệu, hoặc chờ nhà tuyển dụng cập nhật lại file bị từ chối.
+            </p>
+          )}
+
+          {showRejectForm && canReviewCompany && (
             <form className="admin-company-reject-form" onSubmit={handleReject}>
               <label>
-                Lý do từ chối
+                Lý do từ chối hồ sơ công ty
                 <textarea
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
@@ -234,7 +425,7 @@ export default function AdminCompanyDetailPage() {
               </label>
               <div className="admin-company-actions">
                 <button type="submit" className="danger" disabled={submitting}>
-                  {submitting ? 'Đang xử lý...' : 'Xác nhận từ chối'}
+                  {submitting ? 'Đang xử lý...' : 'Xác nhận từ chối hồ sơ'}
                 </button>
                 <button type="button" className="outline" onClick={() => setShowRejectForm(false)} disabled={submitting}>
                   Hủy

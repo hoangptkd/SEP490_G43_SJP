@@ -19,6 +19,15 @@ public record AdminStatisticsResponse(
         List<AdminTrendPointResponse> employerUsersTrend,
         List<AdminTrendPointResponse> applicationsLast7Days,
         List<AdminTrendPointResponse> jobsLast7Days,
+        long interviewSessions,
+        long interviewCompleted,
+        long interviewInProgress,
+        long aiAnswersEvaluated,
+        long aiRecommendations,
+        long aiRankingJobs,
+        double averageInterviewScore,
+        List<AdminStatItemResponse> interviewsByStatus,
+        List<AdminTrendPointResponse> interviewsTrend,
         LocalDateTime updatedAt
 ) {
 }

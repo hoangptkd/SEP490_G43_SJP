@@ -59,6 +59,17 @@ export const employerService = {
     return response.data;
   },
 
+  replaceDocument: async (id: string, file: File): Promise<CompanyDocument> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<CompanyDocument>(`/employer/company/documents/${id}/replace`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
   deleteDocument: async (id: string): Promise<void> => {
     await api.delete(`/employer/company/documents/${id}`);
   },

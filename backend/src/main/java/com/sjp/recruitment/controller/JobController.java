@@ -1,8 +1,11 @@
 package com.sjp.recruitment.controller;
 
+import com.sjp.recruitment.model.dto.request.JobReportRequest;
 import com.sjp.recruitment.model.dto.response.JobPageResponse;
+import com.sjp.recruitment.model.dto.response.JobReportResponse;
 import com.sjp.recruitment.model.dto.response.JobResponse;
 import com.sjp.recruitment.model.dto.response.RecommendationResponse;
+import com.sjp.recruitment.service.JobReportService;
 import com.sjp.recruitment.service.JobService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +20,7 @@ import java.util.List;
 public class JobController {
 
     private final JobService jobService;
+    private final JobReportService jobReportService;
 
     @GetMapping
     public ResponseEntity<JobPageResponse> getAllJobs(
@@ -36,6 +40,14 @@ public class JobController {
     @GetMapping("/{id}")
     public ResponseEntity<JobResponse> getJobById(@PathVariable String id) {
         return ResponseEntity.ok(jobService.findJobResponseById(id));
+    }
+
+    @PostMapping("/{id}/reports")
+    public ResponseEntity<JobReportResponse> reportJob(
+            @PathVariable String id,
+            @RequestBody JobReportRequest request
+    ) {
+        return ResponseEntity.ok(jobReportService.reportJob(id, request));
     }
 
     @GetMapping("/recommendations")

@@ -258,7 +258,13 @@ public class JobService {
         if ("rejected".equalsIgnoreCase(job.getStatus())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_REJECTED", "Tin tuyển dụng đã bị từ chối duyệt. Vui lòng chỉnh sửa nội dung tin tuyển dụng trước khi gửi duyệt lại.");
         }
-        if (hasCompanyHadApprovedJob(job.getCompany(), job.getId())) {
+
+        boolean fromReportFix = "awaiting_company".equalsIgnoreCase(job.getStatus());
+        if (fromReportFix || !hasCompanyHadApprovedJob(job.getCompany(), job.getId())) {
+            job.setStatus("pending_review");
+            // Giữ rejection_reason để admin còn thấy ghi chú báo cáo; chỉ clear closed_at
+            job.setClosedAt(null);
+        } else {
             job.setStatus("published");
             if (job.getPublishedAt() == null) {
                 job.setPublishedAt(LocalDateTime.now());
@@ -267,11 +273,22 @@ public class JobService {
                 job.setPostedAt(LocalDateTime.now());
             }
             job.setRejectionReason(null);
-        } else {
-            job.setStatus("pending_review");
-            job.setRejectionReason(null);
+            job.setClosedAt(null);
         }
         job = jobRepository.save(job);
+
+        if (fromReportFix) {
+            namedParameterJdbcTemplate.update("""
+                    UPDATE job_reports
+                    SET status = 'resubmitted',
+                        resolved_at = now()
+                    WHERE job_id = CAST(:jobId AS uuid)
+                      AND status = 'awaiting_company'
+                    """,
+                    new MapSqlParameterSource("jobId", job.getId().toString())
+            );
+        }
+
         return dtoMapper.toJobResponse(job, false, false, null);
     }
 
@@ -466,9 +483,14 @@ public class JobService {
 
         String targetStatus = request.getStatus() != null && !request.getStatus().isBlank() ? request.getStatus().toLowerCase() : "draft";
         boolean wasNotClosed = !"closed".equalsIgnoreCase(job.getStatus());
+        boolean fromReportFix = "awaiting_company".equalsIgnoreCase(job.getStatus());
 
         if ("pending_review".equals(targetStatus) || "published".equals(targetStatus) || "active".equals(targetStatus)) {
-            if (hasCompanyHadApprovedJob(company, job.getId())) {
+            if (fromReportFix) {
+                // Tin bị báo cáo → công ty sửa xong phải qua admin duyệt lại, không auto-publish
+                targetStatus = "pending_review";
+                job.setClosedAt(null);
+            } else if (hasCompanyHadApprovedJob(company, job.getId())) {
                 targetStatus = "published";
                 if (job.getPublishedAt() == null) {
                     job.setPublishedAt(LocalDateTime.now());
@@ -476,11 +498,15 @@ public class JobService {
                 if (job.getPostedAt() == null) {
                     job.setPostedAt(LocalDateTime.now());
                 }
+                job.setRejectionReason(null);
+                job.setClosedAt(null);
             } else {
                 targetStatus = "pending_review";
+                job.setRejectionReason(null);
+                job.setClosedAt(null);
             }
-            job.setRejectionReason(null);
-            job.setClosedAt(null);
+        } else if (fromReportFix && ("draft".equals(targetStatus) || "awaiting_company".equals(targetStatus))) {
+            targetStatus = "awaiting_company";
         }
         job.setStatus(targetStatus);
         if ("closed".equals(targetStatus) && job.getClosedAt() == null) {
@@ -508,6 +534,18 @@ public class JobService {
         job.setEmployer(employer);
         job.setCompany(company);
         job = jobRepository.save(job);
+
+        if (fromReportFix && "pending_review".equals(targetStatus) && job.getId() != null) {
+            namedParameterJdbcTemplate.update("""
+                    UPDATE job_reports
+                    SET status = 'resubmitted',
+                        resolved_at = now()
+                    WHERE job_id = CAST(:jobId AS uuid)
+                      AND status = 'awaiting_company'
+                    """,
+                    new MapSqlParameterSource("jobId", job.getId().toString())
+            );
+        }
 
         if ("closed".equals(targetStatus) && wasNotClosed && job.getId() != null) {
             notifyCandidatesJobClosed(job, "Tin tuyển dụng [" + job.getTitle() + "] mà bạn nộp đơn ứng tuyển đã được nhà tuyển dụng đóng (ngừng nhận đơn).");
@@ -869,6 +907,8 @@ public class JobService {
         return switch (status.trim().toLowerCase(Locale.ROOT)) {
             case "published" -> "ACTIVE";
             case "closed" -> "CLOSED";
+            case "removed" -> "REMOVED";
+            case "awaiting_company" -> "AWAITING_COMPANY";
             case "expired" -> "EXPIRED";
             default -> "DRAFT";
         };

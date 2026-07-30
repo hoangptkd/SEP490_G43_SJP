@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
-import type { AdminJobDetail } from '../../types/admin';
+import type { AdminJobDetail, AdminJobReport } from '../../types/admin';
 
 function jobStatusLabel(status?: string) {
   const value = status?.toLowerCase() || 'draft';
@@ -11,15 +11,31 @@ function jobStatusLabel(status?: string) {
       return { text: 'Đã duyệt', className: 'status-verified' };
     case 'pending_review':
       return { text: 'Chờ duyệt', className: 'status-pending' };
+    case 'awaiting_company':
+      return { text: 'Đang chờ Công ty kiểm tra', className: 'status-pending' };
     case 'rejected':
       return { text: 'Bị từ chối', className: 'status-rejected' };
     case 'draft':
       return { text: 'Bản nháp', className: 'status-unverified' };
     case 'closed':
-      return { text: 'Đã đóng', className: 'status-unverified' };
+      return { text: 'Đã ẩn', className: 'status-unverified' };
+    case 'removed':
+      return { text: 'Đã gỡ do vi phạm', className: 'status-rejected' };
     default:
       return { text: status || '—', className: 'status-unverified' };
   }
+}
+
+function reportReasonLabel(reason?: string) {
+  const map: Record<string, string> = {
+    spam: 'Spam / tin rác',
+    scam: 'Lừa đảo / nghi ngờ',
+    offensive: 'Nội dung phản cảm',
+    misleading: 'Thông tin sai lệch',
+    discrimination: 'Phân biệt đối xử',
+    other: 'Khác',
+  };
+  return map[reason || ''] || reason || '—';
 }
 
 function formatDate(value?: string) {
@@ -49,22 +65,40 @@ export default function AdminJobDetailPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [detail, setDetail] = useState<AdminJobDetail | null>(null);
+  const [reports, setReports] = useState<AdminJobReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showNotifyForm, setShowNotifyForm] = useState(false);
+  const [notifyNote, setNotifyNote] = useState(
+    'Tin tuyển dụng có dấu hiệu vi phạm. Vui lòng kiểm tra và chỉnh sửa lại trước khi gửi duyệt.'
+  );
+
+  const reportIdFromQuery = searchParams.get('reportId');
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     setError('');
-    adminService.getJobDetail(id)
-      .then(setDetail)
+    Promise.all([
+      adminService.getJobDetail(id),
+      adminService.listJobReports('all').catch(() => [] as AdminJobReport[]),
+    ])
+      .then(([jobDetail, allReports]) => {
+        setDetail(jobDetail);
+        setReports(allReports.filter((item) => item.jobId === id));
+      })
       .catch((err) => setError(readError(err)))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const actionableReport =
+    reports.find((item) => item.id === reportIdFromQuery && item.status === 'pending')
+    || reports.find((item) => item.status === 'pending')
+    || null;
 
   async function handleApprove() {
     if (!id || !detail) return;
@@ -108,8 +142,117 @@ export default function AdminJobDetailPage() {
     }
   }
 
+  async function handleClose() {
+    if (!id || !detail) return;
+    const reason = window.prompt('Nhập lý do ẩn tin tuyển dụng', 'Vi phạm nội dung / yêu cầu ẩn bởi admin') || '';
+    if (!reason.trim()) return;
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await adminService.closeJob(id, reason.trim());
+      setDetail(updated);
+      setSuccess('Đã ẩn tin tuyển dụng khỏi danh sách công khai.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleReopen() {
+    if (!id || !detail) return;
+    if (!window.confirm(`Mở lại tin "${detail.job.title}" lên trạng thái công khai?`)) return;
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await adminService.reopenJob(id);
+      setDetail(updated);
+      setSuccess('Đã mở lại tin tuyển dụng.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleNotifyCompany() {
+    if (!actionableReport || !detail) return;
+    if (!notifyNote.trim()) {
+      setError('Vui lòng nhập lý do thông báo cho công ty.');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updatedReport = await adminService.notifyCompanyJobReport(actionableReport.id, notifyNote.trim());
+      setReports((prev) => prev.map((item) => (
+        item.jobId === updatedReport.jobId && (item.status === 'pending' || item.status === 'awaiting_company')
+          ? { ...item, status: 'awaiting_company', adminNote: updatedReport.adminNote, jobStatus: 'awaiting_company' }
+          : item
+      )));
+      const refreshed = await adminService.getJobDetail(detail.job.id);
+      setDetail(refreshed);
+      setShowNotifyForm(false);
+      setSuccess('Đã thông báo công ty. Tin chuyển sang trạng thái chờ công ty kiểm tra.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDismissReport() {
+    if (!actionableReport) return;
+    const note = window.prompt('Ghi chú (không vi phạm, tin tiếp tục hoạt động):', 'Không phát hiện vi phạm') || '';
+    if (!note.trim()) return;
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await adminService.dismissJobReport(actionableReport.id, note.trim());
+      setReports((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setSuccess('Đã bỏ qua báo cáo. Tin tiếp tục hoạt động bình thường.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleResolveReport() {
+    if (!actionableReport || !detail) return;
+    if (!window.confirm(`Xác nhận tin "${detail.job.title}" vi phạm và GỠ tin này?`)) return;
+    const note = window.prompt('Lý do gỡ tin:', 'Vi phạm chính sách — đã gỡ tin') || '';
+    if (!note.trim()) return;
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await adminService.resolveJobReport(actionableReport.id, note.trim());
+      const refreshed = await adminService.getJobDetail(detail.job.id);
+      setDetail(refreshed);
+      setReports((prev) => prev.map((item) => (
+        item.jobId === detail.job.id && item.status === 'pending'
+          ? { ...item, status: 'resolved', adminNote: note.trim() }
+          : item
+      )));
+      setSuccess('Đã xác nhận vi phạm và gỡ tin tuyển dụng.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const status = jobStatusLabel(detail?.job.status);
-  const canReview = detail?.job.status?.toLowerCase() === 'pending_review';
+  const currentStatus = detail?.job.status?.toLowerCase() || '';
+  const canReview = currentStatus === 'pending_review';
+  const canClose = currentStatus === 'published' || currentStatus === 'active';
+  const canReopen = currentStatus === 'closed';
   const backStatus = searchParams.get('status') || 'pending_review';
   const backPage = searchParams.get('page') || '1';
   const backTo = `/admin/jobs?status=${backStatus}&page=${backPage}`;
@@ -197,9 +340,80 @@ export default function AdminJobDetailPage() {
 
           {detail.job.rejectionReason && (
             <div className="admin-company-section">
-              <h3>Lý do từ chối</h3>
+              <h3>{currentStatus === 'awaiting_company' ? 'Nội dung thông báo gửi công ty' : 'Lý do từ chối / ghi chú'}</h3>
               <p className="admin-company-doc-reason">{detail.job.rejectionReason}</p>
             </div>
+          )}
+
+          {reports.length > 0 && (
+            <div className="admin-company-section">
+              <h3>Báo cáo liên quan ({reports.length})</h3>
+              <div className="admin-review-list">
+                {reports.map((report) => (
+                  <article key={report.id} className="admin-review-row" style={{ marginBottom: 12 }}>
+                    <div className="admin-review-main" style={{ flex: 1 }}>
+                      <div className="admin-review-meta">
+                        <span>{report.reporterName || report.reporterEmail}</span>
+                        <span>Tuổi: {report.reporterAge != null ? report.reporterAge : '—'}</span>
+                        <span>SĐT: {report.reporterPhone || '—'}</span>
+                        <span>{reportReasonLabel(report.reason)}</span>
+                        <span>{formatDate(report.createdAt)}</span>
+                        <span>{report.status}</span>
+                      </div>
+                      {report.description && <p className="muted">{report.description}</p>}
+                      {report.adminNote && <p className="muted">Ghi chú: {report.adminNote}</p>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {actionableReport && (
+            <div className="admin-company-actions">
+              <button type="button" className="outline" onClick={handleDismissReport} disabled={submitting}>
+                {submitting ? 'Đang xử lý...' : 'Không vi phạm'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowNotifyForm((value) => !value)}
+                disabled={submitting}
+              >
+                Thông báo công ty sửa
+              </button>
+              <button type="button" className="danger" onClick={handleResolveReport} disabled={submitting}>
+                {submitting ? 'Đang xử lý...' : 'Gỡ tin'}
+              </button>
+            </div>
+          )}
+
+          {showNotifyForm && actionableReport && (
+            <form
+              className="admin-company-reject-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleNotifyCompany();
+              }}
+            >
+              <label>
+                Lý do thông báo công ty sửa *
+                <textarea
+                  value={notifyNote}
+                  onChange={(e) => setNotifyNote(e.target.value)}
+                  placeholder="Nhập lý do / yêu cầu chỉnh sửa gửi tới công ty..."
+                  required
+                  rows={4}
+                />
+              </label>
+              <div className="admin-company-actions">
+                <button type="submit" disabled={submitting}>
+                  {submitting ? 'Đang xử lý...' : 'Gửi thông báo'}
+                </button>
+                <button type="button" className="outline" onClick={() => setShowNotifyForm(false)} disabled={submitting}>
+                  Hủy
+                </button>
+              </div>
+            </form>
           )}
 
           {canReview && (
@@ -210,6 +424,21 @@ export default function AdminJobDetailPage() {
               <button type="button" className="danger" onClick={() => setShowRejectForm((value) => !value)} disabled={submitting}>
                 Từ chối tin
               </button>
+            </div>
+          )}
+
+          {(canClose || canReopen) && (
+            <div className="admin-company-actions">
+              {canClose && (
+                <button type="button" className="danger" onClick={handleClose} disabled={submitting}>
+                  {submitting ? 'Đang xử lý...' : 'Ẩn tin công khai'}
+                </button>
+              )}
+              {canReopen && (
+                <button type="button" onClick={handleReopen} disabled={submitting}>
+                  {submitting ? 'Đang xử lý...' : 'Mở lại tin'}
+                </button>
+              )}
             </div>
           )}
 

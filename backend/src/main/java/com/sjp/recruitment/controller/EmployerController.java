@@ -72,6 +72,14 @@ public class EmployerController {
         return ResponseEntity.ok(employerService.uploadCompanyDocument(file));
     }
 
+    @PostMapping(value = "/company/documents/{id}/replace", consumes = "multipart/form-data")
+    public ResponseEntity<CompanyDocumentResponse> replaceCompanyDocument(
+            @PathVariable String id,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return ResponseEntity.ok(employerService.replaceCompanyDocument(id, file));
+    }
+
     @DeleteMapping("/company/documents/{id}")
     public ResponseEntity<Void> deleteCompanyDocument(@PathVariable String id) {
         employerService.deleteCompanyDocument(id);

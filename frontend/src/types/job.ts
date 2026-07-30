@@ -60,6 +60,15 @@ export interface Company {
   verificationStatus?: string;
   status?: string;
   locations?: CompanyLocation[];
+  industries?: CompanyIndustry[];
+}
+
+export interface CompanyIndustry {
+  id?: string;
+  categoryId: string;
+  categoryName?: string;
+  categorySlug?: string;
+  primary: boolean;
 }
 
 export interface CompanyDocument {

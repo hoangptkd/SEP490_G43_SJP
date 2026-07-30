@@ -35,6 +35,9 @@ export default function EmployerApplicationsPage() {
   const [note, setNote] = useState<string>('');
   const [updating, setUpdating] = useState(false);
 
+  // Candidate detail modal
+  const [selectedAppDetail, setSelectedAppDetail] = useState<CandidateApplication | null>(null);
+
   useEffect(() => {
     loadJobs();
   }, []);
@@ -109,6 +112,9 @@ export default function EmployerApplicationsPage() {
       setApplications((prev) =>
         prev.map((item) => (item.id === updated.id ? updated : item))
       );
+      if (selectedAppDetail && selectedAppDetail.id === updated.id) {
+        setSelectedAppDetail(updated);
+      }
       setUpdatingApp(null);
     } catch (err: unknown) {
       const message =
@@ -272,7 +278,11 @@ export default function EmployerApplicationsPage() {
                 }}
               >
                 {/* Candidate and Job Info */}
-                <div style={{ flex: '1 1 400px' }}>
+                <div
+                  onClick={() => setSelectedAppDetail(app)}
+                  style={{ flex: '1 1 400px', cursor: 'pointer', transition: 'opacity 0.2s' }}
+                  title="Click để xem chi tiết hồ sơ & CV ứng viên"
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                     <div
                       style={{
@@ -401,6 +411,27 @@ export default function EmployerApplicationsPage() {
 
                 {/* Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '180px', alignSelf: 'center' }}>
+                  <button
+                    onClick={() => setSelectedAppDetail(app)}
+                    style={{
+                      background: '#f8fafc',
+                      color: '#2563eb',
+                      border: '1px solid #93c5fd',
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    👁️ Xem chi tiết hồ sơ
+                  </button>
+
                   <button
                     onClick={() => openUpdateModal(app, 'UNDER_REVIEW')}
                     style={{
@@ -549,6 +580,416 @@ export default function EmployerApplicationsPage() {
                 style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: updating ? 'wait' : 'pointer' }}
               >
                 {updating ? 'Đang lưu...' : 'Xác nhận & Gửi thông báo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Candidate Profile Detail Modal */}
+      {selectedAppDetail && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999,
+            padding: '20px',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '850px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '20px 24px',
+                background: '#f8fafc',
+                borderBottom: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div
+                  style={{
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '50%',
+                    background: '#2563eb',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '1.4rem',
+                    boxShadow: '0 4px 6px -1px rgba(37,99,235,0.2)',
+                  }}
+                >
+                  {(selectedAppDetail.candidate?.fullName || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h2 style={{ margin: 0, color: '#0f172a', fontSize: '1.35rem' }}>
+                      {selectedAppDetail.candidate?.fullName || 'Ứng viên ẩn danh'}
+                    </h2>
+                    {(() => {
+                      const st = statusConfig[selectedAppDetail.status] || { label: selectedAppDetail.status, color: '#475569', bg: '#f1f5f9' };
+                      return (
+                        <span
+                          style={{
+                            background: st.bg,
+                            color: st.color,
+                            padding: '4px 12px',
+                            borderRadius: '12px',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {st.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '4px' }}>
+                    💼 Ứng tuyển: <strong style={{ color: '#334155' }}>{selectedAppDetail.job.title}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedAppDetail(null)}
+                style={{
+                  background: '#f1f5f9',
+                  color: '#64748b',
+                  border: 'none',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                title="Đóng modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Overview Info Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>📞 ĐIỆN THOẠI / CONTACT</div>
+                  <div style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600, marginTop: '4px' }}>
+                    {selectedAppDetail.candidate?.phone || 'Chưa cập nhật'}
+                  </div>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>📍 KHU VỰC / ĐỊA ĐIỂM</div>
+                  <div style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600, marginTop: '4px' }}>
+                    {selectedAppDetail.candidate?.location || 'Chưa cập nhật'}
+                  </div>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>🕒 NGÀY NỘP HỒ SƠ</div>
+                  <div style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600, marginTop: '4px' }}>
+                    {new Date(selectedAppDetail.submittedAt).toLocaleDateString('vi-VN')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bio Section */}
+              <div>
+                <h4 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                  📖 Giới thiệu bản thân
+                </h4>
+                <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', color: '#334155', lineHeight: '1.6', fontSize: '0.95rem', whiteSpace: 'pre-line' }}>
+                  {selectedAppDetail.candidate?.bio || (selectedAppDetail.cvVersion?.snapshot?.summary as string) || 'Ứng viên chưa cập nhật lời giới thiệu.'}
+                </div>
+              </div>
+
+              {/* Skills Section */}
+              <div>
+                <h4 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                  🛠️ Kỹ năng chuyên môn
+                </h4>
+                {(() => {
+                  const skillsList = selectedAppDetail.candidate?.skills?.length
+                    ? selectedAppDetail.candidate.skills
+                    : Array.isArray(selectedAppDetail.cvVersion?.snapshot?.skills)
+                    ? (selectedAppDetail.cvVersion.snapshot.skills as string[])
+                    : [];
+                  return skillsList.length > 0 ? (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {skillsList.map((sk, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe',
+                            padding: '6px 14px',
+                            borderRadius: '20px',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {sk}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>Chưa ghi nhận kỹ năng nào.</p>
+                  );
+                })()}
+              </div>
+
+              {/* CV Attachment Section */}
+              <div>
+                <h4 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                  📄 Hồ sơ CV đính kèm
+                </h4>
+                <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                  {selectedAppDetail.cv ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ fontSize: '2rem' }}>📎</div>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>
+                          {selectedAppDetail.cv.originalFileName}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                          Kích thước: {Math.round(selectedAppDetail.cv.fileSize / 1024)} KB | Tải lên ngày {new Date(selectedAppDetail.cv.createdAt).toLocaleDateString('vi-VN')}
+                        </div>
+                      </div>
+                    </div>
+                  ) : selectedAppDetail.cvVersion ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ fontSize: '2rem' }}>📝</div>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>
+                          {selectedAppDetail.cvVersion.title} (CV Online)
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                          Mẫu CV: {selectedAppDetail.cvVersion.templateKey} | Cập nhật ngày {new Date(selectedAppDetail.cvVersion.updatedAt).toLocaleDateString('vi-VN')}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Ứng viên không đính kèm file gốc.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Education Section */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                  🎓 Học vấn & Bằng cấp
+                </h4>
+                {(() => {
+                  const eduList = (selectedAppDetail.candidate?.education && selectedAppDetail.candidate.education.length > 0)
+                    ? selectedAppDetail.candidate.education
+                    : Array.isArray(selectedAppDetail.cvVersion?.snapshot?.education)
+                    ? (selectedAppDetail.cvVersion.snapshot.education as Record<string, unknown>[])
+                    : [];
+                  return eduList.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {eduList.map((item, idx) => {
+                        const inst = item.institution || item.school || item.schoolName || 'Trường / Cơ sở đào tạo';
+                        const deg = item.degree || item.major || item.field || '';
+                        const field = item.field && item.degree ? ` - ${item.field}` : '';
+                        const start = item.startDate || item.startYear || '';
+                        const end = item.endDate || item.endYear || 'Hiện tại';
+                        return (
+                          <div key={idx} style={{ borderLeft: '3px solid #2563eb', paddingLeft: '14px', background: '#f8fafc', padding: '12px 14px', borderRadius: '0 8px 8px 0' }}>
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>{String(inst)}</div>
+                            {deg && <div style={{ color: '#334155', fontSize: '0.9rem', marginTop: '2px' }}>{String(deg)}{field}</div>}
+                            {(start || end) && <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>🕒 {String(start)} - {String(end)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>Chưa có thông tin học vấn.</p>
+                  );
+                })()}
+              </div>
+
+              {/* Work Experience Section */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                  💼 Kinh nghiệm làm việc
+                </h4>
+                {(() => {
+                  const experienceSnapshot = selectedAppDetail.cvVersion?.snapshot;
+                  const snapshotExperiences = experienceSnapshot?.workExperience || experienceSnapshot?.experience;
+                  const expList = (selectedAppDetail.candidate?.workExperience && selectedAppDetail.candidate.workExperience.length > 0)
+                    ? selectedAppDetail.candidate.workExperience
+                    : Array.isArray(snapshotExperiences)
+                    ? (snapshotExperiences as Record<string, unknown>[])
+                    : [];
+                  return expList.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {expList.map((item, idx) => {
+                        const comp = item.company || item.companyName || 'Công ty / Tổ chức';
+                        const pos = item.position || item.title || item.role || '';
+                        const start = item.startDate || item.startYear || '';
+                        const end = item.endDate || item.endYear || 'Hiện tại';
+                        const desc = item.description || item.summary || '';
+                        return (
+                          <div key={idx} style={{ borderLeft: '3px solid #10b981', paddingLeft: '14px', background: '#f8fafc', padding: '12px 14px', borderRadius: '0 8px 8px 0' }}>
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>{String(comp)}</div>
+                            {pos && <div style={{ color: '#10b981', fontWeight: 600, fontSize: '0.9rem', marginTop: '2px' }}>{String(pos)}</div>}
+                            {(start || end) && <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>🕒 {String(start)} - {String(end)}</div>}
+                            {desc && <div style={{ color: '#334155', fontSize: '0.88rem', marginTop: '6px', whiteSpace: 'pre-line' }}>{String(desc)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>Chưa có thông tin kinh nghiệm làm việc.</p>
+                  );
+                })()}
+              </div>
+
+              {/* Projects Section */}
+              {(() => {
+                const projList = (selectedAppDetail.candidate?.projects && selectedAppDetail.candidate.projects.length > 0)
+                  ? selectedAppDetail.candidate.projects
+                  : Array.isArray(selectedAppDetail.cvVersion?.snapshot?.projects)
+                  ? (selectedAppDetail.cvVersion.snapshot.projects as Record<string, unknown>[])
+                  : [];
+                return projList.length > 0 ? (
+                  <div>
+                    <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                      🚀 Dự án đã thực hiện
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {projList.map((item, idx) => {
+                        const name = item.name || item.projectName || item.title || 'Tên dự án';
+                        const role = item.role || item.position || '';
+                        const desc = item.description || item.summary || '';
+                        return (
+                          <div key={idx} style={{ borderLeft: '3px solid #8b5cf6', paddingLeft: '14px', background: '#f8fafc', padding: '12px 14px', borderRadius: '0 8px 8px 0' }}>
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>{String(name)} {role ? `(${role})` : ''}</div>
+                            {desc && <div style={{ color: '#334155', fontSize: '0.88rem', marginTop: '6px', whiteSpace: 'pre-line' }}>{String(desc)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Timeline Section */}
+              {selectedAppDetail.timeline && selectedAppDetail.timeline.length > 0 && (
+                <div>
+                  <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                    📈 Lịch sử xử lý hồ sơ (Timeline)
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {selectedAppDetail.timeline.map((t, idx) => {
+                      const toSt = statusConfig[t.toStatus] || { label: t.toStatus, color: '#475569', bg: '#f1f5f9' };
+                      const fromSt = t.fromStatus ? (statusConfig[t.fromStatus] || { label: t.fromStatus }) : null;
+                      return (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', background: '#f8fafc', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                          <span style={{ background: toSt.bg, color: toSt.color, padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {fromSt ? `${fromSt.label} ➔ ${toSt.label}` : toSt.label}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            {t.publicNote && <div style={{ fontSize: '0.88rem', color: '#334155', marginBottom: '2px' }}>💬 {t.publicNote}</div>}
+                            <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                              🕒 Cập nhật lúc: {new Date(t.createdAt).toLocaleString('vi-VN')}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer / Action Bar */}
+            <div
+              style={{
+                padding: '16px 24px',
+                background: '#f8fafc',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => openUpdateModal(selectedAppDetail, 'UNDER_REVIEW')}
+                  style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                >
+                  ⚡ Cập nhật trạng thái / Ghi chú
+                </button>
+                {selectedAppDetail.status !== 'INTERVIEW_SCHEDULED' && selectedAppDetail.status !== 'ACCEPTED' && (
+                  <button
+                    type="button"
+                    onClick={() => openUpdateModal(selectedAppDetail, 'INTERVIEW_SCHEDULED')}
+                    style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    Mời PV
+                  </button>
+                )}
+                {selectedAppDetail.status !== 'ACCEPTED' && (
+                  <button
+                    type="button"
+                    onClick={() => openUpdateModal(selectedAppDetail, 'ACCEPTED')}
+                    style={{ background: '#d1fae5', color: '#047857', border: '1px solid #a7f3d0', padding: '10px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    Duyệt trúng tuyển
+                  </button>
+                )}
+                {selectedAppDetail.status !== 'REJECTED' && (
+                  <button
+                    type="button"
+                    onClick={() => openUpdateModal(selectedAppDetail, 'REJECTED')}
+                    style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    Từ chối
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedAppDetail(null)}
+                style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Đóng
               </button>
             </div>
           </div>

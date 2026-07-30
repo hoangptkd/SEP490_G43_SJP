@@ -38,6 +38,9 @@ public class CandidateProfile {
 
     private String location;
 
+    @Column(name = "date_of_birth")
+    private java.time.LocalDate dateOfBirth;
+
     @Column(name = "years_of_experience", nullable = false)
     private Integer experienceYears = 0;
 

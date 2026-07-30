@@ -22,7 +22,9 @@ import com.sjp.recruitment.model.entity.Company;
 import com.sjp.recruitment.model.entity.CompanyDocument;
 import com.sjp.recruitment.model.entity.Employer;
 import com.sjp.recruitment.model.entity.User;
+import com.sjp.recruitment.model.dto.response.CompanyIndustryResponse;
 import com.sjp.recruitment.repository.CompanyDocumentRepository;
+import com.sjp.recruitment.repository.CompanyIndustryRepository;
 import com.sjp.recruitment.repository.CompanyLocationRepository;
 import com.sjp.recruitment.repository.CompanyRepository;
 import com.sjp.recruitment.repository.EmployerRepository;
@@ -55,9 +57,11 @@ public class AdminService {
     private final CompanyRepository companyRepository;
     private final CompanyDocumentRepository companyDocumentRepository;
     private final CompanyLocationRepository companyLocationRepository;
+    private final CompanyIndustryRepository companyIndustryRepository;
     private final EmployerRepository employerRepository;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final DtoMapper dtoMapper;
+    private final AdminOpsService adminOpsService;
 
     @Transactional(readOnly = true)
     public AdminDashboardResponse getDashboardStats() {
@@ -73,6 +77,54 @@ public class AdminService {
         long totalApplications = count("SELECT COUNT(*) FROM applications");
         long totalEmployers = count("SELECT COUNT(*) FROM users WHERE role = 'employer' AND status <> 'deleted'");
         long totalCandidates = count("SELECT COUNT(*) FROM users WHERE role IN ('job_seeker', 'candidate') AND status <> 'deleted'");
+        long closedJobs = count("SELECT COUNT(*) FROM jobs WHERE status = 'closed'");
+
+        BigDecimal revenueToday = money("""
+                SELECT COALESCE(SUM(amount), 0)
+                FROM payments
+                WHERE status = 'paid' AND COALESCE(paid_at, created_at)::date = CURRENT_DATE
+                """);
+        BigDecimal revenueMonth = money("""
+                SELECT COALESCE(SUM(amount), 0)
+                FROM payments
+                WHERE status = 'paid'
+                  AND date_trunc('month', COALESCE(paid_at, created_at)) = date_trunc('month', CURRENT_DATE)
+                """);
+        long paidCountMonth = count("""
+                SELECT COUNT(*)
+                FROM payments
+                WHERE status = 'paid'
+                  AND date_trunc('month', COALESCE(paid_at, created_at)) = date_trunc('month', CURRENT_DATE)
+                """);
+        long activeSubscriptions = count("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'");
+
+        MapSqlParameterSource empty = new MapSqlParameterSource();
+        long interviewsToday = safeCount("""
+                SELECT COUNT(*)
+                FROM interview_sessions
+                WHERE deleted_at IS NULL AND created_at::date = CURRENT_DATE
+                """, empty);
+        long interviewsWeek = safeCount("""
+                SELECT COUNT(*)
+                FROM interview_sessions
+                WHERE deleted_at IS NULL
+                  AND created_at >= date_trunc('week', CURRENT_DATE)
+                  AND created_at < date_trunc('week', CURRENT_DATE) + INTERVAL '7 days'
+                """, empty);
+        long interviewsCompletedWeek = safeCount("""
+                SELECT COUNT(*)
+                FROM interview_sessions
+                WHERE deleted_at IS NULL
+                  AND status = 'completed'
+                  AND created_at >= date_trunc('week', CURRENT_DATE)
+                  AND created_at < date_trunc('week', CURRENT_DATE) + INTERVAL '7 days'
+                """, empty);
+
+        LocalDate trendEnd = LocalDate.now().plusDays(1);
+        LocalDate trendStart = LocalDate.now().minusDays(6);
+        MapSqlParameterSource trendParams = new MapSqlParameterSource()
+                .addValue("start", trendStart)
+                .addValue("end", trendEnd);
 
         return new AdminDashboardResponse(
                 totalUsers,
@@ -86,8 +138,36 @@ public class AdminService {
                 totalApplications,
                 totalEmployers,
                 totalCandidates,
+                revenueToday,
+                revenueMonth,
+                paidCountMonth,
+                activeSubscriptions,
+                interviewsToday,
+                interviewsWeek,
+                interviewsCompletedWeek,
+                closedJobs,
+                trendPoints(applicationTrendSql(true), trendParams),
+                safeTrendPoints(revenueTrendSql(), trendParams),
                 LocalDateTime.now()
         );
+    }
+
+    private BigDecimal money(String sql) {
+        BigDecimal value = namedParameterJdbcTemplate.getJdbcTemplate().queryForObject(sql, BigDecimal.class);
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private String revenueTrendSql() {
+        return """
+                SELECT bucket::date::text AS date,
+                       COALESCE(SUM(p.amount), 0)::bigint AS value
+                FROM generate_series(CAST(:start AS date), CAST(:end AS date) - INTERVAL '1 day', INTERVAL '1 day') bucket
+                LEFT JOIN payments p
+                  ON COALESCE(p.paid_at, p.created_at)::date = bucket::date
+                 AND p.status = 'paid'
+                GROUP BY bucket
+                ORDER BY bucket
+                """;
     }
 
     private long count(String sql) {
@@ -98,7 +178,80 @@ public class AdminService {
     @Transactional(readOnly = true)
     public AdminStatisticsResponse getStatistics(String period, Integer year, Integer month, String date) {
         requireAdmin();
-        TimeRange range = resolveStatisticsRange(period, year, month, date);
+        String resolvedPeriod = period == null ? "all" : period.trim().toLowerCase(Locale.ROOT);
+        boolean allTime = "all".equals(resolvedPeriod) || "total".equals(resolvedPeriod);
+
+        if (allTime) {
+            LocalDate trendEnd = LocalDate.now().plusDays(1);
+            LocalDate trendStart = LocalDate.now().withDayOfMonth(1).minusMonths(11);
+            MapSqlParameterSource trendParams = new MapSqlParameterSource()
+                    .addValue("start", trendStart)
+                    .addValue("end", trendEnd);
+            MapSqlParameterSource empty = new MapSqlParameterSource();
+
+            return new AdminStatisticsResponse(
+                    count("SELECT COUNT(*) FROM users WHERE status <> 'deleted'", empty),
+                    count("SELECT COUNT(*) FROM companies", empty),
+                    count("SELECT COUNT(*) FROM jobs", empty),
+                    count("SELECT COUNT(*) FROM applications", empty),
+                    count("SELECT COALESCE(SUM(views_count), 0) FROM jobs", empty),
+                    statItems("""
+                            SELECT role AS key, role AS label, COUNT(*) AS value
+                            FROM users
+                            WHERE status <> 'deleted'
+                            GROUP BY role
+                            ORDER BY value DESC
+                            """, empty),
+                    statItems("""
+                            SELECT status AS key, status AS label, COUNT(*) AS value
+                            FROM users
+                            WHERE status <> 'deleted'
+                            GROUP BY status
+                            ORDER BY value DESC
+                            """, empty),
+                    statItems("""
+                            SELECT verification_status AS key, verification_status AS label, COUNT(*) AS value
+                            FROM companies
+                            GROUP BY verification_status
+                            ORDER BY value DESC
+                            """, empty),
+                    statItems("""
+                            SELECT status AS key, status AS label, COUNT(*) AS value
+                            FROM jobs
+                            GROUP BY status
+                            ORDER BY value DESC
+                            """, empty),
+                    statItems("""
+                            SELECT status AS key, status AS label, COUNT(*) AS value
+                            FROM applications
+                            GROUP BY status
+                            ORDER BY value DESC
+                            """, empty),
+                    trendPoints(userTrendSql(false, null), trendParams),
+                    trendPoints(userTrendSql(false, "job_seeker"), trendParams),
+                    trendPoints(userTrendSql(false, "employer"), trendParams),
+                    trendPoints(applicationTrendSql(false), trendParams),
+                    trendPoints(jobTrendSql(false), trendParams),
+                    safeCount("SELECT COUNT(*) FROM interview_sessions WHERE deleted_at IS NULL", empty),
+                    safeCount("SELECT COUNT(*) FROM interview_sessions WHERE deleted_at IS NULL AND status = 'completed'", empty),
+                    safeCount("SELECT COUNT(*) FROM interview_sessions WHERE deleted_at IS NULL AND status = 'in_progress'", empty),
+                    safeCount("SELECT COUNT(*) FROM interview_answers WHERE feedback_status = 'completed'", empty),
+                    safeCount("SELECT COUNT(*) FROM ai_job_recommendations", empty),
+                    safeCount("SELECT COUNT(*) FROM ai_ranking_jobs", empty),
+                    safeAverage("SELECT COALESCE(AVG(overall_score), 0) FROM interview_sessions WHERE deleted_at IS NULL AND overall_score IS NOT NULL", empty),
+                    safeStatItems("""
+                            SELECT status AS key, status AS label, COUNT(*) AS value
+                            FROM interview_sessions
+                            WHERE deleted_at IS NULL
+                            GROUP BY status
+                            ORDER BY value DESC
+                            """, empty),
+                    safeTrendPoints(interviewTrendSql(false), trendParams),
+                    LocalDateTime.now()
+            );
+        }
+
+        TimeRange range = resolveStatisticsRange(resolvedPeriod, year, month, date);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("start", range.start())
                 .addValue("end", range.end());
@@ -151,8 +304,80 @@ public class AdminService {
                 trendPoints(userTrendSql(range.dailyBuckets(), "employer"), params),
                 trendPoints(applicationTrendSql(range.dailyBuckets()), params),
                 trendPoints(jobTrendSql(range.dailyBuckets()), params),
+                safeCount("SELECT COUNT(*) FROM interview_sessions WHERE deleted_at IS NULL AND created_at >= :start AND created_at < :end", params),
+                safeCount("SELECT COUNT(*) FROM interview_sessions WHERE deleted_at IS NULL AND status = 'completed' AND created_at >= :start AND created_at < :end", params),
+                safeCount("SELECT COUNT(*) FROM interview_sessions WHERE deleted_at IS NULL AND status = 'in_progress' AND created_at >= :start AND created_at < :end", params),
+                safeCount("SELECT COUNT(*) FROM interview_answers WHERE feedback_status = 'completed' AND created_at >= :start AND created_at < :end", params),
+                safeCount("SELECT COUNT(*) FROM ai_job_recommendations WHERE created_at >= :start AND created_at < :end", params),
+                safeCount("SELECT COUNT(*) FROM ai_ranking_jobs WHERE created_at >= :start AND created_at < :end", params),
+                safeAverage("SELECT COALESCE(AVG(overall_score), 0) FROM interview_sessions WHERE deleted_at IS NULL AND overall_score IS NOT NULL AND created_at >= :start AND created_at < :end", params),
+                safeStatItems("""
+                        SELECT status AS key, status AS label, COUNT(*) AS value
+                        FROM interview_sessions
+                        WHERE deleted_at IS NULL
+                          AND created_at >= :start AND created_at < :end
+                        GROUP BY status
+                        ORDER BY value DESC
+                        """, params),
+                safeTrendPoints(interviewTrendSql(range.dailyBuckets()), params),
                 LocalDateTime.now()
         );
+    }
+
+    private long safeCount(String sql, MapSqlParameterSource params) {
+        try {
+            return count(sql, params);
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private double safeAverage(String sql, MapSqlParameterSource params) {
+        try {
+            Double value = namedParameterJdbcTemplate.queryForObject(sql, params, Double.class);
+            return value == null ? 0 : value;
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private List<AdminStatItemResponse> safeStatItems(String sql, MapSqlParameterSource params) {
+        try {
+            return statItems(sql, params);
+        } catch (Exception ignored) {
+            return List.of();
+        }
+    }
+
+    private List<AdminTrendPointResponse> safeTrendPoints(String sql, MapSqlParameterSource params) {
+        try {
+            return trendPoints(sql, params);
+        } catch (Exception ignored) {
+            return List.of();
+        }
+    }
+
+    private String interviewTrendSql(boolean byDay) {
+        if (byDay) {
+            return """
+                    SELECT bucket::date::text AS date, COUNT(s.id) AS value
+                    FROM generate_series(CAST(:start AS date), CAST(:end AS date) - 1, interval '1 day') bucket
+                    LEFT JOIN interview_sessions s
+                      ON s.created_at::date = bucket::date
+                     AND s.deleted_at IS NULL
+                    GROUP BY bucket
+                    ORDER BY bucket
+                    """;
+        }
+        return """
+                SELECT to_char(bucket, 'YYYY-MM-01') AS date, COUNT(s.id) AS value
+                FROM generate_series(date_trunc('month', CAST(:start AS timestamp)), date_trunc('month', CAST(:end AS timestamp)) - interval '1 month', interval '1 month') bucket
+                LEFT JOIN interview_sessions s
+                  ON date_trunc('month', s.created_at) = bucket
+                 AND s.deleted_at IS NULL
+                GROUP BY bucket
+                ORDER BY bucket
+                """;
     }
 
     private long count(String sql, MapSqlParameterSource params) {
@@ -429,6 +654,28 @@ public class AdminService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "ALREADY_APPROVED", "Hồ sơ công ty đã được duyệt trước đó");
         }
 
+        List<CompanyDocument> documents = companyDocumentRepository.findByCompanyIdOrderByUploadedAtDesc(company.getId());
+        long pendingDocs = documents.stream()
+                .filter(doc -> "pending".equalsIgnoreCase(doc.getStatus()))
+                .count();
+        long rejectedDocs = documents.stream()
+                .filter(doc -> "rejected".equalsIgnoreCase(doc.getStatus()))
+                .count();
+        if (pendingDocs > 0) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "DOCUMENTS_PENDING",
+                    "Hãy phê duyệt hoặc từ chối từng tài liệu pháp lý trước khi duyệt hồ sơ công ty"
+            );
+        }
+        if (rejectedDocs > 0) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "DOCUMENTS_INCOMPLETE",
+                    "Còn tài liệu bị từ chối. Chờ nhà tuyển dụng cập nhật lại hoặc từ chối toàn bộ hồ sơ công ty"
+            );
+        }
+
         LocalDateTime now = LocalDateTime.now();
         company.setVerificationStatus("verified");
         company.setStatus("active");
@@ -436,6 +683,7 @@ public class AdminService {
 
         reviewPendingDocuments(company, admin, "approved", null, now);
         updateEmployerVerification(company.getId(), "verified");
+        adminOpsService.writeAudit(admin.getId().toString(), "COMPANY_APPROVE", "company", id, "pending", "verified");
 
         return toDetailResponse(company);
     }
@@ -457,8 +705,140 @@ public class AdminService {
 
         reviewPendingDocuments(company, admin, "rejected", reason, now);
         updateEmployerVerification(company.getId(), "rejected");
+        adminOpsService.writeAudit(admin.getId().toString(), "COMPANY_REJECT", "company", id, "pending", "rejected");
 
         return toDetailResponse(company);
+    }
+
+    @Transactional
+    public AdminCompanyDetailResponse approveCompanyDocument(String companyId, String documentId) {
+        User admin = requireAdminUser();
+        Company company = findCompany(companyId);
+        CompanyDocument document = findCompanyDocument(company.getId(), documentId);
+
+        if (!"pending".equalsIgnoreCase(document.getStatus())) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "INVALID_STATUS",
+                    "Chỉ có thể phê duyệt tài liệu đang chờ duyệt"
+            );
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        document.setStatus("approved");
+        document.setRejectReason(null);
+        document.setReviewedAt(now);
+        document.setReviewedBy(admin);
+        companyDocumentRepository.save(document);
+
+        adminOpsService.writeAudit(
+                admin.getId().toString(),
+                "COMPANY_DOCUMENT_APPROVE",
+                "company_document",
+                documentId,
+                "pending",
+                "approved"
+        );
+        syncCompanyVerificationFromDocuments(company, admin);
+
+        return toDetailResponse(company);
+    }
+
+    @Transactional
+    public AdminCompanyDetailResponse rejectCompanyDocument(String companyId, String documentId, CompanyReviewRequest request) {
+        User admin = requireAdminUser();
+        if (request == null || !StringUtils.hasText(request.reason())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "REASON_REQUIRED", "Vui lòng nhập lý do từ chối tài liệu");
+        }
+
+        Company company = findCompany(companyId);
+        CompanyDocument document = findCompanyDocument(company.getId(), documentId);
+        String reason = request.reason().trim();
+        LocalDateTime now = LocalDateTime.now();
+
+        document.setStatus("rejected");
+        document.setRejectReason(reason);
+        document.setReviewedAt(now);
+        document.setReviewedBy(admin);
+        companyDocumentRepository.save(document);
+
+        adminOpsService.writeAudit(
+                admin.getId().toString(),
+                "COMPANY_DOCUMENT_REJECT",
+                "company_document",
+                documentId,
+                "pending",
+                "rejected"
+        );
+        syncCompanyVerificationFromDocuments(company, admin);
+
+        return toDetailResponse(company);
+    }
+
+    private CompanyDocument findCompanyDocument(UUID companyId, String documentId) {
+        UUID docId;
+        try {
+            docId = UUID.fromString(documentId);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ID", "ID tài liệu không hợp lệ");
+        }
+        return companyDocumentRepository.findByIdAndCompanyId(docId, companyId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Không tìm thấy tài liệu pháp lý"));
+    }
+
+    private void syncCompanyVerificationFromDocuments(Company company, User admin) {
+        List<CompanyDocument> documents = companyDocumentRepository.findByCompanyIdOrderByUploadedAtDesc(company.getId());
+        if (documents.isEmpty()) {
+            return;
+        }
+
+        long pending = documents.stream().filter(doc -> "pending".equalsIgnoreCase(doc.getStatus())).count();
+        long approved = documents.stream().filter(doc -> "approved".equalsIgnoreCase(doc.getStatus())).count();
+        long rejected = documents.stream().filter(doc -> "rejected".equalsIgnoreCase(doc.getStatus())).count();
+
+        String previous = company.getVerificationStatus();
+
+        // Có ít nhất 1 tài liệu bị từ chối → hồ sơ rejected, employer cập nhật rồi gửi lại
+        if (rejected > 0) {
+            company.setVerificationStatus("rejected");
+            company.setStatus("rejected");
+            companyRepository.save(company);
+            updateEmployerVerification(company.getId(), "rejected");
+            adminOpsService.writeAudit(
+                    admin.getId().toString(),
+                    "COMPANY_REJECT",
+                    "company",
+                    company.getId().toString(),
+                    previous,
+                    "rejected"
+            );
+            return;
+        }
+
+        if (pending > 0) {
+            company.setVerificationStatus("pending");
+            if (!"active".equalsIgnoreCase(company.getStatus())) {
+                company.setStatus("pending");
+            }
+            companyRepository.save(company);
+            updateEmployerVerification(company.getId(), "pending");
+            return;
+        }
+
+        if (approved > 0) {
+            company.setVerificationStatus("verified");
+            company.setStatus("active");
+            companyRepository.save(company);
+            updateEmployerVerification(company.getId(), "verified");
+            adminOpsService.writeAudit(
+                    admin.getId().toString(),
+                    "COMPANY_APPROVE",
+                    "company",
+                    company.getId().toString(),
+                    previous,
+                    "verified"
+            );
+        }
     }
 
     private List<Company> resolveCompanies(String status) {
@@ -550,6 +930,12 @@ public class AdminService {
                 .map(dtoMapper::toCompanyLocationResponse)
                 .toList();
 
+        List<CompanyIndustryResponse> industries = companyIndustryRepository
+                .findByCompanyIdOrderByPrimaryDescCreatedAtDesc(company.getId())
+                .stream()
+                .map(dtoMapper::toCompanyIndustryResponse)
+                .toList();
+
         CompanyProfileResponse profile = new CompanyProfileResponse(
                 String.valueOf(company.getId()),
                 company.getName(),
@@ -563,7 +949,8 @@ public class AdminService {
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),
-                locations
+                locations,
+                industries
         );
 
         List<CompanyDocumentResponse> documents = companyDocumentRepository
@@ -642,7 +1029,7 @@ public class AdminService {
 
     @Transactional
     public AdminJobDetailResponse approveJob(String id) {
-        requireAdmin();
+        User admin = requireAdminUser();
         ensurePendingJob(id);
         String sql = """
                 UPDATE jobs
@@ -650,16 +1037,36 @@ public class AdminService {
                     published_at = COALESCE(published_at, now()),
                     posted_at = COALESCE(posted_at, now()),
                     rejection_reason = NULL,
+                    reviewed_by_user_id = CAST(:adminId AS uuid),
                     updated_at = now()
                 WHERE id = CAST(:id AS uuid)
                 """;
-        namedParameterJdbcTemplate.update(sql, new MapSqlParameterSource("id", id));
+        namedParameterJdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("adminId", admin.getId().toString())
+        );
+        adminOpsService.writeAudit(admin.getId().toString(), "JOB_APPROVE", "job", id, "pending_review", "published");
+        namedParameterJdbcTemplate.update("""
+                UPDATE job_reports
+                SET status = 'dismissed',
+                    admin_note = COALESCE(admin_note, 'Đã duyệt lại sau khi công ty chỉnh sửa'),
+                    resolved_by = CAST(:adminId AS uuid),
+                    resolved_at = now()
+                WHERE job_id = CAST(:jobId AS uuid)
+                  AND status IN ('resubmitted', 'awaiting_company', 'pending')
+                """,
+                new MapSqlParameterSource()
+                        .addValue("jobId", id)
+                        .addValue("adminId", admin.getId().toString())
+        );
         return findJobDetail(id);
     }
 
     @Transactional
     public AdminJobDetailResponse rejectJob(String id, CompanyReviewRequest request) {
-        requireAdmin();
+        User admin = requireAdminUser();
         if (request == null || !StringUtils.hasText(request.reason())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "REASON_REQUIRED", "Vui lòng nhập lý do từ chối");
         }
@@ -668,6 +1075,7 @@ public class AdminService {
                 UPDATE jobs
                 SET status = 'rejected',
                     rejection_reason = :reason,
+                    reviewed_by_user_id = CAST(:adminId AS uuid),
                     updated_at = now()
                 WHERE id = CAST(:id AS uuid)
                 """;
@@ -676,7 +1084,63 @@ public class AdminService {
                 new MapSqlParameterSource()
                         .addValue("id", id)
                         .addValue("reason", request.reason().trim())
+                        .addValue("adminId", admin.getId().toString())
         );
+        adminOpsService.writeAudit(admin.getId().toString(), "JOB_REJECT", "job", id, "pending_review", "rejected");
+        return findJobDetail(id);
+    }
+
+    @Transactional
+    public AdminJobDetailResponse closeJob(String id, CompanyReviewRequest request) {
+        User admin = requireAdminUser();
+        AdminJobDetailResponse current = findJobDetail(id);
+        String normalized = toDbJobStatus(current.job().status());
+        if (!"published".equals(normalized)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATUS", "Chỉ có thể ẩn tin đang được công khai");
+        }
+        String reason = request != null && StringUtils.hasText(request.reason())
+                ? request.reason().trim()
+                : "Admin ẩn tin tuyển dụng";
+        namedParameterJdbcTemplate.update("""
+                UPDATE jobs
+                SET status = 'closed',
+                    closed_at = now(),
+                    rejection_reason = :reason,
+                    reviewed_by_user_id = CAST(:adminId AS uuid),
+                    updated_at = now()
+                WHERE id = CAST(:id AS uuid)
+                """,
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("reason", reason)
+                        .addValue("adminId", admin.getId().toString())
+        );
+        adminOpsService.writeAudit(admin.getId().toString(), "JOB_CLOSE", "job", id, "published", "closed");
+        return findJobDetail(id);
+    }
+
+    @Transactional
+    public AdminJobDetailResponse reopenJob(String id) {
+        User admin = requireAdminUser();
+        AdminJobDetailResponse current = findJobDetail(id);
+        String normalized = toDbJobStatus(current.job().status());
+        if (!"closed".equals(normalized)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATUS", "Chỉ có thể mở lại tin đã bị ẩn");
+        }
+        namedParameterJdbcTemplate.update("""
+                UPDATE jobs
+                SET status = 'published',
+                    closed_at = NULL,
+                    rejection_reason = NULL,
+                    reviewed_by_user_id = CAST(:adminId AS uuid),
+                    updated_at = now()
+                WHERE id = CAST(:id AS uuid)
+                """,
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("adminId", admin.getId().toString())
+        );
+        adminOpsService.writeAudit(admin.getId().toString(), "JOB_REOPEN", "job", id, "closed", "published");
         return findJobDetail(id);
     }
 
@@ -688,6 +1152,26 @@ public class AdminService {
             case "pending", "pending_review" -> "pending_review";
             case "published", "active", "approved" -> "published";
             case "rejected" -> "rejected";
+            case "closed", "hidden", "suspended" -> "closed";
+            case "removed", "deleted" -> "removed";
+            case "awaiting_company", "awaiting" -> "awaiting_company";
+            default -> status.trim().toLowerCase(Locale.ROOT);
+        };
+    }
+
+    private String toDbJobStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return "";
+        }
+        return switch (status.trim().toLowerCase(Locale.ROOT)) {
+            case "published", "active" -> "published";
+            case "pending_review", "pending" -> "pending_review";
+            case "rejected" -> "rejected";
+            case "closed", "hidden", "suspended" -> "closed";
+            case "removed", "deleted" -> "removed";
+            case "awaiting_company", "awaiting" -> "awaiting_company";
+            case "expired" -> "expired";
+            case "draft" -> "draft";
             default -> status.trim().toLowerCase(Locale.ROOT);
         };
     }
@@ -848,6 +1332,7 @@ public class AdminService {
             case "pending_review" -> "PENDING_REVIEW";
             case "rejected" -> "REJECTED";
             case "closed" -> "CLOSED";
+            case "removed" -> "REMOVED";
             case "expired" -> "EXPIRED";
             default -> status.toUpperCase(Locale.ROOT);
         };

@@ -117,4 +117,8 @@ export const candidateService = {
     const response = await api.get<SubscriptionView>('/candidate/subscription');
     return response.data;
   },
+
+  reportJob: async (jobId: string, reason: string, description?: string): Promise<void> => {
+    await api.post(`/jobs/${jobId}/reports`, { reason, description: description || '' });
+  },
 };

@@ -31,10 +31,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.sjp.recruitment.model.dto.request.CompanyIndustryRequest;
+import com.sjp.recruitment.model.dto.response.CompanyIndustryResponse;
+import com.sjp.recruitment.model.entity.CompanyIndustry;
+import com.sjp.recruitment.model.entity.Category;
+import com.sjp.recruitment.repository.CompanyIndustryRepository;
+import com.sjp.recruitment.repository.CategoryRepository;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +53,8 @@ public class EmployerService {
     private final EmployerRepository employerRepository;
     private final CompanyRepository companyRepository;
     private final CompanyLocationRepository companyLocationRepository;
+    private final CompanyIndustryRepository companyIndustryRepository;
+    private final CategoryRepository categoryRepository;
     private final CompanyDocumentRepository companyDocumentRepository;
     private final JobRepository jobRepository;
     private final JobService jobService;
@@ -59,7 +70,7 @@ public class EmployerService {
         if (user.getRoleEnum() != User.UserRole.EMPLOYER) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ dành cho Nhà tuyển dụng");
         }
-        
+
         return employerRepository.findByUserId(user.getId())
                 .orElseGet(() -> {
                     // Tạo một công ty tạm thời cho nhà tuyển dụng
@@ -110,7 +121,7 @@ public class EmployerService {
         String newTax = request.taxCode() == null ? "" : request.taxCode().trim();
 
         boolean legalInfoChanged = !oldName.equalsIgnoreCase(newName) || !oldTax.equals(newTax);
-        
+
         // Kiểm tra tên công ty trùng lặp
         if (!oldName.equalsIgnoreCase(newName)) {
             companyRepository.findByName(newName).ifPresent(existing -> {
@@ -121,10 +132,58 @@ public class EmployerService {
         }
 
         company.setName(newName);
-        company.setDescription(request.description());
         company.setWebsite(request.website());
-        company.setIndustry(request.industry());
-        
+
+        if (request.industries() != null) {
+            List<CompanyIndustry> existingInds = companyIndustryRepository.findByCompanyId(company.getId());
+            Map<UUID, CompanyIndustry> existingMap = existingInds.stream()
+                    .collect(Collectors.toMap(ci -> ci.getCategory().getId(), ci -> ci, (ci1, ci2) -> ci1));
+            Set<UUID> reqCatIds = request.industries().stream()
+                    .map(CompanyIndustryRequest::categoryId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            List<CompanyIndustry> toDelete = existingInds.stream()
+                    .filter(ci -> !reqCatIds.contains(ci.getCategory().getId()))
+                    .toList();
+            if (!toDelete.isEmpty()) {
+                companyIndustryRepository.deleteAll(toDelete);
+            }
+
+            String primaryIndustryName = null;
+            for (CompanyIndustryRequest item : request.industries()) {
+                if (item.categoryId() == null) continue;
+                CompanyIndustry ci = existingMap.get(item.categoryId());
+                if (ci != null) {
+                    ci.setPrimary(item.primary());
+                    companyIndustryRepository.save(ci);
+                    if (item.primary() && ci.getCategory() != null) {
+                        primaryIndustryName = ci.getCategory().getName();
+                    }
+                } else {
+                    Optional<Category> catOpt = categoryRepository.findById(item.categoryId());
+                    if (catOpt.isPresent()) {
+                        Category cat = catOpt.get();
+                        CompanyIndustry newCi = new CompanyIndustry();
+                        newCi.setCompany(company);
+                        newCi.setCategory(cat);
+                        newCi.setPrimary(item.primary());
+                        companyIndustryRepository.save(newCi);
+                        if (item.primary()) {
+                            primaryIndustryName = cat.getName();
+                        }
+                    }
+                }
+            }
+            if (primaryIndustryName != null) {
+                company.setIndustry(primaryIndustryName);
+            } else if (request.industry() != null) {
+                company.setIndustry(request.industry());
+            }
+        } else {
+            company.setIndustry(request.industry());
+        }
+
         if (request.location() != null && !request.location().isBlank()) {
             List<CompanyLocation> locs = companyLocationRepository.findByCompanyId(company.getId());
             Optional<CompanyLocation> targetHq = locs.stream()
@@ -292,6 +351,11 @@ public class EmployerService {
                                 .thenComparing(CompanyLocation::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                         .map(dtoMapper::toCompanyLocationResponse)
                         .toList();
+        List<CompanyIndustryResponse> indResponses = companyIndustryRepository
+                .findByCompanyIdOrderByPrimaryDescCreatedAtDesc(company.getId())
+                .stream()
+                .map(dtoMapper::toCompanyIndustryResponse)
+                .toList();
         return new CompanyProfileResponse(
                 String.valueOf(company.getId()),
                 company.getName(),
@@ -305,7 +369,8 @@ public class EmployerService {
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),
-                locResponses
+                locResponses,
+                indResponses
         );
     }
 
@@ -366,6 +431,79 @@ public class EmployerService {
         } else {
             markCompanyPendingReviewIfNeeded(company);
         }
+        companyRepository.save(company);
+
+        return dtoMapper.toCompanyDocumentResponse(doc);
+    }
+
+    @Transactional
+    public CompanyDocumentResponse replaceCompanyDocument(String id, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EMPTY_FILE", "Vui lòng chọn file để tải lên");
+        }
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        if (!employer.isOwner()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ chủ sở hữu công ty mới có quyền cập nhật tài liệu xác thực");
+        }
+
+        UUID docId;
+        try {
+            docId = UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ID", "ID tài liệu không hợp lệ");
+        }
+
+        Company company = employer.getCompany();
+        CompanyDocument doc = companyDocumentRepository.findByIdAndCompanyId(docId, company.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Không tìm thấy tài liệu"));
+
+        if (!"rejected".equalsIgnoreCase(doc.getStatus())) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "CANNOT_REPLACE",
+                    "Chỉ có thể cập nhật lại tài liệu đã bị từ chối"
+            );
+        }
+
+        String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document.pdf";
+        String contentType = file.getContentType() != null ? file.getContentType() : "application/pdf";
+        String fileType = contentType.contains("pdf") ? "pdf" : "image";
+
+        String fileUrl;
+        String publicId = null;
+        try {
+            String resourceType = "pdf".equalsIgnoreCase(fileType) ? "raw" : "image";
+            if (doc.getPublicId() != null && !doc.getPublicId().startsWith("local_")) {
+                try {
+                    String oldType = "pdf".equalsIgnoreCase(doc.getFileType()) ? "raw" : "image";
+                    cloudinary.uploader().destroy(doc.getPublicId(), ObjectUtils.asMap("resource_type", oldType));
+                } catch (Exception ignored) {}
+            }
+            Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                    "folder", "sjp/company_docs",
+                    "resource_type", resourceType
+            ));
+            fileUrl = (String) uploadResult.get("secure_url");
+            publicId = (String) uploadResult.get("public_id");
+        } catch (Exception e) {
+            fileUrl = "pdf".equalsIgnoreCase(fileType)
+                    ? "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+                    : "https://res.cloudinary.com/demo/image/upload/sample.jpg";
+            publicId = "local_" + UUID.randomUUID();
+        }
+
+        doc.setFileName(fileName);
+        doc.setFileUrl(fileUrl);
+        doc.setFileType(fileType);
+        doc.setPublicId(publicId);
+        doc.setStatus("pending");
+        doc.setRejectReason(null);
+        doc.setReviewedAt(null);
+        doc.setReviewedBy(null);
+        doc.setUploadedAt(java.time.LocalDateTime.now());
+        doc = companyDocumentRepository.save(doc);
+
+        forceCompanyAndOwnerPending(company);
         companyRepository.save(company);
 
         return dtoMapper.toCompanyDocumentResponse(doc);
