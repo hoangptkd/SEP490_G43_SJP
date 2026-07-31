@@ -17,7 +17,6 @@ const booleanKeys = new Set([
   'maintenance_mode',
   'ai_interview_enabled',
   'payment_gateway_enabled',
-  'payment_gateway_sandbox',
   'company_review_required',
 ]);
 
@@ -30,27 +29,25 @@ const tabKeys: Record<Exclude<SettingsTab, 'categories'>, string[]> = {
   general: ['site_name', 'support_email', 'maintenance_mode', 'company_review_required'],
   limits: ['max_free_job_posts', 'max_ai_sessions_per_day', 'max_applications_per_day'],
   ai: ['ai_interview_enabled', 'ai_system_prompt', 'ai_feedback_prompt'],
-  payment: ['payment_gateway_enabled', 'payment_gateway_provider', 'payment_gateway_merchant_id', 'payment_gateway_sandbox'],
+  payment: ['payment_gateway_enabled', 'payment_gateway_provider'],
   theme: ['theme_mode', 'theme_primary_color'],
 };
 
 const labels: Record<string, string> = {
-  site_name: 'Tên hệ thống',
-  support_email: 'Email hỗ trợ',
-  maintenance_mode: 'Chế độ bảo trì',
+  theme_mode: 'Theme mode',
+  theme_primary_color: 'Màu chủ đạo (áp dụng toàn site)',
+  max_ai_sessions_per_day: 'Giới hạn phiên AI / ngày (user free)',
+  max_applications_per_day: 'Giới hạn ứng tuyển / ngày (user free)',
+  max_free_job_posts: 'Số tin miễn phí tối đa (employer free)',
+  company_review_required: 'Bắt buộc duyệt hồ sơ công ty trước khi đăng tin',
+  maintenance_mode: 'Chế độ bảo trì (chặn user thường)',
   ai_interview_enabled: 'Bật phỏng vấn AI',
-  payment_gateway_enabled: 'Bật cổng thanh toán',
-  max_free_job_posts: 'Số tin miễn phí tối đa',
-  company_review_required: 'Bắt buộc duyệt hồ sơ công ty',
+  payment_gateway_enabled: 'Bật cổng thanh toán (gói trả phí)',
+  payment_gateway_provider: 'Phương thức mặc định khi checkout',
   ai_system_prompt: 'AI Prompt Templates (hệ thống)',
   ai_feedback_prompt: 'AI Prompt phản hồi',
-  payment_gateway_provider: 'Payment Gateway',
-  payment_gateway_merchant_id: 'Merchant ID',
-  payment_gateway_sandbox: 'Sandbox thanh toán',
-  theme_mode: 'Theme mode',
-  theme_primary_color: 'Màu chủ đạo',
-  max_ai_sessions_per_day: 'Giới hạn phiên AI / ngày',
-  max_applications_per_day: 'Giới hạn ứng tuyển / ngày',
+  site_name: 'Tên hệ thống',
+  support_email: 'Email hỗ trợ',
 };
 
 const tabs: { value: SettingsTab; label: string }[] = [
@@ -193,7 +190,7 @@ export default function AdminSettingsPage() {
           <div className="admin-company-detail-header">
             <div>
               <h2>{tabs.find((item) => item.value === tab)?.label}</h2>
-              <p className="muted">Các thay đổi được ghi nhật ký hoạt động.</p>
+              <p className="muted">Các thay đổi áp dụng ngay cho hệ thống (giới hạn, AI, thanh toán, bảo trì, theme, duyệt công ty).</p>
             </div>
             <button type="submit" disabled={saving || loading}>
               {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
@@ -226,10 +223,9 @@ export default function AdminSettingsPage() {
                     value={draft[item.key] ?? item.value}
                     onChange={(e) => setDraft((prev) => ({ ...prev, [item.key]: e.target.value }))}
                   >
+                    <option value="bank_transfer">Chuyển khoản QR</option>
                     <option value="vnpay">VNPay</option>
                     <option value="momo">MoMo</option>
-                    <option value="paypal">PayPal</option>
-                    <option value="bank_transfer">Chuyển khoản</option>
                   </select>
                 ) : item.key === 'theme_primary_color' ? (
                   <input

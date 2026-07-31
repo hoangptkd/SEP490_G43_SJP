@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -58,6 +60,10 @@ public class Application {
     @Column(name = "ai_match_analysis")
     private String aiMatchAnalysis;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "job_snapshot_json", columnDefinition = "jsonb")
+    private com.sjp.recruitment.model.dto.JobSnapshot jobSnapshotJson;
+
     public void setStatus(ApplicationStatus status) {
         this.status = status == null ? null : status.databaseValue;
     }
@@ -72,6 +78,7 @@ public class Application {
         SHORTLISTED("shortlisted"),
         INTERVIEW_SCHEDULED("interview_scheduled"),
         ACCEPTED("accepted"),
+        HIRED("hired"),
         REJECTED("rejected"),
         WITHDRAWN("withdrawn");
 
@@ -95,6 +102,7 @@ public class Application {
                 case "shortlisted" -> SHORTLISTED;
                 case "interview_scheduled" -> INTERVIEW_SCHEDULED;
                 case "accepted" -> ACCEPTED;
+                case "hired" -> HIRED;
                 case "rejected" -> REJECTED;
                 case "withdrawn" -> WITHDRAWN;
                 default -> SUBMITTED;

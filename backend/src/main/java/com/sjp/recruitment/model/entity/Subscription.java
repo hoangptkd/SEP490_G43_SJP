@@ -61,6 +61,7 @@ public class Subscription {
     }
 
     public enum SubscriptionStatus {
+        PENDING("pending"),
         ACTIVE("active"),
         EXPIRED("expired"),
         CANCELLED("cancelled");
@@ -80,6 +81,7 @@ public class Subscription {
                 return null;
             }
             return switch (value.trim().toLowerCase(Locale.ROOT)) {
+                case "pending" -> PENDING;
                 case "expired" -> EXPIRED;
                 case "cancelled" -> CANCELLED;
                 default -> ACTIVE;

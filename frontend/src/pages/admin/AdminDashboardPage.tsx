@@ -156,7 +156,7 @@ export default function AdminDashboardPage() {
     {
       label: 'Đăng ký gói đang active',
       value: stats.activeSubscriptions ?? 0,
-      to: '/admin/billing?tab=subscriptions',
+      to: '/admin/billing?tab=transactions',
       tone: 'green' as const,
     },
   ];
@@ -225,7 +225,7 @@ export default function AdminDashboardPage() {
           <strong>{formatNumber(stats.closedJobs)}</strong>
           <p>Tiếp nhận báo cáo từ ứng viên để kiểm tra</p>
         </Link>
-        <Link className="admin-dashboard-card dash-card-sub" to="/admin/billing?tab=subscriptions">
+        <Link className="admin-dashboard-card dash-card-sub" to="/admin/billing?tab=transactions">
           <span>Đăng ký gói active</span>
           <strong>{formatNumber(stats.activeSubscriptions)}</strong>
           <p>Đang có hiệu lực trên nền tảng</p>

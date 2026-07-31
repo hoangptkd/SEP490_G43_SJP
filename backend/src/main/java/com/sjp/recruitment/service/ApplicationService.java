@@ -10,6 +10,7 @@ import com.sjp.recruitment.model.entity.CandidateCv;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.CvVersion;
 import com.sjp.recruitment.model.entity.Job;
+import com.sjp.recruitment.model.dto.JobSnapshot;
 import com.sjp.recruitment.model.entity.Notification;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.repository.ApplicationRepository;
@@ -18,7 +19,12 @@ import com.sjp.recruitment.repository.CandidateCvRepository;
 import com.sjp.recruitment.repository.CvVersionRepository;
 import com.sjp.recruitment.repository.JobRepository;
 import com.sjp.recruitment.repository.NotificationRepository;
+import com.sjp.recruitment.repository.InterviewScheduleRepository;
+import com.sjp.recruitment.repository.JobOfferRepository;
+import com.sjp.recruitment.repository.EmployerRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,6 +37,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ApplicationService {
 
     private static final String SOURCE_UPLOADED = "uploaded";
@@ -42,15 +49,25 @@ public class ApplicationService {
     private final CvVersionRepository cvVersionRepository;
     private final ApplicationStatusHistoryRepository historyRepository;
     private final NotificationRepository notificationRepository;
+    private final InterviewScheduleRepository interviewScheduleRepository;
+    private final JobOfferRepository jobOfferRepository;
     private final CandidateService candidateService;
     private final JobService jobService;
     private final DtoMapper dtoMapper;
+    private final FeatureLimitService featureLimitService;
+    private final EmployerRepository employerRepository;
+
+    @Transactional(readOnly = true)
+    public Page<Application> findByCandidateId(String candidateId, Pageable pageable) {
+        return applicationRepository.findByCandidateId(parseUuid(candidateId, "CANDIDATE_ID_INVALID"), pageable);
+    }
 
     @Transactional
     public ApplicationResponse submit(ApplicationSubmitRequest request) {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         User user = candidate.getUser();
         candidateService.requireCandidate(user);
+        featureLimitService.requireApplication(user);
         if (!candidateService.isApplyReady(candidate)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PROFILE_INCOMPLETE", "Can hoan thien ho so va co it nhat 1 CV truoc khi ung tuyen");
         }
@@ -89,11 +106,23 @@ public class ApplicationService {
         application.setCv(cv);
         application.setCvVersion(cvVersion);
         application.setStatus(Application.ApplicationStatus.SUBMITTED);
+        application.setJobSnapshotJson(JobSnapshot.fromJob(job));
         Application saved = applicationRepository.save(application);
 
         addHistory(saved, null, Application.ApplicationStatus.SUBMITTED, "Ho so ung tuyen da duoc gui thanh cong.");
         createNotification(user, "APPLICATION_SUBMITTED", "Da gui ho so ung tuyen",
                 "Ban da ung tuyen thanh cong vao vi tri " + job.getTitle() + ".", saved.getId());
+        featureLimitService.consumeApplication(user);
+
+        if (job.getCompany() != null) {
+            employerRepository.findByCompanyIdWithUser(job.getCompany().getId())
+                    .forEach(employer -> {
+                        if (employer.getUser() != null) {
+                            createNotification(employer.getUser(), "APPLICATION_RECEIVED", "Có ứng viên mới",
+                                    "Ứng viên " + user.getFullName() + " vừa nộp hồ sơ vào vị trí " + job.getTitle() + ".", saved.getId());
+                        }
+                    });
+        }
 
         return toResponse(saved);
     }
@@ -125,10 +154,10 @@ public class ApplicationService {
         addHistory(application, from, toStatus, note);
         createNotification(application.getCandidate().getUser(), "APPLICATION_STATUS_CHANGED",
                 "Trang thai ung tuyen da cap nhat", note, application.getId());
-        if (toStatus == Application.ApplicationStatus.ACCEPTED && application.getJob() != null) {
+        if (toStatus == Application.ApplicationStatus.HIRED && application.getJob() != null) {
             Job job = application.getJob();
-            long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
-            if (job.getVacancies() != null && acceptedCount >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
+            long hiredCount = applicationRepository.countByJobIdAndStatus(job.getId(), "hired");
+            if (job.getVacancies() != null && hiredCount >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
                 job.setStatus("closed");
                 job.setClosedAt(LocalDateTime.now());
                 jobRepository.save(job);
@@ -154,10 +183,58 @@ public class ApplicationService {
                 .stream()
                 .map(dtoMapper::toTimelineResponse)
                 .toList();
+
+        List<com.sjp.recruitment.model.dto.response.InterviewScheduleResponse> interviews = interviewScheduleRepository.findByApplicationId(application.getId())
+                .stream()
+                .map(dtoMapper::toInterviewScheduleResponse)
+                .toList();
+
+        com.sjp.recruitment.model.dto.response.JobOfferResponse jobOffer = jobOfferRepository.findByApplicationId(application.getId())
+                .map(dtoMapper::toJobOfferResponse)
+                .orElse(null);
+
+        com.sjp.recruitment.model.dto.response.JobResponse jobResponse = application.getJob() != null
+                ? jobService.toJobResponse(application.getJob(), application.getCandidate())
+                : null;
+
+        if (jobResponse != null && application.getJobSnapshotJson() != null) {
+            JobSnapshot snap = application.getJobSnapshotJson();
+            jobResponse = new com.sjp.recruitment.model.dto.response.JobResponse(
+                    jobResponse.id(),
+                    snap.getTitle() != null ? snap.getTitle() : jobResponse.title(),
+                    snap.getDescription() != null ? snap.getDescription() : jobResponse.description(),
+                    snap.getRequirements() != null ? snap.getRequirements() : jobResponse.requirements(),
+                    jobResponse.skills(),
+                    snap.getSalaryMin() != null ? snap.getSalaryMin() : jobResponse.salaryMin(),
+                    snap.getSalaryMax() != null ? snap.getSalaryMax() : jobResponse.salaryMax(),
+                    snap.getLocation() != null ? snap.getLocation() : jobResponse.location(),
+                    snap.getExperienceLevel() != null ? snap.getExperienceLevel() : jobResponse.experienceLevel(),
+                    snap.getDeadline() != null ? snap.getDeadline().atStartOfDay() : jobResponse.deadline(),
+                    jobResponse.status(),
+                    jobResponse.company(),
+                    jobResponse.companyLocationId(),
+                    jobResponse.companyLocation(),
+                    jobResponse.saved(),
+                    jobResponse.applied(),
+                    jobResponse.matchScore(),
+                    snap.getBenefits() != null ? snap.getBenefits() : jobResponse.benefits(),
+                    snap.getVacancies() != null ? snap.getVacancies() : jobResponse.vacancies(),
+                    snap.getWorkingTime() != null ? snap.getWorkingTime() : jobResponse.workingTime(),
+                    snap.getSalaryType() != null ? snap.getSalaryType() : jobResponse.salaryType(),
+                    snap.getJobType() != null ? snap.getJobType() : jobResponse.jobType(),
+                    snap.getWorkMode() != null ? snap.getWorkMode() : jobResponse.workMode(),
+                    jobResponse.viewsCount(),
+                    jobResponse.rejectionReason(),
+                    jobResponse.applicationsCount()
+            );
+        }
+
         return dtoMapper.toApplicationResponse(
                 application,
-                application.getJob() != null ? jobService.toJobResponse(application.getJob(), application.getCandidate()) : null,
-                timeline);
+                jobResponse,
+                timeline,
+                interviews,
+                jobOffer);
     }
 
     private void addHistory(Application application, Application.ApplicationStatus from, Application.ApplicationStatus to, String note) {

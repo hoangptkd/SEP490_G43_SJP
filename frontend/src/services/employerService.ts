@@ -1,6 +1,6 @@
 import { api } from './api';
 import type { Company, CompanyLocation, CompanyDocument, Job } from '../types/job';
-import type { CandidateApplication } from '../types/candidateDomain';
+import type { CandidateApplication, NotificationItem } from '../types/candidateDomain';
 
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
@@ -126,5 +126,52 @@ export const employerService = {
   downloadApplicationCv: async (id: string): Promise<Blob> => {
     const response = await api.get<Blob>(`/employer/applications/${id}/cv`, { responseType: 'blob' });
     return response.data;
+  },
+
+  getNotifications: async (): Promise<NotificationItem[]> => {
+    const response = await api.get<NotificationItem[]>('/employer/notifications');
+    return response.data;
+  },
+
+  markNotificationRead: async (id: string): Promise<void> => {
+    await api.patch(`/employer/notifications/${id}/read`);
+  },
+
+  markAllNotificationsRead: async (): Promise<void> => {
+    await api.patch('/employer/notifications/read-all');
+  },
+
+  scheduleInterview: async (applicationId: string, data: import('../types/candidateDomain').InterviewScheduleRequest): Promise<import('../types/candidateDomain').InterviewScheduleResponse> => {
+    const response = await api.post(`/v1/applications/${applicationId}/interviews`, data);
+    return response.data;
+  },
+
+  updateInterviewResult: async (interviewId: string, data: import('../types/candidateDomain').InterviewResultRequest): Promise<import('../types/candidateDomain').InterviewScheduleResponse> => {
+    const response = await api.put(`/v1/interviews/${interviewId}/result`, data);
+    return response.data;
+  },
+
+  employerRespondToReschedule: async (interviewId: string, responseStatus: string, note?: string, scheduledAt?: string): Promise<import('../types/candidateDomain').InterviewScheduleResponse> => {
+    const response = await api.put(`/v1/interviews/${interviewId}/employer-reschedule-response`, { response: responseStatus, note, scheduledAt });
+    return response.data;
+  },
+
+  employerUpdateInterviewResult: async (interviewId: string, result: 'pass' | 'fail', note?: string): Promise<import('../types/candidateDomain').InterviewScheduleResponse> => {
+    const response = await api.put(`/v1/interviews/${interviewId}/result`, { result, note });
+    return response.data;
+  },
+
+  createJobOffer: async (applicationId: string, data: import('../types/candidateDomain').JobOfferRequest): Promise<import('../types/candidateDomain').JobOfferResponse> => {
+    const response = await api.post(`/v1/applications/${applicationId}/offers`, data);
+    return response.data;
+  },
+
+  employerRespondToOfferRejection: async (offerId: string, isUpdating: boolean, updateData?: import('../types/candidateDomain').JobOfferRequest): Promise<import('../types/candidateDomain').JobOfferResponse> => {
+    const response = await api.put(`/v1/offers/${offerId}/employer-response`, updateData, { params: { isUpdating } });
+    return response.data;
+  },
+
+  rejectApplication: async (applicationId: string, note?: string): Promise<void> => {
+    await api.post(`/v1/applications/${applicationId}/reject`, null, { params: { note } });
   },
 };

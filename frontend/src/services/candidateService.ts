@@ -121,4 +121,19 @@ export const candidateService = {
   reportJob: async (jobId: string, reason: string, description?: string): Promise<void> => {
     await api.post(`/jobs/${jobId}/reports`, { reason, description: description || '' });
   },
+
+  respondToInterview: async (interviewId: string, responseStatus: string, rescheduleNote?: string): Promise<import('../types/candidateDomain').InterviewScheduleResponse> => {
+    const response = await api.put(`/v1/interviews/${interviewId}/candidate-response`, { response: responseStatus, rescheduleNote });
+    return response.data;
+  },
+
+  respondToOffer: async (offerId: string, accepted: boolean, note?: string): Promise<import('../types/candidateDomain').JobOfferResponse> => {
+    const response = await api.put(`/v1/offers/${offerId}/response`, null, { params: { accepted, note } });
+    return response.data;
+  },
+
+  finalRespondToOffer: async (offerId: string, accepted: boolean): Promise<import('../types/candidateDomain').JobOfferResponse> => {
+    const response = await api.put(`/v1/offers/${offerId}/candidate-final-response`, null, { params: { accepted } });
+    return response.data;
+  },
 };

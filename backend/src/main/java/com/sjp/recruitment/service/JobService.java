@@ -19,6 +19,8 @@ import com.sjp.recruitment.model.entity.Notification;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.model.entity.Skill;
 import com.sjp.recruitment.model.entity.JobSkill;
+import com.sjp.recruitment.model.entity.JobEditHistory;
+import com.sjp.recruitment.model.dto.JobSnapshot;
 import com.sjp.recruitment.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -54,8 +56,12 @@ public class JobService {
     private final JobSkillRepository jobSkillRepository;
     private final NotificationRepository notificationRepository;
     private final ApplicationStatusHistoryRepository applicationStatusHistoryRepository;
+    private final JobEditHistoryRepository jobEditHistoryRepository;
     private final DtoMapper dtoMapper;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final SystemSettingsService systemSettingsService;
+    private final FeatureLimitService featureLimitService;
+    private final AuthService authService;
 
     @Transactional(readOnly = true)
     public JobPageResponse search(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
@@ -128,13 +134,18 @@ public class JobService {
         return new JobPageResponse(content, safePage, safeSize, total, totalPages);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public JobResponse findJobResponseById(String id) {
         try {
             UUID.fromString(id);
         } catch (IllegalArgumentException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_ID_INVALID", "Ma viec lam khong hop le");
         }
+
+        namedParameterJdbcTemplate.update(
+                "UPDATE jobs SET views_count = views_count + 1 WHERE id = CAST(:id AS uuid) AND status = 'published'",
+                new MapSqlParameterSource("id", id)
+        );
 
         String sql = """
                 SELECT
@@ -220,10 +231,16 @@ public class JobService {
         if (company == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "COMPANY_REQUIRED", "Cần có công ty trước khi tạo việc làm");
         }
-        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && !company.isVerified()
+                && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền đăng tin tuyển dụng.");
         }
-        return buildAndSaveJob(new Job(), employer, company, request);
+        User currentUser = authService.getCurrentUser();
+        featureLimitService.requireJobPost(currentUser);
+        Job saved = buildAndSaveJob(new Job(), employer, company, request);
+        featureLimitService.consumeJobPost(currentUser);
+        return saved;
     }
 
     @Transactional
@@ -236,10 +253,93 @@ public class JobService {
     public Job update(String id, JobRequest request, Employer employer) {
         Job job = findById(id);
         checkEmployerPermission(job, employer, "Ban khong co quyen cap nhat viec lam nay");
-        if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && job.getCompany() != null
+                && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực.");
         }
-        return buildAndSaveJob(job, job.getEmployer(), job.getCompany(), request);
+
+        long applicationCount = applicationRepository.countByJobId(job.getId());
+        JobSnapshot oldSnapshot = null;
+        if (applicationCount > 0) {
+            oldSnapshot = JobSnapshot.fromJob(job);
+        }
+
+        Job updatedJob = buildAndSaveJob(job, job.getEmployer(), job.getCompany(), request);
+
+        if (applicationCount > 0 && oldSnapshot != null) {
+            JobSnapshot newSnapshot = JobSnapshot.fromJob(updatedJob);
+            compareAndLogAndNotify(updatedJob, oldSnapshot, newSnapshot, authService.getCurrentUser());
+        }
+
+        return updatedJob;
+    }
+
+    private void compareAndLogAndNotify(Job job, JobSnapshot oldSnap, JobSnapshot newSnap, User editedBy) {
+        boolean sensitiveChanged = false;
+
+        sensitiveChanged |= checkAndLog(job, editedBy, "title", oldSnap.getTitle(), newSnap.getTitle(), true);
+        sensitiveChanged |= checkAndLog(job, editedBy, "description", oldSnap.getDescription(), newSnap.getDescription(), true);
+        sensitiveChanged |= checkAndLog(job, editedBy, "requirements", joinList(oldSnap.getRequirements()), joinList(newSnap.getRequirements()), true);
+        sensitiveChanged |= checkAndLog(job, editedBy, "salaryMin", toString(oldSnap.getSalaryMin()), toString(newSnap.getSalaryMin()), true);
+        sensitiveChanged |= checkAndLog(job, editedBy, "salaryMax", toString(oldSnap.getSalaryMax()), toString(newSnap.getSalaryMax()), true);
+        sensitiveChanged |= checkAndLog(job, editedBy, "location", oldSnap.getLocation(), newSnap.getLocation(), true);
+
+        checkAndLog(job, editedBy, "benefits", oldSnap.getBenefits(), newSnap.getBenefits(), false);
+        checkAndLog(job, editedBy, "vacancies", toString(oldSnap.getVacancies()), toString(newSnap.getVacancies()), false);
+        checkAndLog(job, editedBy, "workingTime", oldSnap.getWorkingTime(), newSnap.getWorkingTime(), false);
+        checkAndLog(job, editedBy, "salaryType", oldSnap.getSalaryType(), newSnap.getSalaryType(), false);
+        checkAndLog(job, editedBy, "currency", oldSnap.getCurrency(), newSnap.getCurrency(), false);
+        checkAndLog(job, editedBy, "jobType", oldSnap.getJobType(), newSnap.getJobType(), false);
+        checkAndLog(job, editedBy, "workMode", oldSnap.getWorkMode(), newSnap.getWorkMode(), false);
+        checkAndLog(job, editedBy, "experienceLevel", oldSnap.getExperienceLevel(), newSnap.getExperienceLevel(), false);
+        checkAndLog(job, editedBy, "deadline", toString(oldSnap.getDeadline()), toString(newSnap.getDeadline()), false);
+
+        if (sensitiveChanged) {
+            List<Application> applications = applicationRepository.findAllByJobId(job.getId());
+            if (applications != null) {
+                for (Application app : applications) {
+                    if (app.getStatusEnum() != Application.ApplicationStatus.WITHDRAWN
+                        && app.getStatusEnum() != Application.ApplicationStatus.REJECTED) {
+                        try {
+                            Notification note = new Notification();
+                            note.setRecipientUser(app.getCandidate().getUser());
+                            note.setType("JOB_UPDATED");
+                            note.setTitle("Thông báo thay đổi tin tuyển dụng");
+                            note.setMessage("Tin tuyển dụng [" + job.getTitle() + "] bạn đã ứng tuyển vừa có sự thay đổi. Vui lòng kiểm tra lại thông tin để đảm bảo quyền lợi của bạn.");
+                            note.setRelatedEntityType("JOB");
+                            note.setRelatedEntityId(job.getId());
+                            notificationRepository.save(note);
+                        } catch (Exception ex) {
+                            // ignore individual fail
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean checkAndLog(Job job, User editedBy, String fieldName, String oldVal, String newVal, boolean isSensitive) {
+        if (!Objects.equals(oldVal, newVal)) {
+            JobEditHistory history = new JobEditHistory();
+            history.setJob(job);
+            history.setEditedByUser(editedBy);
+            history.setFieldName(fieldName);
+            history.setOldValue(oldVal);
+            history.setNewValue(newVal);
+            jobEditHistoryRepository.save(history);
+            return isSensitive;
+        }
+        return false;
+    }
+
+    private String toString(Object obj) {
+        return obj == null ? null : obj.toString();
+    }
+
+    private String joinList(List<String> list) {
+        if (list == null || list.isEmpty()) return null;
+        return String.join("\n", list);
     }
 
     @Transactional
@@ -252,7 +352,9 @@ public class JobService {
     public JobResponse submitJobForReview(String id, Employer employer) {
         Job job = findById(id);
         checkEmployerPermission(job, employer, "Bạn không có quyền thao tác với việc làm này");
-        if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && job.getCompany() != null
+                && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực pháp lý.");
         }
         if ("rejected".equalsIgnoreCase(job.getStatus())) {

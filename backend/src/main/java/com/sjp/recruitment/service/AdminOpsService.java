@@ -39,6 +39,8 @@ public class AdminOpsService {
     private final AuthService authService;
     private final UserRepository userRepository;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final BillingService billingService;
+    private final SystemSettingsService systemSettingsService;
 
     @Transactional(readOnly = true)
     public List<AdminPlanResponse> listPlans(String status) {
@@ -275,6 +277,13 @@ public class AdminOpsService {
         User admin = requireAdminUser();
         ensureUuid(id, "Đăng ký");
         AdminSubscriptionResponse current = findSubscription(id);
+        if ("cancelled".equalsIgnoreCase(current.status()) && !wasPaidSubscription(id)) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "UNPAID_CANCELLED",
+                    "Không thể khôi phục gói đã hủy do chưa thanh toán"
+            );
+        }
         namedParameterJdbcTemplate.update("""
                 UPDATE subscriptions
                 SET status = 'active',
@@ -290,6 +299,41 @@ public class AdminOpsService {
         return findSubscription(id);
     }
 
+    private boolean wasPaidSubscription(String subscriptionId) {
+        Long paidCount = namedParameterJdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM payments
+                WHERE subscription_id = CAST(:id AS uuid)
+                  AND LOWER(status) = 'paid'
+                """,
+                new MapSqlParameterSource("id", subscriptionId),
+                Long.class);
+        if (paidCount != null && paidCount > 0) {
+            return true;
+        }
+        AdminSubscriptionResponse sub = findSubscription(subscriptionId);
+        String reason = sub.cancelledReason() == null ? "" : sub.cancelledReason().toLowerCase(Locale.ROOT);
+        if (reason.contains("hết hạn thanh toán")
+                || reason.contains("thay thế bởi đơn")
+                || reason.contains("thất bại")
+                || reason.contains("chưa thanh toán")
+                || reason.contains("không thanh toán")) {
+            return false;
+        }
+        return sub.startDate() != null;
+    }
+
+    @Transactional
+    public AdminPaymentResponse confirmBankPayment(String id) {
+        User admin = requireAdminUser();
+        ensureUuid(id, "Thanh toán");
+        billingService.confirmBankTransferAsAdmin(id);
+        writeAudit(admin.getId().toString(), "PAYMENT_CONFIRM", "payment", id, "pending", "paid");
+        return listPayments("all").stream()
+                .filter(item -> item.id().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy giao dịch"));
+    }
+
     @Transactional(readOnly = true)
     public List<AdminPaymentResponse> listPayments(String status) {
         requireAdmin();
@@ -298,6 +342,7 @@ public class AdminOpsService {
                        p.subscription_id::text AS subscription_id,
                        p.user_id::text AS user_id,
                        u.email AS user_email,
+                       pl.name AS plan_name,
                        p.amount,
                        p.currency,
                        p.payment_method,
@@ -305,10 +350,14 @@ public class AdminOpsService {
                        p.status,
                        p.transaction_id,
                        p.failure_reason,
+                       p.gateway_order_id,
+                       p.gateway_response::text AS gateway_response,
                        p.paid_at,
                        p.created_at
                 FROM payments p
                 JOIN users u ON u.id = p.user_id
+                LEFT JOIN subscriptions s ON s.id = p.subscription_id
+                LEFT JOIN plans pl ON pl.id = s.plan_id
                 """);
         MapSqlParameterSource params = new MapSqlParameterSource();
         if (StringUtils.hasText(status) && !"all".equalsIgnoreCase(status)) {
@@ -496,7 +545,9 @@ public class AdminOpsService {
             if (!StringUtils.hasText(entry.getKey())) {
                 continue;
             }
-            namedParameterJdbcTemplate.update("""
+            String key = entry.getKey().trim();
+            String value = entry.getValue() == null ? "" : entry.getValue().trim();
+            int updated = namedParameterJdbcTemplate.update("""
                     UPDATE system_settings
                     SET setting_value = :value,
                         updated_at = now(),
@@ -504,10 +555,26 @@ public class AdminOpsService {
                     WHERE setting_key = :key
                     """,
                     new MapSqlParameterSource()
-                            .addValue("key", entry.getKey().trim())
-                            .addValue("value", entry.getValue() == null ? "" : entry.getValue().trim())
+                            .addValue("key", key)
+                            .addValue("value", value)
                             .addValue("actor", admin.getId().toString())
             );
+            if (updated == 0) {
+                namedParameterJdbcTemplate.update("""
+                        INSERT INTO system_settings (setting_key, setting_value, description, updated_at, updated_by)
+                        VALUES (:key, :value, :description, now(), CAST(:actor AS uuid))
+                        ON CONFLICT (setting_key) DO UPDATE
+                        SET setting_value = EXCLUDED.setting_value,
+                            updated_at = now(),
+                            updated_by = EXCLUDED.updated_by
+                        """,
+                        new MapSqlParameterSource()
+                                .addValue("key", key)
+                                .addValue("value", value)
+                                .addValue("description", "Cập nhật từ admin")
+                                .addValue("actor", admin.getId().toString()));
+            }
+            systemSettingsService.clearCache(key);
         }
         writeAudit(admin.getId().toString(), "SETTINGS_UPDATE", "system_settings", admin.getId().toString(), null, "updated");
         return listSettings();
@@ -598,20 +665,51 @@ public class AdminOpsService {
     }
 
     private AdminPaymentResponse mapPayment(ResultSet rs, int rowNum) throws SQLException {
+        String gatewayResponse = rs.getString("gateway_response");
+        String paymentMethod = rs.getString("payment_method");
+        String gatewayOrderId = rs.getString("gateway_order_id");
+        String transferContent = null;
+        String qrUrl = null;
+        LocalDateTime expiresAt = null;
+        if (StringUtils.hasText(gatewayResponse)) {
+            try {
+                var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(gatewayResponse);
+                if (node.hasNonNull("transferContent")) {
+                    transferContent = node.get("transferContent").asText();
+                }
+                if (node.hasNonNull("qrUrl")) {
+                    qrUrl = node.get("qrUrl").asText();
+                }
+                if (node.hasNonNull("expiresAt")) {
+                    expiresAt = LocalDateTime.parse(node.get("expiresAt").asText().replace("Z", ""));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        // ND CK luôn lưu ở gateway_order_id khi tạo đơn chuyển khoản
+        if (!StringUtils.hasText(transferContent)
+                && "bank_transfer".equalsIgnoreCase(paymentMethod)
+                && StringUtils.hasText(gatewayOrderId)) {
+            transferContent = gatewayOrderId;
+        }
         return new AdminPaymentResponse(
                 rs.getString("id"),
                 rs.getString("subscription_id"),
                 rs.getString("user_id"),
                 rs.getString("user_email"),
+                rs.getString("plan_name"),
                 rs.getBigDecimal("amount"),
                 rs.getString("currency"),
-                rs.getString("payment_method"),
+                paymentMethod,
                 rs.getString("gateway"),
                 rs.getString("status"),
                 rs.getString("transaction_id"),
                 rs.getString("failure_reason"),
+                transferContent,
+                qrUrl,
                 toLocalDateTime(rs, "paid_at"),
-                toLocalDateTime(rs, "created_at")
+                toLocalDateTime(rs, "created_at"),
+                expiresAt
         );
     }
 

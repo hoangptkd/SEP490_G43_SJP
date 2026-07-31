@@ -191,6 +191,11 @@ export const adminService = {
     return response.data;
   },
 
+  confirmPayment: async (id: string): Promise<AdminPayment> => {
+    const response = await api.post<AdminPayment>(`/admin/billing/payments/${id}/confirm`);
+    return response.data;
+  },
+
   getRevenueSummary: async (): Promise<AdminRevenueSummary> => {
     const response = await api.get<AdminRevenueSummary>('/admin/billing/revenue');
     return response.data;

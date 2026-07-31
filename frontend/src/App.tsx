@@ -15,12 +15,19 @@ import AdminProfilePage from './pages/admin/AdminProfilePage';
 import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import AdminStatisticsPage from './pages/admin/AdminStatisticsPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
+import EmployerSubscriptionPage from './pages/billing/EmployerSubscriptionPage';
+import PaymentResultPage from './pages/billing/PaymentResultPage';
+import BankTransferCheckoutPage from './pages/billing/BankTransferCheckoutPage';
+import PaymentCheckoutPage from './pages/billing/PaymentCheckoutPage';
+import SubscriptionPlansPage from './pages/billing/SubscriptionPlansPage';
 import { authService } from './services/authService';
+import { employerService } from './services/employerService';
 import { aiInterviewService } from './services/aiInterviewService';
 import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversation';
-import { clearAuthSession, getToken, setAuthSession } from './utils/authStorage';
+import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './utils/authStorage';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
+import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
 import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
 import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
 import CompanyVerificationPage from './pages/Employer/CompanyVerificationPage';
@@ -33,6 +40,7 @@ import type {
   AiInterviewSession,
 } from './types/aiInterview';
 import EmployerApplicationsPage from './pages/Employer/EmployerApplicationsPage';
+import EmployerNotificationsPage from './pages/Employer/EmployerNotificationsPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -85,6 +93,37 @@ const statusColors: Record<string, string> = {
 
 // ─── App routes ────────────────────────────────────────────────────────────
 function App() {
+  const [publicSettings, setPublicSettings] = useState<PublicSettings>(publicSettingsService.defaults);
+
+  useEffect(() => {
+    publicSettingsService.get()
+      .then((settings) => {
+        setPublicSettings(settings);
+        document.documentElement.style.setProperty('--primary', settings.themePrimaryColor || '#00507d');
+        document.title = settings.siteName || 'Smart Recruitment Portal';
+      })
+      .catch(() => {
+        // keep defaults
+      });
+  }, []);
+
+  const user = getStoredUser();
+  const isAdmin = user?.role === 'ADMIN';
+  const showMaintenance = publicSettings.maintenanceMode && !isAdmin && !window.location.pathname.startsWith('/admin');
+
+  if (showMaintenance) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#f8fafc' }}>
+        <section style={{ maxWidth: 480, textAlign: 'center', background: '#fff', padding: 28, borderRadius: 16, boxShadow: '0 8px 30px rgba(15,23,42,0.08)' }}>
+          <h1 style={{ marginTop: 0 }}>{publicSettings.siteName}</h1>
+          <p>Hệ thống đang bảo trì. Vui lòng quay lại sau.</p>
+          <p className="muted">Hỗ trợ: {publicSettings.supportEmail}</p>
+          <Link to="/admin/login" className="button-link outline">Đăng nhập Admin</Link>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
@@ -107,7 +146,11 @@ function App() {
         <Route path="ai-interviews" element={<AiInterviewPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
+        <Route path="subscription/plans" element={<SubscriptionPlansPage backTo="/candidate/subscription" backLabel="Quay lại gói dịch vụ" />} />
       </Route>
+      <Route path="/payment/result" element={<Protected><PaymentResultPage /></Protected>} />
+      <Route path="/payment/checkout" element={<Protected><PaymentCheckoutPage /></Protected>} />
+      <Route path="/payment/bank/:paymentId" element={<Protected><BankTransferCheckoutPage /></Protected>} />
       <Route path="/employer" element={<Protected role="EMPLOYER"><EmployerLayout /></Protected>}>
         <Route index element={<EmployerDashboard />} />
         <Route path="company-profile" element={<CompanyProfilePage />} />
@@ -115,7 +158,10 @@ function App() {
         <Route path="verification" element={<CompanyVerificationPage />} />
         <Route path="jobs" element={<EmployerJobsPage />} />
         <Route path="applications" element={<EmployerApplicationsPage />} />
+        <Route path="notifications" element={<EmployerNotificationsPage />} />
         <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
+        <Route path="subscription" element={<EmployerSubscriptionPage />} />
+        <Route path="subscription/plans" element={<SubscriptionPlansPage backTo="/employer/subscription" backLabel="Quay lại gói dịch vụ" title="Gói dành cho nhà tuyển dụng" />} />
       </Route>
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
@@ -1802,6 +1848,14 @@ function JobDetailPage() {
 // ─── CANDIDATE LAYOUT ────────────────────────────────────────────────────────
 function CandidateLayout() {
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    candidateService.getNotifications().then(data => {
+      setUnreadCount(data.filter(n => !n.read).length);
+    }).catch(() => {});
+  }, []);
+
   function logout() { clearAuthSession(); navigate('/login'); }
 
   const navItems = [
@@ -1839,9 +1893,26 @@ function CandidateLayout() {
             to={to}
             end={end}
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={to === '/candidate/notifications' ? () => {
+              candidateService.markAllNotificationsRead().then(() => setUnreadCount(0));
+            } : undefined}
           >
             <span className="sidebar-link-icon">{icon}</span>
             {label}
+            {to === '/candidate/notifications' && unreadCount > 0 && (
+              <span style={{
+                marginLeft: 'auto',
+                background: '#ef4444',
+                color: 'white',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '999px',
+                lineHeight: 1
+              }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </NavLink>
         ))}
 
@@ -2666,6 +2737,103 @@ function ApplicationDetailPage() {
         </div>
       </div>
 
+      {application.interviews && application.interviews.length > 0 && (
+        <div className="card" style={{ marginBottom: 20, borderLeft: '4px solid #b45309' }}>
+          <h2 style={{ marginBottom: 12 }}>Lịch Phỏng Vấn</h2>
+          {application.interviews.map(interview => (
+            <div key={interview.id} style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 8 }}>
+              <p style={{ margin: '4px 0' }}><strong>Thời gian:</strong> {new Date(interview.scheduledAt).toLocaleString('vi-VN')}</p>
+              <p style={{ margin: '4px 0' }}><strong>Địa điểm:</strong> {interview.location || 'Chưa cập nhật'}</p>
+              {interview.meetingLink && <p style={{ margin: '4px 0' }}><strong>Link họp:</strong> <a href={interview.meetingLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>{interview.meetingLink}</a></p>}
+              {interview.note && <p style={{ margin: '4px 0' }}><strong>Ghi chú:</strong> {interview.note}</p>}
+
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
+                  <strong>Phản hồi của bạn:</strong>{' '}
+                  {interview.candidateResponse === 'confirmed' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
+                   : interview.candidateResponse === 'request_reschedule' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
+                   : interview.candidateResponse === 'declined' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
+                   : 'Chưa phản hồi'}
+                </p>
+
+                {interview.candidateResponse === 'request_reschedule' && interview.employerRescheduleResponse && (
+                  <p style={{ margin: '4px 0', fontSize: '0.9rem', color: '#4338ca' }}>
+                    <strong>Phản hồi từ Nhà tuyển dụng:</strong> {interview.employerRescheduleResponse === 'accept_reschedule' ? 'Đã đồng ý đổi lịch' : 'Không đồng ý đổi lịch'}.
+                    {interview.employerRescheduleNote && ` Lời nhắn: ${interview.employerRescheduleNote}`}
+                  </p>
+                )}
+
+                {interview.candidateResponse === 'request_reschedule' && interview.employerRescheduleResponse === 'reject_reschedule' && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button onClick={() => candidateService.respondToInterview(interview.id, 'confirmed').then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Đồng ý lịch cũ</button>
+                    <button onClick={() => candidateService.respondToInterview(interview.id, 'declined').then(() => window.location.reload())} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Hủy phỏng vấn</button>
+                  </div>
+                )}
+
+                {(!interview.candidateResponse || interview.candidateResponse === 'pending') && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button onClick={() => candidateService.respondToInterview(interview.id, 'confirmed').then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Đồng ý tham gia</button>
+                    <button onClick={() => {
+                      const note = prompt('Nhập lý do đổi lịch và thời gian đề xuất:');
+                      if (note) candidateService.respondToInterview(interview.id, 'request_reschedule', note).then(() => window.location.reload());
+                    }} style={{ background: '#f59e0b', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Xin đổi lịch</button>
+                    <button onClick={() => candidateService.respondToInterview(interview.id, 'declined').then(() => window.location.reload())} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Từ chối</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {application.jobOffer && (
+        <div className="card" style={{ marginBottom: 20, borderLeft: '4px solid #047857' }}>
+          <h2 style={{ marginBottom: 12 }}>🎉 Đề xuất công việc (Job Offer)</h2>
+          <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8 }}>
+            <p style={{ margin: '4px 0' }}><strong>Chức danh:</strong> {application.jobOffer.positionTitle}</p>
+            <p style={{ margin: '4px 0' }}><strong>Mức lương:</strong> {application.jobOffer.salary ? `${application.jobOffer.salary.toLocaleString()} ${application.jobOffer.salaryCurrency} (${application.jobOffer.salaryType})` : 'Thỏa thuận'}</p>
+            {application.jobOffer.startDate && <p style={{ margin: '4px 0' }}><strong>Ngày bắt đầu:</strong> {application.jobOffer.startDate}</p>}
+            {application.jobOffer.workingLocation && <p style={{ margin: '4px 0' }}><strong>Nơi làm việc:</strong> {application.jobOffer.workingLocation}</p>}
+            {application.jobOffer.benefits && <p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}><strong>Phúc lợi:</strong> {application.jobOffer.benefits}</p>}
+            {application.jobOffer.offerLetterUrl && <p style={{ margin: '4px 0' }}><strong>Link Offer Letter:</strong> <a href={application.jobOffer.offerLetterUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Xem chi tiết đính kèm</a></p>}
+            {application.jobOffer.employerNote && <p style={{ margin: '4px 0' }}><strong>Lời nhắn từ Nhà tuyển dụng:</strong> {application.jobOffer.employerNote}</p>}
+
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+              <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
+                <strong>Phản hồi của bạn:</strong>{' '}
+                {application.jobOffer.status === 'sent' ? 'Chưa phản hồi' :
+                 application.jobOffer.status === 'accepted' ? <span style={{ color: '#047857' }}>Đã chấp nhận Offer</span> :
+                 application.jobOffer.status === 'rejected' ? <span style={{ color: '#b45309' }}>Đã từ chối Offer (Đang chờ phản hồi từ NTD)</span> :
+                 application.jobOffer.status === 'employer_declined_negotiation' ? <span style={{ color: '#b91c1c' }}>NTD từ chối thay đổi Offer</span> :
+                 application.jobOffer.status === 'withdrawn_by_candidate' ? <span style={{ color: '#b91c1c' }}>Bạn đã hủy bỏ Offer</span> :
+                 application.jobOffer.status}
+              </p>
+              {application.jobOffer.status === 'sent' && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => candidateService.respondToOffer(application.jobOffer!.id, true).then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Chấp nhận Offer</button>
+                  <button onClick={() => {
+                    const note = prompt('Nhập lý do từ chối và đề xuất thay đổi (Ví dụ: Tôi muốn lương 20tr):');
+                    if (note !== null) {
+                        candidateService.respondToOffer(application.jobOffer!.id, false, note || '').then(() => window.location.reload());
+                    }
+                  }} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Từ chối Offer / Đề xuất sửa đổi</button>
+                </div>
+              )}
+              {application.jobOffer.status === 'employer_declined_negotiation' && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => candidateService.finalRespondToOffer(application.jobOffer!.id, true).then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Chấp nhận Offer cũ</button>
+                  <button onClick={() => {
+                    if (window.confirm('Bạn có chắc chắn muốn hủy bỏ toàn bộ Job Offer này không?')) {
+                        candidateService.finalRespondToOffer(application.jobOffer!.id, false).then(() => window.location.reload());
+                    }
+                  }} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Hủy bỏ hoàn toàn</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h2 style={{ marginBottom: 0 }}>Lịch sử trạng thái</h2>
         <div className="timeline">
@@ -2712,6 +2880,25 @@ function NotificationsPage() {
     await candidateService.markAllNotificationsRead();
     await load();
   }
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'JOB_UPDATED': return '📝';
+      case 'APPLICATION_STATUS_CHANGED': return '🔄';
+      case 'JOB_OFFER_SENT': return '🎉';
+      case 'INTERVIEW_SCHEDULED': return '📅';
+      default: return '🔔';
+    }
+  };
+
+  const getNotificationLink = (item: NotificationItem) => {
+    if (item.relatedEntityType === 'JOB' && item.relatedEntityId) {
+      return `/jobs/${item.relatedEntityId}`;
+    }
+    if (item.relatedEntityType === 'APPLICATION' && item.relatedEntityId) {
+      return `/candidate/applications/${item.relatedEntityId}`;
+    }
+    return null;
+  };
 
   return (
     <motion.div variants={fadeUp} initial="initial" animate="animate"
@@ -2735,29 +2922,58 @@ function NotificationsPage() {
         </div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔔</div>
+          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📭</div>
           <h3>Không có thông báo mới</h3>
           <p className="muted">Bạn sẽ nhận thông báo khi có cập nhật từ nhà tuyển dụng.</p>
         </div>
       ) : (
-        <div className="data-table">
-          {items.map((item, i) => (
-            <motion.div key={item.id} className="data-row"
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2, ease: EASE_OUT, delay: i * 0.04 }}
-              style={{ gridTemplateColumns: '1fr auto auto', opacity: item.read ? 0.7 : 1 }}>
-              <div>
-                <strong style={{ display: 'block', marginBottom: 4 }}>{item.title}</strong>
-                <span className="muted">{item.message}</span>
-              </div>
-              {!item.read && <span className="chip">Mới</span>}
-              <button className="outline sm"
-                onClick={() => candidateService.markNotificationRead(item.id).then(load)}>
-                {item.read ? 'Đã đọc' : 'Đánh dấu đọc'}
-              </button>
-            </motion.div>
-          ))}
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {items.map((item, i) => {
+            const link = getNotificationLink(item);
+            return (
+              <motion.div key={item.id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, ease: EASE_OUT, delay: i * 0.04 }}
+                style={{
+                  display: 'flex',
+                  padding: '16px 20px',
+                  borderBottom: i < items.length - 1 ? '1px solid var(--outline-variant)' : 'none',
+                  background: item.read ? 'transparent' : 'var(--primary-softer)',
+                  alignItems: 'center',
+                  gap: 16
+                }}>
+                <div style={{ fontSize: '1.5rem', minWidth: 40, textAlign: 'center' }}>
+                  {getIcon(item.type)}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <strong style={{ display: 'block', color: 'var(--on-surface)' }}>{item.title}</strong>
+                    {!item.read && <span className="chip primary sm">Mới</span>}
+                  </div>
+                  <p style={{ margin: 0, color: 'var(--on-muted)', fontSize: '0.9rem', lineHeight: 1.4 }}>
+                    {item.message}
+                  </p>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--outline)', marginTop: 8, display: 'block' }}>
+                    {new Date(item.createdAt).toLocaleString('vi-VN')}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexDirection: 'column', alignItems: 'flex-end' }}>
+                  {!item.read && (
+                    <button className="outline sm"
+                      onClick={() => candidateService.markNotificationRead(item.id).then(load)}>
+                      Đánh dấu đọc
+                    </button>
+                  )}
+                  {link && (
+                    <Link to={link} className="button-link sm">
+                      Xem chi tiết
+                    </Link>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
     </motion.div>
@@ -2783,17 +2999,97 @@ function SubscriptionPage() {
     );
   }
 
+  const statusValue = (subscription.status || '').toLowerCase();
+  const isActivePaid = statusValue === 'active' && subscription.planCode !== 'FREE' && subscription.planName?.toLowerCase() !== 'free';
+  const statusLabel =
+    statusValue === 'active' ? (isActivePaid ? 'Đang sử dụng' : 'Gói miễn phí')
+      : statusValue === 'pending' ? 'Chờ kích hoạt'
+        : statusValue === 'expired' ? 'Hết hạn'
+          : statusValue === 'cancelled' ? 'Đã hủy'
+            : subscription.status || '—';
+  const statusStyle =
+    statusValue === 'active'
+      ? { background: isActivePaid ? '#dcfce7' : '#f3f4f6', color: isActivePaid ? '#166534' : '#374151' }
+      : statusValue === 'pending'
+        ? { background: '#fef3c7', color: '#92400e' }
+        : ['expired', 'cancelled'].includes(statusValue)
+          ? { background: '#fee2e2', color: '#991b1b' }
+          : { background: '#f3f4f6', color: '#374151' };
+
   return (
     <motion.div variants={fadeUp} initial="initial" animate="animate"
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div className="page-header">
         <h1>Gói dịch vụ</h1>
-        <p>Quản lý gói đăng ký của bạn</p>
+        <p>Xem gói bạn đang dùng và nâng cấp khi cần</p>
       </div>
+
+      <article
+        className="card"
+        style={{
+          marginBottom: 20,
+          border: isActivePaid ? '2px solid #16a34a' : undefined,
+          background: isActivePaid ? 'linear-gradient(180deg, #f0fdf4 0%, #fff 55%)' : undefined,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <p className="muted" style={{ margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.8rem' }}>
+              Gói đang dùng
+            </p>
+            <h2 style={{ margin: '6px 0 0', fontSize: '1.6rem' }}>{subscription.planName}</h2>
+          </div>
+          <span
+            style={{
+              display: 'inline-block',
+              padding: '6px 12px',
+              borderRadius: 999,
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              ...statusStyle,
+            }}
+          >
+            {statusLabel}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginTop: 18 }}>
+          <div>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>Giá gói</div>
+            <strong>
+              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(subscription.price || 0)}
+            </strong>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>Ngày bắt đầu</div>
+            <strong>{subscription.startedAt ? new Date(subscription.startedAt).toLocaleString('vi-VN') : '—'}</strong>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>Ngày hết hạn</div>
+            <strong>{subscription.expiresAt ? new Date(subscription.expiresAt).toLocaleString('vi-VN') : '—'}</strong>
+          </div>
+        </div>
+
+        {subscription.benefits.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div className="muted" style={{ marginBottom: 8, fontSize: '0.85rem' }}>Quyền lợi đang có</div>
+            <div className="chip-row">
+              {subscription.benefits.map((benefit) => (
+                <span key={benefit} className="chip match">✓ {benefit}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 20 }}>
+          <Link to="/candidate/subscription/plans" className="button-link">
+            {isActivePaid ? 'Đổi / gia hạn gói' : 'Mua gói'}
+          </Link>
+        </div>
+      </article>
 
       <div className="metric-grid">
         {[
-          { label: 'Gói hiện tại', value: subscription.planName, icon: '💎' },
           { label: 'CV đã tải', value: subscription.cvCount, icon: '📄' },
           { label: 'Việc đã lưu', value: subscription.savedJobsCount, icon: '🔖' },
           { label: 'Thông báo chưa đọc', value: subscription.unreadNotificationsCount, icon: '🔔' },
@@ -2808,17 +3104,6 @@ function SubscriptionPage() {
           </motion.div>
         ))}
       </div>
-
-      {subscription.benefits.length > 0 && (
-        <div className="card">
-          <h2 style={{ marginBottom: 16 }}>Quyền lợi của bạn</h2>
-          <div className="chip-row">
-            {subscription.benefits.map((benefit) => (
-              <span key={benefit} className="chip match">✓ {benefit}</span>
-            ))}
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -2827,6 +3112,13 @@ function SubscriptionPage() {
 function EmployerLayout() {
   const navigate = useNavigate();
   const [companyOpen, setCompanyOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    employerService.getNotifications().then(data => {
+      setUnreadCount(data.filter(n => !n.read).length);
+    }).catch(() => {});
+  }, []);
 
   function logout() { clearAuthSession(); navigate('/login'); }
 
@@ -2861,6 +3153,36 @@ function EmployerLayout() {
         <NavLink to="/employer/applications" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <span className="sidebar-link-icon">👥</span>
           Quản lý Ứng viên
+        </NavLink>
+
+        <NavLink
+          to="/employer/notifications"
+          className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          onClick={() => {
+            employerService.markAllNotificationsRead().then(() => setUnreadCount(0));
+          }}
+        >
+          <span className="sidebar-link-icon">🔔</span>
+          Thông báo
+          {unreadCount > 0 && (
+            <span style={{
+              marginLeft: 'auto',
+              background: '#ef4444',
+              color: 'white',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: '999px',
+              lineHeight: 1
+            }}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </NavLink>
+
+        <NavLink to="/employer/subscription" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <span className="sidebar-link-icon">💎</span>
+          Gói dịch vụ
         </NavLink>
 
         {/* Company dropdown */}

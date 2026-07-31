@@ -195,6 +195,7 @@ export interface AdminPayment {
   subscriptionId?: string;
   userId: string;
   userEmail: string;
+  planName?: string;
   amount: number;
   currency: string;
   paymentMethod?: string;
@@ -202,8 +203,11 @@ export interface AdminPayment {
   status: string;
   transactionId?: string;
   failureReason?: string;
+  transferContent?: string;
+  qrUrl?: string;
   paidAt?: string;
   createdAt: string;
+  expiresAt?: string;
 }
 
 export interface AdminRevenueSummary {

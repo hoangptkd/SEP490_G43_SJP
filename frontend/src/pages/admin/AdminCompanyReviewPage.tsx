@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router-dom';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminService } from '../../services/adminService';
 import type { AdminCompanySummary, CompanyReviewFilter } from '../../types/admin';
 
@@ -42,10 +42,18 @@ function readError(error: unknown) {
   return 'Có lỗi xảy ra';
 }
 
+function companyMatches(company: AdminCompanySummary, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [company.name, company.ownerName, company.ownerEmail, company.industry, company.taxCode, company.verificationStatus]
+    .some((value) => String(value ?? '').toLowerCase().includes(q));
+}
+
 export default function AdminCompanyReviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<CompanyReviewFilter>(() => readFilter(searchParams.get('status')));
   const [page, setPage] = useState(() => readPage(searchParams.get('page')));
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
   const [companies, setCompanies] = useState<AdminCompanySummary[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [error, setError] = useState('');
@@ -69,18 +77,25 @@ export default function AdminCompanyReviewPage() {
   }, [loadCompanies]);
 
   useEffect(() => {
-    setSearchParams({ status: filter, page: String(page) }, { replace: true });
-  }, [filter, page, setSearchParams]);
+    const params: Record<string, string> = { status: filter, page: String(page) };
+    if (search.trim()) params.q = search.trim();
+    setSearchParams(params, { replace: true });
+  }, [filter, page, search, setSearchParams]);
+
+  const filteredCompanies = useMemo(
+    () => companies.filter((item) => companyMatches(item, search)),
+    [companies, search],
+  );
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(companies.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filteredCompanies.length / PAGE_SIZE));
     if (page > totalPages) {
       setPage(totalPages);
     }
-  }, [companies.length, page]);
+  }, [filteredCompanies.length, page]);
 
-  const totalPages = Math.max(1, Math.ceil(companies.length / PAGE_SIZE));
-  const paginatedCompanies = companies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filteredCompanies.length / PAGE_SIZE));
+  const paginatedCompanies = filteredCompanies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <section className="admin-page">
@@ -114,14 +129,32 @@ export default function AdminCompanyReviewPage() {
         <section className="admin-company-list-panel admin-review-list-panel">
           <div className="admin-company-list-header">
             <h2>Danh sách công ty</h2>
-            <span>{companies.length} hồ sơ</span>
+            <span>
+              {search.trim()
+                ? `${filteredCompanies.length}/${companies.length} hồ sơ`
+                : `${companies.length} hồ sơ`}
+            </span>
+          </div>
+
+          <div className="admin-company-list-header" style={{ marginBottom: 12 }}>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Tìm theo tên công ty, người đại diện, email, ngành, MST..."
+              style={{ flex: 1, minWidth: 240, maxWidth: 520 }}
+              aria-label="Tìm kiếm hồ sơ công ty"
+            />
           </div>
 
           {loadingList ? (
             <p className="loading">Đang tải danh sách...</p>
-          ) : companies.length === 0 ? (
+          ) : filteredCompanies.length === 0 ? (
             <div className="admin-placeholder-card">
-              <p>Không có hồ sơ nào trong mục này.</p>
+              <p>{search.trim() ? 'Không tìm thấy hồ sơ phù hợp.' : 'Không có hồ sơ nào trong mục này.'}</p>
             </div>
           ) : (
             <div className="admin-review-list">
@@ -143,7 +176,7 @@ export default function AdminCompanyReviewPage() {
                       <span>{company.industry || 'Chưa cập nhật ngành'}</span>
                       <span>{company.pendingDocumentCount} tài liệu chờ</span>
                     </div>
-                    <Link className="button-link outline" to={`/admin/companies/${company.id}?status=${filter}&page=${page}`}>
+                    <Link className="button-link outline" to={`/admin/companies/${company.id}?status=${filter}&page=${page}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ''}`}>
                       Xem chi tiết
                     </Link>
                   </article>
@@ -152,7 +185,7 @@ export default function AdminCompanyReviewPage() {
             </div>
           )}
 
-          {companies.length > PAGE_SIZE && (
+          {filteredCompanies.length > PAGE_SIZE && (
             <div className="admin-pagination">
               <button type="button" className="outline" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
                 Trước

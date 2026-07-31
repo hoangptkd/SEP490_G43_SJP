@@ -41,6 +41,7 @@ public class CandidateService {
     private final SkillRepository skillRepository;
     private final CandidateSkillRepository candidateSkillRepository;
     private final StorageService storageService;
+    private final FeatureLimitService featureLimitService;
 
     public record CvDownload(String fileName, String contentType, org.springframework.core.io.Resource resource) {
     }
@@ -98,6 +99,7 @@ public class CandidateService {
     @Transactional
     public CvResponse uploadCv(MultipartFile file) {
         CandidateProfile profile = getCurrentCandidateProfile();
+        featureLimitService.requireCvUpload(profile.getUser());
         validateCvFile(file);
         try {
             StorageService.StoredFile stored = storageService.storeCandidateCv(profile.getId(), file);
@@ -111,7 +113,9 @@ public class CandidateService {
             cv.setSourceType(SOURCE_UPLOADED);
             boolean firstCv = !candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(profile.getId(), SOURCE_UPLOADED);
             cv.setDefaultCv(firstCv);
-            return dtoMapper.toCvResponse(candidateCvRepository.save(cv));
+            CvResponse response = dtoMapper.toCvResponse(candidateCvRepository.save(cv));
+            featureLimitService.consumeCvUpload(profile.getUser());
+            return response;
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "CV_STORAGE_FAILED", "Khong the luu file CV");
         }
@@ -250,7 +254,10 @@ public class CandidateService {
     @Transactional(readOnly = true)
     public SubscriptionResponse getSubscription() {
         User user = authService.getCurrentUser();
-        Subscription subscription = subscriptionRepository.findTopByUserIdOrderByStartedAtDesc(user.getId()).orElse(null);
+        Subscription subscription = subscriptionRepository
+                .findFirstByUserIdAndStatusOrderByCreatedAtDesc(user.getId(), "active")
+                .or(() -> subscriptionRepository.findTopByUserIdOrderByStartedAtDesc(user.getId()))
+                .orElse(null);
         Plan plan = subscription == null ? null : subscription.getPlan();
         return new SubscriptionResponse(
                 plan == null ? "FREE" : plan.getCode(),

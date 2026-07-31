@@ -30,6 +30,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.sjp.recruitment.repository.NotificationRepository;
+import com.sjp.recruitment.model.dto.response.NotificationResponse;
+import com.sjp.recruitment.model.entity.Notification;
 
 import com.sjp.recruitment.model.dto.request.CompanyIndustryRequest;
 import com.sjp.recruitment.model.dto.response.CompanyIndustryResponse;
@@ -63,6 +66,9 @@ public class EmployerService {
     private final CandidateService candidateService;
     private final Cloudinary cloudinary;
     private final DtoMapper dtoMapper;
+    private final FeatureLimitService featureLimitService;
+    private final SystemSettingsService systemSettingsService;
+    private final NotificationRepository notificationRepository;
 
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {
@@ -609,7 +615,9 @@ public class EmployerService {
     public JobResponse createJob(JobRequest request) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         Company company = employer.getCompany();
-        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && !company.isVerified()
+                && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền đăng tin tuyển dụng.");
         }
         return jobService.createJobResponse(request, employer);
@@ -619,7 +627,9 @@ public class EmployerService {
     public JobResponse updateJob(String id, JobRequest request) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         Company company = employer.getCompany();
-        if (!company.isVerified() && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
+        if (systemSettingsService.isCompanyReviewRequired()
+                && !company.isVerified()
+                && !"verified".equalsIgnoreCase(company.getVerificationStatus())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực. Chỉ các công ty đã được Admin xác thực mới có quyền quản lý và đăng tin tuyển dụng.");
         }
         return jobService.updateJobResponse(id, request, employer);
@@ -720,13 +730,16 @@ public class EmployerService {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền cập nhật đơn ứng tuyển này");
         }
 
-        Application.ApplicationStatus toStatus = Application.ApplicationStatus.fromDatabaseValue(status);
-        if (toStatus == null) {
-            try {
-                toStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "STATUS_INVALID", "Trạng thái không hợp lệ: " + status);
-            }
+        Application.ApplicationStatus toStatus = null;
+        try {
+            toStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            toStatus = Application.ApplicationStatus.fromDatabaseValue(status);
+        }
+
+        // fromDatabaseValue returns SUBMITTED by default, we want to reject completely invalid strings
+        if (toStatus == Application.ApplicationStatus.SUBMITTED && !status.equalsIgnoreCase("SUBMITTED") && !status.equalsIgnoreCase("applied")) {
+             throw new ApiException(HttpStatus.BAD_REQUEST, "STATUS_INVALID", "Trạng thái không hợp lệ: " + status);
         }
 
         return applicationService.updateStatus(appId, toStatus, note);
@@ -752,5 +765,29 @@ public class EmployerService {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen truy cap CV cua don ung tuyen nay");
         }
         return candidateService.toCvDownload(application.getCv());
+    }
+
+    @Transactional(readOnly = true)
+    public List<NotificationResponse> getNotifications() {
+        User user = authService.getCurrentUser();
+        return notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
+                .stream()
+                .map(dtoMapper::toNotificationResponse)
+                .toList();
+    }
+
+    @Transactional
+    public void markNotificationRead(String notificationId) {
+        User user = authService.getCurrentUser();
+        Notification notification = notificationRepository.findByIdAndRecipientUserId(UUID.fromString(notificationId), user.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "Không tìm thấy thông báo"));
+        notification.setRead(true);
+    }
+
+    @Transactional
+    public void markAllNotificationsRead() {
+        User user = authService.getCurrentUser();
+        notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
+                .forEach(notification -> notification.setRead(true));
     }
 }

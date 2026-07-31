@@ -3,6 +3,7 @@ import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import { clearAuthSession, getStoredUser, getToken } from '../../utils/authStorage';
 import type { User } from '../../types/auth';
+import '../../styles/admin.css';
 
 const menuItems = [
   { to: '/admin', label: 'Bảng điều khiển', end: true },

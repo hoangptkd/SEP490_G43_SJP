@@ -73,6 +73,11 @@ public class AdminBillingController {
         return ResponseEntity.ok(adminOpsService.listPayments(status));
     }
 
+    @PostMapping("/payments/{id}/confirm")
+    public ResponseEntity<AdminPaymentResponse> confirmPayment(@PathVariable String id) {
+        return ResponseEntity.ok(adminOpsService.confirmBankPayment(id));
+    }
+
     @GetMapping("/revenue")
     public ResponseEntity<AdminRevenueSummaryResponse> getRevenue() {
         return ResponseEntity.ok(adminOpsService.getRevenueSummary());

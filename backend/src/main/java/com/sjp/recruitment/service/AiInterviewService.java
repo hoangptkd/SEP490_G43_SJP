@@ -50,12 +50,23 @@ public class AiInterviewService {
     private final JobService jobService;
     private final AiInterviewRateLimiter rateLimiter;
     private final AiInterviewResponseAssembler responseAssembler;
+    private final FeatureLimitService featureLimitService;
+    private final SystemSettingsService systemSettingsService;
 
     @Transactional(readOnly = true)
     public AiInterviewConfigResponse configStatus() {
+        boolean configured = properties.isEnabled();
+        boolean enabledByAdmin = isEnabledByAdmin();
+        boolean enabled = configured && enabledByAdmin;
+        String message = null;
+        if (!configured) {
+            message = "AI Interview chua duoc cau hinh API key.";
+        } else if (!enabledByAdmin) {
+            message = "Phỏng vấn AI đang bị tắt bởi quản trị viên.";
+        }
         return new AiInterviewConfigResponse(
-                properties.isEnabled(),
-                properties.isEnabled() ? null : "AI Interview chua duoc cau hinh.",
+                enabled,
+                message,
                 properties.getQuestionCount(),
                 properties.getAudioMaxSeconds(),
                 properties.getAudioMaxSizeMb(),
@@ -110,6 +121,7 @@ public class AiInterviewService {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "session-create");
+        requireAiSession(candidate.getUser());
         Application application = applicationRepository.findById(parseUuid(applicationId, "APPLICATION_ID_INVALID"))
                 .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
@@ -130,6 +142,7 @@ public class AiInterviewService {
         createNextQuestion(session);
         session.setStatus("in_progress");
         session = sessionRepository.save(session);
+        consumeAiSession(candidate.getUser());
         return responseAssembler.assemble(session);
     }
 
@@ -138,6 +151,7 @@ public class AiInterviewService {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "session-create");
+        requireAiSession(candidate.getUser());
         if (!hasBasicProfile(candidate)
                 && !candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(candidate.getId(), "uploaded")) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRACTICE_CONTEXT_REQUIRED", "Can co ho so co ban hoac it nhat 1 CV de luyen phong van AI");
@@ -187,6 +201,7 @@ public class AiInterviewService {
         }
         session.setStatus("in_progress");
         session = sessionRepository.save(session);
+        consumeAiSession(candidate.getUser());
         return responseAssembler.assemble(session);
     }
 
@@ -720,6 +735,25 @@ public class AiInterviewService {
     private void ensureEnabled() {
         if (!properties.isEnabled()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI_INTERVIEW_NOT_CONFIGURED", "AI Interview chua duoc cau hinh.");
+        }
+        if (!isEnabledByAdmin()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI_INTERVIEW_DISABLED", "Phỏng vấn AI đang bị tắt bởi quản trị viên.");
+        }
+    }
+
+    private boolean isEnabledByAdmin() {
+        return systemSettingsService == null || systemSettingsService.isAiInterviewEnabled();
+    }
+
+    private void requireAiSession(User user) {
+        if (featureLimitService != null) {
+            featureLimitService.requireAiSession(user);
+        }
+    }
+
+    private void consumeAiSession(User user) {
+        if (featureLimitService != null) {
+            featureLimitService.consumeAiSession(user);
         }
     }
 
