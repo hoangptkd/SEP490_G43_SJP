@@ -22,6 +22,7 @@ import com.sjp.recruitment.model.entity.Company;
 import com.sjp.recruitment.model.entity.CompanyDocument;
 import com.sjp.recruitment.model.entity.Employer;
 import com.sjp.recruitment.model.entity.User;
+import com.sjp.recruitment.model.entity.Notification;
 import com.sjp.recruitment.model.dto.response.CompanyIndustryResponse;
 import com.sjp.recruitment.repository.CompanyDocumentRepository;
 import com.sjp.recruitment.repository.CompanyIndustryRepository;
@@ -29,6 +30,7 @@ import com.sjp.recruitment.repository.CompanyLocationRepository;
 import com.sjp.recruitment.repository.CompanyRepository;
 import com.sjp.recruitment.repository.EmployerRepository;
 import com.sjp.recruitment.repository.UserRepository;
+import com.sjp.recruitment.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -62,6 +64,18 @@ public class AdminService {
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final DtoMapper dtoMapper;
     private final AdminOpsService adminOpsService;
+    private final NotificationRepository notificationRepository;
+
+    private void createNotification(User user, String type, String title, String message, UUID entityId, String entityType) {
+        Notification notification = new Notification();
+        notification.setRecipientUser(user);
+        notification.setType(type);
+        notification.setTitle(title);
+        notification.setMessage(message);
+        notification.setRelatedEntityType(entityType);
+        notification.setRelatedEntityId(entityId);
+        notificationRepository.save(notification);
+    }
 
     @Transactional(readOnly = true)
     public AdminDashboardResponse getDashboardStats() {
@@ -685,6 +699,13 @@ public class AdminService {
         updateEmployerVerification(company.getId(), "verified");
         adminOpsService.writeAudit(admin.getId().toString(), "COMPANY_APPROVE", "company", id, "pending", "verified");
 
+        employerRepository.findOwnerByCompanyId(company.getId()).ifPresent(owner -> {
+            if (owner.getUser() != null) {
+                createNotification(owner.getUser(), "COMPANY_APPROVED", "Hồ sơ công ty đã được duyệt",
+                        "Chúc mừng! Hồ sơ pháp lý của công ty " + company.getName() + " đã được Ban quản trị phê duyệt thành công.", company.getId(), "COMPANY");
+            }
+        });
+
         return toDetailResponse(company);
     }
 
@@ -706,6 +727,13 @@ public class AdminService {
         reviewPendingDocuments(company, admin, "rejected", reason, now);
         updateEmployerVerification(company.getId(), "rejected");
         adminOpsService.writeAudit(admin.getId().toString(), "COMPANY_REJECT", "company", id, "pending", "rejected");
+
+        employerRepository.findOwnerByCompanyId(company.getId()).ifPresent(owner -> {
+            if (owner.getUser() != null) {
+                createNotification(owner.getUser(), "COMPANY_REJECTED", "Hồ sơ công ty bị từ chối",
+                        "Rất tiếc, hồ sơ pháp lý của công ty " + company.getName() + " không được phê duyệt. Lý do: " + reason, company.getId(), "COMPANY");
+            }
+        });
 
         return toDetailResponse(company);
     }
@@ -1061,7 +1089,16 @@ public class AdminService {
                         .addValue("jobId", id)
                         .addValue("adminId", admin.getId().toString())
         );
-        return findJobDetail(id);
+
+        AdminJobDetailResponse response = findJobDetail(id);
+        employerRepository.findByCompanyId(UUID.fromString(response.job().company().id())).forEach(employer -> {
+            if (employer.getUser() != null) {
+                createNotification(employer.getUser(), "JOB_APPROVED", "Tin tuyển dụng được duyệt",
+                        "Tin tuyển dụng [" + response.job().title() + "] của bạn đã được duyệt và đang hiển thị công khai.", UUID.fromString(response.job().id()), "JOB");
+            }
+        });
+
+        return response;
     }
 
     @Transactional
@@ -1087,7 +1124,16 @@ public class AdminService {
                         .addValue("adminId", admin.getId().toString())
         );
         adminOpsService.writeAudit(admin.getId().toString(), "JOB_REJECT", "job", id, "pending_review", "rejected");
-        return findJobDetail(id);
+
+        AdminJobDetailResponse response = findJobDetail(id);
+        employerRepository.findByCompanyId(UUID.fromString(response.job().company().id())).forEach(employer -> {
+            if (employer.getUser() != null) {
+                createNotification(employer.getUser(), "JOB_REJECTED", "Tin tuyển dụng bị từ chối",
+                        "Tin tuyển dụng [" + response.job().title() + "] không được duyệt. Lý do: " + request.reason().trim(), UUID.fromString(response.job().id()), "JOB");
+            }
+        });
+
+        return response;
     }
 
     @Transactional

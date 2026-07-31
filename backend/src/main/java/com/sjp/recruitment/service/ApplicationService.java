@@ -22,6 +22,7 @@ import com.sjp.recruitment.repository.JobRepository;
 import com.sjp.recruitment.repository.NotificationRepository;
 import com.sjp.recruitment.repository.InterviewScheduleRepository;
 import com.sjp.recruitment.repository.JobOfferRepository;
+import com.sjp.recruitment.repository.EmployerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -53,6 +54,7 @@ public class ApplicationService {
     private final JobService jobService;
     private final DtoMapper dtoMapper;
     private final FeatureLimitService featureLimitService;
+    private final EmployerRepository employerRepository;
 
     @Transactional(readOnly = true)
     public Page<Application> findByCandidateId(String candidateId, Pageable pageable) {
@@ -131,6 +133,16 @@ public class ApplicationService {
         createNotification(user, "APPLICATION_SUBMITTED", "Da gui ho so ung tuyen",
                 "Ban da ung tuyen thanh cong vao vi tri " + job.getTitle() + ".", saved.getId());
         featureLimitService.consumeApplication(user);
+
+        if (job.getCompany() != null) {
+            employerRepository.findByCompanyIdWithUser(job.getCompany().getId())
+                    .forEach(employer -> {
+                        if (employer.getUser() != null) {
+                            createNotification(employer.getUser(), "APPLICATION_RECEIVED", "Có ứng viên mới",
+                                    "Ứng viên " + user.getFullName() + " vừa nộp hồ sơ vào vị trí " + job.getTitle() + ".", saved.getId());
+                        }
+                    });
+        }
 
         return toResponse(saved);
     }

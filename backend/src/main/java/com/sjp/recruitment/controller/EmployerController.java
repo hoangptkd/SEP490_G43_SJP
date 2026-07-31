@@ -8,6 +8,7 @@ import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
 import com.sjp.recruitment.model.dto.request.JobRequest;
 import com.sjp.recruitment.model.dto.response.JobResponse;
 import com.sjp.recruitment.model.dto.response.ApplicationResponse;
+import com.sjp.recruitment.model.dto.response.NotificationResponse;
 import com.sjp.recruitment.service.EmployerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -150,5 +151,22 @@ public class EmployerController {
         String targetStatus = body != null && body.get("status") != null ? body.get("status") : status;
         String note = body != null ? body.get("note") : null;
         return ResponseEntity.ok(employerService.updateApplicationStatus(id, targetStatus, note));
+    }
+
+    @GetMapping("/notifications")
+    public ResponseEntity<List<NotificationResponse>> notifications() {
+        return ResponseEntity.ok(employerService.getNotifications());
+    }
+
+    @PatchMapping("/notifications/{id}/read")
+    public ResponseEntity<Void> markNotificationRead(@PathVariable String id) {
+        employerService.markNotificationRead(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/notifications/read-all")
+    public ResponseEntity<Void> markAllNotificationsRead() {
+        employerService.markAllNotificationsRead();
+        return ResponseEntity.noContent().build();
     }
 }

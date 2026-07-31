@@ -31,7 +31,14 @@ function EmployerJobsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const jobsPerPage = 7;
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT' | 'AWAITING_COMPANY'>('ALL');
+  const [viewingJob, setViewingJob] = useState<Job | null>(null);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchTerm]);
   const [skillsInput, setSkillsInput] = useState('');
   const [reqsInput, setReqsInput] = useState('');
   const [formData, setFormData] = useState({
@@ -282,6 +289,7 @@ function EmployerJobsPage() {
   });
 
   return (
+    <>
     <section className="content-card">
       <div style={{
         background: 'linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%)',
@@ -661,27 +669,6 @@ function EmployerJobsPage() {
               />
             </label>
 
-            <label>
-              Trạng thái tin đăng
-              <select
-                value={formData.status}
-                onChange={(e) => {
-                  setFormData({ ...formData, status: e.target.value });
-                  submitTargetRef.current = e.target.value;
-                }}
-              >
-                <option value="draft">Bản nháp (Draft)</option>
-                {hasApprovedJob ? (
-                  <option value="published">Đang hiển thị / Đăng ngay (Published)</option>
-                ) : (
-                  <option value="pending_review">Gửi kiểm duyệt (Pending Review)</option>
-                )}
-                {editingId && (formData.status === 'published' || formData.status === 'active') && !hasApprovedJob ? (
-                  <option value="published">Đang hiển thị (Published)</option>
-                ) : null}
-              </select>
-            </label>
-
             <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
               {editingId ? (
                 <button
@@ -908,6 +895,11 @@ function EmployerJobsPage() {
             return true;
           });
 
+          const totalPages = Math.ceil(filteredJobs.length / jobsPerPage);
+          const indexOfLastJob = currentPage * jobsPerPage;
+          const indexOfFirstJob = indexOfLastJob - jobsPerPage;
+          const currentJobs = filteredJobs.slice(indexOfFirstJob, indexOfLastJob);
+
           return (
             <>
               <h2 style={{ fontSize: '1.3rem', color: '#1e293b', marginBottom: '16px' }}>
@@ -929,8 +921,9 @@ function EmployerJobsPage() {
                   )}
                 </div>
               ) : (
-                <div style={{ display: 'grid', gap: '16px' }}>
-                  {filteredJobs.map((job) => {
+                <>
+                  <div style={{ display: 'grid', gap: '12px' }}>
+                    {currentJobs.map((job) => {
                     const st = job.status?.toLowerCase() || 'draft';
                     const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
                     const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : '#64748b';
@@ -942,19 +935,19 @@ function EmployerJobsPage() {
                       <div key={job.id} style={{
                         border: '1px solid #e2e8f0',
                         borderRadius: '8px',
-                        padding: '22px',
+                        padding: '16px',
                         background: '#ffffff',
                         boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'flex-start',
                         flexWrap: 'wrap',
-                        gap: '16px',
+                        gap: '12px',
                         transition: 'border-color 0.2s, box-shadow 0.2s'
                       }}>
                         <div style={{ flex: '1 1 420px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a', fontWeight: 700 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 700 }}>
                               {job.title}
                             </h3>
                             <span style={{
@@ -1161,6 +1154,25 @@ function EmployerJobsPage() {
                       </button>
                     )}
                     <button
+                      onClick={() => setViewingJob(job)}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        color: '#475569',
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        textDecoration: 'none',
+                        transition: 'all 0.2s',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      👀 Xem chi tiết
+                    </button>
+                    <button
                       onClick={() => handleDelete(job.id, job.title)}
                       style={{
                         background: '#ffffff',
@@ -1181,12 +1193,138 @@ function EmployerJobsPage() {
               );
             })}
           </div>
-        )}
+
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '24px' }}>
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i + 1}
+                  onClick={() => setCurrentPage(i + 1)}
+                  style={{
+                    background: currentPage === i + 1 ? '#2563eb' : '#fff',
+                    color: currentPage === i + 1 ? '#fff' : '#475569',
+                    border: '1px solid #cbd5e1',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+              )}
+                </>
+              )}
             </>
           );
         })()}
       </div>
     </section>
+    
+    {viewingJob && (
+      <div style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '20px'
+      }}>
+        <div style={{
+          backgroundColor: '#fff',
+          borderRadius: '12px',
+          width: '100%',
+          maxWidth: '800px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+          position: 'relative'
+        }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a' }}>Chi tiết tin tuyển dụng</h2>
+            <button onClick={() => setViewingJob(null)} style={{ background: '#f1f5f9', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#475569', fontWeight: 600 }}>✕ Đóng</button>
+          </div>
+          
+          <div style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '1.5rem', margin: '0 0 16px 0', color: '#1e293b' }}>{viewingJob.title}</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px', background: '#f8fafc', padding: '16px', borderRadius: '8px' }}>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Mức lương</div>
+                <div style={{ fontWeight: 600, color: '#059669' }}>
+                  {viewingJob.salaryType === 'negotiable' ? 'Thỏa thuận' : `${viewingJob.salaryMin?.toLocaleString() || 0} - ${viewingJob.salaryMax?.toLocaleString() || 0} VNĐ`}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Địa điểm</div>
+                <div style={{ fontWeight: 600, color: '#334155' }}>{viewingJob.location || 'Hà Nội'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Kinh nghiệm</div>
+                <div style={{ fontWeight: 600, color: '#334155' }}>{viewingJob.experienceLevel}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Hình thức</div>
+                <div style={{ fontWeight: 600, color: '#334155' }}>{viewingJob.workMode} / {viewingJob.jobType}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Số lượng</div>
+                <div style={{ fontWeight: 600, color: '#334155' }}>{viewingJob.vacancies} người</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Hạn nộp hồ sơ</div>
+                <div style={{ fontWeight: 600, color: '#dc2626' }}>{viewingJob.deadline ? new Date(viewingJob.deadline).toLocaleDateString('vi-VN') : 'Không giới hạn'}</div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Mô tả công việc</h4>
+              <div style={{ whiteSpace: 'pre-wrap', color: '#475569', lineHeight: 1.6, fontSize: '0.95rem' }}>
+                {viewingJob.description}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Yêu cầu công việc</h4>
+              <div style={{ whiteSpace: 'pre-wrap', color: '#475569', lineHeight: 1.6, fontSize: '0.95rem' }}>
+                {viewingJob.requirements?.join('\n') || viewingJob.skills?.join(', ')}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Quyền lợi</h4>
+              <div style={{ whiteSpace: 'pre-wrap', color: '#475569', lineHeight: 1.6, fontSize: '0.95rem' }}>
+                {viewingJob.benefits || 'Theo quy định của công ty'}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Kỹ năng chuyên môn</h4>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                {viewingJob.skills?.map((s, idx) => (
+                  <span key={idx} style={{ background: '#f1f5f9', color: '#334155', padding: '6px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 500, border: '1px solid #e2e8f0' }}>
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+            
+            <div style={{ marginBottom: '12px' }}>
+              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Thời gian làm việc</h4>
+              <div style={{ color: '#475569', fontSize: '0.95rem' }}>
+                {viewingJob.workingTime || 'Giờ hành chính'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
