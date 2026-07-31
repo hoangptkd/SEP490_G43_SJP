@@ -21,6 +21,7 @@ import BankTransferCheckoutPage from './pages/billing/BankTransferCheckoutPage';
 import PaymentCheckoutPage from './pages/billing/PaymentCheckoutPage';
 import SubscriptionPlansPage from './pages/billing/SubscriptionPlansPage';
 import { authService } from './services/authService';
+import { employerService } from './services/employerService';
 import { aiInterviewService } from './services/aiInterviewService';
 import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversation';
 import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './utils/authStorage';
@@ -39,6 +40,7 @@ import type {
   AiInterviewSession,
 } from './types/aiInterview';
 import EmployerApplicationsPage from './pages/Employer/EmployerApplicationsPage';
+import EmployerNotificationsPage from './pages/Employer/EmployerNotificationsPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -154,6 +156,7 @@ function App() {
         <Route path="verification" element={<CompanyVerificationPage />} />
         <Route path="jobs" element={<EmployerJobsPage />} />
         <Route path="applications" element={<EmployerApplicationsPage />} />
+        <Route path="notifications" element={<EmployerNotificationsPage />} />
         <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
         <Route path="subscription" element={<EmployerSubscriptionPage />} />
         <Route path="subscription/plans" element={<SubscriptionPlansPage backTo="/employer/subscription" backLabel="Quay lại gói dịch vụ" title="Gói dành cho nhà tuyển dụng" />} />
@@ -1556,6 +1559,14 @@ function JobDetailPage() {
 // ─── CANDIDATE LAYOUT ────────────────────────────────────────────────────────
 function CandidateLayout() {
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    candidateService.getNotifications().then(data => {
+      setUnreadCount(data.filter(n => !n.read).length);
+    }).catch(() => {});
+  }, []);
+
   function logout() { clearAuthSession(); navigate('/login'); }
 
   const navItems = [
@@ -1593,9 +1604,26 @@ function CandidateLayout() {
             to={to}
             end={end}
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={to === '/candidate/notifications' ? () => {
+              candidateService.markAllNotificationsRead().then(() => setUnreadCount(0));
+            } : undefined}
           >
             <span className="sidebar-link-icon">{icon}</span>
             {label}
+            {to === '/candidate/notifications' && unreadCount > 0 && (
+              <span style={{
+                marginLeft: 'auto',
+                background: '#ef4444',
+                color: 'white',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '999px',
+                lineHeight: 1
+              }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </NavLink>
         ))}
 
@@ -2575,6 +2603,13 @@ function SubscriptionPage() {
 function EmployerLayout() {
   const navigate = useNavigate();
   const [companyOpen, setCompanyOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    employerService.getNotifications().then(data => {
+      setUnreadCount(data.filter(n => !n.read).length);
+    }).catch(() => {});
+  }, []);
 
   function logout() { clearAuthSession(); navigate('/login'); }
 
@@ -2609,6 +2644,31 @@ function EmployerLayout() {
         <NavLink to="/employer/applications" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <span className="sidebar-link-icon">👥</span>
           Quản lý Ứng viên
+        </NavLink>
+
+        <NavLink 
+          to="/employer/notifications" 
+          className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          onClick={() => {
+            employerService.markAllNotificationsRead().then(() => setUnreadCount(0));
+          }}
+        >
+          <span className="sidebar-link-icon">🔔</span>
+          Thông báo
+          {unreadCount > 0 && (
+            <span style={{
+              marginLeft: 'auto',
+              background: '#ef4444',
+              color: 'white',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: '999px',
+              lineHeight: 1
+            }}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </NavLink>
 
         <NavLink to="/employer/subscription" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>

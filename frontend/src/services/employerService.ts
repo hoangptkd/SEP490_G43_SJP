@@ -1,6 +1,6 @@
 import { api } from './api';
 import type { Company, CompanyLocation, CompanyDocument, Job } from '../types/job';
-import type { CandidateApplication } from '../types/candidateDomain';
+import type { CandidateApplication, NotificationItem } from '../types/candidateDomain';
 
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
@@ -121,6 +121,19 @@ export const employerService = {
   updateApplicationStatus: async (id: string, status: string, note?: string): Promise<CandidateApplication> => {
     const response = await api.put<CandidateApplication>(`/employer/applications/${id}/status`, { status, note });
     return response.data;
+  },
+
+  getNotifications: async (): Promise<NotificationItem[]> => {
+    const response = await api.get<NotificationItem[]>('/employer/notifications');
+    return response.data;
+  },
+
+  markNotificationRead: async (id: string): Promise<void> => {
+    await api.patch(`/employer/notifications/${id}/read`);
+  },
+
+  markAllNotificationsRead: async (): Promise<void> => {
+    await api.patch('/employer/notifications/read-all');
   },
 
   scheduleInterview: async (applicationId: string, data: import('../types/candidateDomain').InterviewScheduleRequest): Promise<import('../types/candidateDomain').InterviewScheduleResponse> => {

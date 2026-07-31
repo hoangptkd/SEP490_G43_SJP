@@ -1,5 +1,6 @@
 package com.sjp.recruitment.service;
 
+import com.sjp.recruitment.model.dto.request.JobOfferRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -102,6 +103,74 @@ public class EmailService {
         }
     }
 
+    public void sendInterviewRescheduledEmail(String email, String candidateName, String jobTitle, String companyName, String newScheduledAt, String location, String meetingLink, String note) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
+        message.setTo(email);
+        message.setSubject("Lich phong van moi cho vi tri " + jobTitle + " tai " + companyName);
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("Chao %s,\n\n", candidateName));
+        sb.append(String.format("Nha tuyen dung %s da dong y voi yeu cau doi lich phong van cua ban cho vi tri %s.\n\n", companyName, jobTitle));
+        sb.append("Duoi day la thong tin lich phong van moi:\n");
+        sb.append(String.format("- Thoi gian moi: %s\n", newScheduledAt));
+        if (location != null && !location.isBlank()) {
+            sb.append(String.format("- Dia diem: %s\n", location));
+        }
+        if (meetingLink != null && !meetingLink.isBlank()) {
+            sb.append(String.format("- Link hop truc tuyen: %s\n", meetingLink));
+        }
+        if (note != null && !note.isBlank()) {
+            sb.append(String.format("- Luu y tu nha tuyen dung: %s\n", note));
+        }
+        sb.append("\nVui long kiem tra he thong Smart Recruitment Portal va luu lai lich moi.\n\n");
+        sb.append("Tran trong,\n");
+        sb.append(String.format("Doi ngu Tuyen dung %s", companyName));
+        
+        message.setText(sb.toString());
+        
+        try {
+            mailSender.send(message);
+            log.info("Email cap nhat lich phong van (doi lich thanh cong) da duoc gui toi {}", email);
+        } catch (Exception e) {
+            log.error("Khong the gui email cap nhat lich phong van toi {}. Loi: {}", email, e.getMessage());
+        }
+    }
+
+    public void sendInterviewRescheduleRejectedEmail(String email, String candidateName, String jobTitle, String companyName, String oldScheduledAt, String location, String meetingLink, String note) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
+        message.setTo(email);
+        message.setSubject("Ket qua yeu cau doi lich phong van vi tri " + jobTitle + " tai " + companyName);
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("Chao %s,\n\n", candidateName));
+        sb.append(String.format("Ve yeu cau doi lich phong van cho vi tri %s, chung toi rat tiec hien tai nha tuyen dung khong the sap xep thoi gian khac phu hop hon.\n\n", jobTitle));
+        if (note != null && !note.isBlank()) {
+            sb.append(String.format("Phan hoi tu nha tuyen dung: %s\n\n", note));
+        }
+        sb.append("Vi vay, lich phong van hien tai se van duoc giu nguyen nhu sau:\n");
+        sb.append(String.format("- Thoi gian: %s\n", oldScheduledAt));
+        if (location != null && !location.isBlank()) {
+            sb.append(String.format("- Dia diem: %s\n", location));
+        }
+        if (meetingLink != null && !meetingLink.isBlank()) {
+            sb.append(String.format("- Link hop truc tuyen: %s\n", meetingLink));
+        }
+        sb.append("\nMong ban co the sap xep thoi gian de tham gia buoi phong van nhu da dinh. Vui long dang nhap he thong Smart Recruitment Portal de xac nhan hoac xem xet buoc tiep theo.\n\n");
+        sb.append("Tran trong,\n");
+        sb.append(String.format("Doi ngu Tuyen dung %s", companyName));
+        
+        message.setText(sb.toString());
+        
+        try {
+            mailSender.send(message);
+            log.info("Email tu choi doi lich phong van da duoc gui toi {}", email);
+        } catch (Exception e) {
+            log.error("Khong the gui email tu choi doi lich phong van toi {}. Loi: {}", email, e.getMessage());
+        }
+    }
+
     public void sendInterviewResultFailedEmail(String email, String candidateName, String jobTitle, String companyName) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
@@ -129,7 +198,7 @@ public class EmailService {
         }
     }
 
-    public void sendJobOfferEmail(String email, String candidateName, String jobTitle, String companyName, String offerLetterUrl) {
+    public void sendJobOfferEmail(String email, String candidateName, String jobTitle, String companyName, JobOfferRequest request) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
         message.setTo(email);
@@ -137,10 +206,35 @@ public class EmailService {
         
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("Chao %s,\n\n", candidateName));
-        sb.append(String.format("Chuc mung ban da xuat sac vuot qua cac vong phong van. Chung toi rat vui mung duoc gui den ban loi moi lam viec cho vi tri %s tai %s.\n\n", jobTitle, companyName));
+        sb.append(String.format("Chuc mung ban da xuat sac vuot qua cac vong phong van. Chung toi rat vui mung duoc gui den ban loi moi lam viec cho vi tri %s tai %s voi cac thong tin sau:\n\n", jobTitle, companyName));
         
-        if (offerLetterUrl != null && !offerLetterUrl.isBlank()) {
-            sb.append(String.format("Ban co the xem chi tiet thu moi lam viec tai day: %s\n\n", offerLetterUrl));
+        sb.append(String.format("- Chuc danh: %s\n", request.positionTitle()));
+        
+        if (request.salary() != null) {
+            String currency = request.salaryCurrency() != null ? request.salaryCurrency() : "VND";
+            String type = request.salaryType() != null ? request.salaryType() : "";
+            sb.append(String.format("- Muc luong: %s %s %s\n", request.salary(), currency, type));
+        } else {
+            sb.append("- Muc luong: Thoa thuan\n");
+        }
+        
+        if (request.startDate() != null) {
+            sb.append(String.format("- Ngay bat dau lam viec: %s\n", request.startDate()));
+        }
+        if (request.workingLocation() != null && !request.workingLocation().isBlank()) {
+            sb.append(String.format("- Dia diem lam viec: %s\n", request.workingLocation()));
+        }
+        if (request.benefits() != null && !request.benefits().isBlank()) {
+            sb.append(String.format("- Phuc loi: %s\n", request.benefits()));
+        }
+        if (request.employerNote() != null && !request.employerNote().isBlank()) {
+            sb.append(String.format("- Loi nhan tu cong ty: %s\n", request.employerNote()));
+        }
+        
+        sb.append("\n");
+        
+        if (request.offerLetterUrl() != null && !request.offerLetterUrl().isBlank()) {
+            sb.append(String.format("Ban co the xem chi tiet thu moi lam viec tai day: %s\n\n", request.offerLetterUrl()));
         }
         
         sb.append("Vui long dang nhap vao he thong Smart Recruitment Portal de xem chi tiet va xac nhan phan hoi cua ban.\n\n");

@@ -11,6 +11,8 @@ import com.sjp.recruitment.model.entity.*;
 import com.sjp.recruitment.repository.ApplicationRepository;
 import com.sjp.recruitment.repository.InterviewScheduleRepository;
 import com.sjp.recruitment.repository.JobOfferRepository;
+import com.sjp.recruitment.repository.EmployerRepository;
+import com.sjp.recruitment.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,19 @@ public class ApplicationWorkflowService {
     private final EmailService emailService;
     private final DtoMapper dtoMapper;
     private final ApplicationService applicationService;
+    private final EmployerRepository employerRepository;
+    private final NotificationRepository notificationRepository;
+
+    private void createNotification(User user, String type, String title, String message, UUID entityId, String entityType) {
+        Notification notification = new Notification();
+        notification.setRecipientUser(user);
+        notification.setType(type);
+        notification.setTitle(title);
+        notification.setMessage(message);
+        notification.setRelatedEntityType(entityType);
+        notification.setRelatedEntityId(entityId);
+        notificationRepository.save(notification);
+    }
 
     @Transactional
     public void rejectApplication(UUID applicationId, UUID employerId, String note) {
@@ -106,6 +121,17 @@ public class ApplicationWorkflowService {
         }
         
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
+
+        // Notify employer
+        String responseText = "confirmed".equals(request.response()) ? "Đã xác nhận tham gia" : 
+                             "declined".equals(request.response()) ? "Đã từ chối tham gia" : "Yêu cầu đổi lịch phỏng vấn";
+        employerRepository.findByCompanyId(schedule.getApplication().getJob().getCompany().getId()).forEach(employer -> {
+            if (employer.getUser() != null) {
+                createNotification(employer.getUser(), "CANDIDATE_RESPONDED_INTERVIEW", "Ứng viên phản hồi lịch phỏng vấn",
+                        "Ứng viên " + schedule.getCandidate().getFullName() + " đã phản hồi: " + responseText + " cho vị trí " + schedule.getApplication().getJob().getTitle(), schedule.getApplication().getId(), "APPLICATION");
+            }
+        });
+
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
 
@@ -163,6 +189,36 @@ public class ApplicationWorkflowService {
         }
         
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
+        
+        // Send email
+        CandidateProfile candidate = schedule.getApplication().getCandidate();
+        Job job = schedule.getApplication().getJob();
+        Company company = job.getCompany();
+        
+        if ("accept_reschedule".equals(request.response())) {
+            emailService.sendInterviewRescheduledEmail(
+                    candidate.getUser().getEmail(),
+                    candidate.getFullName(),
+                    job.getTitle(),
+                    company.getName(),
+                    saved.getScheduledAt().toString(),
+                    saved.getLocation(),
+                    saved.getMeetingLink(),
+                    request.note()
+            );
+        } else {
+            emailService.sendInterviewRescheduleRejectedEmail(
+                    candidate.getUser().getEmail(),
+                    candidate.getFullName(),
+                    job.getTitle(),
+                    company.getName(),
+                    saved.getScheduledAt().toString(),
+                    saved.getLocation(),
+                    saved.getMeetingLink(),
+                    request.note()
+            );
+        }
+        
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
 
@@ -202,7 +258,7 @@ public class ApplicationWorkflowService {
                 candidate.getFullName(),
                 request.positionTitle(),
                 company.getName(),
-                request.offerLetterUrl()
+                request
         );
 
         return dtoMapper.toJobOfferResponse(saved);
@@ -231,6 +287,15 @@ public class ApplicationWorkflowService {
             applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã từ chối Job Offer (Chờ phản hồi): " + note);
         }
         
+        // Notify employer
+        String responseText = accepted ? "đã chấp nhận Job Offer" : "đã từ chối và đề xuất thay đổi Job Offer";
+        employerRepository.findByCompanyId(offer.getApplication().getJob().getCompany().getId()).forEach(employer -> {
+            if (employer.getUser() != null) {
+                createNotification(employer.getUser(), "CANDIDATE_RESPONDED_OFFER", "Ứng viên phản hồi Job Offer",
+                        "Ứng viên " + offer.getApplication().getCandidate().getFullName() + " " + responseText + " cho vị trí " + offer.getApplication().getJob().getTitle(), offer.getApplication().getId(), "APPLICATION");
+            }
+        });
+
         return dtoMapper.toJobOfferResponse(saved);
     }
 
@@ -283,7 +348,7 @@ public class ApplicationWorkflowService {
                     candidate.getFullName(),
                     updateRequest.positionTitle(),
                     company.getName(),
-                    updateRequest.offerLetterUrl()
+                    updateRequest
             );
         } else {
             offer.setStatus("employer_declined_negotiation");
@@ -329,6 +394,16 @@ public class ApplicationWorkflowService {
         }
         
         JobOffer saved = jobOfferRepository.save(offer);
+
+        // Notify employer
+        String responseText = accepted ? "đã chấp nhận Job Offer" : "quyết định từ chối Job Offer";
+        employerRepository.findByCompanyId(offer.getApplication().getJob().getCompany().getId()).forEach(employer -> {
+            if (employer.getUser() != null) {
+                createNotification(employer.getUser(), "CANDIDATE_FINAL_RESPONDED_OFFER", "Ứng viên chốt phản hồi Job Offer",
+                        "Ứng viên " + offer.getApplication().getCandidate().getFullName() + " " + responseText + " cho vị trí " + offer.getApplication().getJob().getTitle(), offer.getApplication().getId(), "APPLICATION");
+            }
+        });
+
         return dtoMapper.toJobOfferResponse(saved);
     }
 }

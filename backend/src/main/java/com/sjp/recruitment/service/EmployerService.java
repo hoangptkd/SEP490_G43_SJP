@@ -30,6 +30,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.sjp.recruitment.repository.NotificationRepository;
+import com.sjp.recruitment.model.dto.response.NotificationResponse;
+import com.sjp.recruitment.model.entity.Notification;
 
 import com.sjp.recruitment.model.dto.request.CompanyIndustryRequest;
 import com.sjp.recruitment.model.dto.response.CompanyIndustryResponse;
@@ -64,6 +67,7 @@ public class EmployerService {
     private final DtoMapper dtoMapper;
     private final FeatureLimitService featureLimitService;
     private final SystemSettingsService systemSettingsService;
+    private final NotificationRepository notificationRepository;
 
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {
@@ -740,5 +744,29 @@ public class EmployerService {
         }
 
         return applicationService.updateStatus(appId, toStatus, note);
+    }
+
+    @Transactional(readOnly = true)
+    public List<NotificationResponse> getNotifications() {
+        User user = authService.getCurrentUser();
+        return notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
+                .stream()
+                .map(dtoMapper::toNotificationResponse)
+                .toList();
+    }
+
+    @Transactional
+    public void markNotificationRead(String notificationId) {
+        User user = authService.getCurrentUser();
+        Notification notification = notificationRepository.findByIdAndRecipientUserId(UUID.fromString(notificationId), user.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "Không tìm thấy thông báo"));
+        notification.setRead(true);
+    }
+
+    @Transactional
+    public void markAllNotificationsRead() {
+        User user = authService.getCurrentUser();
+        notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
+                .forEach(notification -> notification.setRead(true));
     }
 }
