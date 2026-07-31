@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { billingService } from '../../services/billingService';
 import { getStoredUser } from '../../utils/authStorage';
 import type { BankTransferInfo, PlanCatalogItem } from '../../types/billing';
+import { BankTransferSupportBanner, shouldShowBankTransferSupport } from './BankTransferSupportBanner';
 import '../../styles/admin.css';
 
 function formatMoney(value?: number, currency = 'VND') {
@@ -106,6 +107,12 @@ export default function PaymentCheckoutPage() {
     const ss = String(totalSec % 60).padStart(2, '0');
     return `${mm}:${ss}`;
   })();
+
+  const showZaloSupport = shouldShowBankTransferSupport({
+    status: bankInfo?.status,
+    createdAt: bankInfo?.createdAt,
+    now,
+  });
 
   async function handleCopy(label: string, value: string) {
     if (await copyText(value)) {
@@ -286,6 +293,8 @@ export default function PaymentCheckoutPage() {
                 </span>
               </div>
             )}
+
+            {showZaloSupport && <BankTransferSupportBanner />}
           </article>
         )}
       </section>

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { billingService } from '../../services/billingService';
 import { getStoredUser } from '../../utils/authStorage';
 import type { BankTransferInfo } from '../../types/billing';
+import { BankTransferSupportBanner, shouldShowBankTransferSupport } from './BankTransferSupportBanner';
 import '../../styles/admin.css';
 
 function formatMoney(value?: number, currency = 'VND') {
@@ -91,6 +92,11 @@ export default function BankTransferCheckoutPage() {
     const ss = String(totalSec % 60).padStart(2, '0');
     return `${mm}:${ss}`;
   }, [info, now]);
+
+  const showZaloSupport = useMemo(
+    () => shouldShowBankTransferSupport({ status: info?.status, createdAt: info?.createdAt, now }),
+    [info, now],
+  );
 
   async function handleCopy(label: string, value: string) {
     const ok = await copyText(value);
@@ -197,19 +203,21 @@ export default function BankTransferCheckoutPage() {
             </div>
           )}
 
+          {showZaloSupport && <BankTransferSupportBanner />}
+
           {!isPending && (
             <div style={{ padding: 16 }}>
               <p className="muted" style={{ margin: 0 }}>
                 {isPaid
                   ? 'Thanh toán đã được xác nhận. Gói của bạn đã được kích hoạt.'
-                  : 'Đơn thanh toán đã hết hạn hoặc thất bại. Vui lòng tạo đơn mới.'}
+                  : 'Đơn thanh toán đã hết hạn hoặc thất bại. Vui lòng tạo đơn mới hoặc nhắn Zalo để được hỗ trợ.'}
               </p>
             </div>
           )}
         </article>
 
         <p className="muted" style={{ marginTop: 16, textAlign: 'center' }}>
-          Sau khi chuyển khoản, vui lòng chờ admin xác nhận (thường trong vài phút đến vài giờ).
+          Sau khi chuyển khoản, vui lòng chờ admin xác nhận. Nếu quá 15 phút chưa được duyệt, hãy nhắn Zalo để được hỗ trợ.
         </p>
       </section>
     </div>

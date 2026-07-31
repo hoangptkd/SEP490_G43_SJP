@@ -1339,6 +1339,298 @@
   gap: 18px;
 }
 
+.admin-plan-page {
+  gap: 18px;
+}
+
+.admin-plan-layout {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+
+.admin-plan-main {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-plan-card {
+  background: var(--surface-lowest);
+  border: 1px solid rgb(192 199 209 / 0.6);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+}
+
+.admin-plan-card-head {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.admin-plan-card-head h2 {
+  font-family: "Lexend", sans-serif;
+  font-size: 1.05rem;
+  margin: 0 0 4px;
+}
+
+.admin-plan-card-head p {
+  margin: 0;
+}
+
+.admin-plan-role-picker {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-plan-role-card {
+  background: #f8fafc;
+  border: 1.5px solid rgb(192 199 209 / 0.7);
+  border-radius: 14px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  padding: 14px 12px;
+  text-align: left;
+  transition:
+    border-color 140ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
+}
+
+.admin-plan-role-card strong {
+  font-size: 0.92rem;
+}
+
+.admin-plan-role-card span {
+  color: var(--on-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.admin-plan-role-card.active {
+  background: #eef6ff;
+  border-color: rgb(0 80 125 / 0.45);
+  box-shadow: inset 0 0 0 1px rgb(0 80 125 / 0.12);
+}
+
+.admin-plan-select-all {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.admin-plan-benefit-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-plan-chip {
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1.5px solid rgb(192 199 209 / 0.65);
+  border-radius: 12px;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  padding: 12px 12px;
+  transition:
+    border-color 140ms var(--ease-out),
+    background-color 140ms var(--ease-out);
+}
+
+.admin-plan-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.admin-plan-chip-mark {
+  background: #fff;
+  border: 1.5px solid rgb(148 163 184 / 0.9);
+  border-radius: 5px;
+  display: inline-block;
+  height: 18px;
+  margin-top: 1px;
+  position: relative;
+  width: 18px;
+}
+
+.admin-plan-chip.checked {
+  background: #eef6ff;
+  border-color: rgb(0 80 125 / 0.4);
+}
+
+.admin-plan-chip.checked .admin-plan-chip-mark {
+  background: #00507d;
+  border-color: #00507d;
+}
+
+.admin-plan-chip.checked .admin-plan-chip-mark::after {
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  content: "";
+  height: 9px;
+  left: 5px;
+  position: absolute;
+  top: 2px;
+  transform: rotate(45deg);
+  width: 5px;
+}
+
+.admin-plan-chip-text {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.admin-plan-custom-block {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-plan-sublabel,
+.admin-plan-custom-input {
+  display: grid;
+  gap: 6px;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.admin-plan-custom-input textarea {
+  background: var(--surface-lowest);
+  border: 1.5px solid var(--outline-variant);
+  border-radius: var(--radius-control);
+  color: var(--on-surface);
+  font: inherit;
+  min-height: 88px;
+  padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.admin-plan-limit-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-plan-limit-card {
+  background: #f8fafc;
+  border: 1px solid rgb(192 199 209 / 0.55);
+  border-radius: 14px;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.admin-plan-limit-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.admin-plan-limit-card input {
+  background: var(--surface-lowest);
+  border: 1.5px solid var(--outline-variant);
+  border-radius: var(--radius-control);
+  color: var(--on-surface);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 4px;
+  min-height: 42px;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.admin-plan-side {
+  position: sticky;
+  top: 18px;
+}
+
+.admin-plan-preview {
+  background: linear-gradient(180deg, #0b1c30 0%, #17324c 100%);
+  border-radius: var(--radius-card);
+  color: #eaf1ff;
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+
+.admin-plan-preview-eyebrow {
+  color: rgb(234 241 255 / 0.7);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.admin-plan-preview h3 {
+  font-family: "Lexend", sans-serif;
+  font-size: 1.15rem;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.admin-plan-preview-price {
+  color: #9ed0ff;
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.admin-plan-preview-meta {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-plan-preview-meta li {
+  align-items: center;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.admin-plan-preview-meta span {
+  color: rgb(234 241 255 / 0.72);
+  font-size: 0.8rem;
+}
+
+.admin-plan-preview-meta strong {
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.admin-plan-preview-desc {
+  color: rgb(234 241 255 / 0.78) !important;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.admin-plan-preview-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.admin-plan-preview-actions .button-link {
+  justify-content: center;
+  text-align: center;
+}
+
 .admin-plan-form {
   max-width: 860px;
   padding: 24px;
@@ -1858,9 +2150,27 @@
   }
 }
 
-@media (max-width: 860px) {
-  .admin-settings-grid {
+@media (max-width: 980px) {
+  .admin-plan-layout {
     grid-template-columns: 1fr;
+  }
+
+  .admin-plan-side {
+    position: static;
+  }
+}
+
+@media (max-width: 860px) {
+  .admin-settings-grid,
+  .admin-plan-role-picker,
+  .admin-plan-benefit-grid,
+  .admin-plan-limit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-plan-card-head {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

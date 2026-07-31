@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { billingService } from '../../services/billingService';
 import { getStoredUser } from '../../utils/authStorage';
 import type { PaymentStatus } from '../../types/billing';
+import { BankTransferSupportBanner, shouldShowBankTransferSupport } from './BankTransferSupportBanner';
 
 function readError(error: unknown) {
   if (typeof error === 'object' && error && 'response' in error) {
@@ -23,6 +24,7 @@ export default function PaymentResultPage() {
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [now, setNow] = useState(Date.now());
 
   const user = getStoredUser();
   const backTo = user?.role === 'EMPLOYER' ? '/employer/subscription' : '/candidate/subscription';
@@ -56,8 +58,25 @@ export default function PaymentResultPage() {
     poll();
   }, [paymentId]);
 
+  useEffect(() => {
+    if (!status || status.status === 'paid') return;
+    const timer = window.setInterval(() => setNow(Date.now()), 15000);
+    return () => window.clearInterval(timer);
+  }, [status]);
+
   const isPaid = status?.status === 'paid';
   const isFailed = status?.status === 'failed' || status?.status === 'cancelled';
+  const isBank = (status?.paymentMethod || '').toLowerCase() === 'bank_transfer';
+  const showZaloSupport = useMemo(
+    () =>
+      isBank &&
+      shouldShowBankTransferSupport({
+        status: status?.status,
+        createdAt: status?.createdAt,
+        now,
+      }),
+    [isBank, status, now],
+  );
 
   return (
     <div className="admin-auth-shell">
@@ -83,6 +102,8 @@ export default function PaymentResultPage() {
             {status.failureReason && <div><span>Lý do</span><strong>{status.failureReason}</strong></div>}
           </div>
         )}
+
+        {showZaloSupport && <BankTransferSupportBanner compact />}
 
         <p className="admin-auth-footer" style={{ marginTop: 20 }}>
           <Link to={backTo}>{isPaid ? 'Xem gói đang dùng' : 'Quay lại trang gói dịch vụ'}</Link>

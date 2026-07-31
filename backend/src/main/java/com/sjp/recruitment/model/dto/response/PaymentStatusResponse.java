@@ -12,6 +12,7 @@ public record PaymentStatusResponse(
         String planName,
         String subscriptionStatus,
         LocalDateTime paidAt,
-        String failureReason
+        String failureReason,
+        LocalDateTime createdAt
 ) {
 }

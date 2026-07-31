@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router-dom';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminService } from '../../services/adminService';
 import type { AdminJobReport, AdminJobSummary, JobReviewFilter } from '../../types/admin';
 
@@ -97,6 +97,30 @@ function readError(error: unknown) {
   return 'Có lỗi xảy ra';
 }
 
+function jobMatches(job: AdminJobSummary, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [job.title, job.companyName, job.employerEmail, job.employerName, job.location, job.status]
+    .some((value) => String(value ?? '').toLowerCase().includes(q));
+}
+
+function reportMatches(report: AdminJobReport, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    report.jobTitle,
+    report.companyName,
+    report.reporterName,
+    report.reporterEmail,
+    report.reporterPhone,
+    report.reason,
+    reportReasonLabel(report.reason),
+    report.description,
+    report.adminNote,
+    report.status,
+  ].some((value) => String(value ?? '').toLowerCase().includes(q));
+}
+
 export default function AdminJobsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<JobReviewFilter>(() => readFilter(searchParams.get('status')));
@@ -110,6 +134,7 @@ export default function AdminJobsPage() {
   const [success, setSuccess] = useState('');
   const [notifyReportId, setNotifyReportId] = useState('');
   const [notifyNote, setNotifyNote] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
 
   const isReportsView = filter === 'reports';
 
@@ -140,14 +165,26 @@ export default function AdminJobsPage() {
   }, [loadJobs]);
 
   useEffect(() => {
-    setSearchParams({ status: filter, page: String(page) }, { replace: true });
-  }, [filter, page, setSearchParams]);
+    const params: Record<string, string> = { status: filter, page: String(page) };
+    if (search.trim()) params.q = search.trim();
+    setSearchParams(params, { replace: true });
+  }, [filter, page, search, setSearchParams]);
+
+  const filteredJobs = useMemo(
+    () => jobs.filter((item) => jobMatches(item, search)),
+    [jobs, search],
+  );
+
+  const filteredReports = useMemo(
+    () => reports.filter((item) => reportMatches(item, search)),
+    [reports, search],
+  );
 
   useEffect(() => {
-    const total = isReportsView ? reports.length : jobs.length;
+    const total = isReportsView ? filteredReports.length : filteredJobs.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     if (page > totalPages) setPage(totalPages);
-  }, [jobs.length, reports.length, isReportsView, page]);
+  }, [filteredJobs.length, filteredReports.length, isReportsView, page]);
 
   async function suspendJob(job: AdminJobSummary) {
     const reason = window.prompt(`Lý do tạm dừng tin "${job.title}"?`, 'Tạm ẩn theo quyết định quản trị') || '';
@@ -246,10 +283,11 @@ export default function AdminJobsPage() {
     }
   }
 
-  const listLength = isReportsView ? reports.length : jobs.length;
+  const listLength = isReportsView ? filteredReports.length : filteredJobs.length;
+  const sourceLength = isReportsView ? reports.length : jobs.length;
   const totalPages = Math.max(1, Math.ceil(listLength / PAGE_SIZE));
-  const paginatedJobs = jobs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const paginatedReports = reports.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginatedJobs = filteredJobs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginatedReports = filteredReports.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <section className="admin-page">
@@ -324,15 +362,37 @@ export default function AdminJobsPage() {
                   ? 'Tin đã tạm dừng'
                   : 'Danh sách tin tuyển dụng'}
             </h2>
-            <span>{listLength} {isReportsView ? 'báo cáo' : 'tin'}</span>
+            <span>
+              {search.trim()
+                ? `${listLength}/${sourceLength} ${isReportsView ? 'báo cáo' : 'tin'}`
+                : `${sourceLength} ${isReportsView ? 'báo cáo' : 'tin'}`}
+            </span>
+          </div>
+
+          <div className="admin-company-list-header" style={{ marginBottom: 12 }}>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder={
+                isReportsView
+                  ? 'Tìm theo tin, công ty, người báo cáo, email, lý do...'
+                  : 'Tìm theo tiêu đề tin, công ty, email NTD, địa điểm...'
+              }
+              style={{ flex: 1, minWidth: 240, maxWidth: 520 }}
+              aria-label="Tìm kiếm việc làm"
+            />
           </div>
 
           {loadingList ? (
             <p className="loading">Đang tải danh sách...</p>
           ) : isReportsView ? (
-            reports.length === 0 ? (
+            filteredReports.length === 0 ? (
               <div className="admin-placeholder-card">
-                <p>Không có báo cáo phù hợp.</p>
+                <p>{search.trim() ? 'Không tìm thấy báo cáo phù hợp.' : 'Không có báo cáo phù hợp.'}</p>
               </div>
             ) : (
               <div className="admin-review-list">
@@ -422,9 +482,9 @@ export default function AdminJobsPage() {
                 ))}
               </div>
             )
-          ) : jobs.length === 0 ? (
+          ) : filteredJobs.length === 0 ? (
             <div className="admin-placeholder-card">
-              <p>Không có tin phù hợp bộ lọc.</p>
+              <p>{search.trim() ? 'Không tìm thấy tin phù hợp.' : 'Không có tin phù hợp bộ lọc.'}</p>
             </div>
           ) : (
             <div className="admin-review-list">
@@ -470,7 +530,7 @@ export default function AdminJobsPage() {
             </div>
           )}
 
-          {totalPages > 1 && (
+          {listLength > PAGE_SIZE && (
             <div className="admin-pagination">
               <button type="button" className="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Trước</button>
               <span>Trang {page}/{totalPages}</span>

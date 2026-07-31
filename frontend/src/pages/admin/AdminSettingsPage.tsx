@@ -17,7 +17,6 @@ const booleanKeys = new Set([
   'maintenance_mode',
   'ai_interview_enabled',
   'payment_gateway_enabled',
-  'payment_gateway_sandbox',
   'company_review_required',
 ]);
 
@@ -30,13 +29,11 @@ const tabKeys: Record<Exclude<SettingsTab, 'categories'>, string[]> = {
   general: ['site_name', 'support_email', 'maintenance_mode', 'company_review_required'],
   limits: ['max_free_job_posts', 'max_ai_sessions_per_day', 'max_applications_per_day'],
   ai: ['ai_interview_enabled', 'ai_system_prompt', 'ai_feedback_prompt'],
-  payment: ['payment_gateway_enabled', 'payment_gateway_provider', 'payment_gateway_merchant_id', 'payment_gateway_sandbox'],
+  payment: ['payment_gateway_enabled', 'payment_gateway_provider'],
   theme: ['theme_mode', 'theme_primary_color'],
 };
 
 const labels: Record<string, string> = {
-  payment_gateway_merchant_id: 'Merchant ID (tham chiếu — key thật vẫn lấy từ .env)',
-  payment_gateway_sandbox: 'Sandbox thanh toán (tham chiếu UI)',
   theme_mode: 'Theme mode',
   theme_primary_color: 'Màu chủ đạo (áp dụng toàn site)',
   max_ai_sessions_per_day: 'Giới hạn phiên AI / ngày (user free)',

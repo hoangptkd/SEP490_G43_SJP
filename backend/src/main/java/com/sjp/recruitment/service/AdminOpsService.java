@@ -277,6 +277,13 @@ public class AdminOpsService {
         User admin = requireAdminUser();
         ensureUuid(id, "Đăng ký");
         AdminSubscriptionResponse current = findSubscription(id);
+        if ("cancelled".equalsIgnoreCase(current.status()) && !wasPaidSubscription(id)) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "UNPAID_CANCELLED",
+                    "Không thể khôi phục gói đã hủy do chưa thanh toán"
+            );
+        }
         namedParameterJdbcTemplate.update("""
                 UPDATE subscriptions
                 SET status = 'active',
@@ -290,6 +297,29 @@ public class AdminOpsService {
         );
         writeAudit(admin.getId().toString(), "SUBSCRIPTION_ACTIVATE", "subscription", id, current.status(), "active");
         return findSubscription(id);
+    }
+
+    private boolean wasPaidSubscription(String subscriptionId) {
+        Long paidCount = namedParameterJdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM payments
+                WHERE subscription_id = CAST(:id AS uuid)
+                  AND LOWER(status) = 'paid'
+                """,
+                new MapSqlParameterSource("id", subscriptionId),
+                Long.class);
+        if (paidCount != null && paidCount > 0) {
+            return true;
+        }
+        AdminSubscriptionResponse sub = findSubscription(subscriptionId);
+        String reason = sub.cancelledReason() == null ? "" : sub.cancelledReason().toLowerCase(Locale.ROOT);
+        if (reason.contains("hết hạn thanh toán")
+                || reason.contains("thay thế bởi đơn")
+                || reason.contains("thất bại")
+                || reason.contains("chưa thanh toán")
+                || reason.contains("không thanh toán")) {
+            return false;
+        }
+        return sub.startDate() != null;
     }
 
     @Transactional
@@ -636,7 +666,9 @@ public class AdminOpsService {
 
     private AdminPaymentResponse mapPayment(ResultSet rs, int rowNum) throws SQLException {
         String gatewayResponse = rs.getString("gateway_response");
-        String transferContent = rs.getString("gateway_order_id");
+        String paymentMethod = rs.getString("payment_method");
+        String gatewayOrderId = rs.getString("gateway_order_id");
+        String transferContent = null;
         String qrUrl = null;
         LocalDateTime expiresAt = null;
         if (StringUtils.hasText(gatewayResponse)) {
@@ -654,6 +686,12 @@ public class AdminOpsService {
             } catch (Exception ignored) {
             }
         }
+        // ND CK luôn lưu ở gateway_order_id khi tạo đơn chuyển khoản
+        if (!StringUtils.hasText(transferContent)
+                && "bank_transfer".equalsIgnoreCase(paymentMethod)
+                && StringUtils.hasText(gatewayOrderId)) {
+            transferContent = gatewayOrderId;
+        }
         return new AdminPaymentResponse(
                 rs.getString("id"),
                 rs.getString("subscription_id"),
@@ -662,7 +700,7 @@ public class AdminOpsService {
                 rs.getString("plan_name"),
                 rs.getBigDecimal("amount"),
                 rs.getString("currency"),
-                rs.getString("payment_method"),
+                paymentMethod,
                 rs.getString("gateway"),
                 rs.getString("status"),
                 rs.getString("transaction_id"),

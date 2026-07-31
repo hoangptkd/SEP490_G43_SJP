@@ -234,12 +234,9 @@ public class BillingService {
             throw new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy yêu cầu chuyển khoản");
         }
         BankTransferInfo info = rows.get(0);
+        // Hết hạn QR phía user: chỉ đổi trạng thái hiển thị.
+        // Giữ status=pending trong DB thêm 1 ngày để admin vẫn xác nhận được nếu tiền đã về.
         if ("pending".equalsIgnoreCase(info.status()) && info.expiresAt() != null && info.expiresAt().isBefore(LocalDateTime.now())) {
-            markPaymentFailed(paymentId, "Hết hạn thanh toán");
-            cancelSubscription(
-                    findPaymentById(paymentId).subscriptionId(),
-                    "Hết hạn thanh toán chuyển khoản"
-            );
             return new BankTransferInfo(
                     info.paymentId(), info.orderCode(), info.planName(), info.bankName(), info.bankCode(),
                     info.accountNumber(), info.accountName(), info.branch(), info.transferContent(),
@@ -545,7 +542,8 @@ public class BillingService {
                                pl.name AS plan_name,
                                s.status AS subscription_status,
                                p.paid_at,
-                               p.failure_reason
+                               p.failure_reason,
+                               p.created_at
                         FROM payments p
                         LEFT JOIN subscriptions s ON s.id = p.subscription_id
                         LEFT JOIN plans pl ON pl.id = s.plan_id
@@ -564,7 +562,8 @@ public class BillingService {
                         rs.getString("plan_name"),
                         rs.getString("subscription_status"),
                         rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toLocalDateTime(),
-                        rs.getString("failure_reason")
+                        rs.getString("failure_reason"),
+                        rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toLocalDateTime()
                 ));
         if (rows.isEmpty()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy giao dịch");
@@ -582,7 +581,8 @@ public class BillingService {
                                pl.name AS plan_name,
                                s.status AS subscription_status,
                                p.paid_at,
-                               p.failure_reason
+                               p.failure_reason,
+                               p.created_at
                         FROM payments p
                         LEFT JOIN subscriptions s ON s.id = p.subscription_id
                         LEFT JOIN plans pl ON pl.id = s.plan_id
@@ -598,7 +598,8 @@ public class BillingService {
                         rs.getString("plan_name"),
                         rs.getString("subscription_status"),
                         rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toLocalDateTime(),
-                        rs.getString("failure_reason")
+                        rs.getString("failure_reason"),
+                        rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toLocalDateTime()
                 ));
         if (rows.isEmpty()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy giao dịch");
@@ -607,6 +608,20 @@ public class BillingService {
     }
 
     private void cancelPendingSubscriptions(UUID userId) {
+        // Hủy luôn payment pending của các đơn cũ — không giữ trong "Chờ xác nhận" admin
+        jdbc.update("""
+                        UPDATE payments p
+                        SET status = 'cancelled',
+                            failure_reason = 'Thay thế bởi đơn thanh toán mới'
+                        WHERE p.status = 'pending'
+                          AND EXISTS (
+                            SELECT 1 FROM subscriptions s
+                            WHERE s.id = p.subscription_id
+                              AND s.user_id = CAST(:userId AS uuid)
+                              AND s.status = 'pending'
+                          )
+                        """,
+                new MapSqlParameterSource("userId", userId.toString()));
         jdbc.update("""
                         UPDATE subscriptions
                         SET status = 'cancelled',
@@ -690,6 +705,32 @@ public class BillingService {
 
     private void markPaymentPaid(String paymentId, String transactionId, Map<?, ?> gatewayResponse) {
         try {
+            Map<String, Object> merged = new HashMap<>();
+            List<String> existing = jdbc.query("""
+                            SELECT gateway_response::text
+                            FROM payments
+                            WHERE id = CAST(:paymentId AS uuid)
+                            """,
+                    new MapSqlParameterSource("paymentId", paymentId),
+                    (rs, rowNum) -> rs.getString(1));
+            if (!existing.isEmpty() && StringUtils.hasText(existing.get(0))) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> previous = objectMapper.readValue(existing.get(0), Map.class);
+                    if (previous != null) {
+                        merged.putAll(previous);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (gatewayResponse != null) {
+                gatewayResponse.forEach((key, value) -> {
+                    if (key != null) {
+                        merged.put(String.valueOf(key), value);
+                    }
+                });
+            }
+            // Giữ ND CK / QR để đối chiếu sau khi thanh toán thành công
             jdbc.update("""
                             UPDATE payments
                             SET status = 'paid',
@@ -701,7 +742,7 @@ public class BillingService {
                     new MapSqlParameterSource()
                             .addValue("paymentId", paymentId)
                             .addValue("transactionId", transactionId)
-                            .addValue("response", objectMapper.writeValueAsString(gatewayResponse)));
+                            .addValue("response", objectMapper.writeValueAsString(merged)));
         } catch (Exception ex) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "PAYMENT_UPDATE_FAILED", "Không cập nhật được thanh toán");
         }

@@ -32,6 +32,8 @@ public class SubscriptionExpirationScheduler {
             log.info("SubscriptionExpirationScheduler: expired {} subscriptions", updated);
         }
 
+        // QR hết hạn: giữ pending 1 ngày để admin còn xác nhận nếu tiền đã về.
+        // Chỉ hủy hẳn sau expiresAt + 1 day. Bill bị thay thế đã cancelled riêng, không vào đây.
         int expiredPayments = jdbc.update("""
                         UPDATE payments p
                         SET status = 'cancelled',
@@ -39,7 +41,7 @@ public class SubscriptionExpirationScheduler {
                         WHERE p.status = 'pending'
                           AND p.payment_method = 'bank_transfer'
                           AND (p.gateway_response ->> 'expiresAt') IS NOT NULL
-                          AND (p.gateway_response ->> 'expiresAt')::timestamptz < now()
+                          AND (p.gateway_response ->> 'expiresAt')::timestamptz + interval '1 day' < now()
                         """,
                 new MapSqlParameterSource());
         if (expiredPayments > 0) {
@@ -58,7 +60,7 @@ public class SubscriptionExpirationScheduler {
                               )
                             """,
                     new MapSqlParameterSource());
-            log.info("SubscriptionExpirationScheduler: cancelled {} expired bank-transfer payments", expiredPayments);
+            log.info("SubscriptionExpirationScheduler: cancelled {} expired bank-transfer payments after 1-day grace", expiredPayments);
         }
     }
 }

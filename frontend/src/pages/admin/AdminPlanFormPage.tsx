@@ -23,6 +23,12 @@ const DEFAULT_LIMITS: PlanLimits = {
   maxAiSessionsPerDay: 20,
 };
 
+const ROLE_OPTIONS = [
+  { value: 'employer', label: 'Nhà tuyển dụng', hint: 'Đăng tin, quản lý ứng viên' },
+  { value: 'job_seeker', label: 'Ứng viên', hint: 'Ứng tuyển, CV, phỏng vấn AI' },
+  { value: 'all', label: 'Tất cả', hint: 'Áp dụng cho cả hai vai trò' },
+] as const;
+
 const BENEFIT_PRESETS: Record<string, string[]> = {
   employer: [
     'Đăng tin tuyển dụng theo hạn mức gói',
@@ -137,6 +143,22 @@ function buildFeaturesJson(state: FeatureState): string {
   );
 }
 
+function moneyPreview(price: number, currency: string) {
+  try {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: currency || 'VND',
+      maximumFractionDigits: 0,
+    }).format(price || 0);
+  } catch {
+    return `${price || 0} ${currency || 'VND'}`;
+  }
+}
+
+function roleLabel(role: string) {
+  return ROLE_OPTIONS.find((item) => item.value === role)?.label || role;
+}
+
 export default function AdminPlanFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -152,6 +174,17 @@ export default function AdminPlanFormPage() {
     [form.targetRole],
   );
 
+  const customSelected = useMemo(
+    () => features.selectedBenefits.filter((item) => !presets.includes(item)),
+    [features.selectedBenefits, presets],
+  );
+
+  const customDraftCount = useMemo(
+    () => features.customBenefit.split('\n').map((line) => line.trim()).filter(Boolean).length,
+    [features.customBenefit],
+  );
+
+  const benefitCount = features.selectedBenefits.length + customDraftCount;
   const showEmployerLimits = form.targetRole === 'employer' || form.targetRole === 'all';
   const showCandidateLimits = form.targetRole === 'job_seeker' || form.targetRole === 'all';
 
@@ -190,7 +223,6 @@ export default function AdminPlanFormPage() {
         customBenefit: prev.customBenefit,
         limits: {
           ...nextDefaults.limits,
-          // giữ số đã nhập nếu admin đang chỉnh
           maxJobs: prev.limits.maxJobs || nextDefaults.limits.maxJobs,
           maxCv: prev.limits.maxCv || nextDefaults.limits.maxCv,
           maxApplicationsPerDay: prev.limits.maxApplicationsPerDay || nextDefaults.limits.maxApplicationsPerDay,
@@ -215,7 +247,7 @@ export default function AdminPlanFormPage() {
   function updateLimit(key: keyof PlanLimits, value: number) {
     setFeatures((prev) => ({
       ...prev,
-      limits: { ...prev.limits, [key]: value },
+      limits: { ...prev.limits, [key]: Math.max(0, value) },
     }));
   }
 
@@ -258,207 +290,269 @@ export default function AdminPlanFormPage() {
   }
 
   return (
-    <section className="admin-page">
+    <section className="admin-page admin-plan-page">
       <header className="admin-page-header">
         <div>
           <p className="muted">
             <Link to="/admin/billing?tab=plans">← Quay lại gói dịch vụ</Link>
           </p>
           <h1>{isEdit ? 'Chỉnh sửa gói dịch vụ' : 'Tạo gói dịch vụ mới'}</h1>
-          <p className="muted">
-            {isEdit
-              ? 'Cập nhật thông tin, giá, quyền lợi và hạn mức của gói.'
-              : 'Chọn đối tượng → tích quyền lợi → chỉnh hạn mức. Không cần viết JSON.'}
-          </p>
+          <p className="muted">Chọn đối tượng, tích quyền lợi và chỉnh hạn mức — không cần viết JSON.</p>
         </div>
       </header>
 
       {error && <p className="error admin-inline-message">{error}</p>}
 
-      <form className="admin-company-detail-panel admin-settings-form admin-plan-form" onSubmit={handleSubmit}>
-        <div className="admin-settings-grid">
-          <label>
-            Tên gói
-            <input
-              required
-              placeholder="Ví dụ: Employer Pro"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </label>
-          <label>
-            Đối tượng
-            <select value={form.targetRole} onChange={(e) => changeTargetRole(e.target.value)}>
-              <option value="job_seeker">Ứng viên</option>
-              <option value="employer">Nhà tuyển dụng</option>
-              <option value="all">Tất cả</option>
-            </select>
-          </label>
-          <label>
-            Giá
-            <input
-              type="number"
-              min={0}
-              required
-              value={form.price}
-              onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            Đơn vị tiền
-            <input
-              value={form.currency}
-              onChange={(e) => setForm({ ...form, currency: e.target.value })}
-            />
-          </label>
-          <label>
-            Thời hạn (ngày)
-            <input
-              type="number"
-              min={1}
-              required
-              value={form.durationDays}
-              onChange={(e) => setForm({ ...form, durationDays: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            Trạng thái
-            <select
-              value={normalizeStatus(form.status)}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-            >
-              <option value="active">Đang hoạt động</option>
-              <option value="inactive">Tạm tắt</option>
-            </select>
-          </label>
-          <label>
-            Thứ tự hiển thị
-            <input
-              type="number"
-              value={form.sortOrder}
-              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
-            />
-          </label>
-          <label className="full">
-            Mô tả
-            <textarea
-              rows={3}
-              placeholder="Mô tả ngắn về gói..."
-              value={form.description || ''}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </label>
-        </div>
-
-        <section className="admin-plan-features">
-          <div className="admin-plan-features-header">
-            <h2>Quyền lợi & hạn mức</h2>
-            <p className="muted">
-              Tích quyền lợi hiển thị cho user. Hạn mức bên dưới là giới hạn thật khi dùng hệ thống.
-            </p>
-          </div>
-
-          <div className="admin-plan-benefit-list">
-            {presets.map((benefit) => {
-              const checked = features.selectedBenefits.includes(benefit);
-              return (
-                <label key={benefit} className={`admin-plan-benefit-item ${checked ? 'checked' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleBenefit(benefit)}
-                  />
-                  <span>{benefit}</span>
-                </label>
-              );
-            })}
-          </div>
-
-          {/* Custom benefits already saved that are not in presets */}
-          {features.selectedBenefits.some((b) => !presets.includes(b)) && (
-            <div className="admin-plan-benefit-list" style={{ marginTop: 10 }}>
-              <p className="muted" style={{ margin: '0 0 8px', gridColumn: '1 / -1' }}>Quyền lợi tùy chỉnh đang có</p>
-              {features.selectedBenefits
-                .filter((b) => !presets.includes(b))
-                .map((benefit) => (
-                  <label key={benefit} className="admin-plan-benefit-item checked">
-                    <input type="checkbox" checked onChange={() => toggleBenefit(benefit)} />
-                    <span>{benefit}</span>
-                  </label>
-                ))}
+      <form className="admin-plan-layout" onSubmit={handleSubmit}>
+        <div className="admin-plan-main">
+          <section className="admin-plan-card">
+            <div className="admin-plan-card-head">
+              <h2>1. Thông tin gói</h2>
+              <p className="muted">Tên, giá và thời hạn hiển thị cho người dùng.</p>
             </div>
-          )}
 
-          <label className="full" style={{ marginTop: 14 }}>
-            Thêm quyền lợi khác (mỗi dòng 1 quyền lợi)
-            <textarea
-              rows={3}
-              placeholder={'Ví dụ:\nƯu tiên hỗ trợ 24/7\nBadge xác thực doanh nghiệp'}
-              value={features.customBenefit}
-              onChange={(e) => setFeatures((prev) => ({ ...prev, customBenefit: e.target.value }))}
-            />
-          </label>
+            <div className="admin-plan-role-picker" role="radiogroup" aria-label="Đối tượng gói">
+              {ROLE_OPTIONS.map((option) => {
+                const active = form.targetRole === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`admin-plan-role-card ${active ? 'active' : ''}`}
+                    onClick={() => changeTargetRole(option.value)}
+                  >
+                    <strong>{option.label}</strong>
+                    <span>{option.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          <div className="admin-settings-grid" style={{ marginTop: 16 }}>
-            {showEmployerLimits && (
+            <div className="admin-settings-grid">
+              <label className="full">
+                Tên gói
+                <input
+                  required
+                  placeholder="Ví dụ: Employer Pro"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </label>
               <label>
-                Số tin đăng tối đa (maxJobs)
+                Giá
                 <input
                   type="number"
                   min={0}
-                  value={features.limits.maxJobs}
-                  onChange={(e) => updateLimit('maxJobs', Number(e.target.value))}
+                  required
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+                />
+                <small className="muted">{moneyPreview(Number(form.price) || 0, form.currency || 'VND')}</small>
+              </label>
+              <label>
+                Đơn vị tiền
+                <select
+                  value={form.currency || 'VND'}
+                  onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                >
+                  <option value="VND">VND</option>
+                  <option value="USD">USD</option>
+                </select>
+              </label>
+              <label>
+                Thời hạn (ngày)
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={form.durationDays}
+                  onChange={(e) => setForm({ ...form, durationDays: Number(e.target.value) })}
                 />
               </label>
-            )}
-            {showCandidateLimits && (
-              <>
-                <label>
-                  Số CV tối đa (maxCv)
-                  <input
-                    type="number"
-                    min={0}
-                    value={features.limits.maxCv}
-                    onChange={(e) => updateLimit('maxCv', Number(e.target.value))}
-                  />
-                </label>
-                <label>
-                  Ứng tuyển / ngày (maxApplicationsPerDay)
-                  <input
-                    type="number"
-                    min={0}
-                    value={features.limits.maxApplicationsPerDay}
-                    onChange={(e) => updateLimit('maxApplicationsPerDay', Number(e.target.value))}
-                  />
-                </label>
-                <label>
-                  Phiên AI / ngày (maxAiSessionsPerDay)
-                  <input
-                    type="number"
-                    min={0}
-                    value={features.limits.maxAiSessionsPerDay}
-                    onChange={(e) => updateLimit('maxAiSessionsPerDay', Number(e.target.value))}
-                  />
-                </label>
-              </>
-            )}
-            {showEmployerLimits && !showCandidateLimits && (
-              <>
-                {/* keep unused keys in JSON with sensible defaults for employer */}
-                <input type="hidden" value={features.limits.maxCv} readOnly />
-              </>
-            )}
-          </div>
-        </section>
+              <label>
+                Trạng thái
+                <select
+                  value={normalizeStatus(form.status)}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
+                  <option value="active">Đang bán</option>
+                  <option value="inactive">Tạm tắt</option>
+                </select>
+              </label>
+              <label>
+                Thứ tự hiển thị
+                <input
+                  type="number"
+                  value={form.sortOrder}
+                  onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
+                />
+                <small className="muted">Số nhỏ hiện trước</small>
+              </label>
+              <label className="full">
+                Mô tả ngắn
+                <textarea
+                  rows={3}
+                  placeholder="Mô tả ngắn về gói để người dùng hiểu nhanh..."
+                  value={form.description || ''}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
+              </label>
+            </div>
+          </section>
 
-        <div className="admin-company-actions">
-          <button type="submit" disabled={saving}>
-            {saving ? 'Đang lưu...' : isEdit ? 'Lưu thay đổi' : 'Tạo gói'}
-          </button>
-          <Link className="button-link outline" to="/admin/billing?tab=plans">
-            Hủy
-          </Link>
+          <section className="admin-plan-card">
+            <div className="admin-plan-card-head">
+              <div>
+                <h2>2. Quyền lợi hiển thị</h2>
+                <p className="muted">Các dòng này hiện trên trang mua gói. Đã chọn {benefitCount} quyền lợi.</p>
+              </div>
+              <button
+                type="button"
+                className="outline admin-plan-select-all"
+                onClick={() => setFeatures((prev) => ({ ...prev, selectedBenefits: [...presets, ...customSelected] }))}
+              >
+                Chọn tất cả
+              </button>
+            </div>
+
+            <div className="admin-plan-benefit-grid">
+              {presets.map((benefit) => {
+                const checked = features.selectedBenefits.includes(benefit);
+                return (
+                  <label key={benefit} className={`admin-plan-chip ${checked ? 'checked' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleBenefit(benefit)}
+                    />
+                    <span className="admin-plan-chip-mark" aria-hidden="true" />
+                    <span className="admin-plan-chip-text">{benefit}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {customSelected.length > 0 && (
+              <div className="admin-plan-custom-block">
+                <p className="admin-plan-sublabel">Quyền lợi tùy chỉnh đang có</p>
+                <div className="admin-plan-benefit-grid">
+                  {customSelected.map((benefit) => (
+                    <label key={benefit} className="admin-plan-chip checked">
+                      <input type="checkbox" checked onChange={() => toggleBenefit(benefit)} />
+                      <span className="admin-plan-chip-mark" aria-hidden="true" />
+                      <span className="admin-plan-chip-text">{benefit}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <label className="admin-plan-custom-input">
+              Thêm quyền lợi khác
+              <textarea
+                rows={3}
+                placeholder={'Mỗi dòng 1 quyền lợi, ví dụ:\nƯu tiên hỗ trợ 24/7\nBadge xác thực doanh nghiệp'}
+                value={features.customBenefit}
+                onChange={(e) => setFeatures((prev) => ({ ...prev, customBenefit: e.target.value }))}
+              />
+            </label>
+          </section>
+
+          <section className="admin-plan-card">
+            <div className="admin-plan-card-head">
+              <h2>3. Hạn mức sử dụng</h2>
+              <p className="muted">Giới hạn thật khi user dùng hệ thống (không chỉ hiển thị).</p>
+            </div>
+
+            <div className="admin-plan-limit-grid">
+              {showEmployerLimits && (
+                <label className="admin-plan-limit-card">
+                  <span className="admin-plan-limit-title">Tin đăng tối đa</span>
+                  <span className="muted">Áp dụng cho nhà tuyển dụng trong thời hạn gói</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={features.limits.maxJobs}
+                    onChange={(e) => updateLimit('maxJobs', Number(e.target.value))}
+                  />
+                </label>
+              )}
+              {showCandidateLimits && (
+                <>
+                  <label className="admin-plan-limit-card">
+                    <span className="admin-plan-limit-title">Số CV tối đa</span>
+                    <span className="muted">Phiên bản CV ứng viên được lưu</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={features.limits.maxCv}
+                      onChange={(e) => updateLimit('maxCv', Number(e.target.value))}
+                    />
+                  </label>
+                  <label className="admin-plan-limit-card">
+                    <span className="admin-plan-limit-title">Ứng tuyển / ngày</span>
+                    <span className="muted">Số lần nộp hồ sơ mỗi ngày</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={features.limits.maxApplicationsPerDay}
+                      onChange={(e) => updateLimit('maxApplicationsPerDay', Number(e.target.value))}
+                    />
+                  </label>
+                  <label className="admin-plan-limit-card">
+                    <span className="admin-plan-limit-title">Phiên AI / ngày</span>
+                    <span className="muted">Lượt luyện phỏng vấn AI mỗi ngày</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={features.limits.maxAiSessionsPerDay}
+                      onChange={(e) => updateLimit('maxAiSessionsPerDay', Number(e.target.value))}
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+          </section>
         </div>
+
+        <aside className="admin-plan-side">
+          <div className="admin-plan-preview">
+            <p className="admin-plan-preview-eyebrow">Xem trước</p>
+            <h3>{form.name.trim() || 'Tên gói chưa nhập'}</h3>
+            <p className="admin-plan-preview-price">{moneyPreview(Number(form.price) || 0, form.currency || 'VND')}</p>
+            <ul className="admin-plan-preview-meta">
+              <li>
+                <span>Đối tượng</span>
+                <strong>{roleLabel(form.targetRole)}</strong>
+              </li>
+              <li>
+                <span>Thời hạn</span>
+                <strong>{form.durationDays || 0} ngày</strong>
+              </li>
+              <li>
+                <span>Trạng thái</span>
+                <strong>{normalizeStatus(form.status) === 'active' ? 'Đang bán' : 'Tạm tắt'}</strong>
+              </li>
+              <li>
+                <span>Quyền lợi</span>
+                <strong>{benefitCount}</strong>
+              </li>
+            </ul>
+            {form.description?.trim() && (
+              <p className="muted admin-plan-preview-desc">{form.description.trim()}</p>
+            )}
+            <div className="admin-plan-preview-actions">
+              <button type="submit" disabled={saving}>
+                {saving ? 'Đang lưu...' : isEdit ? 'Lưu thay đổi' : 'Tạo gói'}
+              </button>
+              <Link className="button-link outline" to="/admin/billing?tab=plans">
+                Hủy
+              </Link>
+            </div>
+          </div>
+        </aside>
       </form>
     </section>
   );

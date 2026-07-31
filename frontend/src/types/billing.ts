@@ -48,4 +48,5 @@ export interface PaymentStatus {
   subscriptionStatus?: string;
   paidAt?: string;
   failureReason?: string;
+  createdAt?: string;
 }
