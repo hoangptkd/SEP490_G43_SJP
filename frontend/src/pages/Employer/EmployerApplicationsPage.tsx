@@ -852,6 +852,27 @@ export default function EmployerApplicationsPage() {
                 </div>
               </div>
 
+              {(selectedAppDetail.preferredLocation || selectedAppDetail.coverLetter) && (
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                    Thông tin ứng tuyển
+                  </h4>
+                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', color: '#334155', lineHeight: '1.6', fontSize: '0.95rem' }}>
+                    {selectedAppDetail.preferredLocation && (
+                      <p style={{ margin: '0 0 10px' }}>
+                        <strong>Địa điểm làm việc mong muốn:</strong> {selectedAppDetail.preferredLocation}
+                      </p>
+                    )}
+                    {selectedAppDetail.coverLetter && (
+                      <div>
+                        <strong>Thư giới thiệu:</strong>
+                        <p style={{ margin: '6px 0 0', whiteSpace: 'pre-line' }}>{selectedAppDetail.coverLetter}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Bio Section */}
               <div>
                 <h4 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>

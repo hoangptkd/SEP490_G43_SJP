@@ -60,6 +60,12 @@ public class Application {
     @Column(name = "ai_match_analysis")
     private String aiMatchAnalysis;
 
+    @Column(name = "preferred_location")
+    private String preferredLocation;
+
+    @Column(name = "cover_letter")
+    private String coverLetter;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "job_snapshot_json", columnDefinition = "jsonb")
     private com.sjp.recruitment.model.dto.JobSnapshot jobSnapshotJson;

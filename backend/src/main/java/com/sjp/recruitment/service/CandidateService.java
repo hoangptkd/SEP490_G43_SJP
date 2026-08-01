@@ -84,7 +84,7 @@ public class CandidateService {
                 && hasText(profile.getLocation())
                 && profile.getSkills() != null
                 && !profile.getSkills().isEmpty()
-                && candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(profile.getId(), SOURCE_UPLOADED);
+                && candidateCvRepository.existsByCandidateIdAndDeletedAtIsNull(profile.getId());
     }
 
     @Transactional(readOnly = true)

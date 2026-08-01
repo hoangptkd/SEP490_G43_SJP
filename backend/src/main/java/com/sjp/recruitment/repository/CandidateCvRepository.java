@@ -15,4 +15,5 @@ public interface CandidateCvRepository extends JpaRepository<CandidateCv, UUID> 
     Optional<CandidateCv> findByIdAndCandidateId(UUID id, UUID candidateId);
     Optional<CandidateCv> findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID id, UUID candidateId, String sourceType);
     boolean existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID candidateId, String sourceType);
+    boolean existsByCandidateIdAndDeletedAtIsNull(UUID candidateId);
 }

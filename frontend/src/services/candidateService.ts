@@ -85,8 +85,20 @@ export const candidateService = {
     await api.delete(`/candidate/saved-jobs/${jobId}`);
   },
 
-  apply: async (jobId: string, cvId?: string, cvVersionId?: string): Promise<CandidateApplication> => {
-    const response = await api.post<CandidateApplication>('/applications', { jobId, cvId, cvVersionId });
+  apply: async (
+    jobId: string,
+    cvId?: string,
+    cvVersionId?: string,
+    preferredLocation?: string,
+    coverLetter?: string,
+  ): Promise<CandidateApplication> => {
+    const response = await api.post<CandidateApplication>('/applications', {
+      jobId,
+      cvId,
+      cvVersionId,
+      preferredLocation,
+      coverLetter,
+    });
     return response.data;
   },
 

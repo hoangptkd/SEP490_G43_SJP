@@ -128,7 +128,9 @@ public class JobService {
                 + resolveRemoteJobOrder(sort)
                 + " LIMIT :limit OFFSET :offset";
 
-        List<JobResponse> content = namedParameterJdbcTemplate.query(dataSql, params, this::mapRemoteJobResponse);
+        CandidateProfile candidate = currentCandidate().orElse(null);
+        List<JobResponse> content = namedParameterJdbcTemplate.query(dataSql, params,
+                (resultSet, rowNumber) -> mapRemoteJobResponse(resultSet, rowNumber, candidate));
         long total = totalElements == null ? 0 : totalElements;
         int totalPages = total == 0 ? 0 : (int) Math.ceil(total / (double) safeSize);
         return new JobPageResponse(content, safePage, safeSize, total, totalPages);
@@ -193,10 +195,11 @@ public class JobService {
                     cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
                     c.id, c.name, c.website, c.location, c.logo_url
                 """;
+        CandidateProfile candidate = currentCandidate().orElse(null);
         List<JobResponse> jobs = namedParameterJdbcTemplate.query(
                 sql,
                 new MapSqlParameterSource("id", id),
-                this::mapRemoteJobResponse
+                (resultSet, rowNumber) -> mapRemoteJobResponse(resultSet, rowNumber, candidate)
         );
         return jobs.stream()
                 .findFirst()
@@ -916,6 +919,10 @@ public class JobService {
     }
 
     private JobResponse mapRemoteJobResponse(ResultSet resultSet, int rowNumber) throws SQLException {
+        return mapRemoteJobResponse(resultSet, rowNumber, null);
+    }
+
+    private JobResponse mapRemoteJobResponse(ResultSet resultSet, int rowNumber, CandidateProfile candidate) throws SQLException {
         String clId = resultSet.getString("company_location_id");
         CompanyLocationResponse clResp = clId == null ? null : new CompanyLocationResponse(
                 clId,
@@ -947,9 +954,9 @@ public class JobService {
                 ),
                 clId,
                 clResp,
-                false,
-                false,
-                null,
+                candidate != null && savedJobRepository.existsByCandidateIdAndJobId(candidate.getId(), java.util.UUID.fromString(resultSet.getString("id"))),
+                candidate != null && applicationRepository.existsByCandidateIdAndJobId(candidate.getId(), java.util.UUID.fromString(resultSet.getString("id"))),
+                candidate == null ? null : calculateMatchScore(candidate, toJobForMatch(resultSet)),
                 resultSet.getString("benefits"),
                 resultSet.getInt("vacancies"),
                 resultSet.getString("working_time"),
@@ -960,6 +967,15 @@ public class JobService {
                 resultSet.getString("rejection_reason"),
                 0L
         );
+    }
+
+    private Job toJobForMatch(ResultSet resultSet) throws SQLException {
+        Job job = new Job();
+        job.setId(java.util.UUID.fromString(resultSet.getString("id")));
+        job.setLocation(resultSet.getString("location"));
+        job.setRequirements(textToList(resultSet.getString("requirements")));
+        job.setSkills(textArrayToList(resultSet.getArray("skills")));
+        return job;
     }
 
     private LocalDateTime readDeadline(ResultSet resultSet) throws SQLException {

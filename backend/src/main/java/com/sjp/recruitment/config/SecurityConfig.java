@@ -57,6 +57,7 @@ public class SecurityConfig {
                     "/payments/vnpay/return"
                 ).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**", "/categories", "/categories/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/billing/plans").permitAll()
                 .requestMatchers("/candidate/**", "/applications/**").hasRole("CANDIDATE")
                 .requestMatchers("/employer/**").hasRole("EMPLOYER")
                 .anyRequest().authenticated()
@@ -87,7 +88,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:5174"));
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "http://localhost:5174",
+                "http://127.0.0.1:5174"
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

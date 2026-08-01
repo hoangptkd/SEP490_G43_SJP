@@ -49,6 +49,8 @@ export interface CandidateApplication {
   candidate?: CandidateProfile;
   cv?: CvFile;
   cvVersion?: CvVersion;
+  preferredLocation?: string;
+  coverLetter?: string;
   status: string;
   submittedAt: string;
   updatedAt: string;

@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotNull;
 public record ApplicationSubmitRequest(
         @NotNull String jobId,
         String cvId,
-        String cvVersionId
+        String cvVersionId,
+        String preferredLocation,
+        String coverLetter
 ) {
 }

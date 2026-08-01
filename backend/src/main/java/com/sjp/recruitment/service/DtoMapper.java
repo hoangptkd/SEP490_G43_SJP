@@ -205,6 +205,8 @@ public class DtoMapper {
                 application.getCandidate() != null ? toCandidateProfileResponse(application.getCandidate(), true) : null,
                 builderResume ? null : toCvResponse(submittedCv),
                 builderResume ? toCvVersionResponse(submittedVersion) : null,
+                application.getPreferredLocation(),
+                application.getCoverLetter(),
                 toFrontendApplicationStatus(application.getStatus()),
                 application.getSubmittedAt(),
                 application.getUpdatedAt(),

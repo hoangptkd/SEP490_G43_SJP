@@ -42,6 +42,7 @@ public class ApplicationService {
 
     private static final String SOURCE_UPLOADED = "uploaded";
     private static final String SOURCE_BUILDER = "builder";
+    private static final int COVER_LETTER_MAX_LENGTH = 2000;
 
     private final ApplicationRepository applicationRepository;
     private final JobRepository jobRepository;
@@ -105,6 +106,8 @@ public class ApplicationService {
         application.setJob(job);
         application.setCv(cv);
         application.setCvVersion(cvVersion);
+        application.setPreferredLocation(trimToNull(request.preferredLocation()));
+        application.setCoverLetter(cleanCoverLetter(request.coverLetter()));
         application.setStatus(Application.ApplicationStatus.SUBMITTED);
         application.setJobSnapshotJson(JobSnapshot.fromJob(job));
         Application saved = applicationRepository.save(application);
@@ -255,6 +258,22 @@ public class ApplicationService {
         notification.setRelatedEntityType("APPLICATION");
         notification.setRelatedEntityId(applicationId);
         notificationRepository.save(notification);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String cleanCoverLetter(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed != null && trimmed.length() > COVER_LETTER_MAX_LENGTH) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "COVER_LETTER_TOO_LONG", "Thu gioi thieu khong duoc vuot qua 2000 ky tu");
+        }
+        return trimmed;
     }
 
     private UUID parseUuid(String value, String code) {

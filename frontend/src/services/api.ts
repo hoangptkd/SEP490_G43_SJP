@@ -27,12 +27,21 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const requestUrl = error.config?.url || '';
+    const isLoginRequest = requestUrl.includes('/auth/login');
+    const hadToken = Boolean(localStorage.getItem('token'));
+
+    if (error.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       localStorage.removeItem('role');
       const isAdminRoute = window.location.pathname.startsWith('/admin');
-      window.location.href = isAdminRoute ? '/admin/login' : '/login';
+      const isAuthRoute = ['/login', '/register', '/forgot-password', '/reset-password'].some((path) =>
+        window.location.pathname.startsWith(path)
+      );
+      if (hadToken && !isAuthRoute) {
+        window.location.href = isAdminRoute ? '/admin/login' : '/login';
+      }
     }
     return Promise.reject(error);
   }

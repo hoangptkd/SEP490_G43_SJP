@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminAuditPage from './pages/admin/AdminAuditPage';
@@ -190,12 +190,37 @@ function formatMoney(value?: number) {
   return new Intl.NumberFormat('vi-VN').format(value) + ' VND';
 }
 
+function formatDate(value?: string) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('vi-VN');
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('vi-VN');
+}
+
 function readError(error: unknown) {
   if (typeof error === 'object' && error && 'response' in error) {
     const response = (error as { response?: { data?: { message?: string } } }).response;
     return response?.data?.message || 'Có lỗi xảy ra';
   }
   return 'Có lỗi xảy ra';
+}
+
+function readLoginError(error: unknown) {
+  if (typeof error === 'object' && error && 'response' in error) {
+    const response = (error as { response?: { status?: number; data?: { code?: string; message?: string } } }).response;
+    if (response?.data?.code === 'INVALID_CREDENTIALS' || response?.status === 401) {
+      return 'Email hoặc mật khẩu không đúng.';
+    }
+    if (response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+      return 'Email chưa được xác minh. Vui lòng kiểm tra email trước khi đăng nhập.';
+    }
+  }
+  return readError(error);
 }
 
 function isSuccessMessage(message: string) {
@@ -216,6 +241,494 @@ function openBlobInNewTab(blob: Blob) {
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function ActionModal({
+  title,
+  description,
+  confirmLabel,
+  cancelLabel = 'Hủy',
+  danger,
+  busy,
+  confirmDisabled,
+  children,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  description?: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  busy?: boolean;
+  confirmDisabled?: boolean;
+  children?: React.ReactNode;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <motion.div
+        className="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="action-modal-title"
+        variants={scaleIn}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={{ duration: 0.16, ease: EASE_OUT }}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <h2 id="action-modal-title">{title}</h2>
+        {description && <p className="muted">{description}</p>}
+        {children}
+        <div className="modal-actions">
+          <button type="button" className="outline" disabled={busy} onClick={onClose}>
+            {cancelLabel}
+          </button>
+          <button type="button" className={danger ? 'danger' : undefined} disabled={busy || confirmDisabled} onClick={onConfirm}>
+            {busy ? 'Đang xử lý...' : confirmLabel}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+type ApplyJobPayload = {
+  resume: string;
+  file?: File;
+  preferredLocation: string;
+  coverLetter: string;
+};
+
+function ApplyJobModal({
+  job,
+  cvs,
+  versions,
+  defaultResume,
+  busy,
+  error,
+  onClose,
+  onSubmit,
+  onOpenCv,
+}: {
+  job: Job;
+  cvs: CvFile[];
+  versions: CvVersion[];
+  defaultResume: string;
+  busy?: boolean;
+  error?: string;
+  onClose: () => void;
+  onSubmit: (payload: ApplyJobPayload) => void;
+  onOpenCv: (id: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedResume, setSelectedResume] = useState(defaultResume);
+  const [file, setFile] = useState<File | undefined>();
+  const [preferredLocation, setPreferredLocation] = useState(job.location || '');
+  const [coverLetter, setCoverLetter] = useState('');
+  const [allowAi, setAllowAi] = useState(true);
+  const [agreePolicy, setAgreePolicy] = useState(true);
+  const [fileError, setFileError] = useState('');
+
+  useEffect(() => {
+    setSelectedResume(defaultResume);
+  }, [defaultResume]);
+
+  function validateFile(nextFile: File) {
+    const name = nextFile.name.toLowerCase();
+    if (!name.endsWith('.pdf') || (nextFile.type && !nextFile.type.toLowerCase().includes('pdf'))) {
+      return 'Chỉ hỗ trợ file PDF.';
+    }
+    if (nextFile.size > 5 * 1024 * 1024) {
+      return 'File CV không được vượt quá 5MB.';
+    }
+    return '';
+  }
+
+  function chooseFile(nextFile?: File) {
+    if (!nextFile) return;
+    const validationMessage = validateFile(nextFile);
+    setFileError(validationMessage);
+    if (validationMessage) {
+      setFile(undefined);
+      return;
+    }
+    setFile(nextFile);
+    setSelectedResume('');
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedResume && !file) {
+      setFileError('Vui lòng chọn CV hoặc tải CV từ máy tính.');
+      return;
+    }
+    if (!preferredLocation.trim()) {
+      setFileError('Vui lòng nhập địa điểm làm việc mong muốn.');
+      return;
+    }
+    onSubmit({
+      resume: selectedResume,
+      file,
+      preferredLocation: preferredLocation.trim(),
+      coverLetter: coverLetter.trim(),
+    });
+  }
+
+  const latestCvId = cvs[0]?.id;
+  const latestVersionId = versions[0]?.id;
+  const canSubmit = (Boolean(selectedResume) || Boolean(file))
+    && Boolean(preferredLocation.trim())
+    && allowAi
+    && agreePolicy
+    && !busy;
+
+  return (
+    <div className="modal-backdrop application-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <motion.form
+        className="application-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-modal-title"
+        variants={scaleIn}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={{ duration: 0.16, ease: EASE_OUT }}
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={submit}
+      >
+        <div className="application-modal-header">
+          <div>
+            <h2 id="application-modal-title">Ứng tuyển</h2>
+            <p>{job.title}</p>
+          </div>
+          <button type="button" className="icon-button" aria-label="Đóng" onClick={onClose}>×</button>
+        </div>
+
+        <div className="application-modal-body">
+          <section className="application-modal-section">
+            <h3>
+              <span aria-hidden="true">▣</span>
+              Chọn CV để ứng tuyển
+            </h3>
+            <div className="resume-choice-list">
+              {cvs.map((cv) => {
+                const value = `uploaded:${cv.id}`;
+                const checked = selectedResume === value;
+                return (
+                  <label key={cv.id} className={`resume-choice ${checked ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="resume"
+                      value={value}
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedResume(value);
+                        setFile(undefined);
+                        setFileError('');
+                      }}
+                    />
+                    <span className="resume-choice-main">
+                      <strong>{cv.originalFileName}</strong>
+                      <span>{Math.round(cv.fileSize / 1024)} KB</span>
+                    </span>
+                    {(cv.defaultCv || cv.id === latestCvId) && (
+                      <span className="resume-choice-badge">{cv.defaultCv ? 'CV mặc định' : 'CV gần nhất'}</span>
+                    )}
+                    <button type="button" className="ghost sm" onClick={(event) => { event.preventDefault(); onOpenCv(cv.id); }}>
+                      Xem
+                    </button>
+                  </label>
+                );
+              })}
+
+              {versions.map((version) => {
+                const value = `builder:${version.id}`;
+                const checked = selectedResume === value;
+                return (
+                  <label key={version.id} className={`resume-choice ${checked ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="resume"
+                      value={value}
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedResume(value);
+                        setFile(undefined);
+                        setFileError('');
+                      }}
+                    />
+                    <span className="resume-choice-main">
+                      <strong>{version.title}</strong>
+                      <span>CV Builder</span>
+                    </span>
+                    {version.id === latestVersionId && <span className="resume-choice-badge">Bản gần nhất</span>}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div
+              className={`resume-upload-zone ${file ? 'has-file' : ''}`}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                chooseFile(event.dataTransfer.files[0]);
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                hidden
+                onChange={(event: ChangeEvent<HTMLInputElement>) => chooseFile(event.target.files?.[0])}
+              />
+              <span className="resume-upload-icon" aria-hidden="true">⇧</span>
+              <strong>{file ? file.name : 'Tải lên CV từ máy tính, chọn hoặc kéo thả'}</strong>
+              <span>Hỗ trợ PDF, kích thước dưới 5MB. CV sẽ được lưu vào CV của tôi.</span>
+            </div>
+          </section>
+
+          <label className="application-field">
+            Địa điểm làm việc mong muốn <span>*</span>
+            <input
+              value={preferredLocation}
+              onChange={(event) => setPreferredLocation(event.target.value)}
+              placeholder="Ví dụ: Hà Nội, Remote"
+              required
+            />
+          </label>
+
+          <label className="application-field">
+            <span className="application-field-row">
+              Thư giới thiệu
+              <small>{coverLetter.length}/2000</small>
+            </span>
+            <textarea
+              value={coverLetter}
+              onChange={(event) => setCoverLetter(event.target.value.slice(0, 2000))}
+              placeholder="Viết ngắn gọn lý do bạn phù hợp với vị trí này..."
+              rows={4}
+            />
+          </label>
+
+          <div className="application-note">
+            <strong>Lưu ý:</strong>
+            <p>Hãy kiểm tra kỹ thông tin công ty và vị trí trước khi ứng tuyển. Không cung cấp giấy tờ nhạy cảm hoặc chuyển tiền ngoài nền tảng.</p>
+          </div>
+
+          <label className="application-check">
+            <input type="checkbox" checked={allowAi} onChange={(event) => setAllowAi(event.target.checked)} />
+            <span>Cho phép hệ thống dùng AI để phân tích độ phù hợp CV của bạn.</span>
+          </label>
+          <label className="application-check">
+            <input type="checkbox" checked={agreePolicy} onChange={(event) => setAgreePolicy(event.target.checked)} />
+            <span>Tôi xác nhận thông tin ứng tuyển là chính xác và đồng ý sử dụng dữ liệu cho tuyển dụng.</span>
+          </label>
+
+          {(fileError || error) && <div className="error-panel">{fileError || error}</div>}
+        </div>
+
+        <div className="application-modal-footer">
+          <button type="submit" disabled={!canSubmit} style={{ width: '100%', minHeight: 44 }}>
+            {busy ? 'Đang nộp hồ sơ...' : 'Nộp hồ sơ ứng tuyển'}
+          </button>
+        </div>
+      </motion.form>
+    </div>
+  );
+}
+
+function CandidateHomeActions() {
+  const navigate = useNavigate();
+  const user = getStoredUser();
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [profile, setProfile] = useState<CandidateProfile | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [open, setOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      candidateService.getProfile().catch(() => null),
+      candidateService.getNotifications().catch(() => []),
+    ]).then(([profileData, notificationData]) => {
+      setProfile(profileData);
+      setNotifications(notificationData);
+    });
+  }, []);
+
+  useEffect(() => {
+    function closeOnOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setNotificationOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', closeOnOutside);
+    return () => document.removeEventListener('mousedown', closeOnOutside);
+  }, []);
+
+  function logout() {
+    clearAuthSession();
+    navigate('/login');
+  }
+
+  function notificationLink(item: NotificationItem) {
+    if (item.relatedEntityType === 'APPLICATION' && item.relatedEntityId) {
+      return `/candidate/applications/${item.relatedEntityId}`;
+    }
+    if (item.relatedEntityType === 'JOB' && item.relatedEntityId) {
+      return `/jobs/${item.relatedEntityId}`;
+    }
+    return '/candidate/notifications';
+  }
+
+  async function openNotification(item: NotificationItem) {
+    if (!item.read) {
+      setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry));
+      await candidateService.markNotificationRead(item.id).catch(() => {});
+    }
+    setNotificationOpen(false);
+    navigate(notificationLink(item));
+  }
+
+  async function markAllHomeNotificationsRead() {
+    setNotifications((current) => current.map((entry) => ({ ...entry, read: true })));
+    await candidateService.markAllNotificationsRead().catch(() => {});
+  }
+
+  const displayName = profile?.fullName || user?.email?.split('@')[0] || 'Candidate';
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'C';
+  const unreadCount = notifications.filter((item) => !item.read).length;
+
+  return (
+    <div className="candidate-home-actions" ref={menuRef}>
+      <button
+        type="button"
+        className="home-icon-action"
+        aria-label="Thông báo"
+        onClick={() => {
+          setNotificationOpen((value) => !value);
+          setOpen(false);
+        }}
+      >
+        <span aria-hidden="true">🔔</span>
+        {unreadCount > 0 && <strong>{unreadCount > 99 ? '99+' : unreadCount}</strong>}
+      </button>
+      <button type="button" className="home-avatar-trigger" onClick={() => {
+        setOpen((value) => !value);
+        setNotificationOpen(false);
+      }} aria-expanded={open}>
+        <span className="home-avatar">{initials}</span>
+      </button>
+
+      <AnimatePresence>
+        {notificationOpen && (
+          <motion.div
+            className="candidate-notification-menu"
+            variants={scaleIn}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.14, ease: EASE_OUT }}
+          >
+            <div className="notification-menu-header">
+              <strong>Thông báo</strong>
+              {unreadCount > 0 && (
+                <button type="button" className="ghost sm" onClick={markAllHomeNotificationsRead}>
+                  Đánh dấu đã đọc
+                </button>
+              )}
+            </div>
+            <div className="notification-menu-list">
+              {notifications.length === 0 ? (
+                <div className="notification-menu-empty">Chưa có thông báo mới.</div>
+              ) : notifications.slice(0, 6).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`notification-menu-item ${item.read ? '' : 'unread'}`}
+                  onClick={() => void openNotification(item)}
+                >
+                  <span>{item.title}</span>
+                  <small>{item.message}</small>
+                </button>
+              ))}
+            </div>
+            <Link className="notification-menu-all" to="/candidate/notifications" onClick={() => setNotificationOpen(false)}>
+              Xem tất cả thông báo
+            </Link>
+          </motion.div>
+        )}
+        {open && (
+          <motion.div
+            className="candidate-home-menu"
+            variants={scaleIn}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.14, ease: EASE_OUT }}
+          >
+            <div className="candidate-menu-profile">
+              <div className="candidate-menu-avatar">{initials}</div>
+              <div>
+                <strong>{displayName}</strong>
+                <span>{profile?.applyReady ? 'Sẵn sàng ứng tuyển' : 'Cần hoàn thiện hồ sơ'}</span>
+                <small>{user?.email}</small>
+              </div>
+            </div>
+
+            <div className="candidate-menu-group">
+              <strong>Quản lý tìm việc</strong>
+              <Link to="/candidate/saved-jobs">Việc làm đã lưu</Link>
+              <Link to="/candidate/applications">Việc làm đã ứng tuyển</Link>
+              <Link to="/candidate">Việc làm phù hợp với bạn</Link>
+            </div>
+            <div className="candidate-menu-group">
+              <strong>Quản lý CV & Cover letter</strong>
+              <Link to="/candidate/cvs">CV của tôi</Link>
+              <Link to="/candidate/cvs">Cover Letter của tôi</Link>
+            </div>
+            <div className="candidate-menu-group">
+              <strong>Cài đặt email & thông báo</strong>
+              <Link to="/candidate/notifications">Thông báo</Link>
+            </div>
+            <div className="candidate-menu-group">
+              <strong>Cá nhân & Bảo mật</strong>
+              <Link to="/candidate/profile">Hồ sơ cá nhân</Link>
+            </div>
+            <div className="candidate-menu-group">
+              <strong>Nâng cấp tài khoản</strong>
+              <Link to="/candidate/subscription">Gói dịch vụ</Link>
+            </div>
+
+            <button type="button" className="candidate-menu-logout" onClick={logout}>
+              Đăng xuất
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 type ProfileSectionKey = 'education' | 'workExperience' | 'projects' | 'certifications';
@@ -253,6 +766,42 @@ function buildProfileSnapshot(profile: CandidateProfile | null, skillsText?: str
   };
 }
 
+function numberParam(params: URLSearchParams, key: string) {
+  const raw = params.get(key);
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function jobFiltersFromParams(params: URLSearchParams): JobFilters {
+  return {
+    search: params.get('search') || undefined,
+    location: params.get('location') || undefined,
+    skills: params.get('skills') || undefined,
+    experienceLevel: params.get('experienceLevel') || undefined,
+    minSalary: numberParam(params, 'minSalary'),
+    maxSalary: numberParam(params, 'maxSalary'),
+    sort: params.get('sort') || 'newest',
+  };
+}
+
+function jobPageFromParams(params: URLSearchParams) {
+  const parsed = Number(params.get('page') || '0');
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+}
+
+function toJobSearchParams(filters: JobFilters, page = 0) {
+  const next = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      next.set(key, String(value).trim());
+    }
+  });
+  if (!next.get('sort')) next.set('sort', 'newest');
+  if (page > 0) next.set('page', String(page));
+  return next;
+}
+
 function Protected({ children, role }: { children: JSX.Element; role?: 'CANDIDATE' | 'EMPLOYER' | 'ADMIN' }) {
   if (!getToken()) return <Navigate to="/login" replace />;
   const currentRole = localStorage.getItem('role');
@@ -284,7 +833,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <header className={`topbar ${scrolled ? 'scrolled' : ''}`}>
-        <Link className="brand" to="/jobs">
+        <Link className="brand" to="/">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
             <rect x="2" y="7" width="20" height="14" rx="2" fill="var(--primary)" opacity="0.15"/>
             <rect x="8" y="3" width="8" height="6" rx="1.5" stroke="var(--primary)" strokeWidth="2" fill="none"/>
@@ -294,10 +843,13 @@ function Shell({ children }: { children: React.ReactNode }) {
         </Link>
 
         <nav className="topbar-nav">
+          <NavLink to="/" end className={({ isActive }) => `topbar-nav-item ${isActive ? 'active' : ''}`}>
+            Home
+          </NavLink>
           <NavLink to="/jobs" className={({ isActive }) => `topbar-nav-item ${isActive ? 'active' : ''}`}>
             Việc làm
           </NavLink>
-          {token && role === 'CANDIDATE' && (
+          {false && token && role === 'CANDIDATE' && (
             <NavLink to="/candidate" className={({ isActive }) => `topbar-nav-item ${isActive ? 'active' : ''}`}>
               Dashboard
             </NavLink>
@@ -320,7 +872,8 @@ function Shell({ children }: { children: React.ReactNode }) {
               </Link>
             </>
           )}
-          {token && (
+          {token && role === 'CANDIDATE' && <CandidateHomeActions />}
+          {token && role !== 'CANDIDATE' && (
             <button
               className="outline sm"
               onClick={() => { clearAuthSession(); window.location.href = '/login'; }}
@@ -339,13 +892,21 @@ function Shell({ children }: { children: React.ReactNode }) {
 function HomePage() {
   const token = getToken();
   const role = localStorage.getItem('role');
+  const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
+  const [homeSearch, setHomeSearch] = useState('');
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 8);
     window.addEventListener('scroll', handler, { passive: true });
     return () => window.removeEventListener('scroll', handler);
   }, []);
+
+  function submitHomeSearch(event: FormEvent) {
+    event.preventDefault();
+    const query = homeSearch.trim();
+    navigate(query ? `/jobs?search=${encodeURIComponent(query)}` : '/jobs');
+  }
 
   const stats = [
     { value: '10,000+', label: 'Việc làm đang tuyển' },
@@ -420,7 +981,8 @@ function HomePage() {
             </>
           ) : (
             <>
-              {role === 'CANDIDATE' && (
+              {role === 'CANDIDATE' && <CandidateHomeActions />}
+              {false && role === 'CANDIDATE' && (
                 <Link to="/candidate" className="button-link" style={{ minHeight: 38 }}>
                   Vào Dashboard →
                 </Link>
@@ -479,8 +1041,9 @@ function HomePage() {
           </motion.div>
 
           {/* Search bar */}
-          <motion.div
+          <motion.form
             className="home-search-bar"
+            onSubmit={submitHomeSearch}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.2 }}
@@ -490,12 +1053,12 @@ function HomePage() {
             </svg>
             <input
               placeholder="Tìm kiếm vị trí, kỹ năng, công ty..."
-              readOnly
-              onClick={() => window.location.href = '/jobs'}
-              style={{ cursor: 'pointer' }}
+              value={homeSearch}
+              onChange={(event) => setHomeSearch(event.target.value)}
+              aria-label="Tìm kiếm việc làm"
             />
-            <Link to="/jobs" className="button-link home-search-btn">Tìm kiếm</Link>
-          </motion.div>
+            <button type="submit" className="home-search-btn">Tìm kiếm</button>
+          </motion.form>
         </div>
       </section>
 
@@ -704,7 +1267,7 @@ function LoginPage() {
       }
       if (response.user.role === 'ADMIN') navigate('/admin');
       else if (response.user.role === 'EMPLOYER') navigate('/employer');
-      else if (response.user.role === 'CANDIDATE') navigate('/candidate');
+      else if (response.user.role === 'CANDIDATE') navigate('/');
       else navigate('/jobs');
     } catch (err) {
       setError(readError(err));
@@ -1247,7 +1810,7 @@ function OAuthCallbackPage() {
       authService.getCurrentUser()
         .then((user) => {
           setAuthSession(token, user);
-          if (user.role === 'CANDIDATE') navigate('/candidate');
+          if (user.role === 'CANDIDATE') navigate('/');
           else if (user.role === 'EMPLOYER') navigate('/employer');
           else navigate('/jobs');
         })
@@ -1297,7 +1860,7 @@ function SelectRolePage() {
     try {
       const response = await authService.completeOauthRole(token, role);
       if (response.token) { setAuthSession(response.token, response.user); }
-      navigate(role === 'CANDIDATE' ? '/candidate' : '/employer');
+      navigate(role === 'CANDIDATE' ? '/' : '/employer');
     } catch (err) {
       setError(readError(err));
     }
@@ -1327,31 +1890,64 @@ function SelectRolePage() {
 
 // ─── JOB SEARCH PAGE ────────────────────────────────────────────────────────
 function JobsPage() {
+  const [params, setParams] = useSearchParams();
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [filters, setFilters] = useState<JobFilters>({ sort: 'newest' });
+  const filters = jobFiltersFromParams(params);
+  const page = jobPageFromParams(params);
+  const [draftFilters, setDraftFilters] = useState<JobFilters>(filters);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const response = await jobService.getAll(filters, 0, 12);
+      const response = await jobService.getAll(filters, page, 12);
       setJobs(response.content);
+      setTotalElements(response.totalElements);
+      setTotalPages(response.totalPages);
     } catch (err) {
-      setError(readError(err));
+      setError(readLoginError(err));
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters.search, filters.location, filters.skills, filters.experienceLevel, filters.minSalary, filters.maxSalary, filters.sort, page]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setDraftFilters(filters); }, [params]);
+
+  function updateDraft<K extends keyof JobFilters>(key: K, value: JobFilters[K]) {
+    setDraftFilters((current) => ({ ...current, [key]: value || undefined }));
+  }
+
+  function applyFilters(event?: FormEvent) {
+    event?.preventDefault();
+    setParams(toJobSearchParams(draftFilters, 0));
+  }
+
+  function resetFilters() {
+    setDraftFilters({ sort: 'newest' });
+    setParams(toJobSearchParams({ sort: 'newest' }, 0));
+  }
+
+  function changePage(nextPage: number) {
+    const bounded = Math.max(0, Math.min(nextPage, Math.max(totalPages - 1, 0)));
+    setParams(toJobSearchParams(filters, bounded));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const hasActiveFilters = Boolean(
+    filters.search || filters.location || filters.skills || filters.experienceLevel || filters.minSalary || filters.maxSalary,
+  );
 
   return (
     <Shell>
       <div className="jobs-shell">
         <div className="jobs-layout">
           {/* Filter Sidebar */}
-          <aside className="filter-panel">
+          <form className="filter-panel" onSubmit={applyFilters}>
             <h2>Tìm việc làm</h2>
 
             <div>
@@ -1364,8 +1960,8 @@ function JobsPage() {
                 </span>
                 <input
                   placeholder="Tên vị trí, kỹ năng..."
-                  value={filters.search || ''}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  value={draftFilters.search || ''}
+                  onChange={(e) => updateDraft('search', e.target.value)}
                 />
               </div>
             </div>
@@ -1381,8 +1977,8 @@ function JobsPage() {
                 </span>
                 <input
                   placeholder="TP.HCM, Hà Nội..."
-                  value={filters.location || ''}
-                  onChange={(e) => setFilters({ ...filters, location: e.target.value })}
+                  value={draftFilters.location || ''}
+                  onChange={(e) => updateDraft('location', e.target.value)}
                 />
               </div>
             </div>
@@ -1391,16 +1987,41 @@ function JobsPage() {
               <label className="filter-label">Kỹ năng</label>
               <input
                 placeholder="Java, React, Python..."
-                value={filters.skills || ''}
-                onChange={(e) => setFilters({ ...filters, skills: e.target.value })}
+                value={draftFilters.skills || ''}
+                onChange={(e) => updateDraft('skills', e.target.value)}
               />
+            </div>
+
+            <div className="filter-split">
+              <div>
+                <label className="filter-label">Lương từ</label>
+                <input
+                  type="number"
+                  min="0"
+                  inputMode="numeric"
+                  placeholder="10,000,000"
+                  value={draftFilters.minSalary || ''}
+                  onChange={(e) => updateDraft('minSalary', e.target.value ? Number(e.target.value) : undefined)}
+                />
+              </div>
+              <div>
+                <label className="filter-label">Lương đến</label>
+                <input
+                  type="number"
+                  min="0"
+                  inputMode="numeric"
+                  placeholder="30,000,000"
+                  value={draftFilters.maxSalary || ''}
+                  onChange={(e) => updateDraft('maxSalary', e.target.value ? Number(e.target.value) : undefined)}
+                />
+              </div>
             </div>
 
             <div>
               <label className="filter-label">Kinh nghiệm</label>
               <select
-                value={filters.experienceLevel || ''}
-                onChange={(e) => setFilters({ ...filters, experienceLevel: e.target.value })}
+                value={draftFilters.experienceLevel || ''}
+                onChange={(e) => updateDraft('experienceLevel', e.target.value)}
               >
                 <option value="">Tất cả cấp độ</option>
                 <option value="INTERN">Thực tập sinh</option>
@@ -1414,8 +2035,8 @@ function JobsPage() {
             <div>
               <label className="filter-label">Sắp xếp</label>
               <select
-                value={filters.sort || 'newest'}
-                onChange={(e) => setFilters({ ...filters, sort: e.target.value })}
+                value={draftFilters.sort || 'newest'}
+                onChange={(e) => updateDraft('sort', e.target.value)}
               >
                 <option value="newest">Mới nhất</option>
                 <option value="relevance">Phù hợp nhất</option>
@@ -1424,22 +2045,27 @@ function JobsPage() {
               </select>
             </div>
 
-            <button onClick={load} style={{ width: '100%' }}>
+            <button type="submit" style={{ width: '100%' }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
               </svg>
               Tìm kiếm
             </button>
+            {hasActiveFilters && (
+              <button type="button" className="outline" style={{ width: '100%' }} onClick={resetFilters}>
+                Xóa bộ lọc
+              </button>
+            )}
 
             {error && <div className="error-panel">{error}</div>}
-          </aside>
+          </form>
 
           {/* Job List */}
           <div>
             <div className="jobs-list-header">
               <h1>Việc làm đang tuyển</h1>
               {!loading && (
-                <span className="chip neutral">{jobs.length} kết quả</span>
+                <span className="chip neutral">{totalElements} kết quả</span>
               )}
             </div>
 
@@ -1481,6 +2107,17 @@ function JobsPage() {
                   </div>
                 )}
               </div>
+            )}
+            {!loading && totalPages > 1 && (
+              <nav className="pagination-bar" aria-label="Phân trang việc làm">
+                <button type="button" className="outline" disabled={page === 0} onClick={() => changePage(page - 1)}>
+                  Trước
+                </button>
+                <span className="muted">Trang {page + 1} / {totalPages}</span>
+                <button type="button" className="outline" disabled={page >= totalPages - 1} onClick={() => changePage(page + 1)}>
+                  Sau
+                </button>
+              </nav>
             )}
           </div>
         </div>
@@ -1549,6 +2186,9 @@ function JobDetailPage() {
   const [selectedResume, setSelectedResume] = useState('');
   const [message, setMessage] = useState('');
   const [applying, setApplying] = useState(false);
+  const [savingJob, setSavingJob] = useState(false);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [applyError, setApplyError] = useState('');
   const token = getToken();
   const role = localStorage.getItem('role');
   const isCandidate = Boolean(token && role === 'CANDIDATE');
@@ -1580,13 +2220,55 @@ function JobDetailPage() {
 
   async function toggleSave() {
     if (!job) return;
-    if (job.saved) await candidateService.unsaveJob(job.id);
-    else await candidateService.saveJob(job.id);
-    await load();
+    const previousJob = job;
+    const nextSaved = !job.saved;
+    setSavingJob(true);
+    setMessage('');
+    setJob({ ...job, saved: nextSaved });
+    try {
+      if (previousJob.saved) await candidateService.unsaveJob(previousJob.id);
+      else await candidateService.saveJob(previousJob.id);
+      setMessage(nextSaved ? 'Đã lưu việc làm.' : 'Đã bỏ lưu việc làm.');
+    } catch (err) {
+      setJob(previousJob);
+      setMessage(readError(err));
+    } finally {
+      setSavingJob(false);
+    }
   }
 
-  async function apply() {
+  async function apply(payload?: ApplyJobPayload) {
     if (!job) return;
+    if (payload) {
+      setApplying(true);
+      setApplyError('');
+      try {
+        let resumeType = '';
+        let resumeId = '';
+        if (payload.file) {
+          const uploaded = await candidateService.uploadCv(payload.file);
+          resumeType = 'uploaded';
+          resumeId = uploaded.id;
+        } else {
+          [resumeType, resumeId] = payload.resume.split(':');
+        }
+        await candidateService.apply(
+          job.id,
+          resumeType === 'uploaded' ? resumeId : undefined,
+          resumeType === 'builder' ? resumeId : undefined,
+          payload.preferredLocation,
+          payload.coverLetter,
+        );
+        setMessage('✅ Đã nộp hồ sơ ứng tuyển thành công!');
+        setShowApplyModal(false);
+        await load();
+      } catch (err) {
+        setApplyError(readError(err));
+      } finally {
+        setApplying(false);
+      }
+      return;
+    }
     const [resumeType, resumeId] = selectedResume.split(':');
     setApplying(true);
     try {
@@ -1601,6 +2283,14 @@ function JobDetailPage() {
       setMessage(readError(err));
     } finally {
       setApplying(false);
+    }
+  }
+
+  async function openCv(id: string) {
+    try {
+      openBlobInNewTab(await candidateService.downloadCv(id));
+    } catch (err) {
+      setApplyError(readError(err));
     }
   }
 
@@ -1722,14 +2412,15 @@ function JobDetailPage() {
           {isCandidate ? (
             <>
               <button
-                className="outline"
+                className={`outline saved-job-button ${job.saved ? 'is-saved' : ''}`}
                 onClick={toggleSave}
+                disabled={savingJob}
                 style={{ width: '100%' }}
               >
                 {job.saved ? '🔖 Bỏ lưu' : '🔖 Lưu việc làm'}
               </button>
 
-              {(cvs.length > 0 || versions.length > 0) && (
+              {false && (cvs.length > 0 || versions.length > 0) && (
                 <div>
                   <label className="filter-label" style={{ marginBottom: 8 }}>Chọn CV</label>
                   <select value={selectedResume} onChange={(e) => setSelectedResume(e.target.value)}>
@@ -1745,8 +2436,11 @@ function JobDetailPage() {
               )}
 
               <button
-                onClick={apply}
-                disabled={job.applied || applying || !selectedResume}
+                onClick={() => {
+                  setApplyError('');
+                  setShowApplyModal(true);
+                }}
+                disabled={job.applied || applying}
                 style={{ width: '100%', minHeight: 44 }}
               >
                 {applying ? 'Đang gửi...' : job.applied ? '✓ Đã ứng tuyển' : 'Ứng tuyển ngay'}
@@ -1841,6 +2535,21 @@ function JobDetailPage() {
           </div>
         </aside>
       </div>
+      <AnimatePresence>
+        {showApplyModal && (
+          <ApplyJobModal
+            job={job}
+            cvs={cvs}
+            versions={versions}
+            defaultResume={selectedResume}
+            busy={applying}
+            error={applyError}
+            onClose={() => !applying && setShowApplyModal(false)}
+            onSubmit={apply}
+            onOpenCv={openCv}
+          />
+        )}
+      </AnimatePresence>
     </Shell>
   );
 }
@@ -1859,6 +2568,7 @@ function CandidateLayout() {
   function logout() { clearAuthSession(); navigate('/login'); }
 
   const navItems = [
+    { to: '/', end: true, icon: '⌂', label: 'Trang chủ' },
     { to: '/candidate', end: true, icon: '📊', label: 'Dashboard' },
     { to: '/candidate/profile', icon: '👤', label: 'Hồ sơ' },
     { to: '/candidate/cvs', icon: '📄', label: 'CV của tôi' },
@@ -1872,7 +2582,7 @@ function CandidateLayout() {
   return (
     <div className="candidate-shell">
       <aside className="candidate-nav">
-        <Link className="brand" to="/candidate">
+        <Link className="brand" to="/">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <rect x="2" y="7" width="20" height="14" rx="2" fill="var(--primary)" opacity="0.2"/>
             <rect x="8" y="3" width="8" height="6" rx="1.5" stroke="var(--primary)" strokeWidth="2" fill="none"/>
@@ -2345,6 +3055,9 @@ function CvPage() {
   const [uploading, setUploading] = useState(false);
   const [editingVersionId, setEditingVersionId] = useState('');
   const [draftVersionTitle, setDraftVersionTitle] = useState('');
+  const [pendingDeleteCv, setPendingDeleteCv] = useState<CvFile | null>(null);
+  const [pendingDeleteVersion, setPendingDeleteVersion] = useState<CvVersion | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   async function load() {
     setCvs(await candidateService.getCvs());
@@ -2412,12 +3125,43 @@ function CvPage() {
   }
 
   async function deleteVersion(id: string) {
+    setActionBusy(true);
     try {
       await candidateService.deleteCvVersion(id);
       setMessage('Đã xóa CV Builder.');
+      setPendingDeleteVersion(null);
       await load();
     } catch (err) {
       setMessage(readError(err));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function setDefaultCv(id: string) {
+    setActionBusy(true);
+    try {
+      await candidateService.setDefaultCv(id);
+      setMessage('Đã đặt CV mặc định.');
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function deleteUploadedCv(id: string) {
+    setActionBusy(true);
+    try {
+      await candidateService.deleteCv(id);
+      setMessage('Đã xóa CV.');
+      setPendingDeleteCv(null);
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -2510,11 +3254,13 @@ function CvPage() {
                   Xem
                 </button>
                 <button className="outline sm"
-                  onClick={() => candidateService.setDefaultCv(cv.id).then(load)}>
+                  disabled={actionBusy || cv.defaultCv}
+                  onClick={() => setDefaultCv(cv.id)}>
                   Đặt mặc định
                 </button>
                 <button className="danger sm"
-                  onClick={() => candidateService.deleteCv(cv.id).then(load)}>
+                  disabled={actionBusy}
+                  onClick={() => setPendingDeleteCv(cv)}>
                   Xóa
                 </button>
               </div>
@@ -2546,7 +3292,7 @@ function CvPage() {
                   <strong>CV {version.title}</strong>
                 )}
                 <span className="chip neutral">{version.templateKey}</span>
-                <span className="muted">{new Date(version.updatedAt).toLocaleDateString('vi-VN')}</span>
+                <span className="muted">{formatDate(version.updatedAt)}</span>
                 {editingVersionId === version.id ? (
                   <button className="outline sm" onClick={() => saveVersionTitle(version)}>
                     Luu
@@ -2560,7 +3306,7 @@ function CvPage() {
                   <button className="outline sm" onClick={() => refreshVersionSnapshot(version)}>
                     Cap nhat
                   </button>
-                  <button className="danger sm" onClick={() => deleteVersion(version.id)}>
+                  <button className="danger sm" disabled={actionBusy} onClick={() => setPendingDeleteVersion(version)}>
                     Xoa
                   </button>
                 </div>
@@ -2569,6 +3315,30 @@ function CvPage() {
           </div>
         )}
       </div>
+      <AnimatePresence>
+        {pendingDeleteCv && (
+          <ActionModal
+            title="Xóa CV đã tải lên?"
+            description={`CV "${pendingDeleteCv.originalFileName}" sẽ không còn được dùng cho lần ứng tuyển mới.`}
+            confirmLabel="Xóa CV"
+            danger
+            busy={actionBusy}
+            onClose={() => setPendingDeleteCv(null)}
+            onConfirm={() => deleteUploadedCv(pendingDeleteCv.id)}
+          />
+        )}
+        {pendingDeleteVersion && (
+          <ActionModal
+            title="Xóa CV Builder?"
+            description={`Bản "${pendingDeleteVersion.title}" sẽ được ẩn khỏi danh sách CV Builder.`}
+            confirmLabel="Xóa bản CV"
+            danger
+            busy={actionBusy}
+            onClose={() => setPendingDeleteVersion(null)}
+            onConfirm={() => deleteVersion(pendingDeleteVersion.id)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -2684,7 +3454,7 @@ function ApplicationsPage() {
                   {statusLabels[application.status] || application.status}
                 </span>
                 <span className="muted">
-                  {new Date(application.submittedAt).toLocaleDateString('vi-VN')}
+                  {formatDate(application.submittedAt)}
                 </span>
               </Link>
             </motion.div>
@@ -2699,10 +3469,69 @@ function ApplicationsPage() {
 function ApplicationDetailPage() {
   const { id } = useParams();
   const [application, setApplication] = useState<CandidateApplication | null>(null);
+  const [message, setMessage] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+  const [rescheduleInterviewId, setRescheduleInterviewId] = useState('');
+  const [rescheduleNote, setRescheduleNote] = useState('');
+  const [rejectOfferId, setRejectOfferId] = useState('');
+  const [offerNote, setOfferNote] = useState('');
+  const [withdrawOfferId, setWithdrawOfferId] = useState('');
+
+  const loadApplication = useCallback(async () => {
+    if (!id) return;
+    setApplication(await candidateService.getApplication(id));
+  }, [id]);
 
   useEffect(() => {
-    if (id) candidateService.getApplication(id).then(setApplication);
-  }, [id]);
+    void loadApplication().catch((err) => setMessage(readError(err)));
+  }, [loadApplication]);
+
+  async function respondToInterview(interviewId: string, responseStatus: string, note?: string) {
+    setActionBusy(true);
+    setMessage('');
+    try {
+      await candidateService.respondToInterview(interviewId, responseStatus, note);
+      setMessage('Đã cập nhật phản hồi phỏng vấn.');
+      setRescheduleInterviewId('');
+      setRescheduleNote('');
+      await loadApplication();
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function respondToOffer(offerId: string, accepted: boolean, note?: string) {
+    setActionBusy(true);
+    setMessage('');
+    try {
+      await candidateService.respondToOffer(offerId, accepted, note);
+      setMessage(accepted ? 'Đã chấp nhận job offer.' : 'Đã gửi phản hồi job offer.');
+      setRejectOfferId('');
+      setOfferNote('');
+      await loadApplication();
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function finalRespondToOffer(offerId: string, accepted: boolean) {
+    setActionBusy(true);
+    setMessage('');
+    try {
+      await candidateService.finalRespondToOffer(offerId, accepted);
+      setMessage(accepted ? 'Đã chấp nhận offer cũ.' : 'Đã hủy bỏ job offer.');
+      setWithdrawOfferId('');
+      await loadApplication();
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   if (!application) {
     return (
@@ -2737,12 +3566,48 @@ function ApplicationDetailPage() {
         </div>
       </div>
 
+      {(application.preferredLocation || application.coverLetter) && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h2 style={{ marginBottom: 12 }}>Thông tin đã nộp</h2>
+          {application.preferredLocation && (
+            <p style={{ margin: '4px 0' }}>
+              <strong>Địa điểm làm việc mong muốn:</strong> {application.preferredLocation}
+            </p>
+          )}
+          {application.coverLetter && (
+            <div style={{ marginTop: 12 }}>
+              <strong>Thư giới thiệu:</strong>
+              <p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap', color: 'var(--on-muted)', lineHeight: 1.6 }}>
+                {application.coverLetter}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {message && (
+          <motion.div
+            className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'}
+            variants={scaleIn}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.18, ease: EASE_OUT }}
+            style={{ marginBottom: 20 }}
+            role={isSuccessMessage(message) ? 'status' : 'alert'}
+          >
+            {message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {application.interviews && application.interviews.length > 0 && (
         <div className="card" style={{ marginBottom: 20, borderLeft: '4px solid #b45309' }}>
           <h2 style={{ marginBottom: 12 }}>Lịch Phỏng Vấn</h2>
           {application.interviews.map(interview => (
             <div key={interview.id} style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 8 }}>
-              <p style={{ margin: '4px 0' }}><strong>Thời gian:</strong> {new Date(interview.scheduledAt).toLocaleString('vi-VN')}</p>
+              <p style={{ margin: '4px 0' }}><strong>Thời gian:</strong> {formatDateTime(interview.scheduledAt)}</p>
               <p style={{ margin: '4px 0' }}><strong>Địa điểm:</strong> {interview.location || 'Chưa cập nhật'}</p>
               {interview.meetingLink && <p style={{ margin: '4px 0' }}><strong>Link họp:</strong> <a href={interview.meetingLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>{interview.meetingLink}</a></p>}
               {interview.note && <p style={{ margin: '4px 0' }}><strong>Ghi chú:</strong> {interview.note}</p>}
@@ -2764,20 +3629,17 @@ function ApplicationDetailPage() {
                 )}
 
                 {interview.candidateResponse === 'request_reschedule' && interview.employerRescheduleResponse === 'reject_reschedule' && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <button onClick={() => candidateService.respondToInterview(interview.id, 'confirmed').then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Đồng ý lịch cũ</button>
-                    <button onClick={() => candidateService.respondToInterview(interview.id, 'declined').then(() => window.location.reload())} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Hủy phỏng vấn</button>
+                  <div className="button-row" style={{ marginTop: 12 }}>
+                    <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Đồng ý lịch cũ</button>
+                    <button className="danger sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'declined')}>Hủy phỏng vấn</button>
                   </div>
                 )}
 
                 {(!interview.candidateResponse || interview.candidateResponse === 'pending') && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <button onClick={() => candidateService.respondToInterview(interview.id, 'confirmed').then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Đồng ý tham gia</button>
-                    <button onClick={() => {
-                      const note = prompt('Nhập lý do đổi lịch và thời gian đề xuất:');
-                      if (note) candidateService.respondToInterview(interview.id, 'request_reschedule', note).then(() => window.location.reload());
-                    }} style={{ background: '#f59e0b', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Xin đổi lịch</button>
-                    <button onClick={() => candidateService.respondToInterview(interview.id, 'declined').then(() => window.location.reload())} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Từ chối</button>
+                  <div className="button-row" style={{ marginTop: 12 }}>
+                    <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Đồng ý tham gia</button>
+                    <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
+                    <button className="danger sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'declined')}>Từ chối</button>
                   </div>
                 )}
               </div>
@@ -2809,24 +3671,15 @@ function ApplicationDetailPage() {
                  application.jobOffer.status}
               </p>
               {application.jobOffer.status === 'sent' && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button onClick={() => candidateService.respondToOffer(application.jobOffer!.id, true).then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Chấp nhận Offer</button>
-                  <button onClick={() => {
-                    const note = prompt('Nhập lý do từ chối và đề xuất thay đổi (Ví dụ: Tôi muốn lương 20tr):');
-                    if (note !== null) {
-                        candidateService.respondToOffer(application.jobOffer!.id, false, note || '').then(() => window.location.reload());
-                    }
-                  }} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Từ chối Offer / Đề xuất sửa đổi</button>
+                <div className="button-row" style={{ marginTop: 12 }}>
+                  <button className="success sm" disabled={actionBusy} onClick={() => respondToOffer(application.jobOffer!.id, true)}>Chấp nhận Offer</button>
+                  <button className="danger sm" disabled={actionBusy} onClick={() => setRejectOfferId(application.jobOffer!.id)}>Từ chối / Đề xuất sửa đổi</button>
                 </div>
               )}
               {application.jobOffer.status === 'employer_declined_negotiation' && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button onClick={() => candidateService.finalRespondToOffer(application.jobOffer!.id, true).then(() => window.location.reload())} style={{ background: '#047857', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Chấp nhận Offer cũ</button>
-                  <button onClick={() => {
-                    if (window.confirm('Bạn có chắc chắn muốn hủy bỏ toàn bộ Job Offer này không?')) {
-                        candidateService.finalRespondToOffer(application.jobOffer!.id, false).then(() => window.location.reload());
-                    }
-                  }} style={{ background: '#b91c1c', color: '#fff', padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>Hủy bỏ hoàn toàn</button>
+                <div className="button-row" style={{ marginTop: 12 }}>
+                  <button className="success sm" disabled={actionBusy} onClick={() => finalRespondToOffer(application.jobOffer!.id, true)}>Chấp nhận Offer cũ</button>
+                  <button className="danger sm" disabled={actionBusy} onClick={() => setWithdrawOfferId(application.jobOffer!.id)}>Hủy bỏ hoàn toàn</button>
                 </div>
               )}
             </div>
@@ -2846,7 +3699,7 @@ function ApplicationDetailPage() {
                 {statusLabels[item.toStatus] || item.toStatus}
               </strong>
               <span className="timeline-item-date">
-                {new Date(item.createdAt).toLocaleString('vi-VN')}
+                {formatDateTime(item.createdAt)}
               </span>
               {item.publicNote && (
                 <p style={{ margin: '6px 0 0', color: 'var(--on-muted)', fontSize: '0.875rem' }}>
@@ -2857,6 +3710,61 @@ function ApplicationDetailPage() {
           ))}
         </div>
       </div>
+      <AnimatePresence>
+        {rescheduleInterviewId && (
+          <ActionModal
+            title="Xin đổi lịch phỏng vấn"
+            description="Nhập lý do và thời gian đề xuất để nhà tuyển dụng xem xét."
+            confirmLabel="Gửi yêu cầu"
+            busy={actionBusy}
+            confirmDisabled={!rescheduleNote.trim()}
+            onClose={() => { setRescheduleInterviewId(''); setRescheduleNote(''); }}
+            onConfirm={() => respondToInterview(rescheduleInterviewId, 'request_reschedule', rescheduleNote.trim())}
+          >
+            <label className="modal-field">
+              Lý do và thời gian đề xuất
+              <textarea
+                value={rescheduleNote}
+                onChange={(event) => setRescheduleNote(event.target.value)}
+                placeholder="Ví dụ: Tôi bận lịch học lúc 9h, mong được đổi sang 14h cùng ngày."
+                autoFocus
+              />
+            </label>
+          </ActionModal>
+        )}
+        {rejectOfferId && (
+          <ActionModal
+            title="Phản hồi job offer"
+            description="Bạn có thể nêu lý do từ chối hoặc đề xuất điều chỉnh offer."
+            confirmLabel="Gửi phản hồi"
+            danger
+            busy={actionBusy}
+            onClose={() => { setRejectOfferId(''); setOfferNote(''); }}
+            onConfirm={() => respondToOffer(rejectOfferId, false, offerNote.trim())}
+          >
+            <label className="modal-field">
+              Ghi chú gửi nhà tuyển dụng
+              <textarea
+                value={offerNote}
+                onChange={(event) => setOfferNote(event.target.value)}
+                placeholder="Ví dụ: Tôi mong muốn điều chỉnh mức lương hoặc ngày bắt đầu..."
+                autoFocus
+              />
+            </label>
+          </ActionModal>
+        )}
+        {withdrawOfferId && (
+          <ActionModal
+            title="Hủy bỏ job offer?"
+            description="Thao tác này sẽ gửi phản hồi cuối cùng rằng bạn không tiếp tục với offer này."
+            confirmLabel="Hủy bỏ offer"
+            danger
+            busy={actionBusy}
+            onClose={() => setWithdrawOfferId('')}
+            onConfirm={() => finalRespondToOffer(withdrawOfferId, false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -2955,7 +3863,7 @@ function NotificationsPage() {
                     {item.message}
                   </p>
                   <span style={{ fontSize: '0.75rem', color: 'var(--outline)', marginTop: 8, display: 'block' }}>
-                    {new Date(item.createdAt).toLocaleString('vi-VN')}
+                    {formatDateTime(item.createdAt)}
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexDirection: 'column', alignItems: 'flex-end' }}>
@@ -3062,11 +3970,11 @@ function SubscriptionPage() {
           </div>
           <div>
             <div className="muted" style={{ fontSize: '0.85rem' }}>Ngày bắt đầu</div>
-            <strong>{subscription.startedAt ? new Date(subscription.startedAt).toLocaleString('vi-VN') : '—'}</strong>
+            <strong>{formatDateTime(subscription.startedAt)}</strong>
           </div>
           <div>
             <div className="muted" style={{ fontSize: '0.85rem' }}>Ngày hết hạn</div>
-            <strong>{subscription.expiresAt ? new Date(subscription.expiresAt).toLocaleString('vi-VN') : '—'}</strong>
+            <strong>{formatDateTime(subscription.expiresAt)}</strong>
           </div>
         </div>
 
@@ -3327,6 +4235,7 @@ function AiInterviewPage() {
   const [skills, setSkills] = useState('Spring Boot, PostgreSQL');
   const [jobId, setJobId] = useState('');
   const [selectedSession, setSelectedSession] = useState<AiInterviewSession | null>(null);
+  const [pendingDeleteSession, setPendingDeleteSession] = useState<AiInterviewSession | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -3404,9 +4313,17 @@ function AiInterviewPage() {
   }
 
   async function deleteSession(id: string) {
-    await aiInterviewService.deleteSession(id);
-    if (selectedSession?.id === id) setSelectedSession(null);
-    await load();
+    setLoading(true);
+    try {
+      await aiInterviewService.deleteSession(id);
+      if (selectedSession?.id === id) setSelectedSession(null);
+      setPendingDeleteSession(null);
+      await load();
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (!config) {
@@ -3583,7 +4500,7 @@ function AiInterviewPage() {
                     <button type="button" className="outline" onClick={() => openSession(session.id)}>
                       {session.status === 'completed' ? 'Xem lại' : 'Resume'}
                     </button>
-                    <button type="button" className="danger" onClick={() => deleteSession(session.id)}>Ẩn</button>
+                    <button type="button" className="danger" onClick={() => setPendingDeleteSession(session)}>Ẩn</button>
                   </div>
                 </article>
               ))}
@@ -3591,6 +4508,19 @@ function AiInterviewPage() {
           </div>
         </div>
       )}
+      <AnimatePresence>
+        {pendingDeleteSession && (
+          <ActionModal
+            title="Ẩn phiên phỏng vấn?"
+            description={`Phiên "${pendingDeleteSession.title}" sẽ không còn hiển thị trong lịch sử gần đây.`}
+            confirmLabel="Ẩn phiên"
+            danger
+            busy={loading}
+            onClose={() => setPendingDeleteSession(null)}
+            onConfirm={() => deleteSession(pendingDeleteSession.id)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
