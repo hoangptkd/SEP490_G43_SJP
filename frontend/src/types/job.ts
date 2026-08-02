@@ -40,6 +40,7 @@ export interface Job {
   deadline?: string;
   status: 'ACTIVE' | 'PUBLISHED' | 'PENDING_REVIEW' | 'REJECTED' | 'CLOSED' | 'DRAFT' | 'EXPIRED' | 'ARCHIVED' | string;
   rejectionReason?: string;
+  reportFixDeadline?: string;
   saved: boolean;
   applied: boolean;
   matchScore?: number;

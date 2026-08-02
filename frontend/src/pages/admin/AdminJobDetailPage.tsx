@@ -74,7 +74,7 @@ export default function AdminJobDetailPage() {
   const [success, setSuccess] = useState('');
   const [showNotifyForm, setShowNotifyForm] = useState(false);
   const [notifyNote, setNotifyNote] = useState(
-    'Tin tuyển dụng có dấu hiệu vi phạm. Vui lòng kiểm tra và chỉnh sửa lại trước khi gửi duyệt.'
+    'Tin tuyển dụng có dấu hiệu vi phạm. Vui lòng kiểm tra và chỉnh sửa trong vòng 3 ngày, rồi gửi lại để duyệt. Quá hạn hệ thống sẽ tự động gỡ tin.'
   );
 
   const reportIdFromQuery = searchParams.get('reportId');
@@ -191,13 +191,19 @@ export default function AdminJobDetailPage() {
       const updatedReport = await adminService.notifyCompanyJobReport(actionableReport.id, notifyNote.trim());
       setReports((prev) => prev.map((item) => (
         item.jobId === updatedReport.jobId && (item.status === 'pending' || item.status === 'awaiting_company')
-          ? { ...item, status: 'awaiting_company', adminNote: updatedReport.adminNote, jobStatus: 'awaiting_company' }
+          ? {
+              ...item,
+              status: 'awaiting_company',
+              adminNote: updatedReport.adminNote,
+              jobStatus: 'awaiting_company',
+              companyFixDeadline: updatedReport.companyFixDeadline,
+            }
           : item
       )));
       const refreshed = await adminService.getJobDetail(detail.job.id);
       setDetail(refreshed);
       setShowNotifyForm(false);
-      setSuccess('Đã thông báo công ty. Tin chuyển sang trạng thái chờ công ty kiểm tra.');
+      setSuccess('Đã thông báo công ty. Công ty có 3 ngày để sửa và gửi lại; quá hạn tin sẽ bị gỡ.');
     } catch (err) {
       setError(readError(err));
     } finally {
@@ -259,13 +265,37 @@ export default function AdminJobDetailPage() {
 
   return (
     <section className="admin-page">
-      <div className="admin-detail-topbar">
-        <button type="button" className="outline" onClick={() => navigate(backTo)}>
-          Quay lại
-        </button>
-        <Link className="button-link outline" to={backTo}>
-          Danh sách việc làm
-        </Link>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Chi tiết tin tuyển dụng</p>
+          <h1>{loading ? 'Đang tải...' : detail?.job.title || 'Tin tuyển dụng'}</h1>
+          <p>
+            {detail
+              ? `${detail.job.company?.name || 'Công ty'} · Cập nhật ${formatDate(detail.updatedAt)}`
+              : 'Xem xét, duyệt hoặc xử lý tin tuyển dụng.'}
+          </p>
+        </div>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Trạng thái</span>
+            <strong>{detail ? status.text : '—'}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Báo cáo</span>
+            <strong>{reports.length}</strong>
+          </div>
+        </div>
+      </header>
+
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group">
+          <button type="button" className="outline" onClick={() => navigate(backTo)}>
+            ← Quay lại
+          </button>
+          <Link className="button-link outline" to={backTo}>
+            Danh sách việc làm
+          </Link>
+        </div>
       </div>
 
       {error && <p className="error admin-inline-message">{error}</p>}
@@ -281,7 +311,7 @@ export default function AdminJobDetailPage() {
         <section className="admin-company-detail-panel admin-readable-detail">
           <div className="admin-company-detail-header">
             <div>
-              <h1>{detail.job.title}</h1>
+              <h2>Thông tin tin tuyển dụng</h2>
               <p className="muted">Cập nhật lần cuối: {formatDate(detail.updatedAt)}</p>
             </div>
             <span className={`admin-status-badge ${status.className}`}>{status.text}</span>
@@ -342,6 +372,11 @@ export default function AdminJobDetailPage() {
             <div className="admin-company-section">
               <h3>{currentStatus === 'awaiting_company' ? 'Nội dung thông báo gửi công ty' : 'Lý do từ chối / ghi chú'}</h3>
               <p className="admin-company-doc-reason">{detail.job.rejectionReason}</p>
+              {currentStatus === 'awaiting_company' && detail.job.reportFixDeadline && (
+                <p className="muted" style={{ marginTop: 8, color: '#c2410c', fontWeight: 600 }}>
+                  Hạn sửa: {formatDate(detail.job.reportFixDeadline)} — quá hạn hệ thống sẽ tự gỡ tin.
+                </p>
+              )}
             </div>
           )}
 
@@ -362,6 +397,11 @@ export default function AdminJobDetailPage() {
                       </div>
                       {report.description && <p className="muted">{report.description}</p>}
                       {report.adminNote && <p className="muted">Ghi chú: {report.adminNote}</p>}
+                      {report.status === 'awaiting_company' && report.companyFixDeadline && (
+                        <p className="muted" style={{ color: '#c2410c', fontWeight: 600 }}>
+                          Hạn sửa: {formatDate(report.companyFixDeadline)}
+                        </p>
+                      )}
                     </div>
                   </article>
                 ))}

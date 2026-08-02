@@ -433,6 +433,11 @@ function EmployerJobsPage() {
               <div style={{ background: '#ffffff', padding: '12px 16px', borderRadius: '6px', border: `1px solid ${isReportFix ? '#ffedd5' : '#fee2e2'}`, color: isReportFix ? '#7c2d12' : '#7f1d1d', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '10px' }}>
                 {editingJob?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
               </div>
+              {isReportFix && editingJob?.reportFixDeadline && (
+                <div style={{ fontSize: '0.9rem', color: '#9a3412', fontWeight: 600, marginBottom: '8px' }}>
+                  Hạn chỉnh sửa: {new Date(editingJob.reportFixDeadline).toLocaleString('vi-VN')}. Quá hạn tin sẽ bị gỡ tự động.
+                </div>
+              )}
               <div style={{ fontSize: '0.85rem', color: isReportFix ? '#9a3412' : '#991b1b', opacity: 0.9, lineHeight: 1.5 }}>
                 Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để gửi lại cho Admin duyệt.
               </div>
@@ -1034,8 +1039,13 @@ function EmployerJobsPage() {
                         <div style={{ background: '#ffffff', padding: '10px 12px', borderRadius: '4px', border: '1px solid #ffedd5', color: '#7c2d12', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '6px' }}>
                           {job.rejectionReason || 'Vui lòng kiểm tra nội dung tin tuyển dụng theo phản hồi từ Admin.'}
                         </div>
+                        {job.reportFixDeadline && (
+                          <div style={{ fontSize: '0.85rem', color: '#9a3412', fontWeight: 600, marginBottom: '6px' }}>
+                            Hạn chỉnh sửa: {new Date(job.reportFixDeadline).toLocaleString('vi-VN')}. Quá hạn tin sẽ bị gỡ tự động.
+                          </div>
+                        )}
                         <div style={{ fontSize: '0.8rem', color: '#9a3412', opacity: 0.9 }}>
-                          Chỉnh sửa tin rồi nhấn "Cập nhật & Gửi lại duyệt" để Admin kiểm tra lại.
+                          Chỉnh sửa tin rồi nhấn "Cập nhật & Gửi lại duyệt" trong hạn 3 ngày để Admin kiểm tra lại.
                         </div>
                       </div>
                     )}

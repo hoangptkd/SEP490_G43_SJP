@@ -155,34 +155,49 @@ export default function AdminSettingsPage() {
 
   return (
     <section className="admin-page">
-      <header className="admin-page-header">
-        <div>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Cấu hình hệ thống</p>
           <h1>Cài đặt hệ thống</h1>
-          <p className="muted">Cấu hình AI, thanh toán, theme, giới hạn hệ thống và danh mục việc làm.</p>
+          <p>Cấu hình AI, thanh toán, theme, giới hạn hệ thống và danh mục việc làm.</p>
         </div>
-        <button type="button" className="outline" onClick={load} disabled={loading}>
-          {loading ? 'Đang tải...' : 'Làm mới'}
-        </button>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Mục đang mở</span>
+            <strong>{tabs.find((item) => item.value === tab)?.label || '—'}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Số cấu hình</span>
+            <strong>{settings.length}</strong>
+          </div>
+        </div>
       </header>
 
       {error && <p className="error admin-inline-message">{error}</p>}
       {success && <p className="success admin-inline-message">{success}</p>}
 
-      <div className="admin-filter-tabs">
-        {tabs.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={tab === item.value ? 'active' : 'outline'}
-            onClick={() => {
-              setTab(item.value);
-              setSuccess('');
-              setError('');
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Tab cài đặt">
+          {tabs.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.value}
+              className={tab === item.value ? 'active' : 'outline'}
+              onClick={() => {
+                setTab(item.value);
+                setSuccess('');
+                setError('');
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="outline admin-toolbar-refresh" onClick={load} disabled={loading}>
+          {loading ? 'Đang tải...' : 'Làm mới'}
+        </button>
       </div>
 
       {tab !== 'categories' ? (
@@ -274,21 +289,25 @@ export default function AdminSettingsPage() {
             </div>
           </form>
 
-          <div className="admin-filter-tabs">
-            {[
-              { value: 'all', label: 'Tất cả' },
-              { value: 'active', label: 'Đang dùng' },
-              { value: 'inactive', label: 'Tạm ẩn' },
-            ].map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={categoryFilter === item.value ? 'active' : 'outline'}
-                onClick={() => setCategoryFilter(item.value)}
-              >
-                {item.label}
-              </button>
-            ))}
+          <div className="admin-toolbar">
+            <div className="admin-toolbar-group" role="tablist" aria-label="Lọc danh mục">
+              {[
+                { value: 'all', label: 'Tất cả' },
+                { value: 'active', label: 'Đang dùng' },
+                { value: 'inactive', label: 'Tạm ẩn' },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={categoryFilter === item.value}
+                  className={categoryFilter === item.value ? 'active' : 'outline'}
+                  onClick={() => setCategoryFilter(item.value)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <section className="admin-company-list-panel">

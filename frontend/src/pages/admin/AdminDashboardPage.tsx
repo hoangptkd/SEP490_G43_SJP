@@ -88,6 +88,7 @@ function ChartBars({
           <h3>{title}</h3>
           <p>{subtitle}</p>
         </div>
+        <span className={`dash-chart-badge ${tone === 'green' ? 'green' : ''}`}>7 ngày</span>
       </div>
       <div className="dash-chart-bars">
         {points.map((point) => {
@@ -170,7 +171,10 @@ export default function AdminDashboardPage() {
           <p>Theo dõi kiểm duyệt, doanh thu, phỏng vấn AI và xu hướng 7 ngày gần đây.</p>
         </div>
         <div className="admin-dashboard-refresh">
-          <span>Cập nhật: {formatTime(stats.updatedAt)}</span>
+          <span>
+            <i className="dash-live-dot" aria-hidden="true" />
+            Cập nhật: {formatTime(stats.updatedAt)}
+          </span>
           <button type="button" className="outline" onClick={loadStats} disabled={loading}>
             {loading ? 'Đang tải...' : 'Làm mới'}
           </button>
@@ -178,6 +182,11 @@ export default function AdminDashboardPage() {
       </header>
 
       {error && <p className="error admin-inline-message">{error}</p>}
+
+      <div className="dash-section-label">
+        <h2>Chỉ số nền tảng</h2>
+        <span>Nhấn thẻ để mở chi tiết</span>
+      </div>
 
       <div className="admin-dashboard-grid dash-kpi-grid">
         <Link className="admin-dashboard-card primary" to="/admin/users?role=all&status=all&page=1">
@@ -203,6 +212,11 @@ export default function AdminDashboardPage() {
           <strong>{formatNumber(stats.applicationsToday)}</strong>
           <p>Tổng: {formatNumber(stats.totalApplications)}</p>
         </Link>
+      </div>
+
+      <div className="dash-section-label">
+        <h2>Doanh thu & vận hành</h2>
+        <span>Theo dõi sức khỏe nền tảng</span>
       </div>
 
       <div className="admin-dashboard-grid dash-kpi-grid">

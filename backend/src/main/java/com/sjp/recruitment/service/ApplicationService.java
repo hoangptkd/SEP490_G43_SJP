@@ -228,7 +228,8 @@ public class ApplicationService {
                     snap.getWorkMode() != null ? snap.getWorkMode() : jobResponse.workMode(),
                     jobResponse.viewsCount(),
                     jobResponse.rejectionReason(),
-                    jobResponse.applicationsCount()
+                    jobResponse.applicationsCount(),
+                    jobResponse.reportFixDeadline()
             );
         }
 

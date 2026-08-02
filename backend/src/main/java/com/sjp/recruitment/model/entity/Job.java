@@ -97,6 +97,10 @@ public class Job {
     @Column(name = "closed_at")
     private LocalDateTime closedAt;
 
+    /** Hạn công ty sửa tin sau khi admin thông báo từ báo cáo (3 ngày). */
+    @Column(name = "report_fix_deadline")
+    private LocalDateTime reportFixDeadline;
+
     private LocalDate deadline;
 
     @Column(name = "views_count", nullable = false)

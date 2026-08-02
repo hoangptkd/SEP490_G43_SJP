@@ -20,6 +20,7 @@ public record AdminJobReportResponse(
         String status,
         String adminNote,
         LocalDateTime createdAt,
-        LocalDateTime resolvedAt
+        LocalDateTime resolvedAt,
+        LocalDateTime companyFixDeadline
 ) {
 }

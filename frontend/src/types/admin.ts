@@ -68,6 +68,7 @@ export interface AdminJobReport {
   adminNote?: string;
   createdAt: string;
   resolvedAt?: string;
+  companyFixDeadline?: string;
 }
 
 export interface AdminJobDetail {

@@ -144,7 +144,8 @@ public class JobReportService {
                        r.status,
                        r.admin_note,
                        r.created_at,
-                       r.resolved_at
+                       r.resolved_at,
+                       r.company_fix_deadline
                 FROM job_reports r
                 JOIN jobs j ON j.id = r.job_id
                 JOIN companies c ON c.id = j.company_id
@@ -175,11 +176,14 @@ public class JobReportService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "NOTE_REQUIRED", "Vui lòng nhập lý do thông báo cho công ty");
         }
 
+        LocalDateTime fixDeadline = LocalDateTime.now().plusDays(3);
+
         namedParameterJdbcTemplate.update("""
                 UPDATE jobs
                 SET status = 'awaiting_company',
                     closed_at = now(),
                     rejection_reason = :note,
+                    report_fix_deadline = :fixDeadline,
                     reviewed_by_user_id = CAST(:adminId AS uuid),
                     updated_at = now()
                 WHERE id = CAST(:jobId AS uuid)
@@ -187,6 +191,7 @@ public class JobReportService {
                 new MapSqlParameterSource()
                         .addValue("jobId", current.jobId())
                         .addValue("note", note)
+                        .addValue("fixDeadline", fixDeadline)
                         .addValue("adminId", admin.getId().toString())
         );
 
@@ -194,6 +199,7 @@ public class JobReportService {
                 UPDATE job_reports
                 SET status = 'awaiting_company',
                     admin_note = :note,
+                    company_fix_deadline = :fixDeadline,
                     resolved_by = CAST(:adminId AS uuid),
                     resolved_at = now()
                 WHERE job_id = CAST(:jobId AS uuid)
@@ -202,6 +208,7 @@ public class JobReportService {
                 new MapSqlParameterSource()
                         .addValue("jobId", current.jobId())
                         .addValue("note", note)
+                        .addValue("fixDeadline", fixDeadline)
                         .addValue("adminId", admin.getId().toString())
         );
 
@@ -270,6 +277,7 @@ public class JobReportService {
                 SET status = 'removed',
                     closed_at = now(),
                     rejection_reason = :note,
+                    report_fix_deadline = NULL,
                     reviewed_by_user_id = CAST(:adminId AS uuid),
                     updated_at = now()
                 WHERE id = CAST(:jobId AS uuid)
@@ -284,6 +292,7 @@ public class JobReportService {
                 UPDATE job_reports
                 SET status = 'resolved',
                     admin_note = :note,
+                    company_fix_deadline = NULL,
                     resolved_by = CAST(:adminId AS uuid),
                     resolved_at = now()
                 WHERE id = CAST(:id AS uuid)
@@ -299,10 +308,11 @@ public class JobReportService {
                 UPDATE job_reports
                 SET status = 'resolved',
                     admin_note = COALESCE(admin_note, :note),
+                    company_fix_deadline = NULL,
                     resolved_by = CAST(:adminId AS uuid),
                     resolved_at = now()
                 WHERE job_id = CAST(:jobId AS uuid)
-                  AND status = 'pending'
+                  AND status IN ('pending', 'awaiting_company')
                   AND id <> CAST(:id AS uuid)
                 """,
                 new MapSqlParameterSource()
@@ -365,7 +375,8 @@ public class JobReportService {
                        r.status,
                        r.admin_note,
                        r.created_at,
-                       r.resolved_at
+                       r.resolved_at,
+                       r.company_fix_deadline
                 FROM job_reports r
                 JOIN jobs j ON j.id = r.job_id
                 JOIN companies c ON c.id = j.company_id
@@ -403,7 +414,8 @@ public class JobReportService {
                 rs.getString("status"),
                 rs.getString("admin_note"),
                 toLocalDateTime(rs, "created_at"),
-                toLocalDateTime(rs, "resolved_at")
+                toLocalDateTime(rs, "resolved_at"),
+                toLocalDateTime(rs, "company_fix_deadline")
         );
     }
 

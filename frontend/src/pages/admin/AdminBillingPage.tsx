@@ -353,34 +353,51 @@ export default function AdminBillingPage() {
 
   return (
     <section className="admin-page">
-      <header className="admin-page-header">
-        <div>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Doanh thu & gói dịch vụ</p>
           <h1>Gói dịch vụ & Thanh toán</h1>
-          <p className="muted">Quản lý gói, giao dịch và đăng ký của người dùng.</p>
+          <p>Quản lý gói, giao dịch và đăng ký của người dùng trên nền tảng.</p>
         </div>
-        <button type="button" className="outline" onClick={load} disabled={loading}>
-          {loading ? 'Đang tải...' : 'Làm mới'}
-        </button>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Tab hiện tại</span>
+            <strong>
+              {tab === 'overview' ? 'Tổng quan' : tab === 'plans' ? 'Gói dịch vụ' : 'Đăng ký & TT'}
+            </strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Gói đang mở</span>
+            <strong>{revenue?.activePlans ?? plans.filter((p) => p.status === 'active').length}</strong>
+          </div>
+        </div>
       </header>
 
       {error && <p className="error admin-inline-message">{error}</p>}
       {success && <p className="success admin-inline-message">{success}</p>}
 
-      <div className="admin-filter-tabs">
-        {[
-          { value: 'overview', label: 'Tổng quan doanh thu' },
-          { value: 'plans', label: 'Gói dịch vụ' },
-          { value: 'transactions', label: 'Đăng ký & Thanh toán' },
-        ].map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={tab === item.value ? 'active' : 'outline'}
-            onClick={() => changeTab(item.value as BillingTab)}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Tab billing">
+          {[
+            { value: 'overview', label: 'Tổng quan doanh thu' },
+            { value: 'plans', label: 'Gói dịch vụ' },
+            { value: 'transactions', label: 'Đăng ký & Thanh toán' },
+          ].map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.value}
+              className={tab === item.value ? 'active' : 'outline'}
+              onClick={() => changeTab(item.value as BillingTab)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="outline admin-toolbar-refresh" onClick={load} disabled={loading}>
+          {loading ? 'Đang tải...' : 'Làm mới'}
+        </button>
       </div>
 
       {tab === 'overview' && revenue && (
@@ -410,18 +427,22 @@ export default function AdminBillingPage() {
 
       {tab === 'plans' && (
         <>
-          <div className="admin-filter-tabs">
-            {['all', 'active', 'inactive'].map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={planFilter === item ? 'active' : 'outline'}
-                onClick={() => setPlanFilter(item)}
-              >
-                {statusLabel(item)}
-              </button>
-            ))}
-            <Link className="button-link" to="/admin/billing/plans/new">
+          <div className="admin-toolbar">
+            <div className="admin-toolbar-group" role="tablist" aria-label="Lọc gói">
+              {['all', 'active', 'inactive'].map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  role="tab"
+                  aria-selected={planFilter === item}
+                  className={planFilter === item ? 'active' : 'outline'}
+                  onClick={() => setPlanFilter(item)}
+                >
+                  {statusLabel(item)}
+                </button>
+              ))}
+            </div>
+            <Link className="button-link admin-toolbar-refresh" to="/admin/billing/plans/new">
               + Tạo gói mới
             </Link>
           </div>
@@ -466,28 +487,33 @@ export default function AdminBillingPage() {
 
       {tab === 'transactions' && (
         <>
-          <div className="admin-filter-tabs">
-            {[
-              { value: 'payments', label: `Giao dịch (${counts.payments})` },
-              { value: 'pending', label: `Chờ xử lý (${counts.pending})` },
-              { value: 'paid', label: `Đã thanh toán (${counts.paid})` },
-              { value: 'expired', label: `Hết hạn (${counts.expired})` },
-              { value: 'cancelled', label: `Đã hủy (${counts.cancelled})` },
-            ].map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={txFilter === item.value ? 'active' : 'outline'}
-                onClick={() => changeTxFilter(item.value as TxFilter)}
-              >
-                {item.label}
-              </button>
-            ))}
+          <div className="admin-toolbar">
+            <div className="admin-toolbar-group" role="tablist" aria-label="Lọc giao dịch">
+              {[
+                { value: 'payments', label: `Giao dịch (${counts.payments})` },
+                { value: 'pending', label: `Chờ xử lý (${counts.pending})` },
+                { value: 'paid', label: `Đã thanh toán (${counts.paid})` },
+                { value: 'expired', label: `Hết hạn (${counts.expired})` },
+                { value: 'cancelled', label: `Đã hủy (${counts.cancelled})` },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={txFilter === item.value}
+                  className={txFilter === item.value ? 'active' : 'outline'}
+                  onClick={() => changeTxFilter(item.value as TxFilter)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="admin-company-list-header" style={{ marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
             <input
               type="search"
+              className="admin-search-input"
               value={txSearch}
               onChange={(e) => {
                 setTxSearch(e.target.value);

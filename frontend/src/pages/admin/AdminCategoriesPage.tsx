@@ -61,18 +61,50 @@ export default function AdminCategoriesPage() {
 
   return (
     <section className="admin-page">
-      <header className="admin-page-header">
-        <div>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Phân loại việc làm</p>
           <h1>Danh mục việc làm</h1>
-          <p className="muted">Quản lý ngành nghề / lĩnh vực dùng cho tin tuyển dụng.</p>
+          <p>Quản lý ngành nghề / lĩnh vực dùng cho tin tuyển dụng trên nền tảng.</p>
         </div>
-        <button type="button" className="outline" onClick={load} disabled={loading}>
-          {loading ? 'Đang tải...' : 'Làm mới'}
-        </button>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Bộ lọc</span>
+            <strong>{filter === 'all' ? 'Tất cả' : filter === 'active' ? 'Đang dùng' : 'Tạm ẩn'}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Số danh mục</span>
+            <strong>{items.length}</strong>
+          </div>
+        </div>
       </header>
 
       {error && <p className="error admin-inline-message">{error}</p>}
       {success && <p className="success admin-inline-message">{success}</p>}
+
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Lọc danh mục">
+          {[
+            { value: 'all', label: 'Tất cả' },
+            { value: 'active', label: 'Đang dùng' },
+            { value: 'inactive', label: 'Tạm ẩn' },
+          ].map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.value}
+              className={filter === item.value ? 'active' : 'outline'}
+              onClick={() => setFilter(item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="outline admin-toolbar-refresh" onClick={load} disabled={loading}>
+          {loading ? 'Đang tải...' : 'Làm mới'}
+        </button>
+      </div>
 
       <form className="admin-company-detail-panel admin-settings-form" onSubmit={createCategory}>
         <h2>Thêm danh mục</h2>
@@ -90,23 +122,6 @@ export default function AdminCategoriesPage() {
           <button type="submit">Thêm danh mục</button>
         </div>
       </form>
-
-      <div className="admin-filter-tabs">
-        {[
-          { value: 'all', label: 'Tất cả' },
-          { value: 'active', label: 'Đang dùng' },
-          { value: 'inactive', label: 'Tạm ẩn' },
-        ].map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={filter === item.value ? 'active' : 'outline'}
-            onClick={() => setFilter(item.value)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
 
       <section className="admin-company-list-panel">
         <div className="admin-company-list-header">
