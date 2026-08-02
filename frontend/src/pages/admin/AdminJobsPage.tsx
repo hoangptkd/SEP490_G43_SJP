@@ -272,7 +272,7 @@ export default function AdminJobsPage() {
     setSuccess('');
     try {
       await adminService.notifyCompanyJobReport(report.id, notifyNote.trim());
-      setSuccess('Đã thông báo công ty. Tin chuyển sang trạng thái chờ công ty kiểm tra.');
+      setSuccess('Đã thông báo công ty. Công ty có 3 ngày để sửa và gửi lại; quá hạn tin sẽ bị gỡ.');
       setNotifyReportId('');
       setNotifyNote('');
       await loadJobs();
@@ -291,61 +291,80 @@ export default function AdminJobsPage() {
 
   return (
     <section className="admin-page">
-      <header className="admin-page-header">
-        <div>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Kiểm duyệt tin tuyển dụng</p>
           <h1>Quản lý việc làm</h1>
-          <p className="muted">
+          <p>
             {isReportsView
-              ? 'Tiếp nhận báo cáo từ ứng viên — bỏ qua, yêu cầu công ty sửa, hoặc gỡ tin nếu xác nhận vi phạm.'
+              ? 'Tiếp nhận báo cáo từ ứng viên — bỏ qua, yêu cầu công ty sửa trong 3 ngày, hoặc gỡ tin nếu xác nhận vi phạm.'
               : filter === 'closed'
-                ? 'Các tin đã tạm dừng (có thể mở lại).'
+                ? 'Các tin đã tạm dừng (có thể mở lại khi cần).'
                 : 'Duyệt tin mới, tạm dừng tin, và xử lý báo cáo vi phạm.'}
           </p>
         </div>
-        <Link className="button-link outline" to="/admin/jobs?status=reports&page=1">
-          Xem tin bị báo cáo
-        </Link>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Đang xem</span>
+            <strong>{filters.find((item) => item.value === filter)?.label || '—'}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>{isReportsView ? 'Số báo cáo' : 'Số tin'}</span>
+            <strong>{listLength}</strong>
+          </div>
+        </div>
       </header>
 
-      <div className="admin-filter-tabs">
-        {filters.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={filter === item.value ? 'active' : 'outline'}
-            onClick={() => {
-              setFilter(item.value);
-              setPage(1);
-              setSuccess('');
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {isReportsView && (
-        <div className="admin-filter-tabs">
-          {[
-            { value: 'pending', label: 'Chờ xử lý' },
-            { value: 'awaiting_company', label: 'Chờ công ty sửa' },
-            { value: 'resubmitted', label: 'Công ty đã gửi lại' },
-            { value: 'dismissed', label: 'Đã bỏ qua' },
-            { value: 'resolved', label: 'Đã gỡ tin' },
-            { value: 'all', label: 'Tất cả' },
-          ].map((item) => (
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Lọc tin tuyển dụng">
+          {filters.map((item) => (
             <button
               key={item.value}
               type="button"
-              className={reportStatus === item.value ? 'active' : 'outline'}
+              role="tab"
+              aria-selected={filter === item.value}
+              className={filter === item.value ? 'active' : 'outline'}
               onClick={() => {
-                setReportStatus(item.value);
+                setFilter(item.value);
                 setPage(1);
+                setSuccess('');
               }}
             >
               {item.label}
             </button>
           ))}
+        </div>
+        <Link className="button-link outline admin-toolbar-refresh" to="/admin/jobs?status=reports&page=1">
+          Xem tin bị báo cáo
+        </Link>
+      </div>
+
+      {isReportsView && (
+        <div className="admin-toolbar">
+          <div className="admin-toolbar-group" role="tablist" aria-label="Lọc trạng thái báo cáo">
+            {[
+              { value: 'pending', label: 'Chờ xử lý' },
+              { value: 'awaiting_company', label: 'Chờ công ty sửa' },
+              { value: 'resubmitted', label: 'Công ty đã gửi lại' },
+              { value: 'dismissed', label: 'Đã bỏ qua' },
+              { value: 'resolved', label: 'Đã gỡ tin' },
+              { value: 'all', label: 'Tất cả' },
+            ].map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                role="tab"
+                aria-selected={reportStatus === item.value}
+                className={reportStatus === item.value ? 'active' : 'outline'}
+                onClick={() => {
+                  setReportStatus(item.value);
+                  setPage(1);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -372,6 +391,7 @@ export default function AdminJobsPage() {
           <div className="admin-company-list-header" style={{ marginBottom: 12 }}>
             <input
               type="search"
+              className="admin-search-input"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -420,6 +440,11 @@ export default function AdminJobsPage() {
                       </div>
                       {report.description && <p className="muted">{report.description}</p>}
                       {report.adminNote && <p className="muted">Ghi chú admin: {report.adminNote}</p>}
+                      {report.status === 'awaiting_company' && report.companyFixDeadline && (
+                        <p className="muted" style={{ color: '#c2410c', fontWeight: 600 }}>
+                          Hạn sửa: {formatDate(report.companyFixDeadline)} (nếu quá hạn hệ thống sẽ tự gỡ tin)
+                        </p>
+                      )}
                       {notifyReportId === report.id && (
                         <div style={{ marginTop: 12, display: 'grid', gap: 8, maxWidth: 560 }}>
                           <label style={{ display: 'grid', gap: 6, fontSize: '0.9rem' }}>
@@ -428,7 +453,7 @@ export default function AdminJobsPage() {
                               value={notifyNote}
                               onChange={(e) => setNotifyNote(e.target.value)}
                               rows={3}
-                              placeholder="Ví dụ: Nội dung tin không khớp thực tế / thông tin lương sai lệch. Vui lòng chỉnh sửa và gửi lại để duyệt."
+                              placeholder="Ví dụ: Nội dung tin không khớp thực tế. Công ty có 3 ngày để chỉnh sửa và gửi lại; quá hạn tin sẽ bị gỡ."
                               style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #cbd5e1' }}
                             />
                           </label>
@@ -462,7 +487,9 @@ export default function AdminJobsPage() {
                             disabled={actingId === report.id}
                             onClick={() => {
                               setNotifyReportId(report.id);
-                              setNotifyNote('Tin tuyển dụng có dấu hiệu vi phạm. Vui lòng kiểm tra và chỉnh sửa lại trước khi gửi duyệt.');
+                              setNotifyNote(
+                                'Tin tuyển dụng có dấu hiệu vi phạm. Vui lòng kiểm tra và chỉnh sửa trong vòng 3 ngày, rồi gửi lại để duyệt. Quá hạn hệ thống sẽ tự động gỡ tin.',
+                              );
                               setError('');
                               setSuccess('');
                             }}

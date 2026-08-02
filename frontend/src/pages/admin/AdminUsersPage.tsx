@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminService } from '../../services/adminService';
 import type { AdminUserRoleFilter, AdminUserStatusFilter, AdminUserSummary } from '../../types/admin';
 
@@ -59,9 +59,17 @@ function readError(error: unknown) {
   return 'Có lỗi xảy ra';
 }
 
+function userMatches(user: AdminUserSummary, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [user.fullName, user.email, user.phone, user.role, user.status]
+    .some((value) => String(value ?? '').toLowerCase().includes(q));
+}
+
 export default function AdminUsersPage() {
   const [role, setRole] = useState<AdminUserRoleFilter>('all');
   const [status, setStatus] = useState<AdminUserStatusFilter>('all');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,12 +95,17 @@ export default function AdminUsersPage() {
     loadUsers();
   }, [loadUsers]);
 
+  const filteredUsers = useMemo(
+    () => users.filter((user) => userMatches(user, search)),
+    [users, search],
+  );
+
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
     if (page > totalPages) {
       setPage(totalPages);
     }
-  }, [users.length, page]);
+  }, [filteredUsers.length, page]);
 
   async function handleToggleUser(user: AdminUserSummary) {
     const isSuspended = user.status === 'SUSPENDED';
@@ -115,24 +128,70 @@ export default function AdminUsersPage() {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
-  const paginatedUsers = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const paginatedUsers = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <section className="admin-page">
-      <header className="admin-page-header">
-        <h1>Quản lý người dùng</h1>
-        <p className="muted">Quản lý tài khoản ứng viên, nhà tuyển dụng và quản trị.</p>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Quản trị tài khoản</p>
+          <h1>Quản lý người dùng</h1>
+          <p>Quản lý tài khoản ứng viên, nhà tuyển dụng và quản trị. Có thể khóa tài khoản vi phạm để ngăn đăng nhập.</p>
+        </div>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Vai trò đang lọc</span>
+            <strong>{roleFilters.find((item) => item.value === role)?.label || 'Tất cả'}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Số tài khoản</span>
+            <strong>{filteredUsers.length}</strong>
+          </div>
+        </div>
       </header>
 
-      <div className="admin-user-tools">
-        <div>
-          <h2>Phân quyền tài khoản</h2>
-          <p>Mỗi loại tài khoản có chức năng riêng. Admin có thể khóa tài khoản vi phạm để ngăn đăng nhập và thao tác.</p>
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Lọc theo vai trò">
+          {roleFilters.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={role === item.value}
+              className={role === item.value ? 'active' : 'outline'}
+              onClick={() => {
+                setRole(item.value);
+                setPage(1);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
-        <button type="button" className="outline" onClick={loadUsers} disabled={loading}>
+        <button type="button" className="outline admin-toolbar-refresh" onClick={loadUsers} disabled={loading}>
           {loading ? 'Đang tải...' : 'Làm mới'}
         </button>
+      </div>
+
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Lọc theo trạng thái">
+          {statusFilters.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={status === item.value}
+              className={status === item.value ? 'active' : 'outline'}
+              onClick={() => {
+                setStatus(item.value);
+                setPage(1);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="admin-role-grid">
@@ -151,52 +210,39 @@ export default function AdminUsersPage() {
         })}
       </div>
 
-      <div className="admin-filter-tabs">
-        {roleFilters.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={role === item.value ? 'active' : 'outline'}
-            onClick={() => {
-              setRole(item.value);
-              setPage(1);
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="admin-filter-tabs">
-        {statusFilters.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={status === item.value ? 'active' : 'outline'}
-            onClick={() => {
-              setStatus(item.value);
-              setPage(1);
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
       {error && <p className="error admin-inline-message">{error}</p>}
       {success && <p className="success admin-inline-message">{success}</p>}
 
       <section className="admin-company-list-panel admin-review-list-panel">
         <div className="admin-company-list-header">
           <h2>Danh sách tài khoản</h2>
-          <span>{users.length} tài khoản</span>
+          <span>
+            {search.trim()
+              ? `${filteredUsers.length}/${users.length} tài khoản`
+              : `${users.length} tài khoản`}
+          </span>
+        </div>
+
+        <div className="admin-company-list-header" style={{ marginBottom: 12 }}>
+          <input
+            type="search"
+            className="admin-search-input"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Tìm theo tên, email, số điện thoại..."
+            style={{ flex: 1, minWidth: 240, maxWidth: 480 }}
+            aria-label="Tìm kiếm người dùng"
+          />
         </div>
 
         {loading ? (
           <p className="loading">Đang tải danh sách...</p>
-        ) : users.length === 0 ? (
+        ) : filteredUsers.length === 0 ? (
           <div className="admin-placeholder-card">
-            <p>Không có tài khoản nào phù hợp bộ lọc.</p>
+            <p>{search.trim() ? 'Không tìm thấy tài khoản phù hợp.' : 'Không có tài khoản nào phù hợp bộ lọc.'}</p>
           </div>
         ) : (
           <div className="admin-review-list">
@@ -233,7 +279,7 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        {users.length > PAGE_SIZE && (
+        {filteredUsers.length > PAGE_SIZE && (
           <div className="admin-pagination">
             <button type="button" className="outline" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
               Trước

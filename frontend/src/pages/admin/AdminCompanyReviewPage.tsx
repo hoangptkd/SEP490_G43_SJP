@@ -99,27 +99,46 @@ export default function AdminCompanyReviewPage() {
 
   return (
     <section className="admin-page">
-      <header className="admin-page-header">
-        <h1>Duyệt hồ sơ công ty</h1>
-        <p className="muted">Xem xét, phê duyệt hoặc từ chối hồ sơ xác thực pháp lý của nhà tuyển dụng.</p>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Kiểm duyệt pháp lý</p>
+          <h1>Duyệt hồ sơ công ty</h1>
+          <p>
+            Xem xét, phê duyệt hoặc từ chối hồ sơ xác thực pháp lý của nhà tuyển dụng trước khi họ đăng tin.
+          </p>
+        </div>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Đang xem</span>
+            <strong>{filters.find((item) => item.value === filter)?.label || '—'}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Số hồ sơ</span>
+            <strong>{filteredCompanies.length}</strong>
+          </div>
+        </div>
       </header>
 
-      <div className="admin-filter-tabs">
-        {filters.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={filter === item.value ? 'active' : 'outline'}
-            onClick={() => {
-              setFilter(item.value);
-              setPage(1);
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-        <button type="button" className="outline" onClick={loadCompanies}>
-          Làm mới
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Lọc trạng thái hồ sơ">
+          {filters.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.value}
+              className={filter === item.value ? 'active' : 'outline'}
+              onClick={() => {
+                setFilter(item.value);
+                setPage(1);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="outline admin-toolbar-refresh" onClick={loadCompanies} disabled={loadingList}>
+          {loadingList ? 'Đang tải...' : 'Làm mới'}
         </button>
       </div>
 
@@ -139,13 +158,14 @@ export default function AdminCompanyReviewPage() {
           <div className="admin-company-list-header" style={{ marginBottom: 12 }}>
             <input
               type="search"
+              className="admin-search-input"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
               placeholder="Tìm theo tên công ty, người đại diện, email, ngành, MST..."
-              style={{ flex: 1, minWidth: 240, maxWidth: 520 }}
+              style={{ flex: 1, minWidth: 240, maxWidth: 560 }}
               aria-label="Tìm kiếm hồ sơ công ty"
             />
           </div>

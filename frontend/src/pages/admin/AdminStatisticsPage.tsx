@@ -310,23 +310,28 @@ export default function AdminStatisticsPage() {
 
   return (
     <section className="admin-page stats-page">
-      <header className="stats-hero">
-        <div>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Phân tích vận hành</p>
           <h1>Thống kê</h1>
-          <p>Tổng quan vận hành · {rangeLabel}</p>
+          <p>Tổng quan người dùng, việc làm, doanh thu, phỏng vấn AI theo kỳ đã chọn.</p>
         </div>
-        <div className="stats-hero-actions">
-          <span>Cập nhật {formatTime(stats.updatedAt)}</span>
-          <button type="button" className="outline" onClick={loadStats} disabled={loading}>
-            {loading ? 'Đang tải...' : 'Làm mới'}
-          </button>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Kỳ thống kê</span>
+            <strong>{rangeLabel}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Cập nhật</span>
+            <strong>{formatTime(stats.updatedAt)}</strong>
+          </div>
         </div>
       </header>
 
       {error && <p className="error admin-inline-message">{error}</p>}
 
-      <div className="stats-toolbar">
-        <div className="stats-segment">
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Chọn kỳ">
           {([
             { value: 'all', label: 'Tất cả' },
             { value: 'week', label: 'Tuần' },
@@ -336,15 +341,22 @@ export default function AdminStatisticsPage() {
             <button
               key={item.value}
               type="button"
-              className={period === item.value ? 'active' : ''}
+              role="tab"
+              aria-selected={period === item.value}
+              className={period === item.value ? 'active' : 'outline'}
               onClick={() => setPeriod(item.value)}
             >
               {item.label}
             </button>
           ))}
         </div>
+        <button type="button" className="outline admin-toolbar-refresh" onClick={loadStats} disabled={loading}>
+          {loading ? 'Đang tải...' : 'Làm mới'}
+        </button>
+      </div>
 
-        {!isAll && (
+      {!isAll && (
+        <div className="stats-toolbar">
           <div className="stats-toolbar-fields">
             {period === 'week' && (
               <label>
@@ -373,8 +385,8 @@ export default function AdminStatisticsPage() {
               </label>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="stats-metric-row">
         <Metric label="Người dùng" value={stats.totalUsers} hint={metricHint} />
@@ -384,18 +396,22 @@ export default function AdminStatisticsPage() {
         <Metric label="Lượt xem" value={stats.totalViews} hint={isAll ? 'Tổng lượt xem' : 'Views tin trong kỳ'} />
       </div>
 
-      <nav className="stats-tabs" aria-label="Phân nhóm thống kê">
-        {sections.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={section === item.value ? 'active' : ''}
-            onClick={() => setSection(item.value)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group" role="tablist" aria-label="Phân nhóm thống kê">
+          {sections.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={section === item.value}
+              className={section === item.value ? 'active' : 'outline'}
+              onClick={() => setSection(item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {section === 'users' && (
         <div className="stats-content">

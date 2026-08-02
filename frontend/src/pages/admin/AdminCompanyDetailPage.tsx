@@ -267,13 +267,37 @@ export default function AdminCompanyDetailPage() {
 
   return (
     <section className="admin-page">
-      <div className="admin-detail-topbar">
-        <button type="button" className="outline" onClick={() => navigate(backTo)}>
-          Quay lại
-        </button>
-        <Link className="button-link outline" to={backTo}>
-          Danh sách hồ sơ
-        </Link>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Chi tiết hồ sơ công ty</p>
+          <h1>{loading ? 'Đang tải...' : detail?.company.name || 'Hồ sơ công ty'}</h1>
+          <p>
+            {detail
+              ? `Xem xét và xử lý hồ sơ xác thực pháp lý · Cập nhật ${formatDate(detail.updatedAt)}`
+              : 'Xem xét và xử lý hồ sơ xác thực pháp lý của nhà tuyển dụng.'}
+          </p>
+        </div>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Trạng thái</span>
+            <strong>{detail ? verification.text : '—'}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Tài liệu chờ</span>
+            <strong>{detail?.documents?.filter((d) => String(d.status || '').toLowerCase() === 'pending').length ?? 0}</strong>
+          </div>
+        </div>
+      </header>
+
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group">
+          <button type="button" className="outline" onClick={() => navigate(backTo)}>
+            ← Quay lại
+          </button>
+          <Link className="button-link outline" to={backTo}>
+            Danh sách hồ sơ
+          </Link>
+        </div>
       </div>
 
       {error && <p className="error admin-inline-message">{error}</p>}
@@ -289,7 +313,7 @@ export default function AdminCompanyDetailPage() {
         <section className="admin-company-detail-panel admin-readable-detail">
           <div className="admin-company-detail-header">
             <div>
-              <h1>{detail.company.name}</h1>
+              <h2>Thông tin công ty</h2>
               <p className="muted">Cập nhật lần cuối: {formatDate(detail.updatedAt)}</p>
             </div>
             <span className={`admin-status-badge ${verification.className}`}>{verification.text}</span>

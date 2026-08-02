@@ -1278,6 +1278,7 @@ public class AdminService {
                     j.salary_max,
                     j.rejection_reason,
                     j.views_count,
+                    j.report_fix_deadline,
                     j.created_at,
                     j.updated_at,
                     c.id::text AS company_id,
@@ -1337,7 +1338,8 @@ public class AdminService {
                 null,
                 rs.getInt("views_count"),
                 rs.getString("rejection_reason"),
-                0L
+                0L,
+                toLocalDateTime(rs, "report_fix_deadline")
         );
         return new AdminJobDetailResponse(
                 job,

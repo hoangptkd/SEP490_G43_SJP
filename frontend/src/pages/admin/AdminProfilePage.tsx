@@ -53,13 +53,29 @@ export default function AdminProfilePage() {
 
   return (
     <section className="admin-page admin-profile-page">
-      <header className="admin-page-header">
-        <div>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Tài khoản quản trị</p>
           <h1>Hồ sơ quản trị</h1>
-          <p className="muted">Thông tin tài khoản đang đăng nhập trên hệ thống.</p>
+          <p>Thông tin tài khoản đang đăng nhập trên hệ thống Smart Recruitment Portal.</p>
         </div>
-        <Link to="/admin" className="button-link outline">← Bảng điều khiển</Link>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Vai trò</span>
+            <strong>{roleLabels[user.role] || user.role}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Trạng thái</span>
+            <strong>{statusLabels[user.status] || user.status}</strong>
+          </div>
+        </div>
       </header>
+
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group">
+          <Link to="/admin" className="button-link outline">← Bảng điều khiển</Link>
+        </div>
+      </div>
 
       <article className="admin-profile-hero">
         <div className="admin-profile-hero-bg" aria-hidden="true" />

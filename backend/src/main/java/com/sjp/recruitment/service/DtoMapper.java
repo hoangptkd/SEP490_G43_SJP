@@ -176,7 +176,8 @@ public class DtoMapper {
                 job.getWorkMode(),
                 job.getViewsCount() != null ? job.getViewsCount() : 0,
                 rejectionReason,
-                appsCount
+                appsCount,
+                job.getReportFixDeadline()
         );
     }
 

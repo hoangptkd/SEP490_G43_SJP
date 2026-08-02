@@ -386,12 +386,15 @@ public class JobService {
             namedParameterJdbcTemplate.update("""
                     UPDATE job_reports
                     SET status = 'resubmitted',
+                        company_fix_deadline = NULL,
                         resolved_at = now()
                     WHERE job_id = CAST(:jobId AS uuid)
                       AND status = 'awaiting_company'
                     """,
                     new MapSqlParameterSource("jobId", job.getId().toString())
             );
+            job.setReportFixDeadline(null);
+            job = jobRepository.save(job);
         }
 
         return dtoMapper.toJobResponse(job, false, false, null);
@@ -644,12 +647,15 @@ public class JobService {
             namedParameterJdbcTemplate.update("""
                     UPDATE job_reports
                     SET status = 'resubmitted',
+                        company_fix_deadline = NULL,
                         resolved_at = now()
                     WHERE job_id = CAST(:jobId AS uuid)
                       AND status = 'awaiting_company'
                     """,
                     new MapSqlParameterSource("jobId", job.getId().toString())
             );
+            job.setReportFixDeadline(null);
+            job = jobRepository.save(job);
         }
 
         if ("closed".equals(targetStatus) && wasNotClosed && job.getId() != null) {
@@ -965,7 +971,8 @@ public class JobService {
                 resultSet.getString("work_mode"),
                 resultSet.getInt("views_count"),
                 resultSet.getString("rejection_reason"),
-                0L
+                0L,
+                null
         );
     }
 

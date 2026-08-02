@@ -30,6 +30,7 @@ public record JobResponse(
         String workMode,
         Integer viewsCount,
         String rejectionReason,
-        Long applicationsCount
+        Long applicationsCount,
+        LocalDateTime reportFixDeadline
 ) {
 }

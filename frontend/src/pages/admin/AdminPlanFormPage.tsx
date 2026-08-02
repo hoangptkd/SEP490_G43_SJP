@@ -291,15 +291,29 @@ export default function AdminPlanFormPage() {
 
   return (
     <section className="admin-page admin-plan-page">
-      <header className="admin-page-header">
-        <div>
-          <p className="muted">
-            <Link to="/admin/billing?tab=plans">← Quay lại gói dịch vụ</Link>
-          </p>
+      <header className="admin-page-intro">
+        <div className="admin-page-intro-copy">
+          <p className="admin-page-intro-eyebrow">Cấu hình gói dịch vụ</p>
           <h1>{isEdit ? 'Chỉnh sửa gói dịch vụ' : 'Tạo gói dịch vụ mới'}</h1>
-          <p className="muted">Chọn đối tượng, tích quyền lợi và chỉnh hạn mức — không cần viết JSON.</p>
+          <p>Chọn đối tượng, tích quyền lợi và chỉnh hạn mức — không cần viết JSON.</p>
+        </div>
+        <div className="admin-page-intro-aside">
+          <div className="admin-page-intro-stat">
+            <span>Chế độ</span>
+            <strong>{isEdit ? 'Chỉnh sửa' : 'Tạo mới'}</strong>
+          </div>
+          <div className="admin-page-intro-stat">
+            <span>Đối tượng</span>
+            <strong>{form.targetRole === 'employer' ? 'Nhà tuyển dụng' : 'Ứng viên'}</strong>
+          </div>
         </div>
       </header>
+
+      <div className="admin-toolbar">
+        <div className="admin-toolbar-group">
+          <Link to="/admin/billing?tab=plans" className="button-link outline">← Quay lại gói dịch vụ</Link>
+        </div>
+      </div>
 
       {error && <p className="error admin-inline-message">{error}</p>}
 
