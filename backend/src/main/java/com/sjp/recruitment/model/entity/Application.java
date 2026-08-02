@@ -1,5 +1,8 @@
 package com.sjp.recruitment.model.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sjp.recruitment.model.dto.JobSnapshot;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -21,6 +24,8 @@ import java.util.UUID;
 @AllArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
 public class Application {
+
+    private static final ObjectMapper SNAPSHOT_OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -68,7 +73,29 @@ public class Application {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "job_snapshot_json", columnDefinition = "jsonb")
-    private com.sjp.recruitment.model.dto.JobSnapshot jobSnapshotJson;
+    private JsonNode jobSnapshotJson;
+
+    public JobSnapshot getJobSnapshotJson() {
+        if (jobSnapshotJson == null || jobSnapshotJson.isNull()) {
+            return null;
+        }
+        try {
+            if (jobSnapshotJson.isTextual()) {
+                String raw = jobSnapshotJson.asText();
+                if (raw == null || raw.isBlank()) {
+                    return null;
+                }
+                return SNAPSHOT_OBJECT_MAPPER.readValue(raw, JobSnapshot.class);
+            }
+            return SNAPSHOT_OBJECT_MAPPER.treeToValue(jobSnapshotJson, JobSnapshot.class);
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    public void setJobSnapshotJson(JobSnapshot snapshot) {
+        this.jobSnapshotJson = snapshot == null ? null : SNAPSHOT_OBJECT_MAPPER.valueToTree(snapshot);
+    }
 
     public void setStatus(ApplicationStatus status) {
         this.status = status == null ? null : status.databaseValue;
