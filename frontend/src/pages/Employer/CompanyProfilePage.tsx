@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { employerService } from '../../services/employerService';
 import { jobService } from '../../services/jobService';
 import type { Company, Category } from '../../types/job';
 
 function CompanyProfilePage() {
+  const navigate = useNavigate();
   const [company, setCompany] = useState<Company | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +78,7 @@ function CompanyProfilePage() {
     setMessage('');
     setError('');
     try {
-      const updated = await employerService.updateCompanyProfile(company);
+      const updated = await employerService.updateCompanyProfile({ ...company, submitForReview: false });
       setCompany(updated);
       if (updated.verificationStatus?.toLowerCase() === 'pending') {
         setMessage('Lưu hồ sơ thành công. Hồ sơ đã được gửi và đang chờ admin duyệt.');
@@ -98,6 +100,8 @@ function CompanyProfilePage() {
   if (!company) return <div className="content-card"><p className="error">{error || 'Không tìm thấy thông tin công ty.'}</p></div>;
 
   const verificationStatus = company.verificationStatus?.toLowerCase() || 'unverified';
+  const isVerified = verificationStatus === 'verified' || verificationStatus === 'approved';
+  
   const statusBadge = verificationStatus === 'verified'
     ? { text: 'Đã xác thực', bg: '#ecfdf5', color: '#047857', border: '#a7f3d0', dot: '#10b981' }
     : verificationStatus === 'pending'
@@ -165,7 +169,7 @@ function CompanyProfilePage() {
               margin: 0
             }}>
               <span>{uploadingLogo ? 'Đang cập nhật...' : 'Thay đổi logo'}</span>
-              <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} style={{ display: 'none' }} />
+              <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo || isVerified} style={{ display: 'none' }} />
             </label>
             <span style={{
               background: statusBadge.bg,
@@ -186,7 +190,13 @@ function CompanyProfilePage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="form-grid two">
+      <form onSubmit={handleSubmit}>
+        {isVerified && (
+          <div style={{ background: '#fef3c7', color: '#b45309', padding: '16px', borderRadius: '8px', border: '1px solid #fde68a', marginBottom: '20px', fontSize: '0.95rem' }}>
+            <strong>Hồ sơ công ty đã được duyệt.</strong> Để thay đổi thông tin công ty, vui lòng sang trang <button type="button" onClick={() => navigate('/employer/verification')} style={{ background: 'none', border: 'none', padding: 0, color: '#d97706', textDecoration: 'underline', fontWeight: 600, cursor: 'pointer' }}>Xác thực pháp lý</button>.
+          </div>
+        )}
+        <fieldset className="form-grid two" disabled={isVerified} style={{ border: 'none', padding: 0, margin: 0 }}>
         <label className="wide">
           Tên công ty *
           <input
@@ -512,28 +522,49 @@ function CompanyProfilePage() {
           />
         </label>
 
-        <div className="wide" style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+        </fieldset>
+        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
           {message && <p className="success" style={{ margin: 0, padding: '12px 16px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', borderRadius: '6px', fontSize: '0.9rem' }}>{message}</p>}
           {error && <p className="error" style={{ margin: 0, padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', fontSize: '0.9rem' }}>{error}</p>}
-          <button
-            type="submit"
-            disabled={saving}
-            style={{
-              alignSelf: 'flex-start',
-              background: '#2563eb',
-              color: '#fff',
-              border: 'none',
-              padding: '10px 24px',
-              borderRadius: '6px',
-              fontWeight: 600,
-              fontSize: '0.95rem',
-              cursor: saving ? 'wait' : 'pointer',
-              boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-              transition: 'background-color 0.2s'
-            }}
-          >
-            {saving ? 'Đang xử lý...' : 'Lưu thay đổi'}
-          </button>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+            {!isVerified && (
+              <button
+                type="submit"
+                disabled={saving}
+                style={{
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '10px 24px',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  fontSize: '0.95rem',
+                  cursor: saving ? 'wait' : 'pointer',
+                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                {saving ? 'Đang xử lý...' : 'Lưu'}
+              </button>
+            )}
+            <button 
+              type="button" 
+              onClick={() => navigate('/employer/locations')}
+              style={{
+                background: isVerified ? '#2563eb' : '#f8fafc',
+                color: isVerified ? '#fff' : '#334155',
+                padding: '10px 24px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '0.95rem',
+                border: isVerified ? 'none' : '1px solid #cbd5e1',
+                cursor: 'pointer',
+                boxShadow: isVerified ? '0 2px 4px rgba(37, 99, 235, 0.2)' : '0 1px 2px rgba(0,0,0,0.05)',
+              }}
+            >
+              Tiếp theo: Địa điểm làm việc →
+            </button>
+          </div>
         </div>
       </form>
 

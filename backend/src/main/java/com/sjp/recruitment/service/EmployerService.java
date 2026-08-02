@@ -126,7 +126,8 @@ public class EmployerService {
         String oldTax = company.getTaxCode() == null ? "" : company.getTaxCode().trim();
         String newTax = request.taxCode() == null ? "" : request.taxCode().trim();
 
-        boolean legalInfoChanged = !oldName.equalsIgnoreCase(newName) || !oldTax.equals(newTax);
+        boolean nameOrTaxChanged = !oldName.equalsIgnoreCase(newName) || !oldTax.equals(newTax);
+        boolean industryChanged = false;
 
         // Kiểm tra tên công ty trùng lặp
         if (!oldName.equalsIgnoreCase(newName)) {
@@ -153,6 +154,7 @@ public class EmployerService {
                     .filter(ci -> !reqCatIds.contains(ci.getCategory().getId()))
                     .toList();
             if (!toDelete.isEmpty()) {
+                industryChanged = true;
                 companyIndustryRepository.deleteAll(toDelete);
             }
 
@@ -161,12 +163,14 @@ public class EmployerService {
                 if (item.categoryId() == null) continue;
                 CompanyIndustry ci = existingMap.get(item.categoryId());
                 if (ci != null) {
+                    if (ci.isPrimary() != item.primary()) industryChanged = true;
                     ci.setPrimary(item.primary());
                     companyIndustryRepository.save(ci);
                     if (item.primary() && ci.getCategory() != null) {
                         primaryIndustryName = ci.getCategory().getName();
                     }
                 } else {
+                    industryChanged = true;
                     Optional<Category> catOpt = categoryRepository.findById(item.categoryId());
                     if (catOpt.isPresent()) {
                         Category cat = catOpt.get();
@@ -182,11 +186,14 @@ public class EmployerService {
                 }
             }
             if (primaryIndustryName != null) {
+                if (!primaryIndustryName.equals(company.getIndustry())) industryChanged = true;
                 company.setIndustry(primaryIndustryName);
             } else if (request.industry() != null) {
+                if (!request.industry().equals(company.getIndustry())) industryChanged = true;
                 company.setIndustry(request.industry());
             }
         } else {
+            if (request.industry() != null && !request.industry().equals(company.getIndustry())) industryChanged = true;
             company.setIndustry(request.industry());
         }
 
@@ -214,10 +221,12 @@ public class EmployerService {
             company.setLogoUrl(request.logoUrl());
         }
 
-        if (legalInfoChanged && company.isVerified()) {
+        boolean legalInfoChanged = nameOrTaxChanged || industryChanged;
+
+        if (Boolean.TRUE.equals(request.submitForReview())) {
             forceCompanyAndOwnerPending(company);
-        } else if (!company.isVerified()) {
-            markCompanyPendingReviewIfNeeded(company);
+        } else if (legalInfoChanged && company.isVerified()) {
+            forceCompanyAndOwnerPending(company);
         }
 
         return toCompanyProfileResponse(companyRepository.save(company));

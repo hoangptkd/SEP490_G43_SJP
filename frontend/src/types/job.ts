@@ -62,6 +62,7 @@ export interface Company {
   status?: string;
   locations?: CompanyLocation[];
   industries?: CompanyIndustry[];
+  submitForReview?: boolean;
 }
 
 export interface CompanyIndustry {
