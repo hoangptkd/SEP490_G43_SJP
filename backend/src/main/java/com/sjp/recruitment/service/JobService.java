@@ -57,6 +57,7 @@ public class JobService {
     private final NotificationRepository notificationRepository;
     private final ApplicationStatusHistoryRepository applicationStatusHistoryRepository;
     private final JobEditHistoryRepository jobEditHistoryRepository;
+    private final InterviewScheduleRepository interviewScheduleRepository;
     private final DtoMapper dtoMapper;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final SystemSettingsService systemSettingsService;
@@ -423,75 +424,118 @@ public class JobService {
         Job job = findById(id);
         checkEmployerPermission(job, employer, "Bạn không có quyền xóa việc làm này");
 
+        String status = job.getStatus();
+
+        // ── 1. Trạng thái KHÔNG cho phép xoá ──
+        if ("pending_review".equalsIgnoreCase(status)) {
+            throw new ApiException(HttpStatus.CONFLICT, "JOB_PENDING_REVIEW",
+                    "Tin đang chờ Admin duyệt. Vui lòng chờ kết quả duyệt hoặc rút lại tin trước khi xóa.");
+        }
+        if ("awaiting_company".equalsIgnoreCase(status)) {
+            throw new ApiException(HttpStatus.CONFLICT, "JOB_AWAITING_COMPANY",
+                    "Tin đang chờ bạn chỉnh sửa theo yêu cầu của Admin. Vui lòng xử lý trước khi xóa.");
+        }
+        if ("removed".equalsIgnoreCase(status)) {
+            throw new ApiException(HttpStatus.CONFLICT, "JOB_REMOVED",
+                    "Tin đã bị Admin gỡ bỏ do vi phạm. Không thể thực hiện thao tác xóa.");
+        }
+        if ("archived".equalsIgnoreCase(status)) {
+            throw new ApiException(HttpStatus.CONFLICT, "JOB_ALREADY_ARCHIVED",
+                    "Tin đã được lưu trữ (archived) trước đó.");
+        }
+
+        // ── 2. Thu thập applications ──
         List<Application> applications = applicationRepository.findAllByJobId(job.getId());
-        if (applications != null && !applications.isEmpty()) {
-            job.setStatus("archived");
-            if (job.getClosedAt() == null) {
-                job.setClosedAt(LocalDateTime.now());
+        boolean hasApplications = applications != null && !applications.isEmpty();
+
+        // ── 3. Nếu có ứng viên → kiểm tra lịch phỏng vấn active ──
+        if (hasApplications) {
+            List<UUID> appIds = applications.stream()
+                    .map(Application::getId)
+                    .collect(Collectors.toList());
+            boolean hasActiveInterviews = interviewScheduleRepository
+                    .existsActiveByApplicationIds(appIds);
+            if (hasActiveInterviews) {
+                throw new ApiException(HttpStatus.CONFLICT, "JOB_HAS_ACTIVE_INTERVIEWS",
+                        "Tin tuyển dụng đang có lịch phỏng vấn chưa hoàn tất. "
+                        + "Vui lòng hoàn thành hoặc hủy phỏng vấn trước khi xóa.");
             }
-            jobRepository.save(job);
+        }
 
-            for (Application app : applications) {
-                if (app != null && app.getStatusEnum() != null) {
-                    Application.ApplicationStatus currentStatus = app.getStatusEnum();
-                    boolean isPending = currentStatus == Application.ApplicationStatus.SUBMITTED
-                            || currentStatus == Application.ApplicationStatus.UNDER_REVIEW
-                            || currentStatus == Application.ApplicationStatus.SHORTLISTED
-                            || currentStatus == Application.ApplicationStatus.INTERVIEW_SCHEDULED;
-                    if (isPending) {
-                        app.setStatus(Application.ApplicationStatus.REJECTED);
-                        if (app.getReviewedAt() == null) {
-                            app.setReviewedAt(LocalDateTime.now());
-                        }
-                        applicationRepository.save(app);
+        // ── 4. Không có ứng viên → Hard delete ──
+        if (!hasApplications) {
+            jobRepository.delete(job);
+            return;
+        }
 
-                        try {
-                            ApplicationStatusHistory history = new ApplicationStatusHistory();
-                            history.setApplication(app);
-                            history.setFromStatus(currentStatus);
-                            history.setToStatus(Application.ApplicationStatus.REJECTED);
-                            history.setPublicNote("Tin tuyển dụng đã bị xóa/lưu trữ (archive) bởi nhà tuyển dụng. Đơn ứng tuyển tự động chuyển sang trạng thái Từ chối.");
-                            applicationStatusHistoryRepository.save(history);
-                        } catch (Exception ex) {
-                            // ignore history log failure
-                        }
+        // ── 5. Có ứng viên → Soft delete (archive) ──
+        archiveJobAndRejectPendingApplications(job, applications);
+    }
 
-                        if (app.getCandidate() != null && app.getCandidate().getUser() != null) {
-                            try {
-                                Notification note = new Notification();
-                                note.setRecipientUser(app.getCandidate().getUser());
-                                note.setType("JOB_DELETED");
-                                note.setTitle("Thông báo tin tuyển dụng bị xóa/lưu trữ");
-                                note.setMessage("Tin tuyển dụng [" + job.getTitle() + "] mà bạn ứng tuyển đã bị nhà tuyển dụng xóa (lưu trữ). Đơn ứng tuyển của bạn đã tự động chuyển sang trạng thái Từ chối.");
-                                note.setRelatedEntityType("JOB");
-                                note.setRelatedEntityId(job.getId());
-                                notificationRepository.save(note);
-                            } catch (Exception ex) {
-                                // ignore notification save failure
-                            }
-                        }
-                    } else if (app.getCandidate() != null && app.getCandidate().getUser() != null) {
-                        try {
-                            Notification note = new Notification();
-                            note.setRecipientUser(app.getCandidate().getUser());
-                            note.setType("JOB_DELETED");
-                            note.setTitle("Thông báo tin tuyển dụng bị xóa/lưu trữ");
-                            note.setMessage("Tin tuyển dụng [" + job.getTitle() + "] mà bạn đã ứng tuyển vừa được nhà tuyển dụng lưu trữ (archive).");
-                            note.setRelatedEntityType("JOB");
-                            note.setRelatedEntityId(job.getId());
-                            notificationRepository.save(note);
-                        } catch (Exception ex) {
-                            // ignore notification save failure
-                        }
-                    }
+    /**
+     * Soft-delete: chuyển job sang "archived" và tự động reject các đơn ứng tuyển
+     * đang pending, ghi lịch sử và gửi notification cho ứng viên.
+     */
+    private void archiveJobAndRejectPendingApplications(Job job, List<Application> applications) {
+        job.setStatus("archived");
+        if (job.getClosedAt() == null) {
+            job.setClosedAt(LocalDateTime.now());
+        }
+        jobRepository.save(job);
+
+        for (Application app : applications) {
+            if (app == null || app.getStatusEnum() == null) continue;
+
+            Application.ApplicationStatus currentStatus = app.getStatusEnum();
+            boolean isPending = currentStatus == Application.ApplicationStatus.SUBMITTED
+                    || currentStatus == Application.ApplicationStatus.UNDER_REVIEW
+                    || currentStatus == Application.ApplicationStatus.SHORTLISTED
+                    || currentStatus == Application.ApplicationStatus.INTERVIEW_SCHEDULED;
+
+            if (isPending) {
+                app.setStatus(Application.ApplicationStatus.REJECTED);
+                if (app.getReviewedAt() == null) {
+                    app.setReviewedAt(LocalDateTime.now());
                 }
+                applicationRepository.save(app);
+
+                try {
+                    ApplicationStatusHistory history = new ApplicationStatusHistory();
+                    history.setApplication(app);
+                    history.setFromStatus(currentStatus);
+                    history.setToStatus(Application.ApplicationStatus.REJECTED);
+                    history.setPublicNote("Tin tuyển dụng đã bị nhà tuyển dụng xóa (lưu trữ). "
+                            + "Đơn ứng tuyển tự động chuyển sang trạng thái Từ chối.");
+                    applicationStatusHistoryRepository.save(history);
+                } catch (Exception ex) {
+                    // non-critical — ghi log thất bại không làm rollback transaction
+                }
+
+                sendJobDeletedNotification(app, job,
+                        "Tin tuyển dụng [" + job.getTitle()
+                        + "] mà bạn ứng tuyển đã bị nhà tuyển dụng xóa (lưu trữ). "
+                        + "Đơn ứng tuyển của bạn đã tự động chuyển sang trạng thái Từ chối.");
+            } else {
+                sendJobDeletedNotification(app, job,
+                        "Tin tuyển dụng [" + job.getTitle()
+                        + "] mà bạn đã ứng tuyển vừa được nhà tuyển dụng lưu trữ (archive).");
             }
-        } else {
-            job.setStatus("archived");
-            if (job.getClosedAt() == null) {
-                job.setClosedAt(LocalDateTime.now());
-            }
-            jobRepository.save(job);
+        }
+    }
+
+    private void sendJobDeletedNotification(Application app, Job job, String message) {
+        if (app.getCandidate() == null || app.getCandidate().getUser() == null) return;
+        try {
+            Notification note = new Notification();
+            note.setRecipientUser(app.getCandidate().getUser());
+            note.setType("JOB_DELETED");
+            note.setTitle("Thông báo tin tuyển dụng bị xóa/lưu trữ");
+            note.setMessage(message);
+            note.setRelatedEntityType("JOB");
+            note.setRelatedEntityId(job.getId());
+            notificationRepository.save(note);
+        } catch (Exception ex) {
+            // non-critical — gửi notification thất bại không làm rollback transaction
         }
     }
 

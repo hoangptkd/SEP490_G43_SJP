@@ -120,6 +120,21 @@ export default function EmployerApplicationsPage() {
     loadApplications();
   }
 
+  function getDetailedStatus(app: CandidateApplication) {
+    if (app.status === 'INTERVIEW_SCHEDULED') {
+      const interview = app.interviews && app.interviews.length > 0 ? app.interviews[app.interviews.length - 1] : null;
+      if (interview) {
+        const iStatus = (interview.status || '').toUpperCase();
+        if (iStatus === 'CONFIRMED') return { label: 'Sắp phỏng vấn', color: '#0369a1', bg: '#e0f2fe' };
+        if (iStatus === 'SCHEDULED' || iStatus === 'PENDING') return { label: 'Chờ UV xác nhận', color: '#b45309', bg: '#fef3c7' };
+        if (iStatus === 'RESCHEDULED' || iStatus === 'DECLINED' || iStatus === 'REJECTED') return { label: 'UV xin đổi lịch / Từ chối', color: '#be123c', bg: '#ffe4e6' };
+        if (interview.interviewResult || new Date(interview.scheduledAt).getTime() < Date.now()) return { label: 'Đã phỏng vấn', color: '#6d28d9', bg: '#f3e8ff' };
+      }
+      return { label: 'Chờ xếp lịch', color: '#475569', bg: '#f1f5f9' };
+    }
+    return statusConfig[app.status] || { label: app.status, color: '#475569', bg: '#f1f5f9' };
+  }
+
   function openUpdateModal(app: CandidateApplication, defaultStatus?: string) {
     setUpdatingApp(app);
     setTargetStatus(defaultStatus || app.status || 'UNDER_REVIEW');
@@ -331,7 +346,7 @@ export default function EmployerApplicationsPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {applications.map((app) => {
-            const st = statusConfig[app.status] || { label: app.status, color: '#475569', bg: '#f1f5f9' };
+            const st = getDetailedStatus(app);
             const candidateName = app.candidate?.fullName || 'Ứng viên ẩn danh';
             const candidateEmail = app.candidate?.phone ? `${app.candidate.phone}` : 'Chưa có SĐT';
 
@@ -783,7 +798,7 @@ export default function EmployerApplicationsPage() {
                       {selectedAppDetail.candidate?.fullName || 'Ứng viên ẩn danh'}
                     </h2>
                     {(() => {
-                      const st = statusConfig[selectedAppDetail.status] || { label: selectedAppDetail.status, color: '#475569', bg: '#f1f5f9' };
+                      const st = getDetailedStatus(selectedAppDetail);
                       return (
                         <span
                           style={{
