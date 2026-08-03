@@ -90,7 +90,11 @@ export default function PaymentResultPage() {
           <p className="muted">Gói đã được kích hoạt. Bạn có thể xem chi tiết gói đang dùng tại trang gói dịch vụ.</p>
         )}
         {!loading && !isPaid && !isFailed && (
-          <p className="muted">Đơn đang chờ admin xác nhận chuyển khoản. Sau khi xác nhận, gói sẽ hiện ở trang gói dịch vụ.</p>
+          <p className="muted">
+            {(status?.paymentMethod || '').toLowerCase() === 'payos'
+              ? 'Đang xác nhận thanh toán PayOS. Nếu vừa thanh toán xong, vui lòng đợi vài giây hoặc tải lại trang.'
+              : 'Đơn đang chờ xác nhận. Sau khi thanh toán thành công, gói sẽ hiện ở trang gói dịch vụ.'}
+          </p>
         )}
 
         {status && (

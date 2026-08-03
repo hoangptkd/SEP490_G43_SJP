@@ -91,7 +91,12 @@ public class AdminService {
         long totalApplications = count("SELECT COUNT(*) FROM applications");
         long totalEmployers = count("SELECT COUNT(*) FROM users WHERE role = 'employer' AND status <> 'deleted'");
         long totalCandidates = count("SELECT COUNT(*) FROM users WHERE role IN ('job_seeker', 'candidate') AND status <> 'deleted'");
-        long closedJobs = count("SELECT COUNT(*) FROM jobs WHERE status = 'closed'");
+        // Báo cáo đang mở: chờ admin / chờ công ty sửa / công ty đã gửi lại
+        long pendingJobReports = count("""
+                SELECT COUNT(*)
+                FROM job_reports
+                WHERE LOWER(status) IN ('pending', 'awaiting_company', 'resubmitted')
+                """);
 
         BigDecimal revenueToday = money("""
                 SELECT COALESCE(SUM(amount), 0)
@@ -159,7 +164,7 @@ public class AdminService {
                 interviewsToday,
                 interviewsWeek,
                 interviewsCompletedWeek,
-                closedJobs,
+                pendingJobReports,
                 trendPoints(applicationTrendSql(true), trendParams),
                 safeTrendPoints(revenueTrendSql(), trendParams),
                 LocalDateTime.now()

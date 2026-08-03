@@ -127,7 +127,11 @@ export default function AdminJobsPage() {
   const [page, setPage] = useState(() => readPage(searchParams.get('page')));
   const [jobs, setJobs] = useState<AdminJobSummary[]>([]);
   const [reports, setReports] = useState<AdminJobReport[]>([]);
-  const [reportStatus, setReportStatus] = useState('pending');
+  const [reportStatus, setReportStatus] = useState(() => {
+    const value = searchParams.get('reportStatus');
+    const allowed = ['pending', 'awaiting_company', 'resubmitted', 'dismissed', 'resolved', 'all'];
+    return value && allowed.includes(value) ? value : 'pending';
+  });
   const [loadingList, setLoadingList] = useState(true);
   const [actingId, setActingId] = useState('');
   const [error, setError] = useState('');
@@ -167,8 +171,9 @@ export default function AdminJobsPage() {
   useEffect(() => {
     const params: Record<string, string> = { status: filter, page: String(page) };
     if (search.trim()) params.q = search.trim();
+    if (filter === 'reports') params.reportStatus = reportStatus;
     setSearchParams(params, { replace: true });
-  }, [filter, page, search, setSearchParams]);
+  }, [filter, page, search, reportStatus, setSearchParams]);
 
   const filteredJobs = useMemo(
     () => jobs.filter((item) => jobMatches(item, search)),
@@ -334,7 +339,7 @@ export default function AdminJobsPage() {
             </button>
           ))}
         </div>
-        <Link className="button-link outline admin-toolbar-refresh" to="/admin/jobs?status=reports&page=1">
+        <Link className="button-link outline admin-toolbar-refresh" to="/admin/jobs?status=reports&reportStatus=all&page=1">
           Xem tin bị báo cáo
         </Link>
       </div>

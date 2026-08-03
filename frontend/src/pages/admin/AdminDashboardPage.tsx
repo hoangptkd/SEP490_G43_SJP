@@ -62,6 +62,7 @@ const emptyStats: AdminDashboardStats = {
   interviewsWeek: 0,
   interviewsCompletedWeek: 0,
   closedJobs: 0,
+  pendingJobReports: 0,
   applicationsLast7Days: [],
   revenueLast7Days: [],
   updatedAt: '',
@@ -150,8 +151,8 @@ export default function AdminDashboardPage() {
     },
     {
       label: 'Tin bị báo cáo',
-      value: stats.closedJobs ?? 0,
-      to: '/admin/jobs?status=reports&page=1',
+      value: stats.pendingJobReports ?? 0,
+      to: '/admin/jobs?status=reports&reportStatus=all&page=1',
       tone: 'danger' as const,
     },
     {
@@ -234,9 +235,9 @@ export default function AdminDashboardPage() {
             Hôm nay {formatNumber(stats.interviewsToday)} · hoàn thành {interviewRate}%
           </p>
         </Link>
-        <Link className="admin-dashboard-card dash-card-alert" to="/admin/jobs?status=reports&page=1">
+        <Link className="admin-dashboard-card dash-card-alert" to="/admin/jobs?status=reports&reportStatus=all&page=1">
           <span>Tin bị báo cáo</span>
-          <strong>{formatNumber(stats.closedJobs)}</strong>
+          <strong>{formatNumber(stats.pendingJobReports)}</strong>
           <p>Tiếp nhận báo cáo từ ứng viên để kiểm tra</p>
         </Link>
         <Link className="admin-dashboard-card dash-card-sub" to="/admin/billing?tab=transactions">

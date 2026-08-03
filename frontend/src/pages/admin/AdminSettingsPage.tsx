@@ -238,7 +238,7 @@ export default function AdminSettingsPage() {
                     value={draft[item.key] ?? item.value}
                     onChange={(e) => setDraft((prev) => ({ ...prev, [item.key]: e.target.value }))}
                   >
-                    <option value="bank_transfer">Chuyển khoản QR</option>
+                    <option value="payos">PayOS (tự động)</option>
                     <option value="vnpay">VNPay</option>
                     <option value="momo">MoMo</option>
                   </select>

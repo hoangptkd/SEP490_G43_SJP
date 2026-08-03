@@ -78,11 +78,11 @@ public class SystemSettingsService {
     }
 
     public String defaultPaymentProvider() {
-        String provider = getString(PAYMENT_GATEWAY_PROVIDER, "bank_transfer").trim().toLowerCase(Locale.ROOT);
-        if ("momo".equals(provider) || "vnpay".equals(provider) || "bank_transfer".equals(provider)) {
+        String provider = getString(PAYMENT_GATEWAY_PROVIDER, "payos").trim().toLowerCase(Locale.ROOT);
+        if ("momo".equals(provider) || "vnpay".equals(provider) || "bank_transfer".equals(provider) || "payos".equals(provider)) {
             return provider;
         }
-        return "bank_transfer";
+        return "payos";
     }
 
     public void clearCache() {

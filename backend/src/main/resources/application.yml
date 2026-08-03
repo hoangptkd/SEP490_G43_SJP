@@ -126,6 +126,12 @@ app:
       account-name: ${BANK_TRANSFER_ACCOUNT_NAME:DAM HUY HOA}
       branch: ${BANK_TRANSFER_BRANCH:}
       expire-minutes: ${BANK_TRANSFER_EXPIRE_MINUTES:15}
+    payos:
+      enabled: ${PAYOS_ENABLED:true}
+      client-id: ${PAYOS_CLIENT_ID:}
+      api-key: ${PAYOS_API_KEY:}
+      checksum-key: ${PAYOS_CHECKSUM_KEY:}
+      endpoint: ${PAYOS_ENDPOINT:https://api-merchant.payos.vn}
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}

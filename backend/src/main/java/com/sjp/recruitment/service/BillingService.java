@@ -11,6 +11,7 @@ import com.sjp.recruitment.model.dto.response.PlanCatalogResponse;
 import com.sjp.recruitment.model.dto.response.UserSubscriptionResponse;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.payment.MomoPaymentGateway;
+import com.sjp.recruitment.payment.PayOsPaymentGateway;
 import com.sjp.recruitment.payment.VnPayPaymentGateway;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,6 +41,7 @@ public class BillingService {
     private final NamedParameterJdbcTemplate jdbc;
     private final MomoPaymentGateway momoPaymentGateway;
     private final VnPayPaymentGateway vnPayPaymentGateway;
+    private final PayOsPaymentGateway payOsPaymentGateway;
     private final BankTransferProperties bankTransferProperties;
     private final FeatureLimitService featureLimitService;
     private final SystemSettingsService systemSettingsService;
@@ -79,9 +81,9 @@ public class BillingService {
         String paymentMethod = StringUtils.hasText(request.paymentMethod())
                 ? request.paymentMethod().trim().toLowerCase(Locale.ROOT)
                 : systemSettingsService.defaultPaymentProvider();
-        if (!List.of("momo", "vnpay", "bank_transfer").contains(paymentMethod)) {
+        if (!List.of("momo", "vnpay", "bank_transfer", "payos").contains(paymentMethod)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "UNSUPPORTED_GATEWAY",
-                    "Phương thức thanh toán không hỗ trợ. Chọn momo, vnpay hoặc bank_transfer");
+                    "Phương thức thanh toán không hỗ trợ. Chọn payos, momo, vnpay hoặc bank_transfer");
         }
 
         cancelPendingSubscriptions(user.getId());
@@ -106,8 +108,31 @@ public class BillingService {
         return switch (paymentMethod) {
             case "vnpay" -> checkoutVnPay(paymentId, subscriptionId, amountVnd, orderInfo);
             case "bank_transfer" -> checkoutBankTransfer(paymentId, subscriptionId, plan);
-            default -> checkoutMomo(paymentId, subscriptionId, amountVnd, orderInfo);
+            case "momo" -> checkoutMomo(paymentId, subscriptionId, amountVnd, orderInfo);
+            default -> checkoutPayOs(paymentId, subscriptionId, amountVnd, orderInfo);
         };
+    }
+
+    private CheckoutResponse checkoutPayOs(String paymentId, String subscriptionId, long amountVnd, String orderInfo) {
+        var result = payOsPaymentGateway.createPayment(paymentId, amountVnd, orderInfo);
+        jdbc.update("""
+                        UPDATE payments
+                        SET gateway = 'payos',
+                            gateway_order_id = :orderId,
+                            gateway_response = CAST(:response AS jsonb)
+                        WHERE id = CAST(:paymentId AS uuid)
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("orderId", String.valueOf(result.orderCode()))
+                        .addValue("response", objectMapper.createObjectNode()
+                                .put("orderCode", result.orderCode())
+                                .put("paymentLinkId", result.paymentLinkId())
+                                .put("qrCode", result.qrCode())
+                                .set("createResponse", result.rawResponse())
+                                .toString())
+                        .addValue("paymentId", paymentId));
+        return CheckoutResponse.redirect(paymentId, subscriptionId, "pending", result.checkoutUrl(),
+                "Chuyển đến PayOS để thanh toán", "payos");
     }
 
     private CheckoutResponse checkoutMomo(String paymentId, String subscriptionId, long amountVnd, String orderInfo) {
@@ -360,6 +385,32 @@ public class BillingService {
     }
 
     @Transactional
+    public void handlePayOsWebhook(Map<String, Object> payload) {
+        Long orderCode = payOsPaymentGateway.extractOrderCode(payload);
+        saveWebhookEvent("payos", orderCode == null ? null : String.valueOf(orderCode), payload);
+
+        // PayOS gửi payload mẫu khi xác nhận webhook URL — bỏ qua nếu không map được đơn thật
+        if (orderCode == null) {
+            return;
+        }
+        if (!payOsPaymentGateway.verifyWebhookSignature(payload)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_SIGNATURE", "Chữ ký PayOS không hợp lệ");
+        }
+
+        String paymentId = findPaymentIdByGatewayOrderId(String.valueOf(orderCode));
+        if (!StringUtils.hasText(paymentId)) {
+            return;
+        }
+        completeGatewayPayment(
+                paymentId,
+                payOsPaymentGateway.extractReference(payload),
+                payload,
+                payOsPaymentGateway.isSuccess(payload),
+                "Thanh toán PayOS thất bại"
+        );
+    }
+
+    @Transactional
     public void handleMomoIpn(Map<String, Object> payload) {
         saveWebhookEvent("momo", stringValue(payload.get("orderId")), payload);
         if (!momoPaymentGateway.verifyIpnSignature(payload)) {
@@ -453,6 +504,22 @@ public class BillingService {
         featureLimitService.initUsagesForSubscription(subscriptionId, featuresJson == null ? "{}" : featuresJson);
     }
 
+    private String findPaymentIdByGatewayOrderId(String gatewayOrderId) {
+        if (!StringUtils.hasText(gatewayOrderId)) {
+            return null;
+        }
+        List<String> ids = jdbc.query("""
+                        SELECT id::text
+                        FROM payments
+                        WHERE gateway_order_id = :orderId
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """,
+                new MapSqlParameterSource("orderId", gatewayOrderId),
+                (rs, rowNum) -> rs.getString(1));
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
     private String resolveVnPayPaymentId(Map<String, String> params, String hint) {
         if (StringUtils.hasText(hint)) {
             return hint;
@@ -483,6 +550,11 @@ public class BillingService {
             return;
         }
         String gateway = stringValue(rows.get(0).get("gateway"));
+        if ("payos".equalsIgnoreCase(gateway)) {
+            syncPendingPayOs(paymentId, stringValue(rows.get(0).get("gateway_order_id")),
+                    stringValue(rows.get(0).get("gateway_response")));
+            return;
+        }
         if (!"momo".equalsIgnoreCase(gateway)) {
             return;
         }
@@ -507,6 +579,46 @@ public class BillingService {
             }
         } catch (Exception ignored) {
             // keep pending until IPN arrives
+        }
+    }
+
+    private void syncPendingPayOs(String paymentId, String orderCode, String gatewayResponseJson) {
+        try {
+            String queryId = orderCode;
+            if (StringUtils.hasText(gatewayResponseJson)) {
+                var node = objectMapper.readTree(gatewayResponseJson);
+                if (node.hasNonNull("paymentLinkId") && StringUtils.hasText(node.get("paymentLinkId").asText())) {
+                    queryId = node.get("paymentLinkId").asText();
+                }
+            }
+            if (!StringUtils.hasText(queryId)) {
+                return;
+            }
+            var response = payOsPaymentGateway.queryPayment(queryId);
+            if (!payOsPaymentGateway.isPaidStatus(response)) {
+                return;
+            }
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("code", response.path("code").asText("00"));
+            payload.put("success", true);
+            payload.put("desc", response.path("desc").asText("success"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = objectMapper.convertValue(response.path("data"), Map.class);
+            if (data == null) {
+                data = new HashMap<>();
+            }
+            data.putIfAbsent("orderCode", orderCode);
+            data.putIfAbsent("code", "00");
+            payload.put("data", data);
+            completeGatewayPayment(
+                    paymentId,
+                    stringValue(data.get("paymentLinkId")),
+                    payload,
+                    true,
+                    "Thanh toán PayOS thất bại"
+            );
+        } catch (Exception ignored) {
+            // keep pending until webhook arrives
         }
     }
 

@@ -23,7 +23,7 @@ export const billingService = {
     return response.data;
   },
 
-  checkout: async (planId: string, paymentMethod = 'momo'): Promise<CheckoutResult> => {
+  checkout: async (planId: string, paymentMethod = 'payos'): Promise<CheckoutResult> => {
     const response = await api.post<CheckoutResult>('/billing/checkout', { planId, paymentMethod });
     return response.data;
   },

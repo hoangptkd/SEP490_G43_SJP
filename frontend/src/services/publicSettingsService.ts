@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: PublicSettings = {
   maintenanceMode: false,
   aiInterviewEnabled: true,
   paymentGatewayEnabled: true,
-  paymentGatewayProvider: 'bank_transfer',
+  paymentGatewayProvider: 'payos',
   themeMode: 'light',
   themePrimaryColor: '#00507d',
 };

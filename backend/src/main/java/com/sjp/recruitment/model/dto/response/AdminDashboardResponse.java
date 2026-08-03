@@ -23,7 +23,7 @@ public record AdminDashboardResponse(
         long interviewsToday,
         long interviewsWeek,
         long interviewsCompletedWeek,
-        long closedJobs,
+        long pendingJobReports,
         List<AdminTrendPointResponse> applicationsLast7Days,
         List<AdminTrendPointResponse> revenueLast7Days,
         LocalDateTime updatedAt

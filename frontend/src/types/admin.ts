@@ -100,6 +100,7 @@ export interface AdminDashboardStats {
   interviewsWeek?: number;
   interviewsCompletedWeek?: number;
   closedJobs?: number;
+  pendingJobReports?: number;
   applicationsLast7Days?: AdminTrendPoint[];
   revenueLast7Days?: AdminTrendPoint[];
   updatedAt: string;

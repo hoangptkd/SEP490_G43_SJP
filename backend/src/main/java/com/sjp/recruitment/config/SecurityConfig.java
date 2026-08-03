@@ -54,7 +54,8 @@ public class SecurityConfig {
                     "/candidate/ai-interviews/speech/**",
                     "/payments/momo/ipn",
                     "/payments/vnpay/ipn",
-                    "/payments/vnpay/return"
+                    "/payments/vnpay/return",
+                    "/payments/payos/webhook"
                 ).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**", "/categories", "/categories/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/billing/plans").permitAll()
