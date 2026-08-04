@@ -34,7 +34,7 @@ public class AiRankingScheduler {
                 log.info("Found {} applications needing re-ranking", pendingApps.size());
                 for (Application app : pendingApps) {
                     try {
-                        aiRankingService.rankApplication(app);
+                        aiRankingService.rankApplication(app.getId());
                         log.info("Successfully re-ranked application {}", app.getId());
                     } catch (Exception e) {
                         log.error("Error re-ranking application {}", app.getId(), e);
