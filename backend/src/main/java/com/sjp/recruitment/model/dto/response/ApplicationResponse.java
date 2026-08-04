@@ -16,6 +16,11 @@ public record ApplicationResponse(
         LocalDateTime updatedAt,
         List<ApplicationTimelineResponse> timeline,
         List<InterviewScheduleResponse> interviews,
-        JobOfferResponse jobOffer
+        JobOfferResponse jobOffer,
+        Integer aiMatchScore,
+        String aiMatchAnalysis,
+        com.fasterxml.jackson.databind.JsonNode missingRequirements,
+        com.fasterxml.jackson.databind.JsonNode scoreBreakdown,
+        Boolean needRerank
 ) {
 }

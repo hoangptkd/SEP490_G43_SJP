@@ -14,6 +14,7 @@ import java.util.UUID;
 @Repository
 public interface ApplicationRepository extends JpaRepository<Application, UUID> {
     Page<Application> findByCandidateId(UUID candidateId, Pageable pageable);
+    List<Application> findByNeedRerankTrue();
     Page<Application> findByCandidateUserId(UUID userId, Pageable pageable);
     Page<Application> findByJobId(UUID jobId, Pageable pageable);
     List<Application> findAllByJobId(UUID jobId);
@@ -22,6 +23,14 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
 
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId")
     Page<Application> findByEmployerId(UUID employerId, Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Application a SET a.needRerank = true WHERE a.job.id = :jobId AND a.status IN ('applied', 'reviewed', 'shortlisted')")
+    void markApplicationsForRerank(UUID jobId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Application a SET a.needRerank = true WHERE a.cv.id = :cvId AND a.status IN ('applied', 'reviewed', 'shortlisted')")
+    void markApplicationsForRerankByCvId(UUID cvId);
 
     @Query("SELECT a FROM Application a WHERE a.job.company.id = :companyId ORDER BY a.submittedAt DESC")
     List<Application> findByCompanyId(@Param("companyId") UUID companyId);

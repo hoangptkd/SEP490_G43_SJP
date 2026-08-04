@@ -45,6 +45,17 @@ export interface Job {
   applied: boolean;
   matchScore?: number;
   applicationsCount?: number;
+  rankingConfig?: {
+    template?: string;
+    weights?: Record<string, number>;
+    enabled_criteria?: string[];
+    mandatory?: {
+      skills?: string[];
+      certificates?: string[];
+      min_experience_years?: number | null;
+      education_level?: string | null;
+    };
+  };
 }
 
 export interface Company {

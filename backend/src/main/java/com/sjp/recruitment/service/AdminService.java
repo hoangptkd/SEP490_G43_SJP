@@ -1344,7 +1344,8 @@ public class AdminService {
                 rs.getInt("views_count"),
                 rs.getString("rejection_reason"),
                 0L,
-                toLocalDateTime(rs, "report_fix_deadline")
+                toLocalDateTime(rs, "report_fix_deadline"),
+                null
         );
         return new AdminJobDetailResponse(
                 job,

@@ -75,6 +75,9 @@ public class Application {
     @Column(name = "job_snapshot_json", columnDefinition = "jsonb")
     private JsonNode jobSnapshotJson;
 
+    @Column(name = "need_rerank")
+    private Boolean needRerank = false;
+
     public JobSnapshot getJobSnapshotJson() {
         if (jobSnapshotJson == null || jobSnapshotJson.isNull()) {
             return null;

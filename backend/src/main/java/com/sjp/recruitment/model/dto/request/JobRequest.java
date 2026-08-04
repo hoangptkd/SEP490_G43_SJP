@@ -33,4 +33,6 @@ public class JobRequest {
     private String status;
 
     private String employerId;
+    
+    private com.fasterxml.jackson.databind.JsonNode rankingConfig;
 }

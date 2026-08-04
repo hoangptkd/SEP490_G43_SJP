@@ -274,6 +274,7 @@ public class JobService {
         if (applicationCount > 0 && oldSnapshot != null) {
             JobSnapshot newSnapshot = JobSnapshot.fromJob(updatedJob);
             compareAndLogAndNotify(updatedJob, oldSnapshot, newSnapshot, authService.getCurrentUser());
+            applicationRepository.markApplicationsForRerank(updatedJob.getId());
         }
 
         return updatedJob;
@@ -622,6 +623,7 @@ public class JobService {
         job.setJobType(request.getJobType() != null ? request.getJobType() : "full_time");
         job.setWorkMode(request.getWorkMode() != null ? request.getWorkMode() : "onsite");
         job.setExperienceLevel(request.getExperienceLevel() != null ? request.getExperienceLevel() : "fresher");
+        job.setRankingConfig(request.getRankingConfig());
 
         if (request.getDeadline() != null && !request.getDeadline().isBlank()) {
             try {
@@ -1016,6 +1018,7 @@ public class JobService {
                 resultSet.getInt("views_count"),
                 resultSet.getString("rejection_reason"),
                 0L,
+                null,
                 null
         );
     }

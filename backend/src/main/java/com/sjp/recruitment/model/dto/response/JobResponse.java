@@ -31,6 +31,7 @@ public record JobResponse(
         Integer viewsCount,
         String rejectionReason,
         Long applicationsCount,
-        LocalDateTime reportFixDeadline
+        LocalDateTime reportFixDeadline,
+        com.fasterxml.jackson.databind.JsonNode rankingConfig
 ) {
 }

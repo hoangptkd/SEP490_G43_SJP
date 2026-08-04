@@ -62,6 +62,12 @@ public class CandidateCv {
     @Column(name = "parse_status", nullable = false)
     private String parseStatus = "parsed";
 
+    @Column(name = "parsed_text", columnDefinition = "TEXT")
+    private String parsedText;
+
+    @Column(name = "need_rerank")
+    private Boolean needRerank = false;
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

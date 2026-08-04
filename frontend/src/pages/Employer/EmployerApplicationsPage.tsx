@@ -345,7 +345,9 @@ export default function EmployerApplicationsPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {applications.map((app) => {
+          {[...applications]
+            .sort((a, b) => (b.aiMatchScore || 0) - (a.aiMatchScore || 0))
+            .map((app) => {
             const st = getDetailedStatus(app);
             const candidateName = app.candidate?.fullName || 'Ứng viên ẩn danh';
             const candidateEmail = app.candidate?.phone ? `${app.candidate.phone}` : 'Chưa có SĐT';
@@ -496,6 +498,28 @@ export default function EmployerApplicationsPage() {
                       <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Chưa có file CV đính kèm</span>
                     )}
                   </div>
+
+                  {/* AI Ranking Score */}
+                  {(app.aiMatchScore !== undefined && app.aiMatchScore !== null) && (
+                    <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        background: app.aiMatchScore >= 80 ? '#dcfce7' : app.aiMatchScore >= 50 ? '#fef9c3' : '#fee2e2',
+                        color: app.aiMatchScore >= 80 ? '#166534' : app.aiMatchScore >= 50 ? '#854d0e' : '#991b1b',
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        border: `1px solid ${app.aiMatchScore >= 80 ? '#bbf7d0' : app.aiMatchScore >= 50 ? '#fef08a' : '#fecaca'}`
+                      }}>
+                        ✨ AI Match: {app.aiMatchScore}%
+                      </span>
+                      {app.needRerank && (
+                        <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic' }}>
+                          (Cần chấm lại)
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}
@@ -882,6 +906,66 @@ export default function EmployerApplicationsPage() {
                       <div>
                         <strong>Thư giới thiệu:</strong>
                         <p style={{ margin: '6px 0 0', whiteSpace: 'pre-line' }}>{selectedAppDetail.coverLetter}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* AI Match Analysis Section */}
+              {(selectedAppDetail.aiMatchScore !== undefined && selectedAppDetail.aiMatchScore !== null) && (
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                    🤖 Phân tích độ phù hợp bằng AI
+                  </h4>
+                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', color: '#334155', lineHeight: '1.6', fontSize: '0.95rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <strong style={{ color: '#0f172a' }}>Điểm phù hợp tổng thể:</strong>
+                      <span style={{
+                        background: selectedAppDetail.aiMatchScore >= 80 ? '#dcfce7' : selectedAppDetail.aiMatchScore >= 50 ? '#fef9c3' : '#fee2e2',
+                        color: selectedAppDetail.aiMatchScore >= 80 ? '#166534' : selectedAppDetail.aiMatchScore >= 50 ? '#854d0e' : '#991b1b',
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '0.95rem',
+                        fontWeight: 700,
+                      }}>
+                        {selectedAppDetail.aiMatchScore}%
+                      </span>
+                      {selectedAppDetail.needRerank && (
+                        <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontStyle: 'italic' }}>
+                          (Hồ sơ hoặc yêu cầu đã thay đổi, hệ thống sẽ tự động chấm lại sau ít phút)
+                        </span>
+                      )}
+                    </div>
+
+                    {selectedAppDetail.aiMatchAnalysis && (
+                      <div style={{ marginBottom: '16px', whiteSpace: 'pre-line' }}>
+                        <strong>Đánh giá chung:</strong><br />
+                        {selectedAppDetail.aiMatchAnalysis}
+                      </div>
+                    )}
+
+                    {selectedAppDetail.scoreBreakdown && Object.keys(selectedAppDetail.scoreBreakdown).length > 0 && (
+                      <div style={{ marginBottom: '16px' }}>
+                        <strong style={{ display: 'block', marginBottom: '8px' }}>Chi tiết điểm theo tiêu chí:</strong>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {Object.entries(selectedAppDetail.scoreBreakdown).map(([key, score]) => (
+                            <span key={key} style={{ background: '#e0e7ff', color: '#4338ca', padding: '4px 12px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+                              {key}: {score}/100
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedAppDetail.missingRequirements && selectedAppDetail.missingRequirements.length > 0 && (
+                      <div>
+                        <strong style={{ display: 'block', marginBottom: '8px', color: '#b91c1c' }}>⚠️ Các yêu cầu còn thiếu:</strong>
+                        <ul style={{ margin: 0, paddingLeft: '20px', color: '#991b1b' }}>
+                          {selectedAppDetail.missingRequirements.map((req, idx) => (
+                            <li key={idx} style={{ marginBottom: '4px' }}>{req}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>

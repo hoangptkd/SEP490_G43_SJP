@@ -57,6 +57,7 @@ public class ApplicationService {
     private final DtoMapper dtoMapper;
     private final FeatureLimitService featureLimitService;
     private final EmployerRepository employerRepository;
+    private final AiRankingService aiRankingService;
 
     @Transactional(readOnly = true)
     public Page<Application> findByCandidateId(String candidateId, Pageable pageable) {
@@ -126,6 +127,15 @@ public class ApplicationService {
                         }
                     });
         }
+
+        // Run AI ranking async
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                aiRankingService.rankApplication(saved);
+            } catch (Exception e) {
+                // ignore
+            }
+        });
 
         return toResponse(saved);
     }
@@ -229,7 +239,8 @@ public class ApplicationService {
                     jobResponse.viewsCount(),
                     jobResponse.rejectionReason(),
                     jobResponse.applicationsCount(),
-                    jobResponse.reportFixDeadline()
+                    jobResponse.reportFixDeadline(),
+                    jobResponse.rankingConfig()
             );
         }
 
