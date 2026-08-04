@@ -9,6 +9,7 @@ import java.util.UUID;
 public interface StorageService {
     StoredFile storeCandidateCv(UUID candidateId, MultipartFile file) throws IOException;
     Resource loadCandidateCv(String storageKey) throws IOException;
+    StoredFile storeUserAvatar(UUID userId, MultipartFile file) throws IOException;
 
     record StoredFile(String storageKey, long fileSize, String contentType) {
     }

@@ -102,6 +102,7 @@ app:
     costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
   storage:
     cv-upload-dir: ${CV_UPLOAD_DIR:uploads/cvs}
+    avatar-upload-dir: ${AVATAR_UPLOAD_DIR:uploads/avatars}
   payment:
     momo:
       enabled: ${MOMO_ENABLED:true}

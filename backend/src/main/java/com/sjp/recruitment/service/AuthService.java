@@ -1,22 +1,28 @@
 package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.exception.ApiException;
+import com.sjp.recruitment.model.dto.request.ChangePasswordRequest;
 import com.sjp.recruitment.model.dto.request.CompleteOauthRoleRequest;
+import com.sjp.recruitment.model.dto.request.DeactivateAccountRequest;
 import com.sjp.recruitment.model.dto.request.ForgotPasswordRequest;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.model.dto.request.LoginRequest;
 import com.sjp.recruitment.model.dto.request.RegisterRequest;
 import com.sjp.recruitment.model.dto.request.ResetPasswordRequest;
+import com.sjp.recruitment.model.dto.response.AccountResponse;
 import com.sjp.recruitment.model.dto.response.AuthResponse;
 import com.sjp.recruitment.model.dto.response.UserResponse;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.EmailVerificationToken;
+import com.sjp.recruitment.model.entity.OauthAccount;
 import com.sjp.recruitment.model.entity.OauthRoleSelectionToken;
 import com.sjp.recruitment.model.entity.PasswordResetToken;
 import com.sjp.recruitment.repository.CandidateProfileRepository;
 import com.sjp.recruitment.repository.EmailVerificationTokenRepository;
+import com.sjp.recruitment.repository.OauthAccountRepository;
 import com.sjp.recruitment.repository.PasswordResetTokenRepository;
 import com.sjp.recruitment.repository.UserRepository;
+import com.sjp.recruitment.service.storage.StorageService;
 import com.sjp.recruitment.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,7 +34,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -49,12 +57,14 @@ public class AuthService {
     private final UserRepository userRepository;
     private final CandidateProfileRepository candidateProfileRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final OauthAccountRepository oauthAccountRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final DtoMapper dtoMapper;
     private final EmailService emailService;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final StorageService storageService;
 
     @Value("${app.frontend-base-url}")
     private String frontendBaseUrl;
@@ -86,15 +96,7 @@ public class AuthService {
             ensureCandidateProfile(savedUser);
         }
 
-        String tokenValue = UUID.randomUUID().toString();
-        EmailVerificationToken token = new EmailVerificationToken();
-        token.setUser(savedUser);
-        token.setToken(hashToken(tokenValue));
-        token.setExpiresAt(LocalDateTime.now().plusMinutes(verificationTtlMinutes));
-        emailVerificationTokenRepository.save(token);
-
-        String verificationLink = frontendBaseUrl + "/verify-email?token=" + tokenValue;
-        emailService.sendVerificationEmail(savedUser.getEmail(), verificationLink);
+        sendVerificationEmail(savedUser);
 
         return new AuthResponse(dtoMapper.toUserResponse(savedUser), null);
     }
@@ -188,7 +190,9 @@ public class AuthService {
         user.setRole(request.role());
         user.setEmailVerified(true);
         user.setStatus(User.UserStatus.ACTIVE);
+        user.setLastLoginAt(LocalDateTime.now());
         User saved = userRepository.save(user);
+        linkOauthAccount(saved, token.getProvider(), token.getProviderId(), token.getEmail());
         if (saved.getRoleEnum() == User.UserRole.CANDIDATE) {
             CandidateProfile profile = ensureCandidateProfile(saved);
             profile.setFullName(token.getFullName());
@@ -209,6 +213,32 @@ public class AuthService {
         token.setExpiresAt(LocalDateTime.now().plusMinutes(ttlMinutes));
         oauthRoleSelectionTokens.put(token.getToken(), token);
         return token;
+    }
+
+    @Transactional
+    public Optional<User> findOrLinkOauthUser(String provider, String providerId, String email, String fullName) {
+        String normalizedProvider = normalizeProvider(provider);
+        String normalizedEmail = normalizeEmail(email);
+        Optional<OauthAccount> existingOauth = oauthAccountRepository
+                .findByProviderAndProviderUserId(normalizedProvider, providerId);
+        if (existingOauth.isPresent()) {
+            OauthAccount account = existingOauth.get();
+            account.setProviderEmail(normalizedEmail);
+            User user = account.getUser();
+            activateGoogleVerifiedUser(user);
+            return Optional.of(userRepository.save(user));
+        }
+
+        return userRepository.findByEmail(normalizedEmail)
+                .map(user -> {
+                    activateGoogleVerifiedUser(user);
+                    if (user.getFullName() == null || user.getFullName().isBlank()) {
+                        user.setFullName(fullName);
+                    }
+                    User saved = userRepository.save(user);
+                    linkOauthAccount(saved, normalizedProvider, providerId, normalizedEmail);
+                    return saved;
+                });
     }
 
     public User getCurrentUser() {
@@ -247,6 +277,46 @@ public class AuthService {
         return findRemoteUserByEmail(authentication.getName())
                 .map(RemoteUser::toUserResponse)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Khong tim thay nguoi dung"));
+    }
+
+    @Transactional(readOnly = true)
+    public AccountResponse getAccount() {
+        return toAccountResponse(getCurrentUser());
+    }
+
+    @Transactional
+    public void changePassword(ChangePasswordRequest request) {
+        User user = getCurrentUser();
+        requirePasswordLogin(user);
+        requireCurrentPassword(user, request.currentPassword());
+        if (passwordMatches(request.newPassword(), user.getPasswordHash())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_UNCHANGED", "Mat khau moi phai khac mat khau hien tai");
+        }
+        validatePassword(request.newPassword());
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public AccountResponse updateAvatar(MultipartFile file) {
+        User user = getCurrentUser();
+        validateAvatarFile(file);
+        try {
+            StorageService.StoredFile stored = storageService.storeUserAvatar(user.getId(), file);
+            user.setAvatarUrl("/api/public/avatars/" + stored.storageKey());
+            return toAccountResponse(userRepository.save(user));
+        } catch (IOException exception) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "AVATAR_STORAGE_FAILED", "Khong the luu anh dai dien");
+        }
+    }
+
+    @Transactional
+    public void deactivateAccount(DeactivateAccountRequest request) {
+        User user = getCurrentUser();
+        requirePasswordLogin(user);
+        requireCurrentPassword(user, request.currentPassword());
+        user.setStatus(User.UserStatus.SUSPENDED);
+        userRepository.save(user);
     }
 
     public CandidateProfile ensureCandidateProfile(User user) {
@@ -311,6 +381,85 @@ public class AuthService {
                 || password.chars().noneMatch(Character::isDigit)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "WEAK_PASSWORD", "Mat khau phai co it nhat 8 ky tu, gom chu hoa, chu thuong va so");
         }
+    }
+
+    private void requirePasswordLogin(User user) {
+        if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_LOGIN_NOT_ENABLED", "Tai khoan nay chua co mat khau noi bo");
+        }
+    }
+
+    private void requireCurrentPassword(User user, String currentPassword) {
+        if (!passwordMatches(currentPassword, user.getPasswordHash())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "CURRENT_PASSWORD_INVALID", "Mat khau hien tai khong dung");
+        }
+    }
+
+    private void validateAvatarFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_FILE_REQUIRED", "Vui long chon anh dai dien");
+        }
+        if (file.getSize() > 2L * 1024 * 1024) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_FILE_TOO_LARGE", "Anh dai dien khong duoc vuot qua 2MB");
+        }
+        String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
+        if (!List.of("image/jpeg", "image/png", "image/webp").contains(contentType)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_INVALID_TYPE", "Chi ho tro anh JPG, PNG hoac WEBP");
+        }
+    }
+
+    private void activateGoogleVerifiedUser(User user) {
+        if (user.getStatusEnum() == User.UserStatus.SUSPENDED) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_SUSPENDED", "Tai khoan da bi khoa");
+        }
+        user.setEmailVerified(true);
+        user.setStatus(User.UserStatus.ACTIVE);
+        user.setLastLoginAt(LocalDateTime.now());
+    }
+
+    private void linkOauthAccount(User user, String provider, String providerId, String providerEmail) {
+        String normalizedProvider = normalizeProvider(provider);
+        if (oauthAccountRepository.existsByProviderAndProviderUserId(normalizedProvider, providerId)) {
+            return;
+        }
+        OauthAccount account = new OauthAccount();
+        account.setUser(user);
+        account.setProvider(normalizedProvider);
+        account.setProviderUserId(providerId);
+        account.setProviderEmail(normalizeEmail(providerEmail));
+        oauthAccountRepository.save(account);
+    }
+
+    private String normalizeProvider(String provider) {
+        return provider == null ? "" : provider.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void sendVerificationEmail(User user) {
+        String tokenValue = UUID.randomUUID().toString();
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setUser(user);
+        token.setToken(hashToken(tokenValue));
+        token.setExpiresAt(LocalDateTime.now().plusMinutes(verificationTtlMinutes));
+        emailVerificationTokenRepository.save(token);
+        emailService.sendVerificationEmail(user.getEmail(), frontendBaseUrl + "/verify-email?token=" + tokenValue);
+    }
+
+    private AccountResponse toAccountResponse(User user) {
+        return new AccountResponse(
+                String.valueOf(user.getId()),
+                user.getEmail(),
+                user.getRoleEnum() == null ? toFrontendRole(user.getRole()) : user.getRoleEnum().name(),
+                user.getStatusEnum() == null ? toFrontendStatus(user.getStatus()) : user.getStatusEnum().name(),
+                user.isEmailVerified(),
+                user.getFullName(),
+                user.getPhone(),
+                user.getAvatarUrl(),
+                user.getPasswordHash() != null && !user.getPasswordHash().isBlank()
+        );
     }
 
     private String hashToken(String token) {

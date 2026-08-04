@@ -1,12 +1,15 @@
 package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.entity.User;
+import com.sjp.recruitment.model.dto.request.ChangePasswordRequest;
 import com.sjp.recruitment.model.dto.request.CompleteOauthRoleRequest;
+import com.sjp.recruitment.model.dto.request.DeactivateAccountRequest;
 import com.sjp.recruitment.model.dto.request.ForgotPasswordRequest;
 import com.sjp.recruitment.model.dto.request.LoginRequest;
 import com.sjp.recruitment.model.dto.request.RegisterRequest;
 import com.sjp.recruitment.model.dto.request.ResetPasswordRequest;
 import com.sjp.recruitment.model.dto.request.VerifyEmailRequest;
+import com.sjp.recruitment.model.dto.response.AccountResponse;
 import com.sjp.recruitment.model.dto.response.AuthConfigResponse;
 import com.sjp.recruitment.model.dto.response.AuthResponse;
 import com.sjp.recruitment.model.dto.response.MessageResponse;
@@ -18,6 +21,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/auth")
@@ -74,5 +78,27 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser() {
         return ResponseEntity.ok(authService.getCurrentUserResponse());
+    }
+
+    @GetMapping("/account")
+    public ResponseEntity<AccountResponse> getAccount() {
+        return ResponseEntity.ok(authService.getAccount());
+    }
+
+    @PutMapping("/account/password")
+    public ResponseEntity<MessageResponse> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        authService.changePassword(request);
+        return ResponseEntity.ok(new MessageResponse("Mat khau da duoc cap nhat"));
+    }
+
+    @PutMapping(value = "/account/avatar", consumes = "multipart/form-data")
+    public ResponseEntity<AccountResponse> updateAvatar(@RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(authService.updateAvatar(file));
+    }
+
+    @PostMapping("/account/deactivate")
+    public ResponseEntity<MessageResponse> deactivateAccount(@Valid @RequestBody DeactivateAccountRequest request) {
+        authService.deactivateAccount(request);
+        return ResponseEntity.ok(new MessageResponse("Tai khoan da duoc vo hieu hoa"));
     }
 }

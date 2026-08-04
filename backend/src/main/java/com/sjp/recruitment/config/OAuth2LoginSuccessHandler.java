@@ -2,7 +2,6 @@ package com.sjp.recruitment.config;
 
 import com.sjp.recruitment.model.entity.OauthRoleSelectionToken;
 import com.sjp.recruitment.model.entity.User;
-import com.sjp.recruitment.repository.UserRepository;
 import com.sjp.recruitment.service.AuthService;
 import com.sjp.recruitment.util.JwtUtil;
 import jakarta.servlet.ServletException;
@@ -23,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 @RequiredArgsConstructor
 public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
-    private final UserRepository userRepository;
     private final AuthService authService;
     private final JwtUtil jwtUtil;
 
@@ -49,13 +47,18 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
             return;
         }
 
-        userRepository.findByEmail(email).ifPresentOrElse(existing -> redirectExisting(request, response, existing),
-                () -> redirectRoleSelection(request, response, email, providerId, fullName));
+        try {
+            authService.findOrLinkOauthUser("GOOGLE", providerId, email, fullName)
+                    .ifPresentOrElse(existing -> redirectExisting(request, response, existing),
+                            () -> redirectRoleSelection(request, response, email, providerId, fullName));
+        } catch (com.sjp.recruitment.exception.ApiException exception) {
+            getRedirectStrategy().sendRedirect(request, response, frontendBaseUrl + "/login?oauthError=account_not_active");
+        }
     }
 
     private void redirectExisting(HttpServletRequest request, HttpServletResponse response, User user) {
         try {
-            if (!user.isEmailVerified() || user.getStatusEnum() != User.UserStatus.ACTIVE) {
+            if (user.getStatusEnum() != User.UserStatus.ACTIVE) {
                 getRedirectStrategy().sendRedirect(request, response, frontendBaseUrl + "/login?oauthError=account_not_active");
                 return;
             }

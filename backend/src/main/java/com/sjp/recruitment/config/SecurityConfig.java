@@ -51,6 +51,7 @@ public class SecurityConfig {
                     "/login/oauth2/**",
                     "/actuator/health",
                     "/settings/public",
+                    "/public/avatars/**",
                     "/candidate/ai-interviews/speech/**",
                     "/payments/momo/ipn",
                     "/payments/vnpay/ipn",

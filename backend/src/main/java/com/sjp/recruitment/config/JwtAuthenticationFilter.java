@@ -27,13 +27,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getServletPath();
-        return "GET".equalsIgnoreCase(request.getMethod())
-                && ("/jobs".equals(path) || path.matches("^/jobs/[0-9a-fA-F-]{36}$"));
-    }
-
-    @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,

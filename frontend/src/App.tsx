@@ -49,6 +49,7 @@ import type {
   NotificationItem,
   SubscriptionView,
 } from './types/candidateDomain';
+import type { AccountView } from './types/auth';
 import type { Job, JobFilters, Recommendation } from './types/job';
 
 // ─── Framer Motion variants ────────────────────────────────────────────────
@@ -139,6 +140,7 @@ function App() {
       <Route path="/candidate" element={<Protected role="CANDIDATE"><CandidateLayout /></Protected>}>
         <Route index element={<CandidateHome />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="account" element={<AccountPage />} />
         <Route path="cvs" element={<CvPage />} />
         <Route path="saved-jobs" element={<SavedJobsPage />} />
         <Route path="applications" element={<ApplicationsPage />} />
@@ -715,6 +717,7 @@ function CandidateHomeActions() {
             <div className="candidate-menu-group">
               <strong>Cá nhân & Bảo mật</strong>
               <Link to="/candidate/profile">Hồ sơ cá nhân</Link>
+              <Link to="/candidate/account">Tài khoản & Bảo mật</Link>
             </div>
             <div className="candidate-menu-group">
               <strong>Nâng cấp tài khoản</strong>
@@ -1249,6 +1252,13 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
   const oauthError = params.get('oauthError');
+  const oauthErrorMessage = oauthError === 'google_not_configured'
+    ? 'Đăng nhập Google chưa được cấu hình trên môi trường này.'
+    : oauthError === 'missing_profile'
+      ? 'Google chưa trả về đủ thông tin email cho tài khoản này.'
+      : oauthError === 'account_not_active'
+        ? 'Tài khoản đang bị khoá hoặc chưa thể đăng nhập.'
+        : '';
 
   useEffect(() => {
     authService.getConfig()
@@ -1313,14 +1323,14 @@ function LoginPage() {
 
         {/* OAuth error */}
         <AnimatePresence>
-          {oauthError === 'google_not_configured' && (
+          {oauthErrorMessage && (
             <motion.div
               className="error-panel"
               variants={scaleIn} initial="initial" animate="animate" exit="exit"
               transition={{ duration: 0.2, ease: EASE_OUT }}
               style={{ marginBottom: 16 }}
             >
-              Đăng nhập Google chưa được cấu hình trên môi trường này.
+              {oauthErrorMessage}
             </motion.div>
           )}
         </AnimatePresence>
@@ -2571,6 +2581,7 @@ function CandidateLayout() {
     { to: '/', end: true, icon: '⌂', label: 'Trang chủ' },
     { to: '/candidate', end: true, icon: '📊', label: 'Dashboard' },
     { to: '/candidate/profile', icon: '👤', label: 'Hồ sơ' },
+    { to: '/candidate/account', icon: '🔐', label: 'Tài khoản' },
     { to: '/candidate/cvs', icon: '📄', label: 'CV của tôi' },
     { to: '/candidate/saved-jobs', icon: '🔖', label: 'Việc đã lưu' },
     { to: '/candidate/applications', icon: '📋', label: 'Ứng tuyển' },
@@ -3042,6 +3053,270 @@ function ProfilePage() {
             )}
           </AnimatePresence>
         </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── ACCOUNT PAGE ───────────────────────────────────────────────────────────
+function AccountPage() {
+  const navigate = useNavigate();
+  const [account, setAccount] = useState<AccountView | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [deactivatePassword, setDeactivatePassword] = useState('');
+  const [busy, setBusy] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    authService.getAccount()
+      .then((data) => {
+        setAccount(data);
+      })
+      .catch((err) => setError(readError(err)));
+  }, []);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreview('');
+      return;
+    }
+    const previewUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [avatarFile]);
+
+  function resetNotice() {
+    setMessage('');
+    setError('');
+  }
+
+  function syncStoredUser(updated: AccountView) {
+    const token = getToken();
+    if (!token) return;
+    setAuthSession(token, {
+      id: updated.id,
+      email: updated.email,
+      role: updated.role,
+      status: updated.status,
+      emailVerified: updated.emailVerified,
+    });
+  }
+
+  async function saveAvatar(event: FormEvent) {
+    event.preventDefault();
+    resetNotice();
+    if (!avatarFile) {
+      setError('Vui lòng chọn ảnh đại diện.');
+      return;
+    }
+    setBusy('avatar');
+    try {
+      const updated = await authService.updateAvatar(avatarFile);
+      setAccount(updated);
+      setAvatarFile(null);
+      syncStoredUser(updated);
+      setMessage('Đã cập nhật avatar.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function savePassword(event: FormEvent) {
+    event.preventDefault();
+    resetNotice();
+    if (newPassword !== confirmPassword) {
+      setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+    setBusy('password');
+    try {
+      await authService.changePassword({ currentPassword, newPassword });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setMessage('Đã đổi mật khẩu.');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function deactivate(event: FormEvent) {
+    event.preventDefault();
+    resetNotice();
+    setBusy('deactivate');
+    try {
+      await authService.deactivateAccount(deactivatePassword);
+      clearAuthSession();
+      navigate('/login');
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  if (!account) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center' }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2.5"
+          style={{ animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }}>
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        <p className="muted">Đang tải tài khoản...</p>
+      </div>
+    );
+  }
+
+  const displayName = account.fullName || account.email.split('@')[0];
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'C';
+
+  return (
+    <motion.div variants={fadeUp} initial="initial" animate="animate"
+      transition={{ duration: 0.25, ease: EASE_OUT }}>
+      <div className="page-header">
+        <h1>Tài khoản & Bảo mật</h1>
+        <p>Quản lý đăng nhập, email và ảnh đại diện của bạn</p>
+      </div>
+
+      {(message || error) && (
+        <div className={error ? 'error-panel' : 'success-panel'} style={{ marginBottom: 16 }}>
+          {error || message}
+        </div>
+      )}
+
+      <section className="card" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{
+            width: 72,
+            height: 72,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            background: 'var(--primary-soft)',
+            border: '2px solid var(--primary-soft)',
+            display: 'grid',
+            placeItems: 'center',
+            color: 'var(--primary)',
+            fontWeight: 800,
+            fontSize: '1.35rem',
+          }}>
+            {avatarPreview || account.avatarUrl ? (
+              <img src={avatarPreview || account.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : initials}
+          </div>
+          <div style={{ flex: '1 1 240px' }}>
+            <h2 style={{ margin: 0 }}>{displayName}</h2>
+            <p className="muted" style={{ margin: '4px 0 10px' }}>{account.email}</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <span className={`chip ${account.emailVerified ? 'match' : 'warning'}`}>
+                {account.emailVerified ? 'Email đã xác minh' : 'Chờ xác minh email'}
+              </span>
+              <span className={`chip ${account.status === 'ACTIVE' ? 'match' : 'danger'}`}>
+                {account.status === 'ACTIVE' ? 'Đang hoạt động' : account.status}
+              </span>
+              <span className="chip neutral">{account.role}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div style={{ display: 'grid', gap: 20 }}>
+        <form className="card" onSubmit={saveAvatar}>
+          <h2 style={{ marginBottom: 16 }}>Ảnh đại diện</h2>
+          <div className="form-grid">
+            <label>
+              Chọn ảnh từ máy tính
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => setAvatarFile(event.target.files?.[0] || null)}
+              />
+            </label>
+          </div>
+          <p className="muted" style={{ margin: '10px 0 0', fontSize: '0.85rem' }}>
+            Hỗ trợ JPG, PNG hoặc WEBP, tối đa 2MB.
+          </p>
+          <button type="submit" disabled={busy === 'avatar'} style={{ marginTop: 16 }}>
+            {busy === 'avatar' ? 'Đang tải...' : 'Tải ảnh đại diện'}
+          </button>
+        </form>
+
+        {!account.passwordLoginEnabled && (
+          <div className="notice-panel">
+            Tài khoản này đang đăng nhập bằng Google/OAuth và chưa có mật khẩu nội bộ.
+          </div>
+        )}
+
+        <form className="card" onSubmit={savePassword}>
+          <h2 style={{ marginBottom: 16 }}>Đổi mật khẩu</h2>
+          <div className="form-grid two">
+            <label>
+              Mật khẩu hiện tại
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                disabled={!account.passwordLoginEnabled}
+                required
+              />
+            </label>
+            <label>
+              Mật khẩu mới
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                disabled={!account.passwordLoginEnabled}
+                required
+              />
+            </label>
+            <label>
+              Nhập lại mật khẩu mới
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                disabled={!account.passwordLoginEnabled}
+                required
+              />
+            </label>
+          </div>
+          <button type="submit" disabled={!account.passwordLoginEnabled || busy === 'password'} style={{ marginTop: 16 }}>
+            {busy === 'password' ? 'Đang đổi...' : 'Đổi mật khẩu'}
+          </button>
+        </form>
+
+        <form className="card" onSubmit={deactivate} style={{ borderColor: 'rgba(220, 38, 38, 0.35)' }}>
+          <h2 style={{ marginBottom: 16, color: 'var(--danger)' }}>Vô hiệu hoá tài khoản</h2>
+          <div className="form-grid">
+            <label>
+              Mật khẩu hiện tại
+              <input
+                type="password"
+                value={deactivatePassword}
+                onChange={(event) => setDeactivatePassword(event.target.value)}
+                disabled={!account.passwordLoginEnabled}
+                required
+              />
+            </label>
+          </div>
+          <button type="submit" className="danger" disabled={!account.passwordLoginEnabled || busy === 'deactivate'} style={{ marginTop: 16 }}>
+            {busy === 'deactivate' ? 'Đang xử lý...' : 'Vô hiệu hoá tài khoản'}
+          </button>
+        </form>
       </div>
     </motion.div>
   );

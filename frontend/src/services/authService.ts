@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { User } from '../types/auth';
+import type { AccountView, User } from '../types/auth';
 
 export interface LoginRequest {
   email: string;
@@ -19,6 +19,11 @@ export interface ForgotPasswordRequest {
 export interface ResetPasswordRequest {
   token: string;
   password: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }
 
 export interface AuthResponse {
@@ -72,6 +77,30 @@ export const authService = {
 
   getCurrentUser: async (): Promise<User> => {
     const response = await api.get<User>('/auth/me');
+    return response.data;
+  },
+
+  getAccount: async (): Promise<AccountView> => {
+    const response = await api.get<AccountView>('/auth/account');
+    return response.data;
+  },
+
+  changePassword: async (data: ChangePasswordRequest): Promise<{ message: string }> => {
+    const response = await api.put<{ message: string }>('/auth/account/password', data);
+    return response.data;
+  },
+
+  updateAvatar: async (file: File): Promise<AccountView> => {
+    const data = new FormData();
+    data.append('file', file);
+    const response = await api.put<AccountView>('/auth/account/avatar', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  deactivateAccount: async (currentPassword: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/account/deactivate', { currentPassword });
     return response.data;
   },
 };

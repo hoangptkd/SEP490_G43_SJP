@@ -6,6 +6,13 @@ export interface User {
   emailVerified: boolean;
 }
 
+export interface AccountView extends User {
+  fullName?: string;
+  phone?: string;
+  avatarUrl?: string;
+  passwordLoginEnabled: boolean;
+}
+
 export interface AuthState {
   user: User | null;
   token: string | null;
