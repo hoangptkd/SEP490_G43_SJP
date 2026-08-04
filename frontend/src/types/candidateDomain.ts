@@ -57,6 +57,11 @@ export interface CandidateApplication {
   timeline: ApplicationTimeline[];
   interviews?: InterviewScheduleResponse[];
   jobOffer?: JobOfferResponse;
+  aiMatchScore?: number;
+  aiMatchAnalysis?: string;
+  missingRequirements?: string[];
+  scoreBreakdown?: Record<string, number>;
+  needRerank?: boolean;
 }
 
 export interface NotificationItem {

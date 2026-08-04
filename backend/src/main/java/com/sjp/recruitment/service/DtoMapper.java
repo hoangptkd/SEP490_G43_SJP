@@ -21,6 +21,9 @@ public class DtoMapper {
     @Autowired
     private ApplicationRepository applicationRepository;
 
+    @Autowired
+    private com.sjp.recruitment.repository.AiRankingResultRepository aiRankingResultRepository;
+
     public UserResponse toUserResponse(User user) {
         return new UserResponse(
                 String.valueOf(user.getId()),
@@ -177,7 +180,8 @@ public class DtoMapper {
                 job.getViewsCount() != null ? job.getViewsCount() : 0,
                 rejectionReason,
                 appsCount,
-                job.getReportFixDeadline()
+                job.getReportFixDeadline(),
+                job.getRankingConfig()
         );
     }
 
@@ -200,6 +204,9 @@ public class DtoMapper {
         CandidateCv submittedCv = application.getCv();
         CvVersion submittedVersion = application.getCvVersion();
         boolean builderResume = submittedVersion != null && "builder".equalsIgnoreCase(submittedVersion.getSourceType());
+        com.sjp.recruitment.model.entity.AiRankingResult aiResult = application.getId() != null ? 
+                aiRankingResultRepository.findByApplicationId(application.getId()).orElse(null) : null;
+
         return new ApplicationResponse(
                 String.valueOf(application.getId()),
                 job,
@@ -213,7 +220,12 @@ public class DtoMapper {
                 application.getUpdatedAt(),
                 timeline,
                 interviews,
-                jobOffer
+                jobOffer,
+                application.getAiMatchScore(),
+                application.getAiMatchAnalysis(),
+                aiResult != null ? aiResult.getMissingRequirements() : null,
+                aiResult != null ? aiResult.getScoreBreakdown() : null,
+                application.getNeedRerank()
         );
     }
 

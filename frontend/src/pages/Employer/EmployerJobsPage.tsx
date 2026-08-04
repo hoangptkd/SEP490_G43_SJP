@@ -41,6 +41,7 @@ function EmployerJobsPage() {
   }, [statusFilter, searchTerm]);
   const [skillsInput, setSkillsInput] = useState('');
   const [reqsInput, setReqsInput] = useState('');
+  const [hasApplications, setHasApplications] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -57,6 +58,12 @@ function EmployerJobsPage() {
     location: '',
     companyLocationId: '',
     status: 'published',
+    rankingConfig: {
+      template: 'default',
+      weights: { skills: 40, experience: 30, projects: 10, education: 10, certificates: 10 },
+      enabled_criteria: ['skills', 'experience', 'projects', 'education', 'certificates'],
+      mandatory: { skills: [], certificates: [], min_experience_years: null, education_level: null },
+    } as any,
   });
 
   useEffect(() => {
@@ -86,6 +93,7 @@ function EmployerJobsPage() {
     setEditingId(null);
     setSkillsInput('');
     setReqsInput('');
+    setHasApplications(false);
     const defaultLoc = locations.find((l) => l.headquarter) || locations[0];
     const defaultDate = new Date();
     defaultDate.setDate(defaultDate.getDate() + 30);
@@ -107,6 +115,12 @@ function EmployerJobsPage() {
       location: defaultLoc ? defaultLoc.branchName : (company?.location || 'Hà Nội'),
       companyLocationId: defaultLoc ? defaultLoc.id : '',
       status: 'draft',
+      rankingConfig: {
+        template: 'default',
+        weights: { skills: 40, experience: 30, projects: 10, education: 10, certificates: 10 },
+        enabled_criteria: ['skills', 'experience', 'projects', 'education', 'certificates'],
+        mandatory: { skills: [], certificates: [], min_experience_years: null, education_level: null },
+      },
     });
     submitTargetRef.current = 'draft';
     setShowForm(true);
@@ -118,6 +132,7 @@ function EmployerJobsPage() {
     setEditingId(job.id);
     setSkillsInput((job.skills || []).join(', '));
     setReqsInput((job.requirements || []).join('\n'));
+    setHasApplications((job.applicationsCount || 0) > 0);
 
     let deadlineStr = '';
     if (job.deadline) {
@@ -142,6 +157,12 @@ function EmployerJobsPage() {
       status: job.status?.toLowerCase() === 'rejected' || job.status?.toLowerCase() === 'awaiting_company'
         ? 'pending_review'
         : (job.status?.toLowerCase() || 'draft'),
+      rankingConfig: job.rankingConfig || {
+        template: 'default',
+        weights: { skills: 40, experience: 30, projects: 10, education: 10, certificates: 10 },
+        enabled_criteria: ['skills', 'experience', 'projects', 'education', 'certificates'],
+        mandatory: { skills: [], certificates: [], min_experience_years: null, education_level: null },
+      },
     });
     submitTargetRef.current =
       job.status?.toLowerCase() === 'rejected' || job.status?.toLowerCase() === 'awaiting_company'
@@ -674,128 +695,353 @@ function EmployerJobsPage() {
               />
             </label>
 
+            {/* AI Ranking Configuration Section */}
+            <div style={{ width: '100%', marginTop: '32px', paddingTop: '24px', borderTop: '2px solid #e2e8f0', position: 'relative' }}>
+                {hasApplications && (
+                  <div style={{ position: 'absolute', top: '24px', left: 0, right: 0, bottom: 0, background: 'rgba(255,255,255,0.6)', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(1px)' }}>
+                    <div style={{ background: '#fff', padding: '16px 24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #cbd5e1', textAlign: 'center', maxWidth: '400px' }}>
+                      <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🔒</div>
+                      <h4 style={{ margin: '0 0 8px 0', color: '#0f172a', fontSize: '1.05rem' }}>Đã khóa Cấu hình AI</h4>
+                      <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem', lineHeight: '1.5' }}>Tin tuyển dụng này đã có người nộp CV. Để đảm bảo công bằng cho tất cả ứng viên, tiêu chí chấm điểm không thể thay đổi nữa.</p>
+                    </div>
+                  </div>
+                )}
+                
+                <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>
+                    🤖
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.15rem', fontWeight: 700 }}>Cấu hình AI chấm điểm (Smart Ranking)</h3>
+                    <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Hệ thống tự động đánh giá độ phù hợp của CV với Yêu cầu tuyển dụng.</p>
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  
+                  {/* Top Bar: Template Selection */}
+                  <div style={{ padding: '16px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                    <div>
+                      <h4 style={{ margin: 0, color: '#1e293b', fontSize: '0.95rem', fontWeight: 600 }}>Mẫu phân bổ trọng số (Template)</h4>
+                      <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.85rem' }}>Chọn mẫu để tự động điền điểm cho các tiêu chí bên dưới.</p>
+                    </div>
+                    <select
+                      value={formData.rankingConfig?.template || 'balanced'}
+                      onChange={(e) => {
+                        const template = e.target.value;
+                        let newWeights = { ...formData.rankingConfig?.weights };
+                        if (template === 'balanced') {
+                          newWeights = { skills: 30, experience: 30, projects: 15, education: 15, certificates: 10 };
+                        } else if (template === 'skills_focus') {
+                          newWeights = { skills: 50, experience: 20, projects: 20, education: 5, certificates: 5 };
+                        } else if (template === 'experience_focus') {
+                          newWeights = { skills: 30, experience: 50, projects: 10, education: 5, certificates: 5 };
+                        } else if (template === 'project_focus') {
+                          newWeights = { skills: 30, experience: 10, projects: 50, education: 5, certificates: 5 };
+                        }
+                        setFormData({
+                          ...formData,
+                          rankingConfig: {
+                            ...formData.rankingConfig,
+                            template: template,
+                            weights: newWeights
+                          }
+                        });
+                      }}
+                      style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: 500, color: '#334155', outline: 'none', cursor: 'pointer', background: '#fff', minWidth: '220px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                    >
+                      <option value="balanced">⚖️ Cân bằng (Balanced)</option>
+                      <option value="skills_focus">🎯 Tập trung Kỹ năng</option>
+                      <option value="experience_focus">⏳ Tập trung Kinh nghiệm</option>
+                      <option value="project_focus">🚀 Tập trung Dự án</option>
+                      <option value="custom">⚙️ Tùy chỉnh (Custom)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))' }}>
+                    
+                    {/* Left Column: Scoring Criteria */}
+                    <div style={{ padding: '24px', borderRight: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: 600 }}>
+                          Tiêu chí đánh giá
+                        </h4>
+                        {(() => {
+                          const total = Object.entries(formData.rankingConfig?.weights || {})
+                            .filter(([k]) => formData.rankingConfig?.enabled_criteria?.includes(k))
+                            .reduce((sum, [_, v]) => sum + Number(v), 0);
+                          const isError = total !== 100;
+                          return (
+                            <span style={{ 
+                              fontSize: '0.85rem', 
+                              padding: '4px 12px', 
+                              borderRadius: '20px', 
+                              background: isError ? '#fee2e2' : '#dcfce3', 
+                              color: isError ? '#ef4444' : '#16a34a',
+                              fontWeight: 600,
+                              border: `1px solid ${isError ? '#fca5a5' : '#86efac'}`
+                            }}>
+                              Tổng: {total}% {isError && ' (Cần đúng 100%)'}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      
+                      {['skills', 'experience', 'projects', 'education', 'certificates'].map(criteria => {
+                        const isEnabled = formData.rankingConfig?.enabled_criteria?.includes(criteria) ?? true;
+                        
+                        return (
+                          <div key={criteria} style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', padding: '12px 16px', borderRadius: '8px', background: isEnabled ? '#f8fafc' : '#ffffff', border: `1px solid ${isEnabled ? '#cbd5e1' : '#e2e8f0'}`, transition: 'all 0.2s', opacity: isEnabled ? 1 : 0.6 }}>
+                            <label style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', margin: 0 }}>
+                              <input
+                                type="checkbox"
+                                checked={isEnabled}
+                                onChange={(e) => {
+                                  const current = formData.rankingConfig?.enabled_criteria || [];
+                                  const next = e.target.checked ? [...current, criteria] : current.filter((c: string) => c !== criteria);
+                                  setFormData({
+                                    ...formData,
+                                    rankingConfig: { ...formData.rankingConfig, enabled_criteria: next }
+                                  });
+                                }}
+                                style={{ cursor: 'pointer', width: '18px', height: '18px', accentColor: '#2563eb' }}
+                              />
+                              <span style={{ fontSize: '0.95rem', color: isEnabled ? '#0f172a' : '#64748b', fontWeight: isEnabled ? 600 : 400 }}>
+                                {criteria === 'skills' ? 'Kỹ năng (Skills)' : 
+                                 criteria === 'experience' ? 'Kinh nghiệm (Experience)' : 
+                                 criteria === 'projects' ? 'Dự án (Projects)' : 
+                                 criteria === 'education' ? 'Học vấn (Education)' : 'Chứng chỉ (Certificates)'}
+                              </span>
+                            </label>
+                            
+                            {isEnabled && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                  type="number"
+                                  min="0" max="100"
+                                  value={formData.rankingConfig?.weights?.[criteria] || 0}
+                                  onChange={(e) => {
+                                    setFormData({
+                                      ...formData,
+                                      rankingConfig: {
+                                        ...formData.rankingConfig,
+                                        template: 'custom',
+                                        weights: { ...formData.rankingConfig?.weights, [criteria]: parseInt(e.target.value) || 0 }
+                                      }
+                                    });
+                                  }}
+                                  style={{ width: '65px', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'center', outline: 'none', fontWeight: 600, color: '#0f172a' }}
+                                />
+                                <span style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600 }}>%</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Right Column: Mandatory Requirements */}
+                    <div style={{ padding: '24px', background: '#fafafa' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#1e293b', fontSize: '1rem', fontWeight: 600 }}>
+                        Yêu cầu Bắt buộc (Hard Filters)
+                      </h4>
+                      <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '24px', lineHeight: '1.6' }}>
+                        Hệ thống sẽ đánh dấu Ứng viên là <strong style={{ color: '#ef4444', fontWeight: 600 }}>"Thiếu yêu cầu"</strong> nếu CV không đáp ứng các tiêu chí này. Hãy cẩn trọng để không loại nhầm ứng viên.
+                      </p>
+
+                      <div style={{ marginBottom: '24px' }}>
+                        <label style={{ display: 'block', fontWeight: 600, marginBottom: '8px', fontSize: '0.9rem', color: '#334155' }}>
+                          ⚡ Kỹ năng bắt buộc
+                        </label>
+                        <p style={{ margin: '0 0 8px 0', fontSize: '0.8rem', color: '#94a3b8' }}>Cách nhau bằng dấu phẩy (,)</p>
+                        <input
+                          type="text"
+                          value={formData.rankingConfig?.mandatory?.skills?.join(', ') || ''}
+                          onChange={(e) => {
+                            const skillsStr = e.target.value;
+                            setFormData({
+                              ...formData,
+                              rankingConfig: {
+                                ...formData.rankingConfig,
+                                mandatory: {
+                                  ...formData.rankingConfig?.mandatory,
+                                  skills: skillsStr ? skillsStr.split(',').map(s => s.trim()).filter(s => s.length > 0) : []
+                                }
+                              }
+                            });
+                          }}
+                          onInput={(e: any) => { e.target.dataset.raw = e.target.value; }}
+                          placeholder="VD: Java, Spring Boot, MySQL..."
+                          style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)', transition: 'border-color 0.2s' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontWeight: 600, marginBottom: '8px', fontSize: '0.9rem', color: '#334155' }}>
+                          ⏳ Kinh nghiệm tối thiểu
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <input
+                            type="number"
+                            min="0" step="0.5"
+                            value={formData.rankingConfig?.mandatory?.min_experience_years || ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setFormData({
+                                ...formData,
+                                rankingConfig: {
+                                  ...formData.rankingConfig,
+                                  mandatory: {
+                                    ...formData.rankingConfig?.mandatory,
+                                    min_experience_years: isNaN(val) ? null : val
+                                  }
+                                }
+                              });
+                            }}
+                            placeholder="VD: 1.5, 2..."
+                            style={{ width: '130px', padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)' }}
+                          />
+                          <span style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 500 }}>Năm</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-              {editingId ? (
-                <button
-                  type="submit"
-                  disabled={saving}
-                  onClick={() => {
-                    const editingStatus = jobs.find((j) => j.id === editingId)?.status?.toLowerCase();
-                    if (editingStatus === 'awaiting_company' || editingStatus === 'rejected') {
-                      submitTargetRef.current = 'pending_review';
-                      setFormData((prev) => ({ ...prev, status: 'pending_review' }));
-                    } else {
-                      submitTargetRef.current = formData.status;
-                    }
-                  }}
-                  style={{
-                    background: '#2563eb',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '10px 24px',
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    fontSize: '0.9rem',
-                    cursor: saving ? 'wait' : 'pointer',
-                    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-                    transition: 'background-color 0.2s'
-                  }}
-                >
-                  {saving
-                    ? 'Đang xử lý...'
-                    : (jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'awaiting_company'
-                      || jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected')
-                      ? 'Lưu & Nộp kiểm duyệt'
-                      : 'Lưu lại'}
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    onClick={() => {
-                      submitTargetRef.current = 'draft';
-                      setFormData((prev) => ({ ...prev, status: 'draft' }));
-                    }}
-                    style={{
-                      background: '#f1f5f9',
-                      color: '#334155',
-                      border: '1px solid #cbd5e1',
-                      padding: '10px 18px',
-                      borderRadius: '6px',
-                      fontWeight: 600,
-                      fontSize: '0.9rem',
-                      cursor: saving ? 'wait' : 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
-                  </button>
-                  {hasApprovedJob ? (
+              {(() => {
+                const totalWeight = Object.entries(formData.rankingConfig?.weights || {})
+                  .filter(([k]) => formData.rankingConfig?.enabled_criteria?.includes(k))
+                  .reduce((sum, [_, v]) => sum + Number(v), 0);
+                const isInvalidConfig = totalWeight !== 100;
+                
+                return (
+                  <>
+                    {editingId ? (
+                      <button
+                        type="submit"
+                        disabled={saving || isInvalidConfig}
+                        onClick={() => {
+                          const editingStatus = jobs.find((j) => j.id === editingId)?.status?.toLowerCase();
+                          if (editingStatus === 'awaiting_company' || editingStatus === 'rejected') {
+                            submitTargetRef.current = 'pending_review';
+                            setFormData((prev) => ({ ...prev, status: 'pending_review' }));
+                          } else {
+                            submitTargetRef.current = formData.status;
+                          }
+                        }}
+                        style={{
+                          background: (saving || isInvalidConfig) ? '#94a3b8' : '#2563eb',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '10px 24px',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: '0.9rem',
+                          cursor: (saving || isInvalidConfig) ? 'not-allowed' : 'pointer',
+                          boxShadow: (saving || isInvalidConfig) ? 'none' : '0 2px 4px rgba(37, 99, 235, 0.2)',
+                          transition: 'background-color 0.2s'
+                        }}
+                      >
+                        {saving
+                          ? 'Đang xử lý...'
+                          : (jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'awaiting_company'
+                            || jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected')
+                            ? 'Lưu & Nộp kiểm duyệt'
+                            : 'Lưu lại'}
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="submit"
+                          disabled={saving || isInvalidConfig}
+                          onClick={() => {
+                            submitTargetRef.current = 'draft';
+                            setFormData((prev) => ({ ...prev, status: 'draft' }));
+                          }}
+                          style={{
+                            background: '#f1f5f9',
+                            color: '#334155',
+                            border: '1px solid #cbd5e1',
+                            padding: '10px 18px',
+                            borderRadius: '6px',
+                            fontWeight: 600,
+                            fontSize: '0.9rem',
+                            cursor: (saving || isInvalidConfig) ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.2s',
+                            opacity: isInvalidConfig ? 0.6 : 1
+                          }}
+                        >
+                          {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
+                        </button>
+                        {hasApprovedJob ? (
+                          <button
+                            type="submit"
+                            disabled={saving || isInvalidConfig}
+                            onClick={() => {
+                              submitTargetRef.current = 'published';
+                              setFormData((prev) => ({ ...prev, status: 'published' }));
+                            }}
+                            style={{
+                              background: (saving || isInvalidConfig) ? '#94a3b8' : '#059669',
+                              color: '#fff',
+                              border: 'none',
+                              padding: '10px 22px',
+                              borderRadius: '6px',
+                              fontWeight: 600,
+                              fontSize: '0.9rem',
+                              cursor: (saving || isInvalidConfig) ? 'not-allowed' : 'pointer',
+                              boxShadow: (saving || isInvalidConfig) ? 'none' : '0 2px 4px rgba(5, 150, 105, 0.2)',
+                              transition: 'background-color 0.2s'
+                            }}
+                          >
+                            {saving ? 'Đang xử lý...' : '🚀 Đăng tin ngay (Miễn kiểm duyệt)'}
+                          </button>
+                        ) : (
+                          <button
+                            type="submit"
+                            disabled={saving || isInvalidConfig}
+                            onClick={() => {
+                              submitTargetRef.current = 'pending_review';
+                              setFormData((prev) => ({ ...prev, status: 'pending_review' }));
+                            }}
+                            style={{
+                              background: (saving || isInvalidConfig) ? '#94a3b8' : '#2563eb',
+                              color: '#fff',
+                              border: 'none',
+                              padding: '10px 22px',
+                              borderRadius: '6px',
+                              fontWeight: 600,
+                              fontSize: '0.9rem',
+                              cursor: (saving || isInvalidConfig) ? 'not-allowed' : 'pointer',
+                              boxShadow: (saving || isInvalidConfig) ? 'none' : '0 2px 4px rgba(37, 99, 235, 0.2)',
+                              transition: 'background-color 0.2s'
+                            }}
+                          >
+                            {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
+                          </button>
+                        )}
+                      </>
+                    )}
                     <button
-                      type="submit"
-                      disabled={saving}
-                      onClick={() => {
-                        submitTargetRef.current = 'published';
-                        setFormData((prev) => ({ ...prev, status: 'published' }));
-                      }}
+                      type="button"
+                      onClick={() => setShowForm(false)}
                       style={{
-                        background: '#059669',
-                        color: '#fff',
+                        background: 'transparent',
+                        color: '#64748b',
                         border: 'none',
-                        padding: '10px 22px',
+                        padding: '10px 16px',
                         borderRadius: '6px',
-                        fontWeight: 600,
+                        fontWeight: 500,
                         fontSize: '0.9rem',
-                        cursor: saving ? 'wait' : 'pointer',
-                        boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)',
-                        transition: 'background-color 0.2s'
+                        cursor: 'pointer'
                       }}
                     >
-                      {saving ? 'Đang xử lý...' : '🚀 Đăng tin ngay (Miễn kiểm duyệt)'}
+                      Hủy
                     </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      onClick={() => {
-                        submitTargetRef.current = 'pending_review';
-                        setFormData((prev) => ({ ...prev, status: 'pending_review' }));
-                      }}
-                      style={{
-                        background: '#2563eb',
-                        color: '#fff',
-                        border: 'none',
-                        padding: '10px 22px',
-                        borderRadius: '6px',
-                        fontWeight: 600,
-                        fontSize: '0.9rem',
-                        cursor: saving ? 'wait' : 'pointer',
-                        boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-                        transition: 'background-color 0.2s'
-                      }}
-                    >
-                      {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
-                    </button>
-                  )}
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                style={{
-                  background: 'transparent',
-                  color: '#64748b',
-                  border: 'none',
-                  padding: '10px 16px',
-                  borderRadius: '6px',
-                  fontWeight: 500,
-                  fontSize: '0.9rem',
-                  cursor: 'pointer'
-                }}
-              >
-                Hủy
-              </button>
+                  </>
+                );
+              })()}
             </div>
           </form>
         </div>

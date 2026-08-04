@@ -222,6 +222,7 @@ public class FeatureLimitService {
                         FROM resumes r
                         JOIN job_seekers js ON js.id = r.job_seeker_id
                         WHERE js.user_id = CAST(:userId AS uuid)
+                          AND r.deleted_at IS NULL
                         """,
                 new MapSqlParameterSource("userId", userId.toString()),
                 Long.class);

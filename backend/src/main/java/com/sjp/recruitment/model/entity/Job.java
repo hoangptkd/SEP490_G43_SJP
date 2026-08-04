@@ -1,5 +1,6 @@
 package com.sjp.recruitment.model.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -108,6 +109,10 @@ public class Job {
 
     @OneToMany(mappedBy = "job", fetch = FetchType.LAZY)
     private List<JobSkill> jobSkills = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "ranking_config", columnDefinition = "jsonb")
+    private JsonNode rankingConfig;
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
