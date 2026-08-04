@@ -29,6 +29,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -51,11 +53,16 @@ public class AiRankingService {
     @Value("${SHOPAIKEY_MODEL}")
     private String shopAiModel;
 
-    public void rankApplication(Application application) {
+    @Transactional
+    public void rankApplication(UUID applicationId) {
         try {
+            Application application = applicationRepository.findById(applicationId)
+                    .orElseThrow(() -> new RuntimeException("Application not found"));
+
             Job job = application.getJob();
-            CandidateCv cv = application.getCv();
+            if (job == null) return;
             
+            CandidateCv cv = application.getCv();
             if (cv == null) {
                 log.warn("Application {} has no CV, skipping ranking", application.getId());
                 return;
@@ -105,7 +112,7 @@ public class AiRankingService {
             applicationRepository.save(application);
 
         } catch (Exception e) {
-            log.error("Failed to rank application {}", application.getId(), e);
+            log.error("Failed to rank application {}", applicationId, e);
         }
     }
 

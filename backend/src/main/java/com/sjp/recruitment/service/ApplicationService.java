@@ -23,6 +23,8 @@ import com.sjp.recruitment.repository.InterviewScheduleRepository;
 import com.sjp.recruitment.repository.JobOfferRepository;
 import com.sjp.recruitment.repository.EmployerRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronization;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -128,12 +130,17 @@ public class ApplicationService {
                     });
         }
 
-        // Run AI ranking async
-        java.util.concurrent.CompletableFuture.runAsync(() -> {
-            try {
-                aiRankingService.rankApplication(saved);
-            } catch (Exception e) {
-                // ignore
+        // Run AI ranking async after transaction commits
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        aiRankingService.rankApplication(saved.getId());
+                    } catch (Exception e) {
+                        // ignore
+                    }
+                });
             }
         });
 
