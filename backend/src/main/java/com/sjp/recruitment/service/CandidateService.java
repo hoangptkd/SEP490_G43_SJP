@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -112,6 +113,10 @@ public class CandidateService {
             cv.setFileSize(stored.fileSize());
             cv.setSourceType(SOURCE_UPLOADED);
             boolean firstCv = !candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(profile.getId(), SOURCE_UPLOADED);
+            if (firstCv) {
+                candidateCvRepository.clearDefaultForCandidate(profile.getId());
+                candidateCvRepository.flush();
+            }
             cv.setDefaultCv(firstCv);
             CvResponse response = dtoMapper.toCvResponse(candidateCvRepository.save(cv));
             featureLimitService.consumeCvUpload(profile.getUser());
@@ -126,8 +131,13 @@ public class CandidateService {
         CandidateProfile profile = getCurrentCandidateProfile();
         CandidateCv target = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(cvId, "CV_ID_INVALID"), profile.getId(), SOURCE_UPLOADED)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
-        candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(profile.getId(), SOURCE_UPLOADED)
-                .forEach(cv -> cv.setDefaultCv(cv.getId().equals(target.getId())));
+        if (target.isDefaultCv()) {
+            return dtoMapper.toCvResponse(target);
+        }
+        candidateCvRepository.clearDefaultForCandidate(profile.getId());
+        candidateCvRepository.flush();
+        target.setDefaultCv(true);
+        candidateCvRepository.flush();
         return dtoMapper.toCvResponse(target);
     }
 
@@ -139,10 +149,14 @@ public class CandidateService {
         if (applicationRepository.existsByCvId(cv.getId())) {
             cv.setDeletedAt(java.time.LocalDateTime.now());
             cv.setDefaultCv(false);
+            candidateCvRepository.flush();
             ensureDefaultUploadedCv(profile.getId());
             return;
         }
+        cv.setDefaultCv(false);
+        candidateCvRepository.flush();
         candidateCvRepository.delete(cv);
+        candidateCvRepository.flush();
         ensureDefaultUploadedCv(profile.getId());
     }
 
@@ -284,6 +298,8 @@ public class CandidateService {
         List<CandidateCv> activeUploaded = candidateCvRepository
                 .findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(candidateId, SOURCE_UPLOADED);
         if (!activeUploaded.isEmpty() && activeUploaded.stream().noneMatch(CandidateCv::isDefaultCv)) {
+            candidateCvRepository.clearDefaultForCandidate(candidateId);
+            candidateCvRepository.flush();
             activeUploaded.get(0).setDefaultCv(true);
         }
     }
@@ -350,10 +366,8 @@ public class CandidateService {
 
     private void updateCandidateSkills(CandidateProfile profile, List<String> skillNames) {
         candidateSkillRepository.deleteByCandidateId(profile.getId());
-        skillNames.stream()
-                .map(String::trim)
-                .filter(this::hasText)
-                .distinct()
+        candidateSkillRepository.flush();
+        normalizedSkillNames(skillNames).stream()
                 .forEach(skillName -> {
                     Skill skill = skillRepository.findByNameIgnoreCase(skillName)
                             .orElseGet(() -> {
@@ -369,6 +383,15 @@ public class CandidateService {
                     candidateSkill.setLevel("intermediate");
                     candidateSkillRepository.save(candidateSkill);
                 });
+    }
+
+    private List<String> normalizedSkillNames(List<String> skillNames) {
+        Map<String, String> uniqueByLowercase = new LinkedHashMap<>();
+        skillNames.stream()
+                .map(String::trim)
+                .filter(this::hasText)
+                .forEach(skillName -> uniqueByLowercase.putIfAbsent(skillName.toLowerCase(Locale.ROOT), skillName));
+        return List.copyOf(uniqueByLowercase.values());
     }
 
     private String slugify(String value) {

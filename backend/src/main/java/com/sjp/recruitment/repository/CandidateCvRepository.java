@@ -2,6 +2,9 @@ package com.sjp.recruitment.repository;
 
 import com.sjp.recruitment.model.entity.CandidateCv;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -16,4 +19,8 @@ public interface CandidateCvRepository extends JpaRepository<CandidateCv, UUID> 
     Optional<CandidateCv> findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID id, UUID candidateId, String sourceType);
     boolean existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID candidateId, String sourceType);
     boolean existsByCandidateIdAndDeletedAtIsNull(UUID candidateId);
+
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE CandidateCv cv SET cv.defaultCv = false WHERE cv.candidate.id = :candidateId AND cv.defaultCv = true")
+    int clearDefaultForCandidate(@Param("candidateId") UUID candidateId);
 }
