@@ -2,12 +2,15 @@ package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.dto.request.CompanyLocationRequest;
 import com.sjp.recruitment.model.dto.request.CompanyProfileRequest;
+import com.sjp.recruitment.model.dto.request.EmployerPersonalProfileRequest;
 import com.sjp.recruitment.model.dto.response.CompanyDocumentResponse;
 import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
+import com.sjp.recruitment.model.dto.response.EmployerDashboardResponse;
 import com.sjp.recruitment.model.dto.request.JobRequest;
 import com.sjp.recruitment.model.dto.response.JobResponse;
 import com.sjp.recruitment.model.dto.response.ApplicationResponse;
+import com.sjp.recruitment.model.dto.response.MessageResponse;
 import com.sjp.recruitment.model.dto.response.NotificationResponse;
 import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.EmployerService;
@@ -32,9 +35,20 @@ public class EmployerController {
 
     private final EmployerService employerService;
 
+    @GetMapping("/dashboard")
+    public ResponseEntity<EmployerDashboardResponse> getDashboardStats() {
+        return ResponseEntity.ok(employerService.getDashboardStats());
+    }
+
     @GetMapping("/company")
     public ResponseEntity<CompanyProfileResponse> getCompanyProfile() {
         return ResponseEntity.ok(employerService.getCompanyProfile());
+    }
+
+    @PutMapping("/profile/personal")
+    public ResponseEntity<MessageResponse> updatePersonalProfile(@Valid @RequestBody EmployerPersonalProfileRequest request) {
+        employerService.updatePersonalProfile(request);
+        return ResponseEntity.ok(new MessageResponse("Cập nhật thông tin cá nhân thành công"));
     }
 
     @PutMapping("/company")

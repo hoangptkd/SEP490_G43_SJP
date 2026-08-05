@@ -3,8 +3,10 @@ package com.sjp.recruitment.service;
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.CompanyLocationRequest;
 import com.sjp.recruitment.model.dto.request.CompanyProfileRequest;
+import com.sjp.recruitment.model.dto.request.EmployerPersonalProfileRequest;
 import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
+import com.sjp.recruitment.model.dto.response.EmployerDashboardResponse;
 import com.sjp.recruitment.model.entity.Company;
 import com.sjp.recruitment.model.entity.CompanyLocation;
 import com.sjp.recruitment.model.entity.Employer;
@@ -47,12 +49,85 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @Service
 @RequiredArgsConstructor
 public class EmployerService {
 
     private final AuthService authService;
+    
+    @Transactional
+    public EmployerDashboardResponse getDashboardStats() {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        UUID employerId = employer.getId();
+        
+        long totalJobs = jobRepository.countByEmployerId(employerId);
+        long activeJobs = jobRepository.countByEmployerIdAndStatus(employerId, "PUBLISHED");
+        long totalApplications = applicationRepository.countByJobEmployerId(employerId);
+        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatus(employerId, "pending");
+        
+        List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployer(employerId);
+        Map<String, Long> applicationsByStatus = statusCounts.stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1]
+                ));
+                
+        List<ApplicationResponse> recentApplications = applicationRepository
+                .findByEmployerId(employerId, PageRequest.of(0, 5, Sort.by("submittedAt").descending()))
+                .getContent().stream()
+                .map(applicationService::toResponse)
+                .collect(Collectors.toList());
+                
+        // Time Context Calculations
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime fourteenDaysAgo = now.minusDays(14);
+        List<Application> recentAppsFull = applicationRepository.findApplicationsByEmployerSince(employerId, fourteenDaysAgo);
+        
+        Map<String, Long> trendMap = recentAppsFull.stream()
+                .collect(Collectors.groupingBy(
+                        a -> a.getSubmittedAt().toLocalDate().format(DateTimeFormatter.ISO_DATE),
+                        Collectors.counting()
+                ));
+                
+        List<EmployerDashboardResponse.DailyApplicationTrend> applicationTrend = new ArrayList<>();
+        for (int i = 13; i >= 0; i--) {
+            String dateStr = now.minusDays(i).toLocalDate().format(DateTimeFormatter.ISO_DATE);
+            applicationTrend.add(new EmployerDashboardResponse.DailyApplicationTrend(dateStr, trendMap.getOrDefault(dateStr, 0L)));
+        }
+        
+        LocalDateTime sevenDaysAgo = now.minusDays(7);
+        long appsThisWeek = recentAppsFull.stream().filter(a -> a.getSubmittedAt().isAfter(sevenDaysAgo)).count();
+        long appsLastWeek = recentAppsFull.stream().filter(a -> a.getSubmittedAt().isBefore(sevenDaysAgo) || a.getSubmittedAt().isEqual(sevenDaysAgo)).count();
+        
+        Integer applicationGrowthPercentage = 0;
+        if (appsLastWeek > 0) {
+            applicationGrowthPercentage = (int) Math.round(((double) (appsThisWeek - appsLastWeek) / appsLastWeek) * 100);
+        } else if (appsThisWeek > 0) {
+            applicationGrowthPercentage = 100;
+        }
+        
+        Integer jobGrowthPercentage = 0; // Keeping 0 for now as Jobs rarely fluctuate week-over-week as much as applications.
+                
+        return new EmployerDashboardResponse(
+                totalJobs,
+                jobGrowthPercentage,
+                activeJobs,
+                totalApplications,
+                applicationGrowthPercentage,
+                pendingApplications,
+                applicationsByStatus,
+                recentApplications,
+                applicationTrend
+        );
+    }
     private final EmployerRepository employerRepository;
     private final CompanyRepository companyRepository;
     private final CompanyLocationRepository companyLocationRepository;
@@ -69,6 +144,7 @@ public class EmployerService {
     private final FeatureLimitService featureLimitService;
     private final SystemSettingsService systemSettingsService;
     private final NotificationRepository notificationRepository;
+    private final com.sjp.recruitment.repository.UserRepository userRepository;
 
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {
@@ -111,6 +187,17 @@ public class EmployerService {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         Company company = employer.getCompany();
         return toCompanyProfileResponse(company);
+    }
+
+    @Transactional
+    public void updatePersonalProfile(EmployerPersonalProfileRequest request) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        User user = employer.getUser();
+        user.setFullName(request.fullName());
+        user.setPhone(request.phone());
+        employer.setPosition(request.position());
+        userRepository.save(user);
+        employerRepository.save(employer);
     }
 
     @Transactional

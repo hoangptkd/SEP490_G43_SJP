@@ -41,6 +41,8 @@ import type {
 } from './types/aiInterview';
 import EmployerApplicationsPage from './pages/Employer/EmployerApplicationsPage';
 import EmployerNotificationsPage from './pages/Employer/EmployerNotificationsPage';
+import EmployerSettingsPage from './pages/Employer/EmployerSettingsPage';
+import EmployerDashboardPage from './pages/Employer/EmployerDashboardPage';
 import type {
   CandidateApplication,
   CandidateProfile,
@@ -154,7 +156,7 @@ function App() {
       <Route path="/payment/checkout" element={<Protected><PaymentCheckoutPage /></Protected>} />
       <Route path="/payment/bank/:paymentId" element={<Protected><BankTransferCheckoutPage /></Protected>} />
       <Route path="/employer" element={<Protected role="EMPLOYER"><EmployerLayout /></Protected>}>
-        <Route index element={<EmployerDashboard />} />
+        <Route index element={<EmployerDashboardPage />} />
         <Route path="company-profile" element={<CompanyProfilePage />} />
         <Route path="locations" element={<CompanyLocationsPage />} />
         <Route path="verification" element={<CompanyVerificationPage />} />
@@ -164,6 +166,7 @@ function App() {
         <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
         <Route path="subscription" element={<EmployerSubscriptionPage />} />
         <Route path="subscription/plans" element={<SubscriptionPlansPage backTo="/employer/subscription" backLabel="Quay lại gói dịch vụ" title="Gói dành cho nhà tuyển dụng" />} />
+        <Route path="settings" element={<EmployerSettingsPage />} />
       </Route>
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminProtected><AdminLayout /></AdminProtected>}>
@@ -4409,6 +4412,10 @@ function EmployerLayout() {
         </div>
 
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--outline-variant)', paddingTop: 12 }}>
+          <NavLink to="/employer/settings" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon">⚙️</span>
+            Cài đặt tài khoản
+          </NavLink>
           <NavLink to="/jobs" className="sidebar-link">
             <span className="sidebar-link-icon">🔍</span>
             Xem tin tuyển dụng
@@ -4432,69 +4439,6 @@ function EmployerLayout() {
 }
 
 // ─── EMPLOYER DASHBOARD ──────────────────────────────────────────────────────
-function EmployerDashboard() {
-  const features = [
-    {
-      icon: '📢',
-      title: 'Quản lý & Đăng tin tuyển dụng',
-      desc: 'Tạo mới các vị trí tuyển dụng, thiết lập mức lương, quyền lợi và theo dõi trạng thái các tin đăng.',
-      to: '/employer/jobs',
-      label: 'Quản lý việc làm →',
-      note: 'Yêu cầu công ty đã xác thực',
-    },
-    {
-      icon: '🏢',
-      title: 'Hồ sơ Công ty & Logo',
-      desc: 'Cập nhật thông tin giới thiệu, địa điểm trụ sở và tải lên logo chính thức của doanh nghiệp.',
-      to: '/employer/company-profile',
-      label: 'Hồ sơ công ty →',
-      variant: 'outline',
-    },
-    {
-      icon: '⚖️',
-      title: 'Xác thực pháp lý',
-      desc: 'Tải lên giấy phép kinh doanh và các tài liệu minh chứng để được Admin phê duyệt tài khoản hợp lệ.',
-      to: '/employer/verification',
-      label: 'Xác thực ngay →',
-    },
-  ];
-
-  return (
-    <motion.div variants={fadeUp} initial="initial" animate="animate"
-      transition={{ duration: 0.25, ease: EASE_OUT }}>
-      <div className="page-header">
-        <h1>Employer Dashboard</h1>
-        <p>Chào mừng đến với Smart Recruitment Portal. Quản lý hồ sơ công ty và tin tuyển dụng.</p>
-      </div>
-
-      <div className="employer-cards">
-        {features.map(({ icon, title, desc, to, label, variant, note }, i) => (
-          <motion.div
-            key={to}
-            className="employer-feature-card"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, ease: EASE_OUT, delay: i * 0.07 }}
-          >
-            <div>
-              <div className="employer-feature-icon">{icon}</div>
-              <h3>{title}</h3>
-              <p>{desc}</p>
-              {note && <p style={{ color: 'var(--outline)', fontSize: '0.8rem', marginTop: 4 }}>* {note}</p>}
-            </div>
-            <Link
-              to={to}
-              className={`button-link ${variant || ''}`}
-              style={{ width: '100%', marginTop: 12 }}
-            >
-              {label}
-            </Link>
-          </motion.div>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
 
 // ─── AI INTERVIEW PAGE ───────────────────────────────────────────────────────
 function AiInterviewPage() {

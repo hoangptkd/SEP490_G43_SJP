@@ -2,14 +2,36 @@ import { api } from './api';
 import type { Company, CompanyLocation, CompanyDocument, Job } from '../types/job';
 import type { CandidateApplication, NotificationItem } from '../types/candidateDomain';
 
+export interface EmployerDashboardStats {
+  totalJobs: number;
+  jobGrowthPercentage: number;
+  activeJobs: number;
+  totalApplications: number;
+  applicationGrowthPercentage: number;
+  pendingApplications: number;
+  applicationsByStatus: Record<string, number>;
+  recentApplications: CandidateApplication[];
+  applicationTrend: { date: string; count: number }[];
+}
+
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
     const response = await api.get<Company>('/employer/company');
     return response.data;
   },
 
+  getDashboardStats: async (): Promise<EmployerDashboardStats> => {
+    const response = await api.get<EmployerDashboardStats>('/employer/dashboard');
+    return response.data;
+  },
+
   updateCompanyProfile: async (company: Partial<Company>): Promise<Company> => {
     const response = await api.put<Company>('/employer/company', company);
+    return response.data;
+  },
+
+  updatePersonalProfile: async (profile: { fullName: string; phone: string; position: string }): Promise<{ message: string }> => {
+    const response = await api.put<{ message: string }>('/employer/profile/personal', profile);
     return response.data;
   },
 
