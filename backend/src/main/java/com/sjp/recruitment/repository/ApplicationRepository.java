@@ -21,6 +21,15 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     long countByJobId(UUID jobId);
     long countByJobIdAndStatus(UUID jobId, String status);
 
+    long countByJobEmployerId(UUID employerId);
+    long countByJobEmployerIdAndStatus(UUID employerId, String status);
+    
+    @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.submittedAt >= :startDate")
+    List<Application> findApplicationsByEmployerSince(@Param("employerId") UUID employerId, @Param("startDate") java.time.LocalDateTime startDate);
+
+    @Query("SELECT a.status, COUNT(a) FROM Application a WHERE a.job.employer.id = :employerId GROUP BY a.status")
+    List<Object[]> countApplicationsByStatusForEmployer(@Param("employerId") UUID employerId);
+
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId")
     Page<Application> findByEmployerId(UUID employerId, Pageable pageable);
 

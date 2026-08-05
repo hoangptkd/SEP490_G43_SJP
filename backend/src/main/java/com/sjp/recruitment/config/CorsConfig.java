@@ -32,7 +32,10 @@ public class CorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String avatarLocation = Path.of(avatarUploadDir).toAbsolutePath().normalize().toUri().toString();
+        String avatarLocation = "file:" + Path.of(avatarUploadDir).toAbsolutePath().toString().replace('\\', '/');
+        if (!avatarLocation.endsWith("/")) {
+            avatarLocation += "/";
+        }
         registry.addResourceHandler("/public/avatars/**")
                 .addResourceLocations(avatarLocation);
     }
