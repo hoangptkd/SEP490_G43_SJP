@@ -309,10 +309,32 @@ public class CandidateService {
             throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");
         }
         try {
+            org.springframework.core.io.Resource resource;
+            if (cv.getStorageKey().startsWith("http://") || cv.getStorageKey().startsWith("https://")) {
+                try {
+                    org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+                    org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                    headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                    org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(headers);
+                    org.springframework.http.ResponseEntity<byte[]> response = restTemplate.exchange(
+                            cv.getStorageKey(),
+                            org.springframework.http.HttpMethod.GET,
+                            entity,
+                            byte[].class
+                    );
+                    byte[] fileBytes = response.getBody();
+                    if (fileBytes == null) throw new IOException("Could not download file from URL");
+                    resource = new org.springframework.core.io.ByteArrayResource(fileBytes);
+                } catch (Exception e) {
+                    throw new IOException("Failed to proxy CV from Cloudinary", e);
+                }
+            } else {
+                resource = storageService.loadCandidateCv(cv.getStorageKey());
+            }
             return new CvDownload(
                     cv.getOriginalFileName() == null || cv.getOriginalFileName().isBlank() ? "cv.pdf" : cv.getOriginalFileName(),
                     cv.getContentType() == null || cv.getContentType().isBlank() ? "application/pdf" : cv.getContentType(),
-                    storageService.loadCandidateCv(cv.getStorageKey())
+                    resource
             );
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");

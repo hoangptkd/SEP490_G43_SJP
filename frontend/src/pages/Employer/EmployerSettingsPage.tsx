@@ -14,6 +14,14 @@ const EmployerSettingsPage: React.FC = () => {
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [position, setPosition] = useState(user?.employer?.position || '');
+
+  useEffect(() => {
+    employerService.getPersonalProfile().then(data => {
+      setFullName(data.fullName || '');
+      setPhone(data.phone || '');
+      setPosition(data.position || '');
+    }).catch(console.error);
+  }, []);
   const [personalLoading, setPersonalLoading] = useState(false);
   const [personalMsg, setPersonalMsg] = useState({ type: '', text: '' });
 

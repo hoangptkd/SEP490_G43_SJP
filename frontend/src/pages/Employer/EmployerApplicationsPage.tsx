@@ -100,6 +100,43 @@ export default function EmployerApplicationsPage() {
     }
   }
 
+  // Polling for AI Ranking
+  useEffect(() => {
+    const hasProcessing = applications.some(app => app.aiMatchScore === -1);
+    if (!hasProcessing) return;
+
+    const interval = setInterval(() => {
+      employerService.getApplications({
+        jobId: selectedJobId || undefined,
+        status: selectedStatus || undefined,
+        search: searchKeyword || undefined,
+      }).then(data => setApplications(data)).catch(() => {});
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [applications, selectedJobId, selectedStatus, searchKeyword]);
+
+  const [bulkRanking, setBulkRanking] = useState(false);
+  async function handleBulkAiRanking() {
+    if (!selectedJobId) return;
+    if (!window.confirm('Hệ thống sẽ phân tích AI dưới nền. Bạn có muốn tiếp tục?')) return;
+    setBulkRanking(true);
+    try {
+      setApplications(apps => apps.map(app => {
+        if (app.aiMatchScore == null || app.needRerank || app.aiMatchScore < 0) {
+          return { ...app, aiMatchScore: -1, needRerank: false };
+        }
+        return app;
+      }));
+      await employerService.triggerBulkAiRanking(selectedJobId);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Có lỗi khi phân tích AI');
+      loadApplications();
+    } finally {
+      setBulkRanking(false);
+    }
+  }
+
   function openBlobInNewTab(blob: Blob) {
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -236,25 +273,45 @@ export default function EmployerApplicationsPage() {
           </p>
         </div>
 
-        {selectedJobId && (
-          <button
-            onClick={() => {
-              setSelectedJobId('');
-              setSearchParams({});
-            }}
-            style={{
-              background: '#f1f5f9',
-              color: '#334155',
-              border: '1px solid #cbd5e1',
-              padding: '8px 16px',
-              borderRadius: '6px',
-              fontWeight: 600,
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-            }}
-          >
-            Hiển thị tất cả JD
-          </button>
+        {selectedJobId && currentJob?.rankingConfig?.enabled && (
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={handleBulkAiRanking}
+              disabled={bulkRanking}
+              style={{
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                cursor: bulkRanking ? 'not-allowed' : 'pointer',
+                opacity: bulkRanking ? 0.7 : 1,
+                boxShadow: '0 2px 4px rgba(99,102,241,0.2)',
+              }}
+            >
+              {bulkRanking ? '⏳ Đang khởi tạo...' : '✨ Phân tích AI tất cả'}
+            </button>
+            <button
+              onClick={() => {
+                setSelectedJobId('');
+                setSearchParams({});
+              }}
+              style={{
+                background: '#f1f5f9',
+                color: '#334155',
+                border: '1px solid #cbd5e1',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              Hiển thị tất cả JD
+            </button>
+          </div>
         )}
       </div>
 
@@ -463,7 +520,10 @@ export default function EmployerApplicationsPage() {
                       </span>
                         <button
                           type="button"
-                          onClick={() => openApplicationCv(app.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openApplicationCv(app.id);
+                          }}
                           style={{
                             background: '#fff',
                             color: '#2563eb',
@@ -500,22 +560,38 @@ export default function EmployerApplicationsPage() {
                   </div>
 
                   {/* AI Ranking Score */}
-                  {(app.aiMatchScore !== undefined && app.aiMatchScore !== null) && (
+                  {((app.aiMatchScore !== undefined && app.aiMatchScore !== null) || app.aiMatchAnalysis === 'PROCESSING' || app.aiMatchAnalysis === 'ERROR') && (
                     <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        background: app.aiMatchScore >= 80 ? '#dcfce7' : app.aiMatchScore >= 50 ? '#fef9c3' : '#fee2e2',
-                        color: app.aiMatchScore >= 80 ? '#166534' : app.aiMatchScore >= 50 ? '#854d0e' : '#991b1b',
-                        padding: '4px 10px',
-                        borderRadius: '12px',
-                        fontSize: '0.85rem',
-                        fontWeight: 600,
-                        border: `1px solid ${app.aiMatchScore >= 80 ? '#bbf7d0' : app.aiMatchScore >= 50 ? '#fef08a' : '#fecaca'}`
-                      }}>
-                        ✨ AI Match: {app.aiMatchScore}%
-                      </span>
-                      {app.needRerank && (
-                        <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic' }}>
-                          (Cần chấm lại)
+                      {app.aiMatchScore === -1 || app.aiMatchAnalysis === 'PROCESSING' ? (
+                        <span style={{
+                          background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '12px',
+                          fontSize: '0.85rem', fontWeight: 600, border: '1px solid #bae6fd'
+                        }}>
+                          ⏳ Đang phân tích AI...
+                        </span>
+                      ) : (app.aiMatchScore === -2 || app.aiMatchAnalysis === 'ERROR') ? (
+                        <span style={{
+                          background: '#fee2e2', color: '#991b1b', padding: '4px 10px', borderRadius: '12px',
+                          fontSize: '0.85rem', fontWeight: 600, border: '1px solid #fecaca'
+                        }} title={app.aiMatchAnalysis === 'ERROR' ? 'Lỗi phân tích AI: Hệ thống quá tải hoặc lỗi kết nối.' : app.aiMatchAnalysis}>
+                          ❌ Lỗi phân tích
+                        </span>
+                      ) : (
+                        <span style={{
+                          background: app.aiMatchScore >= 80 ? '#dcfce7' : app.aiMatchScore >= 50 ? '#fef9c3' : '#fee2e2',
+                          color: app.aiMatchScore >= 80 ? '#166534' : app.aiMatchScore >= 50 ? '#854d0e' : '#991b1b',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.85rem',
+                          fontWeight: 600,
+                          border: `1px solid ${app.aiMatchScore >= 80 ? '#bbf7d0' : app.aiMatchScore >= 50 ? '#fef08a' : '#fecaca'}`
+                        }}>
+                          ✨ AI Match: {app.aiMatchScore}%
+                        </span>
+                      )}
+                      {app.needRerank && app.aiMatchScore !== null && app.aiMatchScore > -1 && (
+                        <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', background: '#fffbeb', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                          ⚠️ JD thay đổi, cần chấm lại
                         </span>
                       )}
                     </div>

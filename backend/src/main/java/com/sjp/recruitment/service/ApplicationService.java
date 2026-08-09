@@ -130,19 +130,7 @@ public class ApplicationService {
                     });
         }
 
-        // Run AI ranking async after transaction commits
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                java.util.concurrent.CompletableFuture.runAsync(() -> {
-                    try {
-                        aiRankingService.rankApplication(saved.getId());
-                    } catch (Exception e) {
-                        // ignore
-                    }
-                });
-            }
-        });
+        // Auto ranking has been disabled per user request
 
         return toResponse(saved);
     }

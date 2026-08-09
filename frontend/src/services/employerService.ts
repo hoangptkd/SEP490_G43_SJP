@@ -35,6 +35,11 @@ export const employerService = {
     return response.data;
   },
 
+  getPersonalProfile: async (): Promise<{ fullName: string; phone: string; position: string }> => {
+    const response = await api.get<{ fullName: string; phone: string; position: string }>('/employer/profile/personal');
+    return response.data;
+  },
+
   uploadLogo: async (file: File): Promise<Company> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -140,8 +145,13 @@ export const employerService = {
     return response.data;
   },
 
-  updateApplicationStatus: async (id: string, status: string, note?: string): Promise<CandidateApplication> => {
-    const response = await api.put<CandidateApplication>(`/employer/applications/${id}/status`, { status, note });
+  updateApplicationStatus: async (applicationId: string, status: string, note?: string): Promise<CandidateApplication> => {
+    const response = await api.put<CandidateApplication>(`/employer/applications/${applicationId}/status`, { status, note });
+    return response.data;
+  },
+
+  triggerBulkAiRanking: async (jobId: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>(`/employer/jobs/${jobId}/ai-rank-bulk`);
     return response.data;
   },
 
