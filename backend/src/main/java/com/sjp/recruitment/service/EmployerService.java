@@ -200,6 +200,17 @@ public class EmployerService {
         employerRepository.save(employer);
     }
 
+    @Transactional(readOnly = true)
+    public com.sjp.recruitment.model.dto.response.EmployerPersonalProfileResponse getPersonalProfile() {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        User user = employer.getUser();
+        return new com.sjp.recruitment.model.dto.response.EmployerPersonalProfileResponse(
+                user.getFullName(),
+                user.getPhone(),
+                employer.getPosition()
+        );
+    }
+
     @Transactional
     public CompanyProfileResponse updateCompanyProfile(CompanyProfileRequest request) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();

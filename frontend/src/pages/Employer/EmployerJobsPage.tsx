@@ -42,6 +42,7 @@ function EmployerJobsPage() {
   const [skillsInput, setSkillsInput] = useState('');
   const [reqsInput, setReqsInput] = useState('');
   const [hasApplications, setHasApplications] = useState(false);
+  const [showAiConfig, setShowAiConfig] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -59,6 +60,7 @@ function EmployerJobsPage() {
     companyLocationId: '',
     status: 'published',
     rankingConfig: {
+      enabled: false,
       template: 'default',
       weights: { skills: 40, experience: 30, projects: 10, education: 10, certificates: 10 },
       enabled_criteria: ['skills', 'experience', 'projects', 'education', 'certificates'],
@@ -94,6 +96,7 @@ function EmployerJobsPage() {
     setSkillsInput('');
     setReqsInput('');
     setHasApplications(false);
+    setShowAiConfig(false);
     const defaultLoc = locations.find((l) => l.headquarter) || locations[0];
     const defaultDate = new Date();
     defaultDate.setDate(defaultDate.getDate() + 30);
@@ -132,8 +135,10 @@ function EmployerJobsPage() {
     setEditingId(job.id);
     setSkillsInput((job.skills || []).join(', '));
     setReqsInput((job.requirements || []).join('\n'));
-    setHasApplications((job.applicationsCount || 0) > 0);
-
+    setHasApplications(job.applicationsCount ? job.applicationsCount > 0 : false);
+    setShowAiConfig(false);
+    setEditingId(job.id);
+    setShowForm(true);
     let deadlineStr = '';
     if (job.deadline) {
       deadlineStr = job.deadline.split('T')[0];
@@ -723,16 +728,44 @@ function EmployerJobsPage() {
                   </div>
                 )}
                 
-                <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>
+                <div 
+                  style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}
+                >
+                  <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', transition: 'background-color 0.2s' }}>
                     🤖
                   </div>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.15rem', fontWeight: 700 }}>Cấu hình AI chấm điểm (Smart Ranking)</h3>
                     <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Hệ thống tự động đánh giá độ phù hợp của CV với Yêu cầu tuyển dụng.</p>
                   </div>
+                  
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: formData.rankingConfig?.enabled ? '#dcfce7' : '#f1f5f9', padding: '8px 16px', borderRadius: '20px', border: `1px solid ${formData.rankingConfig?.enabled ? '#86efac' : '#cbd5e1'}`, transition: 'all 0.3s' }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.rankingConfig?.enabled || false}
+                      onChange={(e) => {
+                        const isEnabled = e.target.checked;
+                        setFormData({
+                          ...formData,
+                          rankingConfig: { ...formData.rankingConfig, enabled: isEnabled }
+                        });
+                        setShowAiConfig(isEnabled); // Auto expand if enabled
+                      }}
+                      style={{ cursor: 'pointer', width: '18px', height: '18px', accentColor: '#16a34a' }}
+                    />
+                    <span style={{ fontWeight: 600, color: formData.rankingConfig?.enabled ? '#166534' : '#475569', fontSize: '0.95rem' }}>
+                      {formData.rankingConfig?.enabled ? 'Đã Bật AI' : 'Bật AI'}
+                    </span>
+                  </label>
+                  
+                  {formData.rankingConfig?.enabled && (
+                    <div style={{ fontSize: '1.5rem', color: '#64748b', cursor: 'pointer', transform: showAiConfig ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s', padding: '8px' }} onClick={() => setShowAiConfig(!showAiConfig)}>
+                      ▼
+                    </div>
+                  )}
                 </div>
 
+                {formData.rankingConfig?.enabled && showAiConfig && (
                 <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                   
                   {/* Top Bar: Template Selection */}
@@ -922,6 +955,7 @@ function EmployerJobsPage() {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
 
             <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
@@ -929,7 +963,7 @@ function EmployerJobsPage() {
                 const totalWeight = Object.entries(formData.rankingConfig?.weights || {})
                   .filter(([k]) => formData.rankingConfig?.enabled_criteria?.includes(k))
                   .reduce((sum, [_, v]) => sum + Number(v), 0);
-                const isInvalidConfig = totalWeight !== 100;
+                const isInvalidConfig = formData.rankingConfig?.enabled ? (totalWeight !== 100) : false;
                 
                 return (
                   <>

@@ -14,6 +14,7 @@ import com.sjp.recruitment.model.dto.response.MessageResponse;
 import com.sjp.recruitment.model.dto.response.NotificationResponse;
 import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.EmployerService;
+import com.sjp.recruitment.service.AiRankingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -34,6 +35,7 @@ import java.util.Map;
 public class EmployerController {
 
     private final EmployerService employerService;
+    private final AiRankingService aiRankingService;
 
     @GetMapping("/dashboard")
     public ResponseEntity<EmployerDashboardResponse> getDashboardStats() {
@@ -49,6 +51,11 @@ public class EmployerController {
     public ResponseEntity<MessageResponse> updatePersonalProfile(@Valid @RequestBody EmployerPersonalProfileRequest request) {
         employerService.updatePersonalProfile(request);
         return ResponseEntity.ok(new MessageResponse("Cập nhật thông tin cá nhân thành công"));
+    }
+
+    @GetMapping("/profile/personal")
+    public ResponseEntity<com.sjp.recruitment.model.dto.response.EmployerPersonalProfileResponse> getPersonalProfile() {
+        return ResponseEntity.ok(employerService.getPersonalProfile());
     }
 
     @PutMapping("/company")
@@ -132,6 +139,14 @@ public class EmployerController {
     public ResponseEntity<Void> deleteJob(@PathVariable String id) {
         employerService.deleteJob(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/jobs/{id}/ai-rank-bulk")
+    public ResponseEntity<MessageResponse> bulkRankApplications(@PathVariable String id) {
+        java.util.UUID jobId = java.util.UUID.fromString(id);
+        aiRankingService.markApplicationsAsProcessing(jobId);
+        aiRankingService.rankApplicationsBulkAsync(jobId);
+        return ResponseEntity.accepted().body(new MessageResponse("Đã bắt đầu phân tích AI hàng loạt. Quá trình này sẽ diễn ra trong nền."));
     }
 
     @PostMapping("/jobs/{id}/close")

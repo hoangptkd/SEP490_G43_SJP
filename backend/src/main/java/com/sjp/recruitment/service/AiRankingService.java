@@ -44,6 +44,10 @@ public class AiRankingService {
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate = new RestTemplate();
 
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private AiRankingService self;
+
     @Value("${SHOPAIKEY_API_KEY}")
     private String shopAiKey;
 
@@ -61,6 +65,11 @@ public class AiRankingService {
 
             Job job = application.getJob();
             if (job == null) return;
+            
+            if (job.getRankingConfig() != null && job.getRankingConfig().has("enabled") && !job.getRankingConfig().get("enabled").asBoolean()) {
+                log.info("AI Ranking is explicitly disabled for job {}. Skipping.", job.getId());
+                return;
+            }
             
             CandidateCv cv = application.getCv();
             if (cv == null) {
@@ -113,6 +122,40 @@ public class AiRankingService {
 
         } catch (Exception e) {
             log.error("Failed to rank application {}", applicationId, e);
+            applicationRepository.findById(applicationId).ifPresent(app -> {
+                app.setAiMatchScore(null);
+                app.setAiMatchAnalysis("ERROR");
+                applicationRepository.save(app);
+            });
+        }
+    }
+
+    @Transactional
+    public void markApplicationsAsProcessing(UUID jobId) {
+        List<Application> apps = applicationRepository.findAllByJobId(jobId);
+        for (Application app : apps) {
+            if (app.getAiMatchScore() == null || Boolean.TRUE.equals(app.getNeedRerank()) || "ERROR".equals(app.getAiMatchAnalysis())) {
+                app.setAiMatchScore(null);
+                app.setAiMatchAnalysis("PROCESSING");
+                applicationRepository.save(app);
+            }
+        }
+    }
+
+    @org.springframework.scheduling.annotation.Async
+    public void rankApplicationsBulkAsync(UUID jobId) {
+        List<Application> apps = applicationRepository.findAllByJobId(jobId);
+        for (Application app : apps) {
+            if ("PROCESSING".equals(app.getAiMatchAnalysis())) {
+                try {
+                    self.rankApplication(app.getId());
+                    Thread.sleep(1500); // prevent rate limiting
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (Exception e) {
+                    log.error("Error during bulk rank for app {}", app.getId(), e);
+                }
+            }
         }
     }
 

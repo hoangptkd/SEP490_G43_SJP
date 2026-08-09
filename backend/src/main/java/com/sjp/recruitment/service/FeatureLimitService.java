@@ -29,8 +29,11 @@ public class FeatureLimitService {
     @Transactional(readOnly = true)
     public void requireJobPost(User user) {
         int limit = resolveLimit(user, JOB_POSTS, "maxJobs", "max_free_job_posts", 3);
-        int used = countEmployerJobs(user.getId());
-        enforce(used, limit, "Bạn đã đạt giới hạn đăng tin (" + used + "/" + limit + "). Vui lòng nâng cấp gói.");
+        String subscriptionId = findActiveSubscriptionId(user.getId());
+        int used = (subscriptionId != null) 
+                 ? getUsageCount(subscriptionId, JOB_POSTS) 
+                 : countEmployerJobs(user.getId());
+        enforce(used, limit, "Bạn đã sử dụng hết lượt đăng tin (" + used + "/" + limit + "). Vui lòng nâng cấp gói để có thêm lượt.");
     }
 
     @Transactional
@@ -41,8 +44,11 @@ public class FeatureLimitService {
     @Transactional(readOnly = true)
     public void requireCvUpload(User user) {
         int limit = resolveLimit(user, CV_UPLOADS, "maxCv", null, 3);
-        int used = countCandidateCvs(user.getId());
-        enforce(used, limit, "Bạn đã đạt giới hạn số CV (" + used + "/" + limit + "). Vui lòng nâng cấp gói.");
+        String subscriptionId = findActiveSubscriptionId(user.getId());
+        int used = (subscriptionId != null) 
+                 ? getUsageCount(subscriptionId, CV_UPLOADS) 
+                 : countCandidateCvs(user.getId());
+        enforce(used, limit, "Bạn đã sử dụng hết lượt tải lên CV (" + used + "/" + limit + "). Vui lòng nâng cấp gói để có thêm lượt.");
     }
 
     @Transactional
@@ -209,7 +215,7 @@ public class FeatureLimitService {
                         FROM jobs j
                         JOIN employers e ON e.id = j.created_by_employer_id
                         WHERE e.user_id = CAST(:userId AS uuid)
-                          AND LOWER(j.status) NOT IN ('closed', 'removed', 'expired')
+                          AND LOWER(j.status) NOT IN ('closed', 'removed', 'expired', 'archived')
                         """,
                 new MapSqlParameterSource("userId", userId.toString()),
                 Long.class);
@@ -257,5 +263,19 @@ public class FeatureLimitService {
     }
 
     private record ActivePlan(String subscriptionId, String featuresJson) {
+    }
+
+    private int getUsageCount(String subscriptionId, String featureKey) {
+        var rows = jdbc.query("""
+                        SELECT used_count
+                        FROM subscription_usages
+                        WHERE subscription_id = CAST(:subscriptionId AS uuid)
+                          AND feature_key = :featureKey
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("subscriptionId", subscriptionId)
+                        .addValue("featureKey", featureKey),
+                (rs, rowNum) -> rs.getInt("used_count"));
+        return rows.isEmpty() ? 0 : rows.get(0);
     }
 }

@@ -35,6 +35,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -65,6 +67,7 @@ public class AuthService {
     private final EmailService emailService;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final StorageService storageService;
+    private final Cloudinary cloudinary;
 
     @Value("${app.frontend-base-url}")
     private String frontendBaseUrl;
@@ -302,10 +305,14 @@ public class AuthService {
         User user = getCurrentUser();
         validateAvatarFile(file);
         try {
-            StorageService.StoredFile stored = storageService.storeUserAvatar(user.getId(), file);
-            user.setAvatarUrl("/api/public/avatars/" + stored.storageKey());
+            Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                    "folder", "sjp/avatars",
+                    "resource_type", "image"
+            ));
+            String fileUrl = (String) uploadResult.get("secure_url");
+            user.setAvatarUrl(fileUrl);
             return toAccountResponse(userRepository.save(user));
-        } catch (IOException exception) {
+        } catch (Exception exception) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "AVATAR_STORAGE_FAILED", "Khong the luu anh dai dien");
         }
     }
