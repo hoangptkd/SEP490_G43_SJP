@@ -1,7 +1,6 @@
 package com.sjp.recruitment.util;
 
 import com.sjp.recruitment.model.entity.User;
-import com.sjp.recruitment.model.dto.response.UserResponse;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -63,17 +62,7 @@ public class JwtUtil {
                 .subject(user.getEmail())
                 .claim("id", user.getId())
                 .claim("role", user.getRoleEnum() == null ? normalizeRole(user.getRole()) : user.getRoleEnum().name())
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(getSigningKey())
-                .compact();
-    }
-
-    public String generateToken(UserResponse user) {
-        return Jwts.builder()
-                .subject(user.email())
-                .claim("id", user.id())
-                .claim("role", normalizeRole(user.role()))
+                .claim("tokenVersion", user.getTokenVersion() == null ? 0 : user.getTokenVersion())
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())

@@ -272,6 +272,12 @@ public class ApplicationWorkflowService {
         if (!offer.getApplication().getCandidate().getId().equals(candidateId)) {
              throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen truy cap");
         }
+        if (!"sent".equalsIgnoreCase(offer.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "OFFER_ALREADY_RESPONDED", "Job Offer khong con cho phan hoi");
+        }
+        if (offer.getExpiresAt() != null && offer.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXPIRED", "Job Offer da het han");
+        }
 
         offer.setStatus(accepted ? "accepted" : "rejected");
         offer.setCandidateNote(note);

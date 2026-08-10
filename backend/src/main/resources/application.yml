@@ -107,8 +107,8 @@ app:
     momo:
       enabled: ${MOMO_ENABLED:true}
       partner-code: ${MOMO_PARTNER_CODE:MOMO}
-      access-key: ${MOMO_ACCESS_KEY:F8BBA842ECF85}
-      secret-key: ${MOMO_SECRET_KEY:K951B6PT2tD7wFGf5gct9wDu}
+      access-key: ${MOMO_ACCESS_KEY:}
+      secret-key: ${MOMO_SECRET_KEY:}
       endpoint: ${MOMO_ENDPOINT:https://test-payment.momo.vn/v2/gateway/api/create}
       sandbox: ${MOMO_SANDBOX:true}
     vnpay:

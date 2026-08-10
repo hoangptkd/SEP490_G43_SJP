@@ -52,7 +52,7 @@ import type {
   SubscriptionView,
 } from './types/candidateDomain';
 import type { AccountView } from './types/auth';
-import type { Job, JobFilters, Recommendation } from './types/job';
+import type { Category, Job, JobFilters, Recommendation } from './types/job';
 
 // ─── Framer Motion variants ────────────────────────────────────────────────
 const fadeUp = {
@@ -69,6 +69,16 @@ const scaleIn = {
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
+async function endAuthenticatedSession(afterLogout: () => void) {
+  try {
+    await authService.logout();
+  } catch {
+    // Local cleanup still matters when the token is already expired or revoked.
+  }
+  clearAuthSession();
+  afterLogout();
+}
+
 // ─── Status labels ─────────────────────────────────────────────────────────
 const statusLabels: Record<string, string> = {
   SUBMITTED: 'Đã nộp',
@@ -80,6 +90,7 @@ const statusLabels: Record<string, string> = {
   ACCEPTED: 'Chấp nhận',
   REJECTED: 'Từ chối',
   HIRED: 'Đã tuyển',
+  WITHDRAWN: 'Đã rút',
 };
 
 const statusColors: Record<string, string> = {
@@ -92,6 +103,7 @@ const statusColors: Record<string, string> = {
   ACCEPTED: 'match',
   REJECTED: 'danger',
   HIRED: 'match',
+  WITHDRAWN: 'neutral',
 };
 
 // ─── App routes ────────────────────────────────────────────────────────────
@@ -207,6 +219,55 @@ function formatDateTime(value?: string) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('vi-VN');
 }
 
+function formatJobMetaValue(value?: string) {
+  if (!value) return '';
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function companyInitials(name?: string) {
+  const normalized = name?.trim();
+  if (!normalized) return 'SJ';
+  return normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || normalized.slice(0, 2).toUpperCase();
+}
+
+const focusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function focusFirstDialogControl(container: HTMLElement | null) {
+  const first = container?.querySelector<HTMLElement>(focusableSelector);
+  first?.focus();
+}
+
+function keepFocusInsideDialog(event: KeyboardEvent, container: HTMLElement | null) {
+  if (event.key !== 'Tab' || !container) return;
+  const focusable = Array.from(container.querySelectorAll<HTMLElement>(focusableSelector))
+    .filter((element) => element.offsetParent !== null || element === document.activeElement);
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function readError(error: unknown) {
   if (typeof error === 'object' && error && 'response' in error) {
     const response = (error as { response?: { data?: { message?: string } } }).response;
@@ -271,9 +332,29 @@ function ActionModal({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    focusFirstDialogControl(panelRef.current);
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !busy) {
+        event.preventDefault();
+        onClose();
+      }
+      keepFocusInsideDialog(event, panelRef.current);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocus?.focus();
+    };
+  }, [busy, onClose]);
+
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={() => !busy && onClose()}>
       <motion.div
+        ref={panelRef}
         className="modal-panel"
         role="dialog"
         aria-modal="true"
@@ -329,18 +410,34 @@ function ApplyJobModal({
   onSubmit: (payload: ApplyJobPayload) => void;
   onOpenCv: (id: string) => void;
 }) {
+  const modalRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedResume, setSelectedResume] = useState(defaultResume);
   const [file, setFile] = useState<File | undefined>();
   const [preferredLocation, setPreferredLocation] = useState(job.location || '');
   const [coverLetter, setCoverLetter] = useState('');
-  const [allowAi, setAllowAi] = useState(true);
-  const [agreePolicy, setAgreePolicy] = useState(true);
   const [fileError, setFileError] = useState('');
 
   useEffect(() => {
     setSelectedResume(defaultResume);
   }, [defaultResume]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    focusFirstDialogControl(modalRef.current);
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !busy) {
+        event.preventDefault();
+        onClose();
+      }
+      keepFocusInsideDialog(event, modalRef.current);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocus?.focus();
+    };
+  }, [busy, onClose]);
 
   function validateFile(nextFile: File) {
     const name = nextFile.name.toLowerCase();
@@ -387,13 +484,12 @@ function ApplyJobModal({
   const latestVersionId = versions[0]?.id;
   const canSubmit = (Boolean(selectedResume) || Boolean(file))
     && Boolean(preferredLocation.trim())
-    && allowAi
-    && agreePolicy
     && !busy;
 
   return (
     <div className="modal-backdrop application-modal-backdrop" role="presentation" onMouseDown={onClose}>
       <motion.form
+        ref={modalRef}
         className="application-modal"
         role="dialog"
         aria-modal="true"
@@ -525,6 +621,7 @@ function ApplyJobModal({
             <textarea
               value={coverLetter}
               onChange={(event) => setCoverLetter(event.target.value.slice(0, 2000))}
+              maxLength={2000}
               placeholder="Viết ngắn gọn lý do bạn phù hợp với vị trí này..."
               rows={4}
             />
@@ -534,15 +631,6 @@ function ApplyJobModal({
             <strong>Lưu ý:</strong>
             <p>Hãy kiểm tra kỹ thông tin công ty và vị trí trước khi ứng tuyển. Không cung cấp giấy tờ nhạy cảm hoặc chuyển tiền ngoài nền tảng.</p>
           </div>
-
-          <label className="application-check">
-            <input type="checkbox" checked={allowAi} onChange={(event) => setAllowAi(event.target.checked)} />
-            <span>Cho phép hệ thống dùng AI để phân tích độ phù hợp CV của bạn.</span>
-          </label>
-          <label className="application-check">
-            <input type="checkbox" checked={agreePolicy} onChange={(event) => setAgreePolicy(event.target.checked)} />
-            <span>Tôi xác nhận thông tin ứng tuyển là chính xác và đồng ý sử dụng dữ liệu cho tuyển dụng.</span>
-          </label>
 
           {(fileError || error) && <div className="error-panel">{fileError || error}</div>}
         </div>
@@ -588,8 +676,7 @@ function CandidateHomeActions() {
   }, []);
 
   function logout() {
-    clearAuthSession();
-    navigate('/login');
+    void endAuthenticatedSession(() => navigate('/login'));
   }
 
   function notificationLink(item: NotificationItem) {
@@ -882,7 +969,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {token && role !== 'CANDIDATE' && (
             <button
               className="outline sm"
-              onClick={() => { clearAuthSession(); window.location.href = '/login'; }}
+              onClick={() => { void endAuthenticatedSession(() => { window.location.href = '/login'; }); }}
             >
               Đăng xuất
             </button>
@@ -901,6 +988,12 @@ function HomePage() {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [homeSearch, setHomeSearch] = useState('');
+  const [homeLocation, setHomeLocation] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [latestJobs, setLatestJobs] = useState<Job[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [homeLoading, setHomeLoading] = useState(true);
+  const [homeError, setHomeError] = useState('');
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 8);
@@ -908,53 +1001,74 @@ function HomePage() {
     return () => window.removeEventListener('scroll', handler);
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    async function loadHomeData() {
+      setHomeLoading(true);
+      setHomeError('');
+      try {
+        const [jobData, categoryData, recommendationData] = await Promise.all([
+          jobService.getAll({ sort: 'newest' }, 0, 6),
+          jobService.getCategories().catch(() => []),
+          token && role === 'CANDIDATE'
+            ? jobService.recommendations().catch(() => [])
+            : Promise.resolve([]),
+        ]);
+        if (!mounted) return;
+        setLatestJobs(jobData.content);
+        setCategories(categoryData);
+        setRecommendations(recommendationData);
+      } catch (err) {
+        if (mounted) setHomeError(readError(err));
+      } finally {
+        if (mounted) setHomeLoading(false);
+      }
+    }
+    void loadHomeData();
+    return () => { mounted = false; };
+  }, [token, role]);
+
   function submitHomeSearch(event: FormEvent) {
     event.preventDefault();
+    const params = new URLSearchParams();
     const query = homeSearch.trim();
-    navigate(query ? `/jobs?search=${encodeURIComponent(query)}` : '/jobs');
+    const location = homeLocation.trim();
+    if (query) params.set('search', query);
+    if (location) params.set('location', location);
+    params.set('sort', 'newest');
+    const search = params.toString();
+    navigate(search ? `/jobs?${search}` : '/jobs');
   }
 
-  const stats = [
-    { value: '10,000+', label: 'Việc làm đang tuyển' },
-    { value: '5,000+', label: 'Công ty đối tác' },
-    { value: '50,000+', label: 'Ứng viên thành công' },
-    { value: '98%', label: 'Tỷ lệ hài lòng' },
-  ];
+  function openCategory(category: Category) {
+    const params = new URLSearchParams();
+    params.set('category', category.slug || category.id);
+    params.set('sort', 'newest');
+    navigate(`/jobs?${params.toString()}`);
+  }
 
-  const features = [
-    {
-      icon: '🤖',
-      title: 'AI Interview Luyện tập',
-      desc: 'Chuẩn bị phỏng vấn với AI thông minh, nhận phản hồi chi tiết để cải thiện kỹ năng.',
-      color: '#3b82f6',
-      bg: '#eff6ff',
-    },
-    {
-      icon: '⚡',
-      title: 'Gợi ý Việc làm Thông minh',
-      desc: 'Thuật toán AI phân tích hồ sơ và đề xuất việc làm phù hợp nhất với bạn.',
-      color: '#f59e0b',
-      bg: '#fffbeb',
-    },
-    {
-      icon: '🎯',
-      title: 'Ứng tuyển Một chạm',
-      desc: 'Nộp hồ sơ nhanh chóng với CV đã lưu sẵn. Theo dõi trạng thái ứng tuyển realtime.',
-      color: '#10b981',
-      bg: '#f0fdf4',
-    },
-    {
-      icon: '🏢',
-      title: 'Hệ thống Tuyển dụng Toàn diện',
-      desc: 'Nhà tuyển dụng quản lý tin đăng, duyệt hồ sơ, lên lịch phỏng vấn trên một nền tảng.',
-      color: '#8b5cf6',
-      bg: '#f5f3ff',
-    },
+  const parentCategories = categories
+    .filter((category) => !category.parentId)
+    .slice(0, 8);
+  const quickCategories = (parentCategories.length ? parentCategories : categories).slice(0, 8);
+  const recommendationJobs = recommendations
+    .slice(0, 4)
+    .map((item) => ({ ...item.job, matchScore: item.matchScore }));
+  const hiringCompanies = Array.from(
+    latestJobs.reduce((map, job) => {
+      if (!map.has(job.company.id)) map.set(job.company.id, job.company);
+      return map;
+    }, new Map<string, Job['company']>()).values(),
+  ).slice(0, 4);
+  const candidateTools = [
+    { title: 'Quản lý CV', desc: 'Cập nhật CV đã upload và CV Builder trước khi ứng tuyển.', to: '/candidate/cvs', icon: '📄' },
+    { title: 'Việc đã lưu', desc: 'Quay lại nhanh các công việc bạn đang cân nhắc.', to: '/candidate/saved-jobs', icon: '🔖' },
+    { title: 'Theo dõi ứng tuyển', desc: 'Xem trạng thái hồ sơ, lịch phỏng vấn và job offer.', to: '/candidate/applications', icon: '📋' },
+    { title: 'Luyện phỏng vấn', desc: 'Chuẩn bị câu trả lời cho các vị trí đang ứng tuyển.', to: '/candidate/ai-interviews', icon: '🎙️' },
   ];
 
   return (
     <div className="home-shell">
-      {/* Navbar */}
       <header className={`home-topbar ${scrolled ? 'scrolled' : ''}`}>
         <Link className="brand" to="/">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -968,7 +1082,11 @@ function HomePage() {
         <nav className="home-topbar-nav">
           <Link to="/jobs" className="home-nav-link">Việc làm</Link>
           {token && role === 'CANDIDATE' && (
-            <Link to="/candidate" className="home-nav-link">Dashboard</Link>
+            <>
+              <Link to="/candidate/saved-jobs" className="home-nav-link">Việc đã lưu</Link>
+              <Link to="/candidate/applications" className="home-nav-link">Đã ứng tuyển</Link>
+              <Link to="/candidate/cvs" className="home-nav-link">CV</Link>
+            </>
           )}
           {token && role === 'EMPLOYER' && (
             <Link to="/employer" className="home-nav-link">Nhà tuyển dụng</Link>
@@ -982,20 +1100,15 @@ function HomePage() {
                 Đăng nhập
               </Link>
               <Link to="/register" className="button-link" style={{ minHeight: 38 }}>
-                Đăng ký miễn phí
+                Đăng ký
               </Link>
             </>
           ) : (
             <>
               {role === 'CANDIDATE' && <CandidateHomeActions />}
-              {false && role === 'CANDIDATE' && (
-                <Link to="/candidate" className="button-link" style={{ minHeight: 38 }}>
-                  Vào Dashboard →
-                </Link>
-              )}
               {role === 'EMPLOYER' && (
                 <Link to="/employer" className="button-link" style={{ minHeight: 38 }}>
-                  Employer Portal →
+                  Employer Portal
                 </Link>
               )}
             </>
@@ -1003,50 +1116,25 @@ function HomePage() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="home-hero">
-        <div className="home-hero-bg" aria-hidden="true" />
-        <div className="home-hero-content">
+      <main>
+        <section className="home-hero">
+          <div className="home-hero-content">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: EASE_OUT }}
           >
             <span className="home-hero-eyebrow">
-              🚀 Nền tảng tuyển dụng thông minh hàng đầu Việt Nam
+              Cập nhật việc làm thật từ hệ thống tuyển dụng
             </span>
             <h1 className="home-hero-title">
-              Kết nối
-              <span className="home-hero-accent"> Tài năng</span>
-              {' '}với
-              <br />Cơ hội Nghề nghiệp
+              Tìm công việc phù hợp với bạn
             </h1>
             <p className="home-hero-desc">
-              Smart Recruitment Portal giúp ứng viên tìm việc phù hợp với AI thông minh,
-              đồng thời hỗ trợ nhà tuyển dụng tìm kiếm nhân tài hiệu quả nhất.
+              Tìm theo vị trí, kỹ năng, công ty hoặc địa điểm. Mở chi tiết công việc để lưu, đánh giá độ phù hợp và ứng tuyển bằng CV của bạn.
             </p>
           </motion.div>
 
-          <motion.div
-            className="home-hero-actions"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.12 }}
-          >
-            <Link to="/jobs" className="button-link home-hero-btn-primary">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-              </svg>
-              Tìm việc làm ngay
-            </Link>
-            {!token && (
-              <Link to="/register" className="button-link outline home-hero-btn-secondary">
-                Đăng ký miễn phí →
-              </Link>
-            )}
-          </motion.div>
-
-          {/* Search bar */}
           <motion.form
             className="home-search-bar"
             onSubmit={submitHomeSearch}
@@ -1054,149 +1142,170 @@ function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.2 }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--outline)" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input
-              placeholder="Tìm kiếm vị trí, kỹ năng, công ty..."
-              value={homeSearch}
-              onChange={(event) => setHomeSearch(event.target.value)}
-              aria-label="Tìm kiếm việc làm"
-            />
-            <button type="submit" className="home-search-btn">Tìm kiếm</button>
+            <label className="home-search-field">
+              <span>Từ khóa</span>
+              <input
+                placeholder="Vị trí, kỹ năng hoặc công ty"
+                value={homeSearch}
+                onChange={(event) => setHomeSearch(event.target.value)}
+              />
+            </label>
+            <label className="home-search-field">
+              <span>Địa điểm</span>
+              <input
+                placeholder="Hà Nội, TP.HCM, Remote..."
+                value={homeLocation}
+                onChange={(event) => setHomeLocation(event.target.value)}
+              />
+            </label>
+            <button type="submit" className="home-search-btn">
+              Tìm việc
+            </button>
           </motion.form>
-        </div>
-      </section>
 
-      {/* Stats */}
-      <section className="home-stats">
-        {stats.map(({ value, label }, i) => (
-          <motion.div
-            key={label}
-            className="home-stat-item"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.25 + i * 0.07 }}
-          >
-            <strong className="home-stat-value">{value}</strong>
-            <span className="home-stat-label">{label}</span>
-          </motion.div>
-        ))}
-      </section>
-
-      {/* Features */}
-      <section className="home-section">
-        <div className="home-section-inner">
-          <div className="home-section-header">
-            <p className="eyebrow" style={{ textAlign: 'center', marginBottom: 8 }}>Tính năng nổi bật</p>
-            <h2 className="home-section-title">Tất cả những gì bạn cần</h2>
-            <p className="home-section-desc">
-              Từ AI luyện phỏng vấn đến quản lý tuyển dụng — mọi thứ trên một nền tảng duy nhất.
-            </p>
-          </div>
-
-          <div className="home-features-grid">
-            {features.map(({ icon, title, desc, color, bg }, i) => (
-              <motion.div
-                key={title}
-                className="home-feature-card"
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.1 + i * 0.08 }}
-              >
-                <div className="home-feature-icon" style={{ background: bg, color }}>
-                  {icon}
-                </div>
-                <h3>{title}</h3>
-                <p>{desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* For Candidates & Employers */}
-      <section className="home-roles-section">
-        <div className="home-section-inner">
-          <div className="home-roles-grid">
-            {/* For Candidates */}
-            <motion.div
-              className="home-role-card home-role-candidate"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, ease: EASE_OUT }}
-            >
-              <div className="home-role-icon">👨‍💼</div>
-              <h3>Dành cho Ứng viên</h3>
-              <ul className="home-role-list">
-                <li>✅ Tìm việc làm phù hợp với AI</li>
-                <li>✅ Luyện phỏng vấn với AI thông minh</li>
-                <li>✅ Tạo và quản lý CV chuyên nghiệp</li>
-                <li>✅ Theo dõi trạng thái ứng tuyển</li>
-                <li>✅ Nhận thông báo realtime</li>
-              </ul>
-              <Link
-                to={token && role === 'CANDIDATE' ? '/candidate' : '/register'}
-                className="button-link home-role-btn"
-              >
-                {token && role === 'CANDIDATE' ? 'Vào Dashboard →' : 'Bắt đầu tìm việc →'}
-              </Link>
-            </motion.div>
-
-            {/* For Employers */}
-            <motion.div
-              className="home-role-card home-role-employer"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.1 }}
-            >
-              <div className="home-role-icon">🏢</div>
-              <h3>Dành cho Nhà tuyển dụng</h3>
-              <ul className="home-role-list">
-                <li>✅ Đăng tin tuyển dụng dễ dàng</li>
-                <li>✅ Quản lý hồ sơ ứng viên</li>
-                <li>✅ Xem xét và phê duyệt nhanh</li>
-                <li>✅ Báo cáo và thống kê chi tiết</li>
-                <li>✅ Xác thực pháp lý doanh nghiệp</li>
-              </ul>
-              <Link
-                to={token && role === 'EMPLOYER' ? '/employer' : '/register'}
-                className="button-link outline home-role-btn"
-              >
-                {token && role === 'EMPLOYER' ? 'Vào Employer Portal →' : 'Đăng ký tuyển dụng →'}
-              </Link>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Banner */}
-      {!token && (
-        <section className="home-cta-section">
-          <div className="home-section-inner" style={{ textAlign: 'center' }}>
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: EASE_OUT }}
-            >
-              <h2 className="home-cta-title">Sẵn sàng bắt đầu hành trình của bạn?</h2>
-              <p className="home-cta-desc">
-                Tham gia cùng hàng nghìn người đã tìm được công việc mơ ước qua Smart Recruitment Portal.
-              </p>
-              <div className="home-cta-actions">
-                <Link to="/register" className="button-link home-cta-btn">
-                  Tạo tài khoản miễn phí
-                </Link>
-                <Link to="/jobs" className="button-link outline home-cta-btn">
-                  Xem việc làm →
-                </Link>
+            {quickCategories.length > 0 && (
+              <div className="home-quick-search" aria-label="Tìm nhanh theo ngành nghề">
+                <span>Gợi ý nhanh:</span>
+                {quickCategories.slice(0, 6).map((category) => (
+                  <button key={category.id} type="button" onClick={() => openCategory(category)}>
+                    {category.name}
+                  </button>
+                ))}
               </div>
-            </motion.div>
+            )}
           </div>
         </section>
-      )}
 
-      {/* Footer */}
+        {homeError && (
+          <section className="home-section compact">
+            <div className="home-section-inner">
+              <div className="error-panel">{homeError}</div>
+            </div>
+          </section>
+        )}
+
+        {recommendationJobs.length > 0 && (
+          <section className="home-section compact">
+            <div className="home-section-inner">
+              <div className="home-section-heading-row">
+                <div>
+                  <p className="eyebrow">Gợi ý cá nhân</p>
+                  <h2 className="home-section-title">Việc làm dành cho bạn</h2>
+                </div>
+                <Link to="/jobs?sort=relevance" className="button-link outline sm">Xem thêm</Link>
+              </div>
+              <div className="home-job-grid">
+                {recommendationJobs.map((job) => <JobCard key={job.id} job={job} />)}
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="home-section compact">
+          <div className="home-section-inner">
+            <div className="home-section-heading-row">
+              <div>
+                <p className="eyebrow">Cơ hội mới</p>
+                <h2 className="home-section-title">Việc làm mới nhất</h2>
+              </div>
+              <Link to="/jobs?sort=newest" className="button-link outline sm">Xem tất cả việc làm</Link>
+            </div>
+
+            {homeLoading ? (
+              <div className="home-job-grid">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="job-card-skeleton">
+                    <div className="skeleton" style={{ height: 20, width: '70%' }} />
+                    <div className="skeleton" style={{ height: 16, width: '48%' }} />
+                    <div className="skeleton" style={{ height: 28, width: '80%' }} />
+                  </div>
+                ))}
+              </div>
+            ) : latestJobs.length > 0 ? (
+              <div className="home-job-grid">
+                {latestJobs.map((job) => <JobCard key={job.id} job={job} />)}
+              </div>
+            ) : (
+              <div className="card home-empty-block">
+                <h3>Chưa có việc làm đang hiển thị</h3>
+                <p className="muted">Hãy quay lại sau hoặc thử tìm kiếm với từ khóa khác.</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {quickCategories.length > 0 && (
+          <section className="home-section compact muted-band">
+            <div className="home-section-inner">
+              <div className="home-section-heading-row">
+                <div>
+                  <p className="eyebrow">Ngành nghề</p>
+                  <h2 className="home-section-title">Khám phá việc làm theo ngành</h2>
+                </div>
+              </div>
+              <div className="home-category-grid">
+                {quickCategories.map((category) => (
+                  <button key={category.id} type="button" className="home-category-card" onClick={() => openCategory(category)}>
+                    <strong>{category.name}</strong>
+                    {category.description && <span>{category.description}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {hiringCompanies.length > 0 && (
+          <section className="home-section compact">
+            <div className="home-section-inner">
+              <div className="home-section-heading-row">
+                <div>
+                  <p className="eyebrow">Nhà tuyển dụng</p>
+                  <h2 className="home-section-title">Công ty đang có việc mới</h2>
+                </div>
+              </div>
+              <div className="home-company-grid">
+                {hiringCompanies.map((company) => (
+                  <div key={company.id} className="home-company-card">
+                    <div className="home-company-logo">
+                      {company.logoUrl ? <img src={company.logoUrl} alt="" loading="lazy" /> : <span>{companyInitials(company.name)}</span>}
+                    </div>
+                    <div>
+                      <strong>{company.name}</strong>
+                      <span>{company.industry || company.location || 'Đang tuyển dụng'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="home-section compact muted-band">
+          <div className="home-section-inner">
+            <div className="home-section-heading-row">
+              <div>
+                <p className="eyebrow">Quản lý tìm việc</p>
+                <h2 className="home-section-title">Công cụ cho ứng viên</h2>
+              </div>
+            </div>
+            <div className="home-tools-grid">
+              {candidateTools.map((tool) => (
+                <Link
+                  key={tool.title}
+                  className="home-tool-card"
+                  to={token && role === 'CANDIDATE' ? tool.to : '/login'}
+                >
+                  <span>{tool.icon}</span>
+                  <strong>{tool.title}</strong>
+                  <small>{tool.desc}</small>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+
       <footer className="home-footer">
         <div className="home-section-inner">
           <div className="home-footer-grid">
@@ -1210,28 +1319,30 @@ function HomePage() {
                 Smart Recruitment
               </Link>
               <p style={{ color: 'var(--on-muted)', fontSize: '0.875rem', maxWidth: 280, margin: 0 }}>
-                Nền tảng tuyển dụng thông minh, kết nối tài năng với cơ hội nghề nghiệp tốt nhất.
+                Tìm việc, quản lý CV và theo dõi ứng tuyển trong một trải nghiệm dành cho ứng viên.
               </p>
             </div>
             <div>
               <strong className="home-footer-heading">Ứng viên</strong>
               <nav className="home-footer-nav">
                 <Link to="/jobs">Tìm việc làm</Link>
-                <Link to="/register">Đăng ký</Link>
+                <Link to="/candidate/cvs">CV của tôi</Link>
+                <Link to="/candidate/saved-jobs">Việc đã lưu</Link>
+                <Link to="/candidate/applications">Hồ sơ ứng tuyển</Link>
+              </nav>
+            </div>
+            <div>
+              <strong className="home-footer-heading">Tài khoản</strong>
+              <nav className="home-footer-nav">
                 <Link to="/login">Đăng nhập</Link>
+                <Link to="/register">Đăng ký</Link>
               </nav>
             </div>
             <div>
               <strong className="home-footer-heading">Nhà tuyển dụng</strong>
               <nav className="home-footer-nav">
+                <Link to="/employer">Employer Portal</Link>
                 <Link to="/register">Đăng ký tuyển dụng</Link>
-                <Link to="/login">Đăng nhập</Link>
-              </nav>
-            </div>
-            <div>
-              <strong className="home-footer-heading">Hệ thống</strong>
-              <nav className="home-footer-nav">
-                <Link to="/admin/login">Admin</Link>
               </nav>
             </div>
           </div>
@@ -2343,6 +2454,15 @@ function JobDetailPage() {
   }
 
   const initials = job.company.name.slice(0, 2).toUpperCase();
+  const jobFacts = [
+    job.jobType && ['Loai hinh', formatJobMetaValue(job.jobType)],
+    job.workMode && ['Hinh thuc lam viec', formatJobMetaValue(job.workMode)],
+    job.salaryType && ['Kieu luong', formatJobMetaValue(job.salaryType)],
+    job.deadline && ['Han ung tuyen', formatDate(job.deadline)],
+    job.workingTime && ['Thoi gian lam viec', job.workingTime],
+    job.vacancies !== undefined && job.vacancies !== null && ['So luong tuyen', String(job.vacancies)],
+    job.companyLocation && ['Dia diem cong ty', [job.companyLocation.branchName, job.companyLocation.address, job.companyLocation.city].filter(Boolean).join(' - ')],
+  ].filter(Boolean) as [string, string][];
 
   return (
     <Shell>
@@ -2409,6 +2529,41 @@ function JobDetailPage() {
                   </motion.span>
                 ))}
               </div>
+            </motion.div>
+          )}
+
+          {job.skills?.length > 0 && (
+            <motion.div className="job-detail-section" variants={fadeUp} initial="initial" animate="animate"
+              transition={{ duration: 0.28, ease: EASE_OUT, delay: 0.12 }}>
+              <h2>Ky nang</h2>
+              <div className="chip-row">
+                {job.skills.map((skill) => (
+                  <span key={skill} className="chip match">{skill}</span>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {jobFacts.length > 0 && (
+            <motion.div className="job-detail-section" variants={fadeUp} initial="initial" animate="animate"
+              transition={{ duration: 0.28, ease: EASE_OUT, delay: 0.14 }}>
+              <h2>Thong tin cong viec</h2>
+              <div className="data-table" style={{ gap: 0 }}>
+                {jobFacts.map(([label, value]) => (
+                  <div key={label} className="data-row" style={{ gridTemplateColumns: '180px 1fr' }}>
+                    <span className="muted">{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {job.benefits && (
+            <motion.div className="job-detail-section" variants={fadeUp} initial="initial" animate="animate"
+              transition={{ duration: 0.28, ease: EASE_OUT, delay: 0.16 }}>
+              <h2>Phuc loi</h2>
+              <p style={{ color: 'var(--on-muted)', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{job.benefits}</p>
             </motion.div>
           )}
         </div>
@@ -2578,7 +2733,7 @@ function CandidateLayout() {
     }).catch(() => {});
   }, []);
 
-  function logout() { clearAuthSession(); navigate('/login'); }
+  function logout() { void endAuthenticatedSession(() => navigate('/login')); }
 
   const navItems = [
     { to: '/', end: true, icon: '⌂', label: 'Trang chủ' },
@@ -2617,9 +2772,6 @@ function CandidateLayout() {
             to={to}
             end={end}
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-            onClick={to === '/candidate/notifications' ? () => {
-              candidateService.markAllNotificationsRead().then(() => setUnreadCount(0));
-            } : undefined}
           >
             <span className="sidebar-link-icon">{icon}</span>
             {label}
@@ -3155,6 +3307,8 @@ function AccountPage() {
   async function deactivate(event: FormEvent) {
     event.preventDefault();
     resetNotice();
+    const confirmed = window.confirm('Ban chac chan muon vo hieu hoa tai khoan? Sau thao tac nay ban se bi dang xuat va can lien he ho tro neu muon khoi phuc.');
+    if (!confirmed) return;
     setBusy('deactivate');
     try {
       await authService.deactivateAccount(deactivatePassword);
@@ -3675,6 +3829,8 @@ function SavedJobsPage() {
 function ApplicationsPage() {
   const [applications, setApplications] = useState<CandidateApplication[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     candidateService.getApplications()
@@ -3682,12 +3838,34 @@ function ApplicationsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const statusOptions = [
+    { value: 'ALL', label: 'Tất cả', count: applications.length },
+    ...Array.from(new Set(applications.map((application) => application.status))).map((status) => ({
+      value: status,
+      label: statusLabels[status] || status,
+      count: applications.filter((application) => application.status === status).length,
+    })),
+  ];
+  const filteredApplications = statusFilter === 'ALL'
+    ? applications
+    : applications.filter((application) => application.status === statusFilter);
+
+  async function openSubmittedCv(application: CandidateApplication) {
+    if (!application.cv?.id) return;
+    setMessage('');
+    try {
+      openBlobInNewTab(await candidateService.downloadCv(application.cv.id));
+    } catch (err) {
+      setMessage(readError(err));
+    }
+  }
+
   return (
     <motion.div variants={fadeUp} initial="initial" animate="animate"
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div className="page-header">
         <h1>Hồ sơ ứng tuyển</h1>
-        <p>Theo dõi trạng thái các đơn ứng tuyển của bạn</p>
+        <p>Theo dõi trạng thái từng công việc bạn đã nộp hồ sơ.</p>
       </div>
 
       {loading ? (
@@ -3707,36 +3885,92 @@ function ApplicationsPage() {
           </Link>
         </div>
       ) : (
-        <div className="data-table">
-          <div className="data-table-header"
-            style={{ gridTemplateColumns: '1fr auto auto auto' }}>
-            <span>Vị trí</span>
-            <span>Công ty</span>
-            <span>Trạng thái</span>
-            <span>Ngày nộp</span>
-          </div>
-          {applications.map((application, i) => (
-            <motion.div key={application.id}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.04 }}>
-              <Link
-                className="data-row clickable"
-                to={`/candidate/applications/${application.id}`}
-                style={{ gridTemplateColumns: '1fr auto auto auto', display: 'grid',
-                  textDecoration: 'none', color: 'inherit' }}
+        <div className="application-list-shell">
+          <div className="application-list-toolbar" aria-label="Lọc hồ sơ ứng tuyển">
+            {statusOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={statusFilter === option.value ? 'active' : ''}
+                onClick={() => setStatusFilter(option.value)}
               >
-                <strong>{application.job.title}</strong>
-                <span className="muted">{application.job.company.name}</span>
-                <span className={`chip ${statusColors[application.status] || ''}`}>
-                  {statusLabels[application.status] || application.status}
-                </span>
-                <span className="muted">
-                  {formatDate(application.submittedAt)}
-                </span>
-              </Link>
-            </motion.div>
-          ))}
+                <span>{option.label}</span>
+                <strong>{option.count}</strong>
+              </button>
+            ))}
+          </div>
+
+          {message && <div className="error-panel">{message}</div>}
+
+          {filteredApplications.length === 0 ? (
+            <div className="card application-empty-state">
+              <h3>Không có hồ sơ ở trạng thái này</h3>
+              <p className="muted">Chọn trạng thái khác để xem các hồ sơ ứng tuyển còn lại.</p>
+            </div>
+          ) : (
+            <div className="application-card-list">
+              {filteredApplications.map((application, i) => {
+                const company = application.job.company;
+                const logoUrl = company.logoUrl;
+                const cvLabel = application.cv?.originalFileName || application.cvVersion?.title || 'Không có CV';
+                const latestTimeline = application.timeline?.[application.timeline.length - 1];
+                return (
+                  <motion.article
+                    key={application.id}
+                    className="application-history-card"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.035 }}
+                  >
+                    <div className="application-company-mark" aria-hidden="true">
+                      {logoUrl ? (
+                        <img src={logoUrl} alt="" />
+                      ) : (
+                        <span>{companyInitials(company.name)}</span>
+                      )}
+                    </div>
+
+                    <div className="application-history-main">
+                      <div className="application-history-title-row">
+                        <div>
+                          <Link className="application-job-title" to={`/candidate/applications/${application.id}`}>
+                            {application.job.title}
+                          </Link>
+                          <p className="application-company-name">{company.name}</p>
+                        </div>
+                        <span className={`chip ${statusColors[application.status] || 'neutral'}`}>
+                          {statusLabels[application.status] || application.status}
+                        </span>
+                      </div>
+
+                      <div className="application-history-meta">
+                        <span>📅 Ứng tuyển: {formatDateTime(application.submittedAt)}</span>
+                        <span>📍 {application.preferredLocation || application.job.location || 'Chưa có địa điểm'}</span>
+                        {application.cv?.id ? (
+                          <button type="button" className="application-cv-link" onClick={() => void openSubmittedCv(application)}>
+                            📄 CV ứng tuyển
+                          </button>
+                        ) : (
+                          <span>📄 {cvLabel}</span>
+                        )}
+                      </div>
+
+                      <div className="application-history-note">
+                        <span>{latestTimeline?.publicNote || `Trạng thái hiện tại: ${statusLabels[application.status] || application.status}`}</span>
+                        <small>Cập nhật: {formatDate(application.updatedAt || application.submittedAt)}</small>
+                      </div>
+                    </div>
+
+                    <div className="application-history-actions">
+                      <Link className="button-link outline sm" to={`/candidate/applications/${application.id}`}>
+                        Xem chi tiết
+                      </Link>
+                    </div>
+                  </motion.article>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </motion.div>
@@ -3763,6 +3997,15 @@ function ApplicationDetailPage() {
   useEffect(() => {
     void loadApplication().catch((err) => setMessage(readError(err)));
   }, [loadApplication]);
+
+  async function openBlobInNewTabFromCv(cvId: string) {
+    setMessage('');
+    try {
+      openBlobInNewTab(await candidateService.downloadCv(cvId));
+    } catch (err) {
+      setMessage(readError(err));
+    }
+  }
 
   async function respondToInterview(interviewId: string, responseStatus: string, note?: string) {
     setActionBusy(true);
@@ -3842,6 +4085,28 @@ function ApplicationDetailPage() {
             CV: {application.cv?.originalFileName || application.cvVersion?.title || 'Không có'}
           </span>
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h2 style={{ marginBottom: 12 }}>CV da nop</h2>
+        {application.cvVersion ? (
+          <div>
+            <strong>{application.cvVersion.title}</strong>
+            <p className="muted" style={{ margin: '4px 0 0' }}>CV Builder - cap nhat {formatDate(application.cvVersion.updatedAt)}</p>
+          </div>
+        ) : application.cv ? (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div>
+              <strong>{application.cv.originalFileName}</strong>
+              <p className="muted" style={{ margin: '4px 0 0' }}>{formatDate(application.cv.createdAt)}</p>
+            </div>
+            <button type="button" className="outline sm" onClick={() => openBlobInNewTabFromCv(application.cv!.id)}>
+              Mo CV
+            </button>
+          </div>
+        ) : (
+          <p className="muted" style={{ margin: 0 }}>Khong co thong tin CV da nop.</p>
+        )}
       </div>
 
       {(application.preferredLocation || application.coverLetter) && (
@@ -4306,7 +4571,7 @@ function EmployerLayout() {
     }).catch(() => {});
   }, []);
 
-  function logout() { clearAuthSession(); navigate('/login'); }
+  function logout() { void endAuthenticatedSession(() => navigate('/login')); }
 
   return (
     <div className="employer-shell">

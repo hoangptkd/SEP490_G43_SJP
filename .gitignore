@@ -53,3 +53,6 @@ build/
 *.pfx
 credentials.json
 secrets.properties
+
+# Runtime uploads
+backend/uploads/

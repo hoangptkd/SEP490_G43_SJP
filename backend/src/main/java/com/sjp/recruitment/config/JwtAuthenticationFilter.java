@@ -1,6 +1,8 @@
 package com.sjp.recruitment.config;
 
 import com.sjp.recruitment.model.dto.response.UserResponse;
+import com.sjp.recruitment.model.entity.User;
+import com.sjp.recruitment.repository.UserRepository;
 import com.sjp.recruitment.util.JwtUtil;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -25,6 +27,7 @@ import java.util.Locale;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(
@@ -43,9 +46,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String email = jwtUtil.extractUsername(token);
             if (email != null && jwtUtil.validateToken(token)
                     && SecurityContextHolder.getContext().getAuthentication() == null) {
-                String id = jwtUtil.extractStringClaim(token, "id");
-                String role = normalizeRole(jwtUtil.extractStringClaim(token, "role"));
-                authenticate(request, new UserResponse(id, email, role, "ACTIVE", true));
+                userRepository.findByEmail(email)
+                        .filter(user -> isCurrentToken(token, user))
+                        .ifPresent(user -> authenticate(request, new UserResponse(
+                                String.valueOf(user.getId()),
+                                user.getEmail(),
+                                user.getRoleEnum() == null ? normalizeRole(user.getRole()) : user.getRoleEnum().name(),
+                                user.getStatusEnum() == null ? "UNKNOWN" : user.getStatusEnum().name(),
+                                user.isEmailVerified()
+                        )));
             }
         } catch (JwtException | IllegalArgumentException ignored) {
             SecurityContextHolder.clearContext();
@@ -62,6 +71,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 new UsernamePasswordAuthenticationToken(user, null, authorities);
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private boolean isCurrentToken(String token, User user) {
+        String tokenUserId = jwtUtil.extractStringClaim(token, "id");
+        Integer tokenVersion = jwtUtil.extractClaim(token, claims -> claims.get("tokenVersion", Integer.class));
+        return tokenUserId != null
+                && tokenUserId.equals(String.valueOf(user.getId()))
+                && user.isEmailVerified()
+                && user.getStatusEnum() == User.UserStatus.ACTIVE
+                && tokenVersion != null
+                && tokenVersion.equals(user.getTokenVersion() == null ? 0 : user.getTokenVersion());
     }
 
     private String normalizeRole(String role) {

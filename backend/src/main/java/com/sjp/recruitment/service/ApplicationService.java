@@ -86,22 +86,23 @@ public class ApplicationService {
             throw new ApiException(HttpStatus.CONFLICT, "APPLICATION_DUPLICATED", "Ban da ung tuyen viec lam nay");
         }
 
-        CandidateCv cv = null;
+        boolean hasUploadedCv = hasText(request.cvId());
+        boolean hasBuilderCv = hasText(request.cvVersionId());
+        if (hasUploadedCv == hasBuilderCv) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_REFERENCE_INVALID", "Vui long chon chinh xac mot CV de ung tuyen");
+        }
+
+        CandidateCv cv;
         CvVersion cvVersion = null;
-        if (request.cvId() != null) {
-            cv = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(request.cvId(), "CV_ID_INVALID"), candidate.getId(), SOURCE_UPLOADED)
+        if (hasUploadedCv) {
+            cv = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(request.cvId().trim(), "CV_ID_INVALID"), candidate.getId(), SOURCE_UPLOADED)
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
-        } else if (request.cvVersionId() != null) {
-            UUID cvVersionId = parseUuid(request.cvVersionId(), "CV_VERSION_ID_INVALID");
+        } else {
+            UUID cvVersionId = parseUuid(request.cvVersionId().trim(), "CV_VERSION_ID_INVALID");
             cvVersion = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(cvVersionId, candidate.getId(), SOURCE_BUILDER)
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
             cv = candidateCvRepository.findByIdAndCandidateId(cvVersion.getId(), candidate.getId())
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
-        } else {
-            cv = candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(candidate.getId(), SOURCE_UPLOADED).stream()
-                    .filter(CandidateCv::isDefaultCv)
-                    .findFirst()
-                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "CV_REQUIRED", "Vui long chon CV de ung tuyen"));
         }
 
         Application application = new Application();
@@ -273,6 +274,10 @@ public class ApplicationService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private String cleanCoverLetter(String value) {

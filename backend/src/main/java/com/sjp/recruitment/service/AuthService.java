@@ -35,8 +35,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import com.cloudinary.Cloudinary;
-import com.cloudinary.utils.ObjectUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -67,7 +65,6 @@ public class AuthService {
     private final EmailService emailService;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final StorageService storageService;
-    private final Cloudinary cloudinary;
 
     @Value("${app.frontend-base-url}")
     private String frontendBaseUrl;
@@ -140,8 +137,10 @@ public class AuthService {
                 new MapSqlParameterSource("id", UUID.fromString(user.id()))
         );
 
-        UserResponse response = user.toUserResponse();
-        return new AuthResponse(response, jwtUtil.generateToken(response));
+        User entity = userRepository.findByEmail(user.email())
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Khong tim thay nguoi dung"));
+        UserResponse response = dtoMapper.toUserResponse(entity);
+        return new AuthResponse(response, jwtUtil.generateToken(entity));
     }
 
     @Transactional
@@ -288,6 +287,13 @@ public class AuthService {
     }
 
     @Transactional
+    public void logout() {
+        User user = getCurrentUser();
+        bumpTokenVersion(user);
+        userRepository.save(user);
+    }
+
+    @Transactional
     public void changePassword(ChangePasswordRequest request) {
         User user = getCurrentUser();
         requirePasswordLogin(user);
@@ -297,6 +303,7 @@ public class AuthService {
         }
         validatePassword(request.newPassword());
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        bumpTokenVersion(user);
         userRepository.save(user);
     }
 
@@ -305,14 +312,10 @@ public class AuthService {
         User user = getCurrentUser();
         validateAvatarFile(file);
         try {
-            Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
-                    "folder", "sjp/avatars",
-                    "resource_type", "image"
-            ));
-            String fileUrl = (String) uploadResult.get("secure_url");
-            user.setAvatarUrl(fileUrl);
+            StorageService.StoredFile stored = storageService.storeUserAvatar(user.getId(), file);
+            user.setAvatarUrl(stored.storageKey());
             return toAccountResponse(userRepository.save(user));
-        } catch (Exception exception) {
+        } catch (IOException exception) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "AVATAR_STORAGE_FAILED", "Khong the luu anh dai dien");
         }
     }
@@ -323,7 +326,12 @@ public class AuthService {
         requirePasswordLogin(user);
         requireCurrentPassword(user, request.currentPassword());
         user.setStatus(User.UserStatus.SUSPENDED);
+        bumpTokenVersion(user);
         userRepository.save(user);
+    }
+
+    private void bumpTokenVersion(User user) {
+        user.setTokenVersion((user.getTokenVersion() == null ? 0 : user.getTokenVersion()) + 1);
     }
 
     public CandidateProfile ensureCandidateProfile(User user) {

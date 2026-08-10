@@ -360,11 +360,24 @@ public class CandidateService {
         }
         String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
-        if (!name.endsWith(".pdf") || !contentType.contains("pdf")) {
+        if (!name.endsWith(".pdf") || (!contentType.isBlank() && !contentType.contains("pdf"))) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_TYPE", "Chi ho tro file CV dinh dang PDF");
         }
         if (file.getSize() > MAX_CV_SIZE) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CV_FILE_TOO_LARGE", "File CV vuot qua dung luong 5MB");
+        }
+        try {
+            byte[] header = file.getInputStream().readNBytes(5);
+            if (header.length < 5
+                    || header[0] != '%'
+                    || header[1] != 'P'
+                    || header[2] != 'D'
+                    || header[3] != 'F'
+                    || header[4] != '-') {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_TYPE", "Chi ho tro file CV dinh dang PDF");
+            }
+        } catch (IOException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_FILE", "Khong the doc file CV");
         }
     }
 

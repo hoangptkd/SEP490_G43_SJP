@@ -24,3 +24,6 @@ target/
 .env
 .env.local
 .env.production
+
+# Runtime uploads
+uploads/

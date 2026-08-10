@@ -32,7 +32,7 @@ public class CandidateController {
     }
 
     @PutMapping("/profile")
-    public ResponseEntity<CandidateProfileResponse> updateProfile(@RequestBody CandidateProfileRequest request) {
+    public ResponseEntity<CandidateProfileResponse> updateProfile(@Valid @RequestBody CandidateProfileRequest request) {
         return ResponseEntity.ok(candidateService.updateProfile(request));
     }
 
