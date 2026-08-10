@@ -208,7 +208,14 @@ public class PayOsPaymentGateway {
             if (StringUtils.hasText(reference)) {
                 return reference;
             }
-            return stringValue(dataMap.get("paymentLinkId"));
+            String paymentLinkId = stringValue(dataMap.get("paymentLinkId"));
+            if (StringUtils.hasText(paymentLinkId)) {
+                return paymentLinkId;
+            }
+            String orderCode = stringValue(dataMap.get("orderCode"));
+            if (StringUtils.hasText(orderCode)) {
+                return orderCode;
+            }
         }
         return null;
     }

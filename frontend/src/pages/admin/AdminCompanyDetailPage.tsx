@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { adminService } from '../../services/adminService';
 import type { AdminCompanyDetail } from '../../types/admin';
 import type { CompanyDocument } from '../../types/job';
+import { downloadFile, openFileInNewTab } from '../../utils/helpers';
 
 function verificationLabel(status?: string) {
   const value = status?.toLowerCase() || 'unverified';
@@ -65,9 +66,8 @@ function DocumentRow({
   const isPending = (doc.status || 'pending').toLowerCase() === 'pending';
   const busy = reviewingId === doc.id;
   const showRejectForm = rejectDocId === doc.id;
-  const viewUrl = doc.fileType === 'pdf' || doc.fileName?.toLowerCase().endsWith('.pdf')
-    ? `https://docs.google.com/gview?url=${encodeURIComponent(doc.fileUrl)}`
-    : doc.fileUrl;
+  const [downloading, setDownloading] = useState(false);
+  const hasFile = Boolean(doc.fileUrl);
 
   return (
     <article className={`admin-company-doc ${isPending ? 'is-pending' : ''}`}>
@@ -111,12 +111,31 @@ function DocumentRow({
         )}
       </div>
       <div className="admin-company-doc-actions">
-        <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="button-link outline">
+        <button
+          type="button"
+          className="outline"
+          disabled={!hasFile}
+          title={!hasFile ? 'Không có đường dẫn file' : undefined}
+          onClick={() => openFileInNewTab(doc.fileUrl)}
+        >
           Xem
-        </a>
-        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="button-link outline">
-          Tải về
-        </a>
+        </button>
+        <button
+          type="button"
+          className="outline"
+          disabled={!hasFile || downloading}
+          title={!hasFile ? 'Không có đường dẫn file' : undefined}
+          onClick={async () => {
+            setDownloading(true);
+            try {
+              await downloadFile(doc.fileUrl, doc.fileName);
+            } finally {
+              setDownloading(false);
+            }
+          }}
+        >
+          {downloading ? 'Đang tải...' : 'Tải về'}
+        </button>
         {canReviewDoc && isPending && !showRejectForm && (
           <>
             <button type="button" onClick={() => onApprove(doc)} disabled={busy}>
@@ -227,7 +246,17 @@ export default function AdminCompanyDetailPage() {
     try {
       const updated = await adminService.approveCompanyDocument(id, doc.id);
       setDetail(updated);
-      setSuccess(`Đã phê duyệt tài liệu "${doc.fileName}".`);
+      const stillPending = (updated.documents || []).some(
+        (d) => (d.status || 'pending').toLowerCase() === 'pending',
+      );
+      const hasRejected = (updated.documents || []).some(
+        (d) => (d.status || '').toLowerCase() === 'rejected',
+      );
+      if (!stillPending && !hasRejected && updated.company.verificationStatus?.toLowerCase() === 'pending') {
+        setSuccess(`Đã phê duyệt tài liệu "${doc.fileName}". Bạn có thể bấm "Phê duyệt hồ sơ công ty" để hoàn tất.`);
+      } else {
+        setSuccess(`Đã phê duyệt tài liệu "${doc.fileName}".`);
+      }
       setRejectDocId(null);
       setRejectDocReason('');
     } catch (err) {

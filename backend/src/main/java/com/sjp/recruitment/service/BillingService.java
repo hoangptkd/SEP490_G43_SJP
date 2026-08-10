@@ -19,7 +19,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -38,6 +41,7 @@ import java.util.UUID;
 public class BillingService {
 
     private final AuthService authService;
+    private final PlatformTransactionManager transactionManager;
     private final NamedParameterJdbcTemplate jdbc;
     private final MomoPaymentGateway momoPaymentGateway;
     private final VnPayPaymentGateway vnPayPaymentGateway;
@@ -324,7 +328,8 @@ public class BillingService {
         ensureUuid(paymentId, "Thanh toán");
         PaymentStatusResponse current = getPaymentStatusForUser(paymentId, user.getId().toString());
         if ("pending".equalsIgnoreCase(current.status())) {
-            syncPendingPayment(paymentId);
+            // Sync trong transaction riêng — lỗi SQL khi cập nhật paid không được làm abort luôn bước đọc status
+            syncPendingPaymentIsolated(paymentId);
             return getPaymentStatusForUser(paymentId, user.getId().toString());
         }
         return current;
@@ -487,11 +492,19 @@ public class BillingService {
             PlanRow plan = findPlanById(subscription.planId());
             expireActiveSubscriptions(subscription.userId());
             activatePaidSubscription(subscription.id(), plan);
-            markPaymentPaid(paymentId, transactionId == null ? paymentId : transactionId, payload);
+            markPaymentPaid(paymentId, resolveTransactionId(paymentId, transactionId), payload);
         } else {
             markPaymentFailed(paymentId, failReason);
             cancelSubscription(payment.subscriptionId(), failReason);
         }
+    }
+
+    /** UNIQUE(transaction_id) — chuỗi rỗng '' cũng bị trùng; NULL thì được phép nhiều. */
+    private String resolveTransactionId(String paymentId, String transactionId) {
+        if (StringUtils.hasText(transactionId)) {
+            return transactionId.trim();
+        }
+        return paymentId;
     }
 
     private void activatePaidSubscription(String subscriptionId, PlanRow plan) {
@@ -610,9 +623,16 @@ public class BillingService {
             data.putIfAbsent("orderCode", orderCode);
             data.putIfAbsent("code", "00");
             payload.put("data", data);
+            String reference = firstNonBlank(
+                    stringValue(data.get("reference")),
+                    stringValue(data.get("id")),
+                    stringValue(data.get("paymentLinkId")),
+                    orderCode,
+                    paymentId
+            );
             completeGatewayPayment(
                     paymentId,
-                    stringValue(data.get("paymentLinkId")),
+                    reference,
                     payload,
                     true,
                     "Thanh toán PayOS thất bại"
@@ -620,6 +640,28 @@ public class BillingService {
         } catch (Exception ignored) {
             // keep pending until webhook arrives
         }
+    }
+
+    private void syncPendingPaymentIsolated(String paymentId) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        try {
+            template.executeWithoutResult(status -> syncPendingPayment(paymentId));
+        } catch (Exception ignored) {
+            // Giữ pending; lần poll sau sẽ thử lại
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 
     private void saveWebhookEvent(String gateway, String paymentId, Map<?, ?> payload) {
@@ -843,6 +885,7 @@ public class BillingService {
                 });
             }
             // Giữ ND CK / QR để đối chiếu sau khi thanh toán thành công
+            String resolvedTxn = resolveTransactionId(paymentId, transactionId);
             jdbc.update("""
                             UPDATE payments
                             SET status = 'paid',
@@ -853,10 +896,11 @@ public class BillingService {
                             """,
                     new MapSqlParameterSource()
                             .addValue("paymentId", paymentId)
-                            .addValue("transactionId", transactionId)
+                            .addValue("transactionId", resolvedTxn)
                             .addValue("response", objectMapper.writeValueAsString(merged)));
         } catch (Exception ex) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "PAYMENT_UPDATE_FAILED", "Không cập nhật được thanh toán");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "PAYMENT_UPDATE_FAILED",
+                    "Không cập nhật được thanh toán: " + (ex.getMessage() == null ? "unknown" : ex.getMessage()));
         }
     }
 

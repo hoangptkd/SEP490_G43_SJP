@@ -858,19 +858,15 @@ public class AdminService {
             return;
         }
 
-        if (approved > 0) {
-            company.setVerificationStatus("verified");
-            company.setStatus("active");
+        // Tất cả tài liệu đã duyệt → giữ hồ sơ ở pending để admin bấm "Phê duyệt hồ sơ công ty" riêng.
+        // Không tự verified ở bước duyệt từng file.
+        if (approved > 0 && !"verified".equalsIgnoreCase(previous)) {
+            company.setVerificationStatus("pending");
+            if (!"active".equalsIgnoreCase(company.getStatus())) {
+                company.setStatus("pending");
+            }
             companyRepository.save(company);
-            updateEmployerVerification(company.getId(), "verified");
-            adminOpsService.writeAudit(
-                    admin.getId().toString(),
-                    "COMPANY_APPROVE",
-                    "company",
-                    company.getId().toString(),
-                    previous,
-                    "verified"
-            );
+            updateEmployerVerification(company.getId(), "pending");
         }
     }
 
