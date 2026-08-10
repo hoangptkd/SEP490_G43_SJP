@@ -20,27 +20,35 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiError> handleApiException(ApiException exception) {
+        String upgradeHint = "PLAN_LIMIT_REACHED".equals(exception.getCode())
+                ? "Xem các gói dịch vụ để tăng hạn mức"
+                : null;
         return ResponseEntity.status(exception.getStatus())
-                .body(new ApiError(exception.getMessage(), exception.getCode(), Instant.now().toString()));
+                .body(new ApiError(
+                        exception.getMessage(),
+                        exception.getCode(),
+                        Instant.now().toString(),
+                        upgradeHint
+                ));
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class, HttpMessageNotReadableException.class})
     public ResponseEntity<ApiError> handleValidation(Exception exception) {
         return ResponseEntity.badRequest()
-                .body(new ApiError("Du lieu khong hop le", "VALIDATION_ERROR", Instant.now().toString()));
+                .body(new ApiError("Du lieu khong hop le", "VALIDATION_ERROR", Instant.now().toString(), null));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiError> handleMaxUpload(MaxUploadSizeExceededException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiError("File tải lên vượt quá dung lượng cho phép", "FILE_TOO_LARGE", Instant.now().toString()));
+                .body(new ApiError("File tải lên vượt quá dung lượng cho phép", "FILE_TOO_LARGE", Instant.now().toString(), null));
     }
 
     @ExceptionHandler({ObjectOptimisticLockingFailureException.class, DataIntegrityViolationException.class})
     public ResponseEntity<ApiError> handleConcurrentWrite(Exception exception) {
         String msg = exception.getMessage() != null ? exception.getMessage() : "Unknown error";
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiError("Lỗi CSDL: " + msg, "CONCURRENT_UPDATE", Instant.now().toString()));
+                .body(new ApiError("Lỗi CSDL: " + msg, "CONCURRENT_UPDATE", Instant.now().toString(), null));
     }
 
     @ExceptionHandler(Exception.class)
@@ -48,9 +56,9 @@ public class GlobalExceptionHandler {
         log.error("Unexpected API error", exception);
         String detail = exception.getMessage() != null ? exception.getMessage() : exception.getClass().getSimpleName();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiError("Lỗi hệ thống: " + detail, "INTERNAL_ERROR", Instant.now().toString()));
+                .body(new ApiError("Lỗi hệ thống: " + detail, "INTERNAL_ERROR", Instant.now().toString(), null));
     }
 
-    public record ApiError(String message, String code, String timestamp) {
+    public record ApiError(String message, String code, String timestamp, String upgradeHint) {
     }
 }

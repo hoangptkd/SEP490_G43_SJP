@@ -20,6 +20,22 @@ function roleLabel(targetRole: string) {
   return 'Tất cả';
 }
 
+function planLimitLines(plan: PlanCatalogItem) {
+  const lines: string[] = [];
+  if (plan.targetRole === 'employer' || plan.targetRole === 'all') {
+    if (plan.maxJobs != null) lines.push(`Tin đăng tối đa: ${plan.maxJobs}`);
+    if (plan.listingPriority != null && plan.listingPriority > 0) {
+      lines.push('Tin được ưu tiên hiển thị');
+    }
+  }
+  if (plan.targetRole === 'job_seeker' || plan.targetRole === 'all') {
+    if (plan.maxCv != null) lines.push(`CV tối đa: ${plan.maxCv}`);
+    if (plan.maxApplicationsPerDay != null) lines.push(`Ứng tuyển/ngày: ${plan.maxApplicationsPerDay}`);
+    if (plan.maxAiSessionsPerDay != null) lines.push(`Phiên AI/ngày: ${plan.maxAiSessionsPerDay}`);
+  }
+  return lines;
+}
+
 function readError(error: unknown) {
   if (typeof error === 'object' && error && 'response' in error) {
     const response = (error as { response?: { data?: { message?: string } } }).response;
@@ -103,6 +119,16 @@ export default function SubscriptionPlansPage({
                     <li key={benefit}>{benefit}</li>
                   ))}
                 </ul>
+              )}
+              {planLimitLines(plan).length > 0 && (
+                <div style={{ width: '100%', marginTop: 8, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div className="muted" style={{ fontSize: '0.8rem', marginBottom: 6 }}>Hạn mức gói</div>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {planLimitLines(plan).map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
               <button
                 type="button"

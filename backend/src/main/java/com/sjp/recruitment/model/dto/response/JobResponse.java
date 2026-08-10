@@ -32,6 +32,8 @@ public record JobResponse(
         String rejectionReason,
         Long applicationsCount,
         LocalDateTime reportFixDeadline,
-        com.fasterxml.jackson.databind.JsonNode rankingConfig
+        com.fasterxml.jackson.databind.JsonNode rankingConfig,
+        Integer listingPriority,
+        Boolean featured
 ) {
 }

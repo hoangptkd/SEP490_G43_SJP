@@ -12,6 +12,7 @@ public record UserSubscriptionResponse(
         String currency,
         List<String> benefits,
         LocalDateTime startedAt,
-        LocalDateTime expiresAt
+        LocalDateTime expiresAt,
+        List<FeatureUsageResponse> usages
 ) {
 }

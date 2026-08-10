@@ -8,6 +8,19 @@ export interface PlanCatalogItem {
   durationDays: number;
   benefits: string[];
   sortOrder: number;
+  maxJobs?: number | null;
+  maxCv?: number | null;
+  maxApplicationsPerDay?: number | null;
+  maxAiSessionsPerDay?: number | null;
+  listingPriority?: number | null;
+}
+
+export interface FeatureUsage {
+  featureKey: string;
+  label: string;
+  used: number;
+  limit: number;
+  daily: boolean;
 }
 
 export interface BankTransferInfo {

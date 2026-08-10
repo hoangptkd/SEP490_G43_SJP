@@ -3,6 +3,7 @@ package com.sjp.recruitment.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sjp.recruitment.exception.ApiException;
+import com.sjp.recruitment.model.dto.response.FeatureUsageResponse;
 import com.sjp.recruitment.model.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -23,32 +26,53 @@ public class FeatureLimitService {
     public static final String APPLICATIONS = "applications";
     public static final String AI_SESSIONS = "ai_sessions";
 
+    /** Ưu tiên hiển thị tin (>= 1 thì hiện badge Nổi bật). Gợi ý: 0 free, 1/2/3 theo bậc gói. */
+    public static final int FEATURED_PRIORITY_THRESHOLD = 1;
+
+    /**
+     * Điểm ưu tiên từ gói active của employer tạo tin.
+     * Free / không gói = 0.
+     */
+    public static final String LISTING_PRIORITY_SQL = """
+            COALESCE((
+                SELECT CASE
+                    WHEN (p.features->>'listingPriority') ~ '^[0-9]+$'
+                        THEN (p.features->>'listingPriority')::int
+                    ELSE 0
+                END
+                FROM employers e
+                JOIN subscriptions s ON s.user_id = e.user_id
+                  AND LOWER(s.status) = 'active'
+                  AND (s.end_date IS NULL OR s.end_date > now())
+                JOIN plans p ON p.id = s.plan_id
+                WHERE e.id = j.created_by_employer_id
+                ORDER BY s.start_date DESC NULLS LAST, s.created_at DESC
+                LIMIT 1
+            ), 0)
+            """;
+
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public void requireJobPost(User user) {
-        int limit = resolveLimit(user, JOB_POSTS, "maxJobs", "max_free_job_posts", 3);
-        String subscriptionId = findActiveSubscriptionId(user.getId());
-        int used = (subscriptionId != null) 
-                 ? getUsageCount(subscriptionId, JOB_POSTS) 
-                 : countEmployerJobs(user.getId());
-        enforce(used, limit, "Bạn đã sử dụng hết lượt đăng tin (" + used + "/" + limit + "). Vui lòng nâng cấp gói để có thêm lượt.");
+        int limit = resolveLimit(user, "maxJobs", "max_free_job_posts", 15);
+        int used = countEmployerJobs(user.getId());
+        enforce(user, used, limit,
+                "Bạn đã sử dụng hết lượt đăng tin (" + used + "/" + limit + ").");
     }
 
     @Transactional
     public void consumeJobPost(User user) {
-        bumpUsage(user, JOB_POSTS, "maxJobs", "max_free_job_posts", 3, false);
+        bumpUsage(user, JOB_POSTS, "maxJobs", "max_free_job_posts", 15, false);
     }
 
     @Transactional(readOnly = true)
     public void requireCvUpload(User user) {
-        int limit = resolveLimit(user, CV_UPLOADS, "maxCv", null, 3);
-        String subscriptionId = findActiveSubscriptionId(user.getId());
-        int used = (subscriptionId != null) 
-                 ? getUsageCount(subscriptionId, CV_UPLOADS) 
-                 : countCandidateCvs(user.getId());
-        enforce(used, limit, "Bạn đã sử dụng hết lượt tải lên CV (" + used + "/" + limit + "). Vui lòng nâng cấp gói để có thêm lượt.");
+        int limit = resolveLimit(user, "maxCv", null, 3);
+        int used = countCandidateCvs(user.getId());
+        enforce(user, used, limit,
+                "Bạn đã sử dụng hết lượt tải lên CV (" + used + "/" + limit + ").");
     }
 
     @Transactional
@@ -58,26 +82,70 @@ public class FeatureLimitService {
 
     @Transactional(readOnly = true)
     public void requireApplication(User user) {
-        int limit = resolveLimit(user, APPLICATIONS, "maxApplicationsPerDay", "max_applications_per_day", 20);
+        int limit = resolveLimit(user, "maxApplicationsPerDay", "max_applications_per_day", 5);
         int used = countApplicationsToday(user.getId());
-        enforce(used, limit, "Bạn đã đạt giới hạn ứng tuyển hôm nay (" + used + "/" + limit + "). Vui lòng nâng cấp gói hoặc thử lại ngày mai.");
+        enforce(user, used, limit,
+                "Bạn đã đạt giới hạn ứng tuyển hôm nay (" + used + "/" + limit + ").");
     }
 
     @Transactional
     public void consumeApplication(User user) {
-        bumpUsage(user, APPLICATIONS, "maxApplicationsPerDay", "max_applications_per_day", 20, true);
+        bumpUsage(user, APPLICATIONS, "maxApplicationsPerDay", "max_applications_per_day", 5, true);
     }
 
     @Transactional(readOnly = true)
     public void requireAiSession(User user) {
-        int limit = resolveLimit(user, AI_SESSIONS, "maxAiSessionsPerDay", "max_ai_sessions_per_day", 5);
+        int limit = resolveLimit(user, "maxAiSessionsPerDay", "max_ai_sessions_per_day", 3);
         int used = countAiSessionsToday(user.getId());
-        enforce(used, limit, "Bạn đã đạt giới hạn phiên AI hôm nay (" + used + "/" + limit + "). Vui lòng nâng cấp gói hoặc thử lại ngày mai.");
+        enforce(user, used, limit,
+                "Bạn đã đạt giới hạn phiên AI hôm nay (" + used + "/" + limit + ").");
     }
 
     @Transactional
     public void consumeAiSession(User user) {
-        bumpUsage(user, AI_SESSIONS, "maxAiSessionsPerDay", "max_ai_sessions_per_day", 5, true);
+        bumpUsage(user, AI_SESSIONS, "maxAiSessionsPerDay", "max_ai_sessions_per_day", 3, true);
+    }
+
+    /**
+     * Snapshot hạn mức theo gói đang active (hoặc free settings) — dùng live count.
+     */
+    @Transactional(readOnly = true)
+    public List<FeatureUsageResponse> getUsageSummary(User user) {
+        List<FeatureUsageResponse> rows = new ArrayList<>();
+        User.UserRole role = user.getRoleEnum();
+        if (role == User.UserRole.EMPLOYER || role == User.UserRole.ADMIN) {
+            rows.add(usage(
+                    JOB_POSTS,
+                    "Tin đăng đang mở",
+                    countEmployerJobs(user.getId()),
+                    resolveLimit(user, "maxJobs", "max_free_job_posts", 15),
+                    false
+            ));
+        }
+        if (role == User.UserRole.CANDIDATE || role == User.UserRole.ADMIN) {
+            rows.add(usage(
+                    CV_UPLOADS,
+                    "CV đã tải lên",
+                    countCandidateCvs(user.getId()),
+                    resolveLimit(user, "maxCv", null, 3),
+                    false
+            ));
+            rows.add(usage(
+                    APPLICATIONS,
+                    "Ứng tuyển hôm nay",
+                    countApplicationsToday(user.getId()),
+                    resolveLimit(user, "maxApplicationsPerDay", "max_applications_per_day", 5),
+                    true
+            ));
+            rows.add(usage(
+                    AI_SESSIONS,
+                    "Phiên AI hôm nay",
+                    countAiSessionsToday(user.getId()),
+                    resolveLimit(user, "maxAiSessionsPerDay", "max_ai_sessions_per_day", 3),
+                    true
+            ));
+        }
+        return rows;
     }
 
     @Transactional
@@ -88,12 +156,37 @@ public class FeatureLimitService {
         upsertUsage(subscriptionId, AI_SESSIONS, featureInt(featuresJson, "maxAiSessionsPerDay", 20), true);
     }
 
-    private void bumpUsage(User user, String featureKey, String planFeatureKey, String freeSettingKey, int freeDefault, boolean daily) {
+    /** Khi admin sửa hạn mức gói → cập nhật limit_count cho mọi subscription đang active của gói đó. */
+    @Transactional
+    public void syncUsagesForPlan(String planId, String featuresJson) {
+        if (!StringUtils.hasText(planId)) {
+            return;
+        }
+        List<String> subscriptionIds = jdbc.query("""
+                        SELECT id::text
+                        FROM subscriptions
+                        WHERE plan_id = CAST(:planId AS uuid)
+                          AND status = 'active'
+                          AND (end_date IS NULL OR end_date > now())
+                        """,
+                new MapSqlParameterSource("planId", planId),
+                (rs, rowNum) -> rs.getString(1));
+        for (String subscriptionId : subscriptionIds) {
+            initUsagesForSubscription(subscriptionId, featuresJson == null ? "{}" : featuresJson);
+        }
+    }
+
+    private FeatureUsageResponse usage(String key, String label, int used, int limit, boolean daily) {
+        return new FeatureUsageResponse(key, label, used, limit, daily);
+    }
+
+    private void bumpUsage(User user, String featureKey, String planFeatureKey, String freeSettingKey,
+                           int freeDefault, boolean daily) {
         String subscriptionId = findActiveSubscriptionId(user.getId());
         if (subscriptionId == null) {
             return;
         }
-        int limit = resolveLimit(user, featureKey, planFeatureKey, freeSettingKey, freeDefault);
+        int limit = resolveLimit(user, planFeatureKey, freeSettingKey, freeDefault);
         upsertUsage(subscriptionId, featureKey, limit, daily);
         jdbc.update("""
                         UPDATE subscription_usages
@@ -134,10 +227,11 @@ public class FeatureLimitService {
                         .addValue("daily", daily));
     }
 
-    private int resolveLimit(User user, String featureKey, String planFeatureKey, String freeSettingKey, int freeDefault) {
+    private int resolveLimit(User user, String planFeatureKey, String freeSettingKey, int freeDefault) {
         ActivePlan plan = findActivePlan(user.getId());
         if (plan != null) {
-            return featureInt(plan.featuresJson(), planFeatureKey, freeDefault * 5);
+            // Có gói active: đọc đúng key từ features JSON admin cấu hình (không nhân 5 lần free)
+            return featureInt(plan.featuresJson(), planFeatureKey, freeDefault);
         }
         if (StringUtils.hasText(freeSettingKey)) {
             return readSettingInt(freeSettingKey, freeDefault);
@@ -145,10 +239,15 @@ public class FeatureLimitService {
         return freeDefault;
     }
 
-    private void enforce(int used, int limit, String message) {
-        if (limit >= 0 && used >= limit) {
-            throw new ApiException(HttpStatus.PAYMENT_REQUIRED, "PLAN_LIMIT_REACHED", message);
+    private void enforce(User user, int used, int limit, String baseMessage) {
+        if (limit < 0 || used < limit) {
+            return;
         }
+        boolean onFreePlan = findActivePlan(user.getId()) == null;
+        String tip = onFreePlan
+                ? " Bạn đang dùng hạn mức miễn phí. Hãy xem các gói dịch vụ để tăng thêm số lượng."
+                : " Hãy nâng cấp hoặc đổi gói dịch vụ để tăng thêm số lượng.";
+        throw new ApiException(HttpStatus.PAYMENT_REQUIRED, "PLAN_LIMIT_REACHED", baseMessage + tip);
     }
 
     private ActivePlan findActivePlan(UUID userId) {
@@ -172,9 +271,9 @@ public class FeatureLimitService {
         return plan == null ? null : plan.subscriptionId();
     }
 
-    private int featureInt(String featuresJson, String key, int defaultValue) {
+    public Integer featureIntOrNull(String featuresJson, String key) {
         if (!StringUtils.hasText(featuresJson) || !StringUtils.hasText(key)) {
-            return defaultValue;
+            return null;
         }
         try {
             JsonNode node = objectMapper.readTree(featuresJson).get(key);
@@ -186,7 +285,29 @@ public class FeatureLimitService {
             }
         } catch (Exception ignored) {
         }
-        return defaultValue;
+        return null;
+    }
+
+    public int featureInt(String featuresJson, String key, int defaultValue) {
+        Integer value = featureIntOrNull(featuresJson, key);
+        return value == null ? defaultValue : value;
+    }
+
+    /** Ưu tiên tin đăng theo gói active của user employer (0 nếu free). */
+    @Transactional(readOnly = true)
+    public int resolveListingPriorityForUser(UUID userId) {
+        if (userId == null) {
+            return 0;
+        }
+        ActivePlan plan = findActivePlan(userId);
+        if (plan == null) {
+            return 0;
+        }
+        return featureInt(plan.featuresJson(), "listingPriority", 0);
+    }
+
+    public static boolean isFeatured(int listingPriority) {
+        return listingPriority >= FEATURED_PRIORITY_THRESHOLD;
     }
 
     private int readSettingInt(String key, int defaultValue) {
@@ -229,6 +350,7 @@ public class FeatureLimitService {
                         JOIN job_seekers js ON js.id = r.job_seeker_id
                         WHERE js.user_id = CAST(:userId AS uuid)
                           AND r.deleted_at IS NULL
+                          AND LOWER(COALESCE(r.source_type, 'uploaded')) = 'uploaded'
                         """,
                 new MapSqlParameterSource("userId", userId.toString()),
                 Long.class);
@@ -263,19 +385,5 @@ public class FeatureLimitService {
     }
 
     private record ActivePlan(String subscriptionId, String featuresJson) {
-    }
-
-    private int getUsageCount(String subscriptionId, String featureKey) {
-        var rows = jdbc.query("""
-                        SELECT used_count
-                        FROM subscription_usages
-                        WHERE subscription_id = CAST(:subscriptionId AS uuid)
-                          AND feature_key = :featureKey
-                        """,
-                new MapSqlParameterSource()
-                        .addValue("subscriptionId", subscriptionId)
-                        .addValue("featureKey", featureKey),
-                (rs, rowNum) -> rs.getInt("used_count"));
-        return rows.isEmpty() ? 0 : rows.get(0);
     }
 }

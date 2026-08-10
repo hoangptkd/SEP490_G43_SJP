@@ -235,7 +235,9 @@ public class ApplicationService {
                     jobResponse.rejectionReason(),
                     jobResponse.applicationsCount(),
                     jobResponse.reportFixDeadline(),
-                    jobResponse.rankingConfig()
+                    jobResponse.rankingConfig(),
+                    jobResponse.listingPriority(),
+                    jobResponse.featured()
             );
         }
 

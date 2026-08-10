@@ -283,7 +283,8 @@ public class CandidateService {
                 subscription == null ? null : subscription.getExpiresAt(),
                 getCurrentProfileIdIfCandidate(user) == null ? 0 : savedJobRepository.countByCandidateId(getCurrentProfileIdIfCandidate(user)),
                 getCurrentProfileIdIfCandidate(user) == null ? 0 : candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(getCurrentProfileIdIfCandidate(user), SOURCE_UPLOADED).size(),
-                notificationRepository.countByRecipientUserIdAndReadFalse(user.getId())
+                notificationRepository.countByRecipientUserIdAndReadFalse(user.getId()),
+                featureLimitService.getUsageSummary(user)
         );
     }
 

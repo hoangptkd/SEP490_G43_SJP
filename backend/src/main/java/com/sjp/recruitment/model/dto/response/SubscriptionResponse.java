@@ -14,6 +14,7 @@ public record SubscriptionResponse(
         LocalDateTime expiresAt,
         long savedJobsCount,
         long cvCount,
-        long unreadNotificationsCount
+        long unreadNotificationsCount,
+        List<FeatureUsageResponse> usages
 ) {
 }

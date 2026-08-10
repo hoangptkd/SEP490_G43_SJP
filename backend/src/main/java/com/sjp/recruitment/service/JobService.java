@@ -111,7 +111,8 @@ public class JobService {
                     c.website AS company_website,
                     c.location AS company_location,
                     c.logo_url AS company_logo_url,
-                    COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills
+                    COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills,
+                    __LISTING_PRIORITY__ AS listing_priority
                 FROM jobs j
                 JOIN companies c ON c.id = j.company_id
                 LEFT JOIN company_locations cl ON cl.id = j.company_location_id
@@ -122,12 +123,13 @@ public class JobService {
                 + """
                 GROUP BY
                     j.id, j.title, j.description, j.requirements, j.benefits, j.vacancies, j.working_time, j.salary_type, j.job_type, j.work_mode, j.views_count, j.salary_min, j.salary_max,
-                    j.location, j.experience_level, j.deadline, j.status, j.rejection_reason, j.company_location_id,
+                    j.location, j.experience_level, j.deadline, j.status, j.rejection_reason, j.company_location_id, j.created_by_employer_id,
                     cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
                     c.id, c.name, c.website, c.location, c.logo_url
                 """
                 + resolveRemoteJobOrder(sort)
                 + " LIMIT :limit OFFSET :offset";
+        dataSql = dataSql.replace("__LISTING_PRIORITY__", FeatureLimitService.LISTING_PRIORITY_SQL.trim());
 
         CandidateProfile candidate = currentCandidate().orElse(null);
         List<JobResponse> content = namedParameterJdbcTemplate.query(dataSql, params,
@@ -182,7 +184,8 @@ public class JobService {
                     c.website AS company_website,
                     c.location AS company_location,
                     c.logo_url AS company_logo_url,
-                    COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills
+                    COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills,
+                    __LISTING_PRIORITY__ AS listing_priority
                 FROM jobs j
                 JOIN companies c ON c.id = j.company_id
                 LEFT JOIN company_locations cl ON cl.id = j.company_location_id
@@ -192,10 +195,10 @@ public class JobService {
                   AND j.status = 'published'
                 GROUP BY
                     j.id, j.title, j.description, j.requirements, j.benefits, j.vacancies, j.working_time, j.salary_type, j.job_type, j.work_mode, j.views_count, j.salary_min, j.salary_max,
-                    j.location, j.experience_level, j.deadline, j.status, j.rejection_reason, j.company_location_id,
+                    j.location, j.experience_level, j.deadline, j.status, j.rejection_reason, j.company_location_id, j.created_by_employer_id,
                     cl.branch_name, cl.address, cl.city, cl.district, cl.country, cl.is_headquarter,
                     c.id, c.name, c.website, c.location, c.logo_url
-                """;
+                """.replace("__LISTING_PRIORITY__", FeatureLimitService.LISTING_PRIORITY_SQL.trim());
         CandidateProfile candidate = currentCandidate().orElse(null);
         List<JobResponse> jobs = namedParameterJdbcTemplate.query(
                 sql,
@@ -221,7 +224,13 @@ public class JobService {
         return jobRepository.findTop20ByStatusOrderByCreatedAtDesc("published")
                 .stream()
                 .map(job -> toRecommendation(candidate, job, lowConfidence))
-                .sorted(Comparator.comparingInt(RecommendationResponse::matchScore).reversed())
+                .sorted(Comparator
+                        .comparingInt(RecommendationResponse::matchScore).reversed()
+                        .thenComparing((RecommendationResponse r) ->
+                                        r.job() != null && r.job().listingPriority() != null
+                                                ? r.job().listingPriority()
+                                                : 0,
+                                Comparator.reverseOrder()))
                 .limit(10)
                 .toList();
     }
@@ -562,6 +571,12 @@ public class JobService {
         checkEmployerPermission(job, employer, "Bạn không có quyền thao tác với việc làm này");
         if (job.getCompany() != null && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "COMPANY_NOT_VERIFIED", "Công ty của bạn chưa được Admin xác thực.");
+        }
+        String previousStatus = job.getStatus() == null ? "" : job.getStatus().toLowerCase();
+        boolean wasInactive = List.of("closed", "expired", "archived", "removed").contains(previousStatus);
+        if (wasInactive) {
+            // Tin đóng/hết hạn không nằm trong quota hiện tại → mở lại phải còn slot
+            featureLimitService.requireJobPost(authService.getCurrentUser());
         }
         if (newDeadline != null && !newDeadline.isBlank()) {
             try {
@@ -960,14 +975,21 @@ public class JobService {
         return where.toString();
     }
 
-    private String resolveRemoteJobOrder(String sort) {
+    /**
+     * Sort mặc định: gói cao hơn lên trước → tin mới hơn → id (ổn định khi trùng thời gian).
+     * Salary/deadline vẫn ưu tiên listingPriority trước.
+     */
+    static String resolveRemoteJobOrder(String sort) {
+        String priority = FeatureLimitService.LISTING_PRIORITY_SQL + " DESC";
+        String freshness = "COALESCE(j.published_at, j.posted_at, j.created_at) DESC";
+        String tieBreak = "j.id DESC";
         if ("salary".equalsIgnoreCase(sort)) {
-            return " ORDER BY j.salary_max DESC NULLS LAST, COALESCE(j.published_at, j.posted_at, j.created_at) DESC";
+            return " ORDER BY " + priority + ", j.salary_max DESC NULLS LAST, " + freshness + ", " + tieBreak;
         }
         if ("deadline".equalsIgnoreCase(sort)) {
-            return " ORDER BY j.deadline ASC NULLS LAST, COALESCE(j.published_at, j.posted_at, j.created_at) DESC";
+            return " ORDER BY " + priority + ", j.deadline ASC NULLS LAST, " + freshness + ", " + tieBreak;
         }
-        return " ORDER BY COALESCE(j.published_at, j.posted_at, j.created_at) DESC";
+        return " ORDER BY " + priority + ", " + freshness + ", " + tieBreak;
     }
 
     private JobResponse mapRemoteJobResponse(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -985,6 +1007,7 @@ public class JobService {
                 resultSet.getString("cl_country"),
                 resultSet.getBoolean("cl_is_headquarter")
         );
+        int listingPriority = readListingPriority(resultSet);
         return new JobResponse(
                 resultSet.getString("id"),
                 resultSet.getString("title"),
@@ -1019,8 +1042,18 @@ public class JobService {
                 resultSet.getString("rejection_reason"),
                 0L,
                 null,
-                null
+                null,
+                listingPriority,
+                FeatureLimitService.isFeatured(listingPriority)
         );
+    }
+
+    private int readListingPriority(ResultSet resultSet) throws SQLException {
+        try {
+            return Math.max(0, resultSet.getInt("listing_priority"));
+        } catch (SQLException ex) {
+            return 0;
+        }
     }
 
     private Job toJobForMatch(ResultSet resultSet) throws SQLException {

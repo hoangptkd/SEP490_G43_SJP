@@ -113,6 +113,39 @@ export default function EmployerSubscriptionPage() {
           </div>
         )}
 
+        {(subscription.usages?.length || 0) > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div className="muted" style={{ marginBottom: 8, fontSize: '0.85rem' }}>Hạn mức theo gói</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              {subscription.usages!.map((item) => {
+                const remaining = Math.max(0, item.limit - item.used);
+                const over = item.used >= item.limit;
+                return (
+                  <div
+                    key={item.featureKey}
+                    style={{
+                      border: `1px solid ${over ? '#fecaca' : '#e5e7eb'}`,
+                      background: over ? '#fef2f2' : '#f9fafb',
+                      borderRadius: 10,
+                      padding: '12px 14px',
+                    }}
+                  >
+                    <div className="muted" style={{ fontSize: '0.8rem' }}>
+                      {item.label}{item.daily ? ' / ngày' : ''}
+                    </div>
+                    <strong style={{ fontSize: '1.15rem' }}>
+                      {item.used}/{item.limit}
+                    </strong>
+                    <div style={{ fontSize: '0.8rem', color: over ? '#b91c1c' : '#166534', marginTop: 4 }}>
+                      {over ? 'Đã hết hạn mức' : `Còn ${remaining}`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginTop: 20, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <Link to="/employer/subscription/plans" className="button-link">
             {isPaidPlan ? 'Đổi / gia hạn gói' : 'Mua gói'}

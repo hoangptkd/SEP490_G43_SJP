@@ -368,25 +368,27 @@ public class BillingService {
                         rs.getString("currency"),
                         parseBenefits(rs.getString("features_json")),
                         rs.getTimestamp("start_date") == null ? null : rs.getTimestamp("start_date").toLocalDateTime(),
-                        rs.getTimestamp("end_date") == null ? null : rs.getTimestamp("end_date").toLocalDateTime()
+                        rs.getTimestamp("end_date") == null ? null : rs.getTimestamp("end_date").toLocalDateTime(),
+                        List.of()
                 ));
+        var usages = featureLimitService.getUsageSummary(user);
         if (rows.isEmpty()) {
-            return new UserSubscriptionResponse(null, "Free", "free", BigDecimal.ZERO, "VND", List.of(), null, null);
+            return new UserSubscriptionResponse(null, "Free", "free", BigDecimal.ZERO, "VND",
+                    defaultBenefits(user), null, null, usages);
         }
         UserSubscriptionResponse current = rows.get(0);
-        if (current.benefits().isEmpty()) {
-            return new UserSubscriptionResponse(
-                    current.planId(),
-                    current.planName(),
-                    current.status(),
-                    current.price(),
-                    current.currency(),
-                    defaultBenefits(user),
-                    current.startedAt(),
-                    current.expiresAt()
-            );
-        }
-        return current;
+        List<String> benefits = current.benefits().isEmpty() ? defaultBenefits(user) : current.benefits();
+        return new UserSubscriptionResponse(
+                current.planId(),
+                current.planName(),
+                current.status(),
+                current.price(),
+                current.currency(),
+                benefits,
+                current.startedAt(),
+                current.expiresAt(),
+                usages
+        );
     }
 
     @Transactional
@@ -987,6 +989,7 @@ public class BillingService {
     }
 
     private PlanCatalogResponse mapPlan(ResultSet rs, int rowNum) throws SQLException {
+        String featuresJson = rs.getString("features_json");
         return new PlanCatalogResponse(
                 rs.getString("id"),
                 rs.getString("name"),
@@ -995,8 +998,13 @@ public class BillingService {
                 rs.getBigDecimal("price"),
                 rs.getString("currency"),
                 rs.getInt("duration_days"),
-                parseBenefits(rs.getString("features_json")),
-                rs.getInt("sort_order")
+                parseBenefits(featuresJson),
+                rs.getInt("sort_order"),
+                featureLimitService.featureIntOrNull(featuresJson, "maxJobs"),
+                featureLimitService.featureIntOrNull(featuresJson, "maxCv"),
+                featureLimitService.featureIntOrNull(featuresJson, "maxApplicationsPerDay"),
+                featureLimitService.featureIntOrNull(featuresJson, "maxAiSessionsPerDay"),
+                featureLimitService.featureIntOrNull(featuresJson, "listingPriority")
         );
     }
 
