@@ -86,6 +86,13 @@ export interface SubscriptionView {
   savedJobsCount: number;
   cvCount: number;
   unreadNotificationsCount: number;
+  usages?: Array<{
+    featureKey: string;
+    label: string;
+    used: number;
+    limit: number;
+    daily: boolean;
+  }>;
 }
 
 export interface InterviewScheduleRequest {

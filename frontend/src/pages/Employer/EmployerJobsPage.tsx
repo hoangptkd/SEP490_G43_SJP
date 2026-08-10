@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState, useRef } from 'react';
 import { employerService } from '../../services/employerService';
 import type { Company, CompanyLocation, Job } from '../../types/job';
 import { Link } from 'react-router-dom';
+import PlanLimitAlert from '../../components/PlanLimitAlert';
+import { parseApiError } from '../../utils/planLimits';
 
 const PRESET_WORKING_TIMES = [
   'Thứ 2 - Thứ 6 (08:00 - 17:30)',
@@ -25,6 +27,7 @@ function EmployerJobsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [planLimitReached, setPlanLimitReached] = useState(false);
 
   const submitTargetRef = useRef<string | undefined>(undefined);
 
@@ -245,6 +248,7 @@ function EmployerJobsPage() {
     setSaving(true);
     setMessage('');
     setError('');
+    setPlanLimitReached(false);
 
     const skillsArray = skillsInput
       .split(',')
@@ -295,11 +299,9 @@ function EmployerJobsPage() {
       }
       setShowForm(false);
     } catch (err: any) {
-      if (err.response?.data?.message) {
-        setError(err.response.data.message);
-      } else {
-        setError('Có lỗi xảy ra khi lưu tin tuyển dụng.');
-      }
+      const info = parseApiError(err);
+      setError(info.message);
+      setPlanLimitReached(info.isPlanLimit);
     } finally {
       setSaving(false);
     }
@@ -358,7 +360,13 @@ function EmployerJobsPage() {
       </div>
 
       {message && <p className="success" style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', background: '#d1e7dd', color: '#0f5132' }}>{message}</p>}
-      {error && <p className="error" style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', background: '#f8d7da', color: '#842029' }}>{error}</p>}
+      {planLimitReached && error ? (
+        <div style={{ marginBottom: 16 }}>
+          <PlanLimitAlert message={error} />
+        </div>
+      ) : error ? (
+        <p className="error" style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', background: '#f8d7da', color: '#842029' }}>{error}</p>
+      ) : null}
 
       {!isVerified ? (
         <div style={{

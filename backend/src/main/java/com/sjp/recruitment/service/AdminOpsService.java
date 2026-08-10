@@ -1,5 +1,8 @@
 package com.sjp.recruitment.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.AdminCategoryRequest;
 import com.sjp.recruitment.model.dto.request.AdminPlanUpdateRequest;
@@ -41,6 +44,8 @@ public class AdminOpsService {
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final BillingService billingService;
     private final SystemSettingsService systemSettingsService;
+    private final FeatureLimitService featureLimitService;
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public List<AdminPlanResponse> listPlans(String status) {
@@ -68,7 +73,7 @@ public class AdminOpsService {
         }
 
         AdminPlanResponse current = findPlan(id);
-        String name = StringUtils.hasText(request.name()) ? request.name().trim() : current.name();
+        String name = normalizePlanTier(request.name());
         String targetRole = StringUtils.hasText(request.targetRole())
                 ? request.targetRole().trim().toLowerCase(Locale.ROOT)
                 : current.targetRole();
@@ -76,11 +81,11 @@ public class AdminOpsService {
         BigDecimal price = request.price() != null ? request.price() : current.price();
         String currency = StringUtils.hasText(request.currency()) ? request.currency().trim().toUpperCase(Locale.ROOT) : current.currency();
         Integer durationDays = request.durationDays() != null ? request.durationDays() : current.durationDays();
-        String featuresJson = StringUtils.hasText(request.featuresJson()) ? request.featuresJson().trim() : current.featuresJson();
+        String featuresJson = ensureListingPriority(StringUtils.hasText(request.featuresJson()) ? request.featuresJson().trim() : current.featuresJson(), name);
         String status = StringUtils.hasText(request.status())
                 ? request.status().trim().toLowerCase(Locale.ROOT)
                 : current.status();
-        Integer sortOrder = request.sortOrder() != null ? request.sortOrder() : current.sortOrder();
+        Integer sortOrder = request.sortOrder() != null ? request.sortOrder() : tierSortOrder(name);
 
         if (!List.of("job_seeker", "employer", "all").contains(targetRole)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_TARGET_ROLE", "Đối tượng gói không hợp lệ");
@@ -90,6 +95,24 @@ public class AdminOpsService {
         }
         if (price.compareTo(BigDecimal.ZERO) < 0 || durationDays == null || durationDays <= 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PLAN", "Giá hoặc thời hạn gói không hợp lệ");
+        }
+
+        Long duplicate = namedParameterJdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM plans
+                WHERE LOWER(name) = LOWER(:name)
+                  AND target_role = :targetRole
+                  AND id <> CAST(:id AS uuid)
+                """,
+                new MapSqlParameterSource()
+                        .addValue("name", name)
+                        .addValue("targetRole", targetRole)
+                        .addValue("id", id),
+                Long.class
+        );
+        if (duplicate != null && duplicate > 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "PLAN_EXISTS",
+                    "Gói " + name + " cho đối tượng này đã tồn tại");
         }
 
         namedParameterJdbcTemplate.update("""
@@ -119,6 +142,7 @@ public class AdminOpsService {
                         .addValue("sortOrder", sortOrder)
         );
 
+        featureLimitService.syncUsagesForPlan(id, StringUtils.hasText(featuresJson) ? featuresJson : "{}");
         writeAudit(admin.getId().toString(), "PLAN_UPDATE", "plan", id, current.status(), status);
         return findPlan(id);
     }
@@ -130,7 +154,7 @@ public class AdminOpsService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "NAME_REQUIRED", "Vui lòng nhập tên gói dịch vụ");
         }
 
-        String name = request.name().trim();
+        String name = normalizePlanTier(request.name());
         String targetRole = StringUtils.hasText(request.targetRole())
                 ? request.targetRole().trim().toLowerCase(Locale.ROOT)
                 : "all";
@@ -138,11 +162,14 @@ public class AdminOpsService {
         BigDecimal price = request.price() != null ? request.price() : BigDecimal.ZERO;
         String currency = StringUtils.hasText(request.currency()) ? request.currency().trim().toUpperCase(Locale.ROOT) : "VND";
         Integer durationDays = request.durationDays() != null ? request.durationDays() : 30;
-        String featuresJson = StringUtils.hasText(request.featuresJson()) ? request.featuresJson().trim() : "{}";
+        String featuresJson = ensureListingPriority(
+                StringUtils.hasText(request.featuresJson()) ? request.featuresJson().trim() : "{}",
+                name
+        );
         String status = StringUtils.hasText(request.status())
                 ? request.status().trim().toLowerCase(Locale.ROOT)
                 : "active";
-        Integer sortOrder = request.sortOrder() != null ? request.sortOrder() : 0;
+        Integer sortOrder = request.sortOrder() != null ? request.sortOrder() : tierSortOrder(name);
 
         if (!List.of("job_seeker", "employer", "all").contains(targetRole)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_TARGET_ROLE", "Đối tượng gói không hợp lệ");
@@ -155,12 +182,19 @@ public class AdminOpsService {
         }
 
         Long existing = namedParameterJdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM plans WHERE LOWER(name) = LOWER(:name)",
-                new MapSqlParameterSource("name", name),
+                """
+                SELECT COUNT(*) FROM plans
+                WHERE LOWER(name) = LOWER(:name)
+                  AND target_role = :targetRole
+                """,
+                new MapSqlParameterSource()
+                        .addValue("name", name)
+                        .addValue("targetRole", targetRole),
                 Long.class
         );
         if (existing != null && existing > 0) {
-            throw new ApiException(HttpStatus.CONFLICT, "PLAN_EXISTS", "Tên gói đã tồn tại");
+            throw new ApiException(HttpStatus.CONFLICT, "PLAN_EXISTS",
+                    "Gói " + name + " cho đối tượng này đã tồn tại");
         }
 
         String id = namedParameterJdbcTemplate.query("""
@@ -795,6 +829,49 @@ public class AdminOpsService {
             UUID.fromString(id);
         } catch (IllegalArgumentException e) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ID", label + " không hợp lệ");
+        }
+    }
+
+    private String normalizePlanTier(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "NAME_REQUIRED", "Vui lòng chọn tên gói: Plus, Pro hoặc Premium");
+        }
+        String name = raw.trim();
+        for (String tier : List.of("Plus", "Pro", "Premium")) {
+            if (tier.equalsIgnoreCase(name)) {
+                return tier;
+            }
+        }
+        throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PLAN_NAME",
+                "Tên gói chỉ được chọn: Plus, Pro, Premium");
+    }
+
+    private int tierPriority(String name) {
+        return switch (name) {
+            case "Plus" -> 1;
+            case "Pro" -> 2;
+            case "Premium" -> 3;
+            default -> 0;
+        };
+    }
+
+    private int tierSortOrder(String name) {
+        return tierPriority(name);
+    }
+
+    private String ensureListingPriority(String featuresJson, String planName) {
+        try {
+            JsonNode node = objectMapper.readTree(StringUtils.hasText(featuresJson) ? featuresJson : "{}");
+            ObjectNode root = node.isObject() ? (ObjectNode) node : objectMapper.createObjectNode();
+            int priority = tierPriority(planName);
+            if (priority > 0) {
+                root.put("listingPriority", priority);
+            } else {
+                root.put("listingPriority", 0);
+            }
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception ex) {
+            return "{\"listingPriority\":" + tierPriority(planName) + "}";
         }
     }
 

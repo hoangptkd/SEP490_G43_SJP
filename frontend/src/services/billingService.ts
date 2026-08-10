@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { CheckoutResult, PaymentStatus, PlanCatalogItem, BankTransferInfo } from '../types/billing';
+import type { CheckoutResult, FeatureUsage, PaymentStatus, PlanCatalogItem, BankTransferInfo } from '../types/billing';
 
 export interface UserSubscription {
   planId?: string | null;
@@ -10,6 +10,7 @@ export interface UserSubscription {
   benefits: string[];
   startedAt?: string | null;
   expiresAt?: string | null;
+  usages?: FeatureUsage[];
 }
 
 export const billingService = {

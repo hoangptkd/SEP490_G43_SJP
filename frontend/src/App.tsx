@@ -25,6 +25,8 @@ import { employerService } from './services/employerService';
 import { aiInterviewService } from './services/aiInterviewService';
 import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversation';
 import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './utils/authStorage';
+import { parseApiError } from './utils/planLimits';
+import PlanLimitAlert from './components/PlanLimitAlert';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
@@ -269,11 +271,11 @@ function keepFocusInsideDialog(event: KeyboardEvent, container: HTMLElement | nu
 }
 
 function readError(error: unknown) {
-  if (typeof error === 'object' && error && 'response' in error) {
-    const response = (error as { response?: { data?: { message?: string } } }).response;
-    return response?.data?.message || 'Có lỗi xảy ra';
-  }
-  return 'Có lỗi xảy ra';
+  return parseApiError(error).message;
+}
+
+function isPlanLimitError(error: unknown) {
+  return parseApiError(error).isPlanLimit;
 }
 
 function readLoginError(error: unknown) {
@@ -396,6 +398,7 @@ function ApplyJobModal({
   defaultResume,
   busy,
   error,
+  planLimitError,
   onClose,
   onSubmit,
   onOpenCv,
@@ -406,6 +409,7 @@ function ApplyJobModal({
   defaultResume: string;
   busy?: boolean;
   error?: string;
+  planLimitError?: boolean;
   onClose: () => void;
   onSubmit: (payload: ApplyJobPayload) => void;
   onOpenCv: (id: string) => void;
@@ -632,7 +636,11 @@ function ApplyJobModal({
             <p>Hãy kiểm tra kỹ thông tin công ty và vị trí trước khi ứng tuyển. Không cung cấp giấy tờ nhạy cảm hoặc chuyển tiền ngoài nền tảng.</p>
           </div>
 
-          {(fileError || error) && <div className="error-panel">{fileError || error}</div>}
+          {(fileError || error) && (
+            planLimitError && error
+              ? <PlanLimitAlert message={error} />
+              : <div className="error-panel">{fileError || error}</div>
+          )}
         </div>
 
         <div className="application-modal-footer">
@@ -2259,7 +2267,26 @@ function JobCard({ job }: { job: Job }) {
         <div className="job-card-header">
           <div className="job-company-logo">{initials}</div>
           <div className="job-card-info" style={{ flex: 1 }}>
-            <h3>{job.title}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0 }}>{job.title}</h3>
+              {job.featured && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: '#fef3c7',
+                    color: '#92400e',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  Nổi bật
+                </span>
+              )}
+            </div>
             <p className="job-card-company">{job.company.name}</p>
             <div className="job-card-meta">
               {job.location && (
@@ -2313,6 +2340,8 @@ function JobDetailPage() {
   const [savingJob, setSavingJob] = useState(false);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [applyError, setApplyError] = useState('');
+  const [applyPlanLimit, setApplyPlanLimit] = useState(false);
+  const [messagePlanLimit, setMessagePlanLimit] = useState(false);
   const token = getToken();
   const role = localStorage.getItem('role');
   const isCandidate = Boolean(token && role === 'CANDIDATE');
@@ -2366,6 +2395,7 @@ function JobDetailPage() {
     if (payload) {
       setApplying(true);
       setApplyError('');
+      setApplyPlanLimit(false);
       try {
         let resumeType = '';
         let resumeId = '';
@@ -2388,6 +2418,7 @@ function JobDetailPage() {
         await load();
       } catch (err) {
         setApplyError(readError(err));
+        setApplyPlanLimit(isPlanLimitError(err));
       } finally {
         setApplying(false);
       }
@@ -2395,6 +2426,7 @@ function JobDetailPage() {
     }
     const [resumeType, resumeId] = selectedResume.split(':');
     setApplying(true);
+    setMessagePlanLimit(false);
     try {
       await candidateService.apply(
         job.id,
@@ -2405,6 +2437,7 @@ function JobDetailPage() {
       await load();
     } catch (err) {
       setMessage(readError(err));
+      setMessagePlanLimit(isPlanLimitError(err));
     } finally {
       setApplying(false);
     }
@@ -2478,7 +2511,24 @@ function JobDetailPage() {
               </div>
               <div style={{ flex: 1 }}>
                 <p className="eyebrow">{job.company.name}</p>
-                <h1 className="job-detail-title">{job.title}</h1>
+                <h1 className="job-detail-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  {job.title}
+                  {job.featured && (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        background: '#fef3c7',
+                        color: '#92400e',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Nổi bật
+                    </span>
+                  )}
+                </h1>
                 <div className="chip-row" style={{ marginTop: 12 }}>
                   {job.location && (
                     <span className="job-meta-badge">
@@ -2606,6 +2656,7 @@ function JobDetailPage() {
               <button
                 onClick={() => {
                   setApplyError('');
+                  setApplyPlanLimit(false);
                   setShowApplyModal(true);
                 }}
                 disabled={job.applied || applying}
@@ -2616,6 +2667,9 @@ function JobDetailPage() {
 
               <AnimatePresence>
                 {message && (
+                  messagePlanLimit ? (
+                    <PlanLimitAlert message={message} />
+                  ) : (
                   <motion.div
                     className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'}
                     variants={scaleIn} initial="initial" animate="animate" exit="exit"
@@ -2623,6 +2677,7 @@ function JobDetailPage() {
                   >
                     {message}
                   </motion.div>
+                  )
                 )}
               </AnimatePresence>
 
@@ -2712,6 +2767,7 @@ function JobDetailPage() {
             defaultResume={selectedResume}
             busy={applying}
             error={applyError}
+            planLimitError={applyPlanLimit}
             onClose={() => !applying && setShowApplyModal(false)}
             onSubmit={apply}
             onOpenCv={openCv}
@@ -3484,6 +3540,7 @@ function CvPage() {
   const [cvs, setCvs] = useState<CvFile[]>([]);
   const [versions, setVersions] = useState<CvVersion[]>([]);
   const [message, setMessage] = useState('');
+  const [planLimitReached, setPlanLimitReached] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingVersionId, setEditingVersionId] = useState('');
   const [draftVersionTitle, setDraftVersionTitle] = useState('');
@@ -3501,12 +3558,14 @@ function CvPage() {
   async function upload(file?: File) {
     if (!file) return;
     setUploading(true);
+    setPlanLimitReached(false);
     try {
       await candidateService.uploadCv(file);
       setMessage('✅ Upload CV thành công!');
       await load();
     } catch (err) {
       setMessage(readError(err));
+      setPlanLimitReached(isPlanLimitError(err));
     } finally {
       setUploading(false);
     }
@@ -3644,6 +3703,11 @@ function CvPage() {
         </div>
         <AnimatePresence>
           {message && (
+            planLimitReached ? (
+              <div style={{ marginTop: 12 }}>
+                <PlanLimitAlert message={message} />
+              </div>
+            ) : (
             <motion.div
               className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'}
               variants={scaleIn} initial="initial" animate="animate" exit="exit"
@@ -3652,6 +3716,7 @@ function CvPage() {
             >
               {message}
             </motion.div>
+            )
           )}
         </AnimatePresence>
       </div>
@@ -4532,6 +4597,37 @@ function SubscriptionPage() {
           </div>
         )}
 
+        {(subscription.usages?.length || 0) > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div className="muted" style={{ marginBottom: 8, fontSize: '0.85rem' }}>Hạn mức theo gói</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              {subscription.usages!.map((item) => {
+                const remaining = Math.max(0, item.limit - item.used);
+                const over = item.used >= item.limit;
+                return (
+                  <div
+                    key={item.featureKey}
+                    style={{
+                      border: `1px solid ${over ? '#fecaca' : '#e5e7eb'}`,
+                      background: over ? '#fef2f2' : '#f9fafb',
+                      borderRadius: 10,
+                      padding: '12px 14px',
+                    }}
+                  >
+                    <div className="muted" style={{ fontSize: '0.8rem' }}>
+                      {item.label}{item.daily ? ' / ngày' : ''}
+                    </div>
+                    <strong style={{ fontSize: '1.15rem' }}>{item.used}/{item.limit}</strong>
+                    <div style={{ fontSize: '0.8rem', color: over ? '#b91c1c' : '#166534', marginTop: 4 }}>
+                      {over ? 'Đã hết hạn mức' : `Còn ${remaining}`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginTop: 20 }}>
           <Link to="/candidate/subscription/plans" className="button-link">
             {isActivePaid ? 'Đổi / gia hạn gói' : 'Mua gói'}
@@ -4721,6 +4817,7 @@ function AiInterviewPage() {
   const [selectedSession, setSelectedSession] = useState<AiInterviewSession | null>(null);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<AiInterviewSession | null>(null);
   const [message, setMessage] = useState('');
+  const [planLimitReached, setPlanLimitReached] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function load() {
@@ -4755,12 +4852,14 @@ function AiInterviewPage() {
   async function createFromApplication(applicationId: string) {
     setLoading(true);
     setMessage('');
+    setPlanLimitReached(false);
     try {
       const session = await aiInterviewService.createApplicationSession(applicationId);
       setSelectedSession(session);
       await load();
     } catch (err) {
       setMessage(readError(err));
+      setPlanLimitReached(isPlanLimitError(err));
     } finally {
       setLoading(false);
     }
@@ -4770,6 +4869,7 @@ function AiInterviewPage() {
     event.preventDefault();
     setLoading(true);
     setMessage('');
+    setPlanLimitReached(false);
     try {
       const skillList = skills.split(',').map((item) => item.trim()).filter(Boolean);
       if (questionMode === 'fixed' && !selectedQuestionSetId) {
@@ -4787,6 +4887,7 @@ function AiInterviewPage() {
       await load();
     } catch (err) {
       setMessage(readError(err));
+      setPlanLimitReached(isPlanLimitError(err));
     } finally {
       setLoading(false);
     }
@@ -4956,11 +5057,17 @@ function AiInterviewPage() {
 
             <AnimatePresence>
               {message && (
+                planLimitReached ? (
+                  <div style={{ marginTop: 12 }}>
+                    <PlanLimitAlert message={message} />
+                  </div>
+                ) : (
                 <motion.div className="error-panel" style={{ marginTop: 12 }}
                   variants={scaleIn} initial="initial" animate="animate" exit="exit"
                   transition={{ duration: 0.18, ease: EASE_OUT }} role="alert">
                   {message}
                 </motion.div>
+                )
               )}
             </AnimatePresence>
           </div>

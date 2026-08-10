@@ -12,6 +12,11 @@ public record PlanCatalogResponse(
         String currency,
         int durationDays,
         List<String> benefits,
-        int sortOrder
+        int sortOrder,
+        Integer maxJobs,
+        Integer maxCv,
+        Integer maxApplicationsPerDay,
+        Integer maxAiSessionsPerDay,
+        Integer listingPriority
 ) {
 }

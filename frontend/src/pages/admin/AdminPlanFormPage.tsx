@@ -8,6 +8,7 @@ type PlanLimits = {
   maxCv: number;
   maxApplicationsPerDay: number;
   maxAiSessionsPerDay: number;
+  listingPriority: number;
 };
 
 type FeatureState = {
@@ -16,11 +17,39 @@ type FeatureState = {
   limits: PlanLimits;
 };
 
+const PLAN_TIERS = [
+  {
+    name: 'Plus',
+    listingPriority: 1,
+    sortOrder: 1,
+    hint: 'Gói cơ bản — tin được ưu tiên hiển thị',
+    employerLimits: { maxJobs: 20, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, listingPriority: 1 },
+    candidateLimits: { maxJobs: 5, maxCv: 10, maxApplicationsPerDay: 30, maxAiSessionsPerDay: 10, listingPriority: 0 },
+  },
+  {
+    name: 'Pro',
+    listingPriority: 2,
+    sortOrder: 2,
+    hint: 'Gói nâng cao — tin ưu tiên cao hơn Plus',
+    employerLimits: { maxJobs: 50, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, listingPriority: 2 },
+    candidateLimits: { maxJobs: 5, maxCv: 20, maxApplicationsPerDay: 50, maxAiSessionsPerDay: 20, listingPriority: 0 },
+  },
+  {
+    name: 'Premium',
+    listingPriority: 3,
+    sortOrder: 3,
+    hint: 'Gói cao nhất — tin ưu tiên cao nhất',
+    employerLimits: { maxJobs: 100, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, listingPriority: 3 },
+    candidateLimits: { maxJobs: 5, maxCv: 50, maxApplicationsPerDay: 100, maxAiSessionsPerDay: 50, listingPriority: 0 },
+  },
+] as const;
+
 const DEFAULT_LIMITS: PlanLimits = {
   maxJobs: 20,
   maxCv: 10,
   maxApplicationsPerDay: 50,
   maxAiSessionsPerDay: 20,
+  listingPriority: 1,
 };
 
 const ROLE_OPTIONS = [
@@ -33,7 +62,7 @@ const BENEFIT_PRESETS: Record<string, string[]> = {
   employer: [
     'Đăng tin tuyển dụng theo hạn mức gói',
     'Xem và quản lý ứng viên ứng tuyển',
-    'Tin nổi bật / ưu tiên hiển thị',
+    'Tin được ưu tiên hiển thị',
     'Hỗ trợ ưu tiên từ admin',
     'Thống kê ứng tuyển cơ bản',
   ],
@@ -50,7 +79,7 @@ const BENEFIT_PRESETS: Record<string, string[]> = {
     'Ứng tuyển việc làm theo hạn mức ngày',
     'Upload nhiều phiên bản CV',
     'Luyện phỏng vấn AI',
-    'Hỗ trợ ưu tiên từ admin',
+    'Tin được ưu tiên hiển thị',
   ],
 };
 
@@ -64,7 +93,7 @@ function readError(error: unknown) {
 
 function emptyForm(): Omit<AdminPlan, 'id' | 'createdAt' | 'updatedAt'> & { id?: string } {
   return {
-    name: '',
+    name: 'Plus',
     targetRole: 'employer',
     description: '',
     price: 0,
@@ -72,7 +101,7 @@ function emptyForm(): Omit<AdminPlan, 'id' | 'createdAt' | 'updatedAt'> & { id?:
     durationDays: 30,
     featuresJson: '',
     status: 'active',
-    sortOrder: 0,
+    sortOrder: 1,
   };
 }
 
@@ -80,23 +109,49 @@ function normalizeStatus(status?: string) {
   return status?.toLowerCase() === 'inactive' ? 'inactive' : 'active';
 }
 
-function defaultFeaturesForRole(role: string): FeatureState {
+function normalizePlanName(name?: string): 'Plus' | 'Pro' | 'Premium' {
+  const match = PLAN_TIERS.find((tier) => tier.name.toLowerCase() === (name || '').trim().toLowerCase());
+  return match?.name || 'Plus';
+}
+
+function tierOf(name?: string) {
+  const normalized = normalizePlanName(name);
+  return PLAN_TIERS.find((tier) => tier.name === normalized) || PLAN_TIERS[0];
+}
+
+function limitsFor(role: string, planName?: string): PlanLimits {
+  const tier = tierOf(planName);
+  if (role === 'job_seeker') return { ...tier.candidateLimits };
+  if (role === 'all') {
+    return {
+      maxJobs: tier.employerLimits.maxJobs,
+      maxCv: tier.candidateLimits.maxCv,
+      maxApplicationsPerDay: tier.candidateLimits.maxApplicationsPerDay,
+      maxAiSessionsPerDay: tier.candidateLimits.maxAiSessionsPerDay,
+      listingPriority: tier.listingPriority,
+    };
+  }
+  return { ...tier.employerLimits };
+}
+
+function defaultFeaturesForRole(role: string, planName = 'Plus'): FeatureState {
   const presets = BENEFIT_PRESETS[role] || BENEFIT_PRESETS.employer;
+  const limits = limitsFor(role, planName);
+  const selected = [...presets.slice(0, 2)];
+  if ((role === 'employer' || role === 'all') && limits.listingPriority >= 1) {
+    if (!selected.includes('Tin được ưu tiên hiển thị')) {
+      selected.push('Tin được ưu tiên hiển thị');
+    }
+  }
   return {
-    selectedBenefits: presets.slice(0, 2),
+    selectedBenefits: selected,
     customBenefit: '',
-    limits: {
-      ...DEFAULT_LIMITS,
-      maxJobs: role === 'job_seeker' ? 5 : 20,
-      maxCv: role === 'employer' ? 5 : 10,
-      maxApplicationsPerDay: role === 'employer' ? 20 : 50,
-      maxAiSessionsPerDay: role === 'employer' ? 5 : 20,
-    },
+    limits,
   };
 }
 
-function parseFeatures(featuresJson: string | undefined, role: string): FeatureState {
-  const fallback = defaultFeaturesForRole(role);
+function parseFeatures(featuresJson: string | undefined, role: string, planName?: string): FeatureState {
+  const fallback = defaultFeaturesForRole(role, planName);
   if (!featuresJson?.trim()) return fallback;
   try {
     const parsed = JSON.parse(featuresJson) as {
@@ -117,6 +172,7 @@ function parseFeatures(featuresJson: string | undefined, role: string): FeatureS
         maxCv: Number(parsed.maxCv) || fallback.limits.maxCv,
         maxApplicationsPerDay: Number(parsed.maxApplicationsPerDay) || fallback.limits.maxApplicationsPerDay,
         maxAiSessionsPerDay: Number(parsed.maxAiSessionsPerDay) || fallback.limits.maxAiSessionsPerDay,
+        listingPriority: tierOf(planName).listingPriority,
       },
     };
   } catch {
@@ -124,23 +180,28 @@ function parseFeatures(featuresJson: string | undefined, role: string): FeatureS
   }
 }
 
-function buildFeaturesJson(state: FeatureState): string {
+function buildFeaturesJson(state: FeatureState, role: string, planName: string): string {
   const custom = state.customBenefit
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
-  const benefits = Array.from(new Set([...state.selectedBenefits, ...custom]));
-  return JSON.stringify(
-    {
-      benefits,
-      maxJobs: Number(state.limits.maxJobs) || 0,
-      maxCv: Number(state.limits.maxCv) || 0,
-      maxApplicationsPerDay: Number(state.limits.maxApplicationsPerDay) || 0,
-      maxAiSessionsPerDay: Number(state.limits.maxAiSessionsPerDay) || 0,
-    },
-    null,
-    2,
-  );
+  const benefitSet = new Set([...state.selectedBenefits, ...custom]);
+  const payload: Record<string, unknown> = {};
+  const priority = (role === 'employer' || role === 'all') ? tierOf(planName).listingPriority : 0;
+  if (role === 'employer' || role === 'all') {
+    payload.maxJobs = Number(state.limits.maxJobs) || 0;
+    payload.listingPriority = priority;
+    if (priority >= 1) {
+      benefitSet.add('Tin được ưu tiên hiển thị');
+    }
+  }
+  if (role === 'job_seeker' || role === 'all') {
+    payload.maxCv = Number(state.limits.maxCv) || 0;
+    payload.maxApplicationsPerDay = Number(state.limits.maxApplicationsPerDay) || 0;
+    payload.maxAiSessionsPerDay = Number(state.limits.maxAiSessionsPerDay) || 0;
+  }
+  payload.benefits = Array.from(benefitSet);
+  return JSON.stringify(payload, null, 2);
 }
 
 function moneyPreview(price: number, currency: string) {
@@ -164,7 +225,7 @@ export default function AdminPlanFormPage() {
   const navigate = useNavigate();
   const isEdit = Boolean(id);
   const [form, setForm] = useState(emptyForm());
-  const [features, setFeatures] = useState<FeatureState>(() => defaultFeaturesForRole('employer'));
+  const [features, setFeatures] = useState<FeatureState>(() => defaultFeaturesForRole('employer', 'Plus'));
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -187,6 +248,7 @@ export default function AdminPlanFormPage() {
   const benefitCount = features.selectedBenefits.length + customDraftCount;
   const showEmployerLimits = form.targetRole === 'employer' || form.targetRole === 'all';
   const showCandidateLimits = form.targetRole === 'job_seeker' || form.targetRole === 'all';
+  const currentTier = tierOf(form.name);
 
   useEffect(() => {
     if (!id) return;
@@ -200,13 +262,16 @@ export default function AdminPlanFormPage() {
           setError('Không tìm thấy gói dịch vụ.');
           return;
         }
+        const planName = normalizePlanName(plan.name);
         setForm({
           ...plan,
+          name: planName,
           status: normalizeStatus(plan.status),
           featuresJson: plan.featuresJson || '{}',
           description: plan.description || '',
+          sortOrder: tierOf(planName).sortOrder,
         });
-        setFeatures(parseFeatures(plan.featuresJson, plan.targetRole));
+        setFeatures(parseFeatures(plan.featuresJson, plan.targetRole, planName));
       })
       .catch((err) => setError(readError(err)))
       .finally(() => setLoading(false));
@@ -217,7 +282,7 @@ export default function AdminPlanFormPage() {
     setFeatures((prev) => {
       const nextPresets = BENEFIT_PRESETS[nextRole] || BENEFIT_PRESETS.employer;
       const kept = prev.selectedBenefits.filter((item) => nextPresets.includes(item));
-      const nextDefaults = defaultFeaturesForRole(nextRole);
+      const nextDefaults = defaultFeaturesForRole(nextRole, form.name);
       return {
         selectedBenefits: kept.length > 0 ? kept : nextDefaults.selectedBenefits,
         customBenefit: prev.customBenefit,
@@ -227,6 +292,28 @@ export default function AdminPlanFormPage() {
           maxCv: prev.limits.maxCv || nextDefaults.limits.maxCv,
           maxApplicationsPerDay: prev.limits.maxApplicationsPerDay || nextDefaults.limits.maxApplicationsPerDay,
           maxAiSessionsPerDay: prev.limits.maxAiSessionsPerDay || nextDefaults.limits.maxAiSessionsPerDay,
+          listingPriority: nextDefaults.limits.listingPriority,
+        },
+      };
+    });
+  }
+
+  function changePlanName(nextName: string) {
+    const planName = normalizePlanName(nextName);
+    const tier = tierOf(planName);
+    setForm((prev) => ({ ...prev, name: planName, sortOrder: tier.sortOrder }));
+    setFeatures((prev) => {
+      const nextLimits = limitsFor(form.targetRole, planName);
+      const selected = [...prev.selectedBenefits];
+      if ((form.targetRole === 'employer' || form.targetRole === 'all') && !selected.includes('Tin được ưu tiên hiển thị')) {
+        selected.push('Tin được ưu tiên hiển thị');
+      }
+      return {
+        ...prev,
+        selectedBenefits: selected,
+        limits: {
+          ...prev.limits,
+          ...nextLimits,
         },
       };
     });
@@ -255,9 +342,9 @@ export default function AdminPlanFormPage() {
     event.preventDefault();
     setSaving(true);
     setError('');
-    const featuresJson = buildFeaturesJson(features);
+    const featuresJson = buildFeaturesJson(features, form.targetRole, form.name);
     const payload = {
-      name: form.name.trim(),
+      name: normalizePlanName(form.name),
       targetRole: form.targetRole,
       description: form.description?.trim() || '',
       price: Number(form.price) || 0,
@@ -265,7 +352,7 @@ export default function AdminPlanFormPage() {
       durationDays: Number(form.durationDays) || 30,
       featuresJson,
       status: normalizeStatus(form.status),
-      sortOrder: Number(form.sortOrder) || 0,
+      sortOrder: tierOf(form.name).sortOrder,
     };
     try {
       if (isEdit && id) {
@@ -347,12 +434,18 @@ export default function AdminPlanFormPage() {
             <div className="admin-settings-grid">
               <label className="full">
                 Tên gói
-                <input
+                <select
                   required
-                  placeholder="Ví dụ: Employer Pro"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
+                  value={normalizePlanName(form.name)}
+                  onChange={(e) => changePlanName(e.target.value)}
+                >
+                  {PLAN_TIERS.map((tier) => (
+                    <option key={tier.name} value={tier.name}>
+                      {tier.name}
+                    </option>
+                  ))}
+                </select>
+                <small className="muted">{currentTier.hint}. Chỉ được chọn Plus / Pro / Premium.</small>
               </label>
               <label>
                 Giá
@@ -394,15 +487,6 @@ export default function AdminPlanFormPage() {
                   <option value="active">Đang bán</option>
                   <option value="inactive">Tạm tắt</option>
                 </select>
-              </label>
-              <label>
-                Thứ tự hiển thị
-                <input
-                  type="number"
-                  value={form.sortOrder}
-                  onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
-                />
-                <small className="muted">Số nhỏ hiện trước</small>
               </label>
               <label className="full">
                 Mô tả ngắn
@@ -493,6 +577,12 @@ export default function AdminPlanFormPage() {
                   />
                 </label>
               )}
+              {showEmployerLimits && (
+                <div className="admin-plan-limit-card">
+                  <span className="admin-plan-limit-title">Ưu tiên tin</span>
+                  <span className="muted">Tin được ưu tiên hiển thị theo bậc gói {normalizePlanName(form.name)}.</span>
+                </div>
+              )}
               {showCandidateLimits && (
                 <>
                   <label className="admin-plan-limit-card">
@@ -553,6 +643,12 @@ export default function AdminPlanFormPage() {
                 <span>Quyền lợi</span>
                 <strong>{benefitCount}</strong>
               </li>
+              {showEmployerLimits && (
+                <li>
+                  <span>Ưu tiên tin</span>
+                  <strong>Có</strong>
+                </li>
+              )}
             </ul>
             {form.description?.trim() && (
               <p className="muted admin-plan-preview-desc">{form.description.trim()}</p>

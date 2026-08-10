@@ -24,6 +24,9 @@ public class DtoMapper {
     @Autowired
     private com.sjp.recruitment.repository.AiRankingResultRepository aiRankingResultRepository;
 
+    @Autowired(required = false)
+    private FeatureLimitService featureLimitService;
+
     public UserResponse toUserResponse(User user) {
         return new UserResponse(
                 String.valueOf(user.getId()),
@@ -153,6 +156,10 @@ public class DtoMapper {
             frontendStatus = "EXPIRED";
         }
         long appsCount = (applicationRepository != null && job.getId() != null) ? applicationRepository.countByJobId(job.getId()) : 0L;
+        int listingPriority = 0;
+        if (featureLimitService != null && job.getEmployer() != null && job.getEmployer().getUser() != null) {
+            listingPriority = featureLimitService.resolveListingPriorityForUser(job.getEmployer().getUser().getId());
+        }
         return new JobResponse(
                 String.valueOf(job.getId()),
                 job.getTitle(),
@@ -181,7 +188,9 @@ public class DtoMapper {
                 rejectionReason,
                 appsCount,
                 job.getReportFixDeadline(),
-                job.getRankingConfig()
+                job.getRankingConfig(),
+                listingPriority,
+                FeatureLimitService.isFeatured(listingPriority)
         );
     }
 

@@ -56,6 +56,8 @@ export interface Job {
       education_level?: string | null;
     };
   };
+  listingPriority?: number;
+  featured?: boolean;
 }
 
 export interface Company {
