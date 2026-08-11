@@ -189,10 +189,31 @@ public class AiRankingService {
 
         Map<String, Object> body = new HashMap<>();
         body.put("model", shopAiModel);
+        
+        // KỸ THUẬT 1: TEMPERATURE = 0 (Bắt buộc LLM phải chấm điểm ổn định, không ngẫu hứng)
+        body.put("temperature", 0.0);
+
+        // KỸ THUẬT 2: RUBRIC-BASED PROMPT (Đưa barem chấm điểm vào System Prompt)
+        String systemPrompt = 
+            "You are an expert Technical Recruiter and HR AI assistant. Your task is to perform a strict semantic evaluation of a candidate's CV against a Job Description (JD).\n\n" +
+            "SCORING RUBRIC (0-100 scale for each category):\n" +
+            "- 90-100: Exceptional match (exceeds requirements, advanced mastery).\n" +
+            "- 70-89: Solid match (meets core requirements, acceptable equivalents like NextJS for ReactJS).\n" +
+            "- 50-69: Partial match (has foundational knowledge but falls short on years of experience or lacks key skills).\n" +
+            "- 1-49: Poor match (completely lacks relevance in this category).\n" +
+            "- 0: No information provided in the CV.\n\n" +
+            "INSTRUCTIONS:\n" +
+            "1. Analyze semantics intelligently (e.g., 'IELTS 6.5' satisfies 'Good English').\n" +
+            "2. If ANY mandatory skills or minimum experience are missing, list them strictly in 'missingRequirements'.\n" +
+            "3. The 'summary' MUST justify your scores professionally and be written in Vietnamese.\n\n" +
+            "Return ONLY a valid JSON object (no markdown, no extra text) with this exact structure:\n" +
+            "{\"categoryScores\": {\"skills\": 0, \"experience\": 0, \"projects\": 0, \"education\": 0, \"certificates\": 0}, \"missingRequirements\": [], \"summary\": \"\"}";
+
         body.put("messages", List.of(
-            Map.of("role", "system", "content", "You are an expert HR AI assistant. Your task is to evaluate a candidate's CV against a Job Description. Return ONLY a JSON object with this exact format: {\"categoryScores\": {\"skills\": 80, \"experience\": 90, \"projects\": 70, \"education\": 100, \"certificates\": 0}, \"missingRequirements\": [\"AWS cert\", \"5 years Java\"], \"summary\": \"Brief explanation of the score.\"} If any MANDATORY skills or minimum experience are missing from the CV, you MUST list them strictly in the `missingRequirements` array. The `summary` field MUST be written in Vietnamese."),
+            Map.of("role", "system", "content", systemPrompt),
             Map.of("role", "user", "content", prompt)
         ));
+        
         body.put("response_format", Map.of("type", "json_object"));
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);

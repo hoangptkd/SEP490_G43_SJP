@@ -65,9 +65,18 @@ export default function EmployerApplicationsPage() {
   const [evaluatingInterviewId, setEvaluatingInterviewId] = useState<string | null>(null);
   const [interviewResult, setInterviewResult] = useState<'pass' | 'fail'>('pass');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   useEffect(() => {
     loadJobs();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    loadApplications();
+  }, [selectedJobId, selectedStatus]);
 
   async function loadJobs() {
     try {
@@ -155,12 +164,8 @@ export default function EmployerApplicationsPage() {
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const normalizedKeyword = searchKeyword.trim();
-    if (normalizedKeyword === appliedSearchKeyword) {
-      void loadApplications();
-      return;
-    }
-    setAppliedSearchKeyword(normalizedKeyword);
+    setCurrentPage(1);
+    loadApplications();
   }
 
   function getDetailedStatus(app: CandidateApplication) {
@@ -408,8 +413,14 @@ export default function EmployerApplicationsPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {[...applications]
+          {(() => {
+            const filteredApps = applications.filter(app => !selectedStatus || app.status === selectedStatus);
+            const totalPages = Math.ceil(filteredApps.length / itemsPerPage);
+            return (
+              <>
+          {[...filteredApps]
             .sort((a, b) => (b.aiMatchScore || 0) - (a.aiMatchScore || 0))
+            .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
             .map((app) => {
             const st = getDetailedStatus(app);
             const candidateName = app.candidate?.fullName || 'Ứng viên ẩn danh';
@@ -682,6 +693,72 @@ export default function EmployerApplicationsPage() {
               </div>
             );
           })}
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '24px' }}>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  background: currentPage === 1 ? '#f8fafc' : '#fff',
+                  color: currentPage === 1 ? '#94a3b8' : '#334155',
+                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                  fontWeight: 500,
+                  transition: 'all 0.2s'
+                }}
+              >
+                Trước
+              </button>
+              
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '6px',
+                      border: currentPage === page ? 'none' : '1px solid #cbd5e1',
+                      background: currentPage === page ? '#2563eb' : '#fff',
+                      color: currentPage === page ? '#fff' : '#334155',
+                      fontWeight: currentPage === page ? 600 : 500,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  background: currentPage === totalPages ? '#f8fafc' : '#fff',
+                  color: currentPage === totalPages ? '#94a3b8' : '#334155',
+                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                  fontWeight: 500,
+                  transition: 'all 0.2s'
+                }}
+              >
+                Sau
+              </button>
+            </div>
+          )}
+              </>
+            );
+          })()}
         </div>
       )}
 
