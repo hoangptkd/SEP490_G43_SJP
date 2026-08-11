@@ -12,6 +12,7 @@ export interface PlanCatalogItem {
   maxCv?: number | null;
   maxApplicationsPerDay?: number | null;
   maxAiSessionsPerDay?: number | null;
+  maxAiJobSearchesPerMonth?: number | null;
   listingPriority?: number | null;
 }
 

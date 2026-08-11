@@ -32,6 +32,11 @@ function planLimitLines(plan: PlanCatalogItem) {
     if (plan.maxCv != null) lines.push(`CV tối đa: ${plan.maxCv}`);
     if (plan.maxApplicationsPerDay != null) lines.push(`Ứng tuyển/ngày: ${plan.maxApplicationsPerDay}`);
     if (plan.maxAiSessionsPerDay != null) lines.push(`Phiên AI/ngày: ${plan.maxAiSessionsPerDay}`);
+    if (plan.maxAiJobSearchesPerMonth != null) {
+      lines.push(plan.maxAiJobSearchesPerMonth < 0
+        ? 'Tìm việc bằng AI: Không giới hạn'
+        : `Tìm việc bằng AI/tháng: ${plan.maxAiJobSearchesPerMonth}`);
+    }
   }
   return lines;
 }

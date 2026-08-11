@@ -5,9 +5,11 @@ import AdminLayout, { AdminProtected } from './pages/admin/AdminLayout';
 import { authService } from './services/authService';
 import { employerService } from './services/employerService';
 import { aiInterviewService } from './services/aiInterviewService';
+import { aiJobSearchService } from './services/aiJobSearchService';
 import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversation';
 import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './utils/authStorage';
 import { parseApiError } from './utils/planLimits';
+import { filterAiJobSearchItems } from './utils/aiJobSearch';
 import PlanLimitAlert from './components/PlanLimitAlert';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
@@ -32,6 +34,7 @@ import type {
 } from './types/candidateDomain';
 import type { AccountView } from './types/auth';
 import type { Category, Job, JobFilters, PublicCompany, Recommendation } from './types/job';
+import type { AiJobSearchItem, AiJobSearchResult, AiJobSearchStatus } from './types/aiJobSearch';
 
 const AdminAuditPage = lazy(() => import('./pages/admin/AdminAuditPage'));
 const AdminBillingPage = lazy(() => import('./pages/admin/AdminBillingPage'));
@@ -1120,6 +1123,7 @@ function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [latestJobs, setLatestJobs] = useState<Job[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [aiJobStatus, setAiJobStatus] = useState<AiJobSearchStatus | null>(null);
   const [homeLoading, setHomeLoading] = useState(true);
   const [homeError, setHomeError] = useState('');
 
@@ -1135,17 +1139,21 @@ function HomePage() {
       setHomeLoading(true);
       setHomeError('');
       try {
-        const [jobData, categoryData, recommendationData] = await Promise.all([
+        const [jobData, categoryData, recommendationData, aiStatusData] = await Promise.all([
           jobService.getAll({ sort: 'newest' }, 0, 6),
           jobService.getCategories().catch(() => []),
           token && role === 'CANDIDATE'
             ? jobService.recommendations().catch(() => [])
             : Promise.resolve([]),
+          token && role === 'CANDIDATE'
+            ? aiJobSearchService.status().catch(() => null)
+            : Promise.resolve(null),
         ]);
         if (!mounted) return;
         setLatestJobs(jobData.content);
         setCategories(categoryData);
         setRecommendations(recommendationData);
+        setAiJobStatus(aiStatusData);
       } catch (err) {
         if (mounted) setHomeError(readError(err));
       } finally {
@@ -1173,6 +1181,14 @@ function HomePage() {
     params.set('category', category.slug || category.id);
     params.set('sort', 'newest');
     navigate(`/jobs?${params.toString()}`);
+  }
+
+  function openAiJobSearch() {
+    if (!token) {
+      navigate(`/login?redirect=${encodeURIComponent('/jobs?mode=ai')}`);
+      return;
+    }
+    navigate('/jobs?mode=ai');
   }
 
   const parentCategories = categories
@@ -1290,6 +1306,33 @@ function HomePage() {
               Tìm việc
             </button>
           </motion.form>
+
+            {(!token || role === 'CANDIDATE') && (
+              <div className="home-ai-search">
+                <button
+                  type="button"
+                  className="home-ai-search-button"
+                  onClick={openAiJobSearch}
+                  disabled={Boolean(token && aiJobStatus && !aiJobStatus.enabled)}
+                  aria-describedby="home-ai-search-help"
+                >
+                  <span className="home-ai-search-icon" aria-hidden="true">✦</span>
+                  <span>Tìm việc phù hợp bằng AI</span>
+                  <span aria-hidden="true">→</span>
+                </button>
+                <p id="home-ai-search-help">
+                  {!token
+                    ? 'Đăng nhập để AI phân tích Profile và CV mặc định của bạn.'
+                    : aiJobStatus && !aiJobStatus.enabled
+                      ? 'Tính năng AI hiện chưa sẵn sàng.'
+                      : aiJobStatus
+                        ? aiJobStatus.quota.limit < 0
+                          ? 'Gói của bạn không giới hạn lượt tìm việc bằng AI.'
+                          : `Còn ${aiJobStatus.quota.remaining}/${aiJobStatus.quota.limit} lượt trong tháng này.`
+                        : 'AI phân tích Profile và CV mặc định để xếp hạng công việc.'}
+                </p>
+              </div>
+            )}
 
             {quickCategories.length > 0 && (
               <div className="home-quick-search" aria-label="Tìm nhanh theo ngành nghề">
@@ -1494,6 +1537,10 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
   const oauthError = params.get('oauthError');
+  const requestedRedirect = params.get('redirect');
+  const candidateRedirect = requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
+    ? requestedRedirect
+    : '/';
   const oauthErrorMessage = oauthError === 'google_not_configured'
     ? 'Đăng nhập Google chưa được cấu hình trên môi trường này.'
     : oauthError === 'missing_profile'
@@ -1519,7 +1566,7 @@ function LoginPage() {
       }
       if (response.user.role === 'ADMIN') navigate('/admin');
       else if (response.user.role === 'EMPLOYER') navigate('/employer');
-      else if (response.user.role === 'CANDIDATE') navigate('/');
+      else if (response.user.role === 'CANDIDATE') navigate(candidateRedirect);
       else navigate('/jobs');
     } catch (err) {
       setError(readError(err));
@@ -2194,6 +2241,7 @@ function JobsPage() {
   useRestoreScrollPosition();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  const aiMode = params.get('mode') === 'ai';
   const [jobs, setJobs] = useState<Job[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const filters = useMemo(() => jobFiltersFromParams(params), [params]);
@@ -2206,9 +2254,21 @@ function JobsPage() {
   const [filterError, setFilterError] = useState('');
   const [loading, setLoading] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [aiStatus, setAiStatus] = useState<AiJobSearchStatus | null>(null);
+  const [aiResult, setAiResult] = useState<AiJobSearchResult | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [showAiConsent, setShowAiConsent] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [revokeBusy, setRevokeBusy] = useState(false);
+  const [aiPlanLimit, setAiPlanLimit] = useState(false);
   const filterRef = useRef<HTMLFormElement | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
+    if (aiMode) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -2225,7 +2285,24 @@ function JobsPage() {
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [filters, page, pageSize, setParams]);
+  }, [aiMode, filters, page, pageSize, setParams]);
+
+  const runAiSearch = useCallback(async (forceRefresh: boolean) => {
+    setAiLoading(true);
+    setAiError('');
+    setAiPlanLimit(false);
+    try {
+      const result = await aiJobSearchService.search(forceRefresh);
+      setAiResult(result);
+      setAiStatus((current) => current ? { ...current, quota: result.quota } : current);
+    } catch (err) {
+      const parsed = parseApiError(err);
+      setAiError(parsed.message);
+      setAiPlanLimit(parsed.isPlanLimit);
+    } finally {
+      setAiLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2233,12 +2310,48 @@ function JobsPage() {
     return () => controller.abort();
   }, [load]);
   useEffect(() => {
+    if (!aiMode) return;
+    const token = getToken();
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'CANDIDATE') {
+      navigate(`/login?redirect=${encodeURIComponent('/jobs?mode=ai')}`, { replace: true });
+      return;
+    }
+    setAiLoading(true);
+    let active = true;
+    aiJobSearchService.status()
+      .then((status) => {
+        if (!active) return;
+        setAiStatus(status);
+        if (!status.enabled) {
+          setAiError('Tìm việc bằng AI hiện chưa sẵn sàng. Vui lòng thử lại sau.');
+          setAiLoading(false);
+        } else if (status.consentRequired) {
+          setShowAiConsent(true);
+          setAiLoading(false);
+        } else {
+          void runAiSearch(false);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setAiError(readError(err));
+          setAiLoading(false);
+        }
+      });
+    return () => { active = false; };
+  }, [aiMode, navigate, runAiSearch]);
+  useEffect(() => {
+    if (aiMode) {
+      setCategories([]);
+      return;
+    }
     let active = true;
     jobService.getCategories()
       .then((items) => { if (active) setCategories(items); })
       .catch(() => { if (active) setCategories([]); });
     return () => { active = false; };
-  }, []);
+  }, [aiMode]);
   useEffect(() => { setDraftFilters(filters); }, [filters]);
 
   function updateDraft<K extends keyof JobFilters>(key: K, value: JobFilters[K]) {
@@ -2253,13 +2366,18 @@ function JobsPage() {
       return;
     }
     setFilterError('');
-    setParams(toJobSearchParams(draftFilters, 0, pageSize));
+    const next = toJobSearchParams(draftFilters, 0, pageSize);
+    if (aiMode) next.set('mode', 'ai');
+    setParams(next);
   }
 
   function resetFilters() {
     setFilterError('');
-    setDraftFilters({ sort: 'newest' });
-    setParams(toJobSearchParams({ sort: 'newest' }, 0, pageSize));
+    const reset: JobFilters = aiMode ? {} : { sort: 'newest' };
+    setDraftFilters(reset);
+    const next = toJobSearchParams(reset, 0, pageSize);
+    if (aiMode) next.set('mode', 'ai');
+    setParams(next);
   }
 
   function changePage(nextPage: number) {
@@ -2268,18 +2386,72 @@ function JobsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  const hasActiveFilters = Boolean(
-    filters.search || filters.location || filters.skills || filters.experienceLevel || filters.minSalary || filters.maxSalary
-      || filters.category || filters.jobType || filters.workMode,
-  );
-
+  const aiFilterKeys = new Set<keyof JobFilters>(['location', 'minSalary', 'maxSalary', 'jobType', 'workMode']);
   const activeFilterEntries = Object.entries(filters).filter(([key, value]) =>
-    key !== 'sort' && value !== undefined && value !== null && String(value).trim() !== '',
+    key !== 'sort'
+      && (!aiMode || aiFilterKeys.has(key as keyof JobFilters))
+      && value !== undefined
+      && value !== null
+      && String(value).trim() !== '',
   ) as [keyof JobFilters, string | number][];
+  const hasActiveFilters = activeFilterEntries.length > 0;
 
   function clearFilter(key: keyof JobFilters) {
-    setParams(toJobSearchParams({ ...filters, [key]: undefined }, 0, pageSize));
+    const next = toJobSearchParams({ ...filters, [key]: undefined }, 0, pageSize);
+    if (aiMode) next.set('mode', 'ai');
+    setParams(next);
   }
+
+  async function acceptAiConsent() {
+    if (!aiStatus) return;
+    setConsentBusy(true);
+    setAiError('');
+    try {
+      const status = await aiJobSearchService.consent(aiStatus.policyVersion);
+      setAiStatus(status);
+      setShowAiConsent(false);
+      await runAiSearch(false);
+    } catch (err) {
+      setAiError(readError(err));
+    } finally {
+      setConsentBusy(false);
+    }
+  }
+
+  function refreshAiResults() {
+    const remaining = aiResult?.quota.remaining ?? aiStatus?.quota.remaining;
+    if (remaining === 0) {
+      setAiPlanLimit(true);
+      setAiError('Bạn đã hết lượt tìm việc bằng AI trong tháng này.');
+      return;
+    }
+    if (window.confirm('Tìm lại sẽ sử dụng 1 lượt AI. Bạn muốn tiếp tục?')) {
+      void runAiSearch(true);
+    }
+  }
+
+  async function revokeAiConsent() {
+    if (!window.confirm('Thu hồi quyền AI sẽ xóa kết quả gợi ý đang lưu. Bạn muốn tiếp tục?')) return;
+    setRevokeBusy(true);
+    setAiError('');
+    try {
+      await aiJobSearchService.revokeConsent();
+      setAiResult(null);
+      setAiStatus((current) => current ? {
+        ...current,
+        consentRequired: true,
+        cache: { available: false, generatedAt: null, expiresAt: null, stale: false },
+      } : current);
+    } catch (err) {
+      setAiError(readError(err));
+    } finally {
+      setRevokeBusy(false);
+    }
+  }
+
+  const filteredAiItems = useMemo(() => {
+    return filterAiJobSearchItems(aiResult?.items || [], filters);
+  }, [aiResult, filters]);
 
   return (
     <Shell>
@@ -2289,14 +2461,75 @@ function JobsPage() {
             setMobileFiltersOpen((value) => !value);
             window.requestAnimationFrame(() => filterRef.current?.querySelector<HTMLInputElement>('input')?.focus());
           }}>
-          {mobileFiltersOpen ? 'Đóng bộ lọc' : 'Mở bộ lọc tìm việc'}
+          {mobileFiltersOpen ? 'Đóng bộ lọc' : aiMode ? 'Lọc top 10 AI' : 'Mở bộ lọc tìm việc'}
         </button>
+        {aiMode && (
+          <section className="ai-job-banner" aria-labelledby="ai-job-banner-title" aria-busy={aiLoading}>
+            <div className="ai-job-banner-copy">
+              <p className="eyebrow">AI Job Match</p>
+              <h1 id="ai-job-banner-title">10 công việc phù hợp nhất</h1>
+              <p>
+                {aiResult?.lowConfidence || aiStatus?.readiness.lowConfidence
+                  ? 'Đang xếp hạng từ Profile. Thêm CV mặc định để tăng độ tin cậy.'
+                  : 'Xếp hạng từ Profile và CV mặc định của bạn.'}
+              </p>
+              <div className="ai-job-banner-meta" aria-live="polite">
+                {(aiResult?.quota || aiStatus?.quota) && (
+                  <span>
+                    Lượt còn lại: {((aiResult?.quota || aiStatus?.quota)?.limit ?? 0) < 0
+                      ? 'Không giới hạn'
+                      : `${(aiResult?.quota || aiStatus?.quota)?.remaining}/${(aiResult?.quota || aiStatus?.quota)?.limit}`}
+                  </span>
+                )}
+                {aiResult?.generatedAt && <span>Tạo lúc: {formatAiDate(aiResult.generatedAt)}</span>}
+                {aiResult?.expiresAt && (
+                  <span>{aiResult.stale ? 'Cache đã hết hạn' : 'Cache đến'}: {formatAiDate(aiResult.expiresAt)}</span>
+                )}
+                {aiResult?.stale
+                  ? <span>Kết quả cũ · bấm Tìm lại để cập nhật</span>
+                  : aiResult?.cached && <span>Kết quả đã lưu</span>}
+              </div>
+            </div>
+            <div className="ai-job-banner-actions">
+              {aiStatus?.consentRequired && !aiResult ? (
+                <button type="button" onClick={() => setShowAiConsent(true)} disabled={aiLoading}>
+                  Xem và đồng ý chính sách
+                </button>
+              ) : (
+                <button type="button" onClick={refreshAiResults} disabled={aiLoading || !aiResult}>
+                  {aiLoading ? 'AI đang phân tích…' : 'Tìm lại (dùng 1 lượt)'}
+                </button>
+              )}
+              <button type="button" className="outline" onClick={() => navigate('/jobs')}>
+                Tìm kiếm thông thường
+              </button>
+              {!aiStatus?.consentRequired && (
+                <button type="button" className="ai-consent-revoke" onClick={() => void revokeAiConsent()} disabled={aiLoading || revokeBusy}>
+                  {revokeBusy ? 'Đang thu hồi…' : 'Thu hồi quyền AI'}
+                </button>
+              )}
+            </div>
+            {aiError && (
+              <div className="ai-job-inline-error" role="alert">
+                <span>{aiError}</span>
+                <div>
+                  {!aiPlanLimit && aiStatus?.enabled && (
+                    <button type="button" className="outline sm" onClick={() => void runAiSearch(Boolean(aiResult))} disabled={aiLoading}>
+                      Thử lại
+                    </button>
+                  )}
+                  {aiPlanLimit && <Link className="button-link sm" to="/candidate/subscription/plans">Xem gói dịch vụ</Link>}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
         <div className="jobs-layout">
           {/* Filter Sidebar */}
           <form ref={filterRef} id="job-search-filters" className={`filter-panel ${mobileFiltersOpen ? 'mobile-open' : ''}`} onSubmit={applyFilters}>
-            <h2>Tìm việc làm</h2>
+            <h2>{aiMode ? 'Lọc kết quả AI' : 'Tìm việc làm'}</h2>
 
-            <div>
+            {!aiMode && <div>
               <label className="filter-label">Từ khóa</label>
               <div className="input-icon-wrap">
                 <span className="input-icon">
@@ -2310,7 +2543,7 @@ function JobsPage() {
                   onChange={(e) => updateDraft('search', e.target.value)}
                 />
               </div>
-            </div>
+            </div>}
 
             <div>
               <label className="filter-label">Địa điểm</label>
@@ -2329,16 +2562,16 @@ function JobsPage() {
               </div>
             </div>
 
-            <div>
+            {!aiMode && <div>
               <label className="filter-label">Kỹ năng</label>
               <input
                 placeholder="Java, React, Python..."
                 value={draftFilters.skills || ''}
                 onChange={(e) => updateDraft('skills', e.target.value)}
               />
-            </div>
+            </div>}
 
-            <div>
+            {!aiMode && <div>
               <label className="filter-label">Ngành / danh mục</label>
               <select value={draftFilters.category || ''} onChange={(e) => updateDraft('category', e.target.value)}>
                 <option value="">Tất cả danh mục</option>
@@ -2346,7 +2579,7 @@ function JobsPage() {
                   <option key={category.id} value={category.slug || category.id}>{category.name}</option>
                 ))}
               </select>
-            </div>
+            </div>}
 
             <div className="filter-split">
               <div>
@@ -2373,7 +2606,7 @@ function JobsPage() {
               </div>
             </div>
 
-            <div>
+            {!aiMode && <div>
               <label className="filter-label">Kinh nghiệm</label>
               <select
                 value={draftFilters.experienceLevel || ''}
@@ -2386,12 +2619,12 @@ function JobsPage() {
                 <option value="MIDDLE">Middle</option>
                 <option value="SENIOR">Senior</option>
               </select>
-            </div>
+            </div>}
 
             <div className="filter-split">
               <div>
-                <label className="filter-label">Loại công việc</label>
-                <select value={draftFilters.jobType || ''} onChange={(e) => updateDraft('jobType', e.target.value)}>
+                <label className="filter-label" htmlFor="job-filter-job-type">Loại công việc</label>
+                <select id="job-filter-job-type" value={draftFilters.jobType || ''} onChange={(e) => updateDraft('jobType', e.target.value)}>
                   <option value="">Tất cả</option>
                   <option value="full_time">Toàn thời gian</option>
                   <option value="part_time">Bán thời gian</option>
@@ -2401,8 +2634,8 @@ function JobsPage() {
                 </select>
               </div>
               <div>
-                <label className="filter-label">Hình thức</label>
-                <select value={draftFilters.workMode || ''} onChange={(e) => updateDraft('workMode', e.target.value)}>
+                <label className="filter-label" htmlFor="job-filter-work-mode">Hình thức</label>
+                <select id="job-filter-work-mode" value={draftFilters.workMode || ''} onChange={(e) => updateDraft('workMode', e.target.value)}>
                   <option value="">Tất cả</option>
                   <option value="onsite">Tại văn phòng</option>
                   <option value="remote">Từ xa</option>
@@ -2411,7 +2644,7 @@ function JobsPage() {
               </div>
             </div>
 
-            <div>
+            {!aiMode && <div>
               <label className="filter-label">Sắp xếp</label>
               <select
                 value={draftFilters.sort || 'newest'}
@@ -2421,13 +2654,13 @@ function JobsPage() {
                 <option value="salary">Lương cao nhất</option>
                 <option value="deadline">Gần deadline</option>
               </select>
-            </div>
+            </div>}
 
             <button type="submit" style={{ width: '100%' }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
               </svg>
-              Tìm kiếm
+              {aiMode ? 'Lọc top 10' : 'Tìm kiếm'}
             </button>
             {hasActiveFilters && (
               <button type="button" className="outline" style={{ width: '100%' }} onClick={resetFilters}>
@@ -2436,22 +2669,24 @@ function JobsPage() {
             )}
 
             {filterError && <div className="error-panel" role="alert">{filterError}</div>}
-            {error && <div className="error-panel" role="alert">{error}</div>}
+            {!aiMode && error && <div className="error-panel" role="alert">{error}</div>}
           </form>
 
           {/* Job List */}
           <div>
             <div className="jobs-list-header">
-              <h1>Việc làm đang tuyển</h1>
+              <h1>{aiMode ? 'Kết quả được AI xếp hạng' : 'Việc làm đang tuyển'}</h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {localStorage.getItem('role') === 'CANDIDATE' && (
+                {!aiMode && localStorage.getItem('role') === 'CANDIDATE' && (
                   <button type="button" className="outline sm"
                     onClick={() => navigate(`/candidate/job-alerts?${toJobSearchParams(filters, 0, pageSize)}`)}>
                     Lưu thành cảnh báo
                   </button>
                 )}
-                {!loading && <span className="chip neutral">{totalElements} kết quả</span>}
-                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {aiMode
+                  ? !aiLoading && <span className="chip neutral">{filteredAiItems.length}/{aiResult?.items.length || 0} kết quả</span>
+                  : !loading && <span className="chip neutral">{totalElements} kết quả</span>}
+                {!aiMode && <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   Hiển thị
                   <select
                     aria-label="Số việc làm mỗi trang"
@@ -2462,7 +2697,7 @@ function JobsPage() {
                     <option value={24}>24</option>
                     <option value={48}>48</option>
                   </select>
-                </label>
+                </label>}
               </div>
             </div>
 
@@ -2476,7 +2711,7 @@ function JobsPage() {
               </div>
             )}
 
-            {loading ? (
+            {(aiMode ? aiLoading : loading) ? (
               <div className="job-grid">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="job-card-skeleton">
@@ -2496,26 +2731,33 @@ function JobsPage() {
               </div>
             ) : (
               <div className="job-grid">
-                {jobs.map((job, i) => (
-                  <motion.div
-                    key={job.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.28, ease: EASE_OUT, delay: Math.min(i * 0.04, 0.3) }}
-                  >
-                    <JobCard job={job} />
-                  </motion.div>
-                ))}
-                {jobs.length === 0 && (
+                {aiMode
+                  ? filteredAiItems.map((item) => <AiRecommendationCard key={item.job.id} item={item} />)
+                  : jobs.map((job, i) => (
+                    <motion.div
+                      key={job.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.28, ease: EASE_OUT, delay: Math.min(i * 0.04, 0.3) }}
+                    >
+                      <JobCard job={job} />
+                    </motion.div>
+                  ))}
+                {(aiMode ? filteredAiItems.length === 0 : jobs.length === 0) && (
                   <div className="empty-state card" style={{ padding: 48, textAlign: 'center' }}>
                     <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔍</div>
-                    <h3>Không tìm thấy việc làm</h3>
-                    <p className="muted">Thử thay đổi bộ lọc để xem thêm kết quả.</p>
+                    <h3>{aiMode ? 'Chưa có công việc phù hợp' : 'Không tìm thấy việc làm'}</h3>
+                    <p className="muted">
+                      {aiMode && !aiResult
+                        ? 'Hãy thử lại hoặc cập nhật Profile và CV mặc định.'
+                        : 'Thử thay đổi bộ lọc để xem thêm kết quả.'}
+                    </p>
+                    {aiMode && !aiResult && <Link className="button-link outline" to="/candidate/profile">Cập nhật Profile</Link>}
                   </div>
                 )}
               </div>
             )}
-            {!loading && totalPages > 1 && (
+            {!aiMode && !loading && totalPages > 1 && (
               <nav className="pagination-bar" aria-label="Phân trang việc làm">
                 <button type="button" className="outline" disabled={page === 0} onClick={() => changePage(page - 1)}>
                   Trước
@@ -2541,7 +2783,116 @@ function JobsPage() {
           </div>
         </div>
       </div>
+      <AiConsentDialog
+        open={showAiConsent}
+        policyVersion={aiStatus?.policyVersion || ''}
+        busy={consentBusy}
+        error={showAiConsent ? aiError : ''}
+        onAccept={() => void acceptAiConsent()}
+        onClose={() => setShowAiConsent(false)}
+      />
     </Shell>
+  );
+}
+
+function formatAiDate(value: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(parsed);
+}
+
+function AiRecommendationCard({ item }: { item: AiJobSearchItem }) {
+  return (
+    <section className="ai-recommendation-card" aria-labelledby={`ai-job-${item.job.id}`}>
+      <div className="ai-recommendation-summary">
+        <div className="ai-rank-score" role="img" aria-label={`Xếp hạng ${item.rank}, phù hợp ${item.matchScore} phần trăm`}>
+          <span>#{item.rank}</span>
+          <strong>{item.matchScore}%</strong>
+        </div>
+        <div>
+          <h2 id={`ai-job-${item.job.id}`}>Vì sao công việc này phù hợp?</h2>
+          <p>{item.reason}</p>
+        </div>
+      </div>
+      <div className="ai-skill-groups">
+        <div>
+          <span className="ai-skill-label">Kỹ năng khớp</span>
+          <div className="ai-skill-list">
+            {item.matchedSkills.length > 0
+              ? item.matchedSkills.map((skill) => <span className="chip match" key={skill}>{skill}</span>)
+              : <span className="muted">Chưa có kỹ năng trùng rõ ràng</span>}
+          </div>
+        </div>
+        <div>
+          <span className="ai-skill-label">Nên bổ sung</span>
+          <div className="ai-skill-list">
+            {item.missingSkills.length > 0
+              ? item.missingSkills.map((skill) => <span className="chip warning" key={skill}>{skill}</span>)
+              : <span className="muted">Không có khoảng trống kỹ năng nổi bật</span>}
+          </div>
+        </div>
+      </div>
+      <JobCard job={{ ...item.job, matchScore: item.matchScore }} />
+    </section>
+  );
+}
+
+function AiConsentDialog({
+  open,
+  policyVersion,
+  busy,
+  error,
+  onAccept,
+  onClose,
+}: {
+  open: boolean;
+  policyVersion: string;
+  busy: boolean;
+  error: string;
+  onAccept: () => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="ai-consent-dialog"
+      aria-labelledby="ai-consent-title"
+      aria-describedby="ai-consent-description"
+      onClose={onClose}
+      onCancel={(event) => { if (busy) event.preventDefault(); }}
+    >
+      <div className="ai-consent-content">
+        <p className="eyebrow">Quyền riêng tư · {policyVersion}</p>
+        <h2 id="ai-consent-title">Cho phép AI phân tích dữ liệu nghề nghiệp?</h2>
+        <p id="ai-consent-description">
+          Hệ thống sử dụng kỹ năng, kinh nghiệm, học vấn, dự án và nội dung nghề nghiệp trong CV mặc định để xếp hạng công việc.
+        </p>
+        <ul>
+          <li>Không gửi email, số điện thoại, ngày sinh, tên đầy đủ hoặc file CV gốc.</li>
+          <li>Kết quả chỉ là gợi ý cho bạn, không phải quyết định tuyển dụng.</li>
+          <li>Bạn có thể thu hồi đồng ý và xóa cache gợi ý bất cứ lúc nào.</li>
+        </ul>
+        {error && <div className="error-panel" role="alert">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="outline" onClick={() => dialogRef.current?.close()} disabled={busy}>
+            Để sau
+          </button>
+          <button type="button" onClick={onAccept} disabled={busy} autoFocus>
+            {busy ? 'Đang xác nhận…' : 'Đồng ý và tìm việc'}
+          </button>
+        </div>
+      </div>
+    </dialog>
   );
 }
 
