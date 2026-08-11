@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { employerService } from '../../services/employerService';
 import { jobService } from '../../services/jobService';
 import type { Company, CompanyDocument, Category } from '../../types/job';
+import { FiCheckCircle, FiClock, FiAlertCircle, FiUploadCloud, FiFileText, FiImage, FiDownload, FiTrash2, FiRefreshCw, FiExternalLink, FiChevronDown, FiX, FiSearch } from '../../components/Icons';
 
 function CompanyVerificationPage() {
   const [company, setCompany] = useState<Company | null>(null);
@@ -15,6 +16,7 @@ function CompanyVerificationPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   
   const [isIndustryDropdownOpen, setIsIndustryDropdownOpen] = useState(false);
   const [industrySearchTerm, setIndustrySearchTerm] = useState('');
@@ -63,9 +65,47 @@ function CompanyVerificationPage() {
     }
   }
 
+  function validateForm() {
+    const errors: Record<string, string> = {};
+    if (!company?.name?.trim()) {
+      errors.name = 'Vui lòng nhập tên công ty.';
+    } else if (company.name.length > 100) {
+      errors.name = 'Tên công ty không được vượt quá 100 ký tự.';
+    }
+
+    if (company?.website && !/^https?:\/\//i.test(company.website)) {
+      errors.website = 'Website phải bắt đầu bằng http:// hoặc https://';
+    }
+
+    if (company?.companySize !== undefined && company.companySize !== null && company.companySize <= 0) {
+      errors.companySize = 'Quy mô nhân sự phải lớn hơn 0.';
+    }
+
+    if (!company?.industries || company.industries.length === 0) {
+      errors.industries = 'Vui lòng chọn ít nhất một lĩnh vực hoạt động.';
+    }
+
+    if (!company?.industry) {
+      errors.industry = 'Vui lòng chọn lĩnh vực/ngành chính.';
+    }
+
+    if (company?.taxCode && !/^[a-zA-Z0-9-]{10,15}$/.test(company.taxCode)) {
+      errors.taxCode = 'Mã số thuế không hợp lệ (10-15 ký tự).';
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   async function handleSubmit(e: React.FormEvent, submitForReview: boolean) {
     if (e) e.preventDefault();
     if (!company) return;
+
+    if (!validateForm()) {
+      setError('Vui lòng kiểm tra lại các trường thông tin không hợp lệ.');
+      return;
+    }
+
     setSaving(true);
     setSuccess('');
     setError('');
@@ -171,215 +211,175 @@ function CompanyVerificationPage() {
       case 'APPROVED':
         return {
           text: 'Đã xác thực pháp lý',
-          color: '#047857',
-          bg: '#ecfdf5',
-          border: '#a7f3d0',
-          dot: '#10b981',
+          classes: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+          icon: FiCheckCircle,
           desc: 'Tuyệt vời! Doanh nghiệp của bạn đã hoàn tất kiểm duyệt pháp lý thành công. Huy hiệu xác thực được hiển thị công khai trên tất cả tin tuyển dụng.'
         };
       case 'PENDING':
       case 'PENDING_REVIEW':
         return {
           text: 'Chờ kiểm duyệt hồ sơ',
-          color: '#1d4ed8',
-          bg: '#eff6ff',
-          border: '#bfdbfe',
-          dot: '#3b82f6',
+          classes: 'bg-blue-50 text-blue-700 border-blue-200',
+          icon: FiClock,
           desc: 'Tài liệu pháp lý đang được Bộ phận kiểm duyệt rà soát. Quá trình kiểm duyệt thường hoàn tất trong vòng 24 giờ làm việc.'
         };
       case 'REJECTED':
         return {
           text: 'Yêu cầu cập nhật tài liệu',
-          color: '#b91c1c',
-          bg: '#fef2f2',
-          border: '#fecaca',
-          dot: '#ef4444',
+          classes: 'bg-red-50 text-red-700 border-red-200',
+          icon: FiAlertCircle,
           desc: 'Một hoặc nhiều tài liệu bị từ chối. Vui lòng dùng nút Cập nhật lại trên từng file bị từ chối rồi gửi lại để admin duyệt.'
         };
       default:
         return {
           text: 'Chưa xác thực',
-          color: '#475569',
-          bg: '#f8fafc',
-          border: '#cbd5e1',
-          dot: '#94a3b8',
+          classes: 'bg-slate-100 text-slate-700 border-slate-200',
+          icon: FiAlertCircle,
           desc: 'Vui lòng điền đủ thông tin và tải lên Giấy phép đăng ký kinh doanh hoặc Mã số thuế để tiến hành xác thực.'
         };
     }
   }
 
-  const badgeInfo = getStatusBadge(company?.verificationStatus);
-
   if (loading) {
     return (
-      <div className="card" style={{ padding: '48px', textAlign: 'center', color: '#64748b' }}>
-        <p style={{ margin: 0, fontSize: '1rem' }}>Đang tải thông tin xác thực doanh nghiệp...</p>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div>
       </div>
     );
   }
 
+  const badgeInfo = getStatusBadge(company?.verificationStatus);
+
   return (
-    <div className="card" style={{ padding: '32px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
-        <div>
-          <h1 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>Xác thực pháp lý doanh nghiệp</h1>
-          <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* Header Banner */}
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500 opacity-10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl pointer-events-none"></div>
+        
+        <div className="relative z-10 text-center md:text-left">
+          <h1 className="text-2xl font-bold mb-2">Xác thực pháp lý doanh nghiệp</h1>
+          <p className="text-slate-300 text-sm">
             Quản lý thông tin công ty và tài liệu pháp lý định danh tổ chức
           </p>
         </div>
         <button
           onClick={loadData}
-          style={{
-            background: '#f8fafc',
-            border: '1px solid #cbd5e1',
-            color: '#334155',
-            padding: '8px 16px',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.2s'
-          }}
+          className="relative z-10 inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors border border-white/10 backdrop-blur-sm"
         >
-          Làm mới dữ liệu
+          <FiRefreshCw className="w-4 h-4" /> Làm mới dữ liệu
         </button>
       </div>
 
       {error && (
-        <div style={{ background: '#fef2f2', color: '#991b1b', padding: '14px 18px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626', fontSize: '0.9rem' }}>
-          {error}
+        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-5 py-4 rounded-xl flex items-center gap-3 shadow-sm">
+          <FiAlertCircle className="w-5 h-5 shrink-0" /> {error}
         </div>
       )}
 
       {success && (
-        <div style={{ background: '#ecfdf5', color: '#047857', padding: '14px 18px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #a7f3d0', borderLeft: '4px solid #10b981', fontSize: '0.9rem' }}>
-          {success}
+        <div className="bg-emerald-50 border-l-4 border-emerald-500 text-emerald-700 px-5 py-4 rounded-xl flex items-center gap-3 shadow-sm">
+          <FiCheckCircle className="w-5 h-5 shrink-0" /> {success}
         </div>
       )}
 
       {/* Status Banner */}
-      <div style={{
-        background: badgeInfo.bg,
-        color: badgeInfo.color,
-        border: `1px solid ${badgeInfo.border}`,
-        padding: '22px 24px',
-        borderRadius: '8px',
-        marginBottom: '28px',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '16px'
-      }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>Trạng thái hồ sơ:</span>
-            <span style={{
-              background: '#ffffff',
-              color: badgeInfo.color,
-              border: `1px solid ${badgeInfo.border}`,
-              padding: '4px 14px',
-              borderRadius: '20px',
-              fontWeight: 600,
-              fontSize: '0.85rem',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: badgeInfo.dot }}></span>
+      <div className={`p-6 rounded-2xl border ${badgeInfo.classes} flex flex-col md:flex-row items-start md:items-center gap-4`}>
+        <div className="bg-white/50 p-3 rounded-full shrink-0">
+          <badgeInfo.icon className="w-8 h-8" />
+        </div>
+        <div>
+          <div className="flex items-center gap-3 mb-1 flex-wrap">
+            <span className="font-bold text-slate-900">Trạng thái hồ sơ:</span>
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border bg-white ${badgeInfo.classes}`}>
               {badgeInfo.text}
             </span>
           </div>
-          <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.6, opacity: 0.9 }}>{badgeInfo.desc}</p>
+          <p className="text-sm font-medium opacity-90 leading-relaxed max-w-3xl">{badgeInfo.desc}</p>
         </div>
       </div>
 
-      {/* Warning Banner */}
-      <div style={{ background: '#fffbeb', color: '#b45309', padding: '16px', borderRadius: '8px', border: '1px solid #fde68a', marginBottom: '28px', fontSize: '0.9rem', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-        <span style={{ fontSize: '1.2rem' }}>⚠️</span>
-        <div>
-          <strong style={{ display: 'block', marginBottom: '4px' }}>Lưu ý về việc cập nhật thông tin:</strong>
+      <div className="bg-amber-50 border border-amber-200 text-amber-800 p-5 rounded-2xl flex items-start gap-4">
+        <FiAlertCircle className="w-6 h-6 shrink-0 mt-0.5 text-amber-500" />
+        <div className="text-sm">
+          <strong className="block mb-1 font-bold text-amber-900">Lưu ý về việc cập nhật thông tin:</strong>
           Việc thay đổi các trường quan trọng (Tên công ty, Lĩnh vực hoạt động, Mã số thuế) sẽ yêu cầu công ty phải được duyệt lại. Các trường khác (Quy mô, Website, Mô tả) có thể lưu bình thường mà không ảnh hưởng tới trạng thái xác thực.
         </div>
       </div>
 
       {/* Company Form */}
       {company && (
-        <form onSubmit={(e) => handleSubmit(e, false)} style={{ marginBottom: '48px' }}>
-          <div className="form-grid two">
-            <label className="wide">
-              Tên công ty *
-              <input
-                required
-                value={company.name}
-                onChange={(e) => setCompany({ ...company, name: e.target.value })}
-                placeholder="Tên chính thức của doanh nghiệp"
-              />
-            </label>
+        <form onSubmit={(e) => handleSubmit(e, false)} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-6 md:p-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2 md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Tên công ty <span className="text-red-500">*</span></label>
+                <input
+                  required
+                  value={company.name}
+                  onChange={(e) => setCompany({ ...company, name: e.target.value })}
+                  placeholder="Tên chính thức của doanh nghiệp"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.name ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
+                />
+                {fieldErrors.name && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.name}</p>}
+              </div>
 
-            <label>
-              Website
-              <input
-                value={company.website || ''}
-                onChange={(e) => setCompany({ ...company, website: e.target.value })}
-                placeholder="https://example.com"
-              />
-            </label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Website</label>
+                <input
+                  value={company.website || ''}
+                  onChange={(e) => setCompany({ ...company, website: e.target.value })}
+                  placeholder="https://example.com"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.website ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
+                />
+                {fieldErrors.website && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.website}</p>}
+              </div>
 
-            <div className="wide" style={{ background: '#f8fafc', padding: '20px', borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'visible' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', overflow: 'visible' }}>
-                <div ref={industryDropdownRef} style={{ position: 'relative' }}>
-                  <label style={{ fontWeight: 600, fontSize: '0.95rem', color: '#0f172a', marginBottom: '8px', display: 'block' }}>
-                    1. Lĩnh vực / Ngành nghề hoạt động (Chọn nhiều) *
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Quy mô nhân sự</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={company.companySize === undefined || company.companySize === null ? '' : company.companySize}
+                  onChange={(e) => setCompany({ ...company, companySize: e.target.value ? parseInt(e.target.value) : undefined })}
+                  placeholder="Số lượng nhân viên"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.companySize ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
+                />
+                {fieldErrors.companySize && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.companySize}</p>}
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
+              <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Lĩnh vực hoạt động</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Lĩnh vực hoạt động (Multiple) */}
+                <div ref={industryDropdownRef} className="relative space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    1. Các ngành nghề hoạt động (Chọn nhiều) <span className="text-red-500">*</span>
                   </label>
+                  
                   <div
                     onClick={() => setIsIndustryDropdownOpen(!isIndustryDropdownOpen)}
-                    style={{
-                      minHeight: '46px',
-                      padding: '6px 10px',
-                      borderRadius: '8px',
-                      border: isIndustryDropdownOpen ? '1.5px solid #3b82f6' : '1px solid #d1d5db',
-                      background: '#fff',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                      boxShadow: isIndustryDropdownOpen ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : '0 1px 2px rgba(0,0,0,0.05)',
-                      transition: 'all 0.15s ease'
-                    }}
+                    className={`min-h-[46px] p-2 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                      isIndustryDropdownOpen ? 'border-emerald-500 ring-2 ring-emerald-200 bg-white' : 
+                      fieldErrors.industries ? 'border-red-500 bg-white' : 'border-gray-200 bg-white cursor-pointer hover:border-emerald-400'
+                    }`}
                   >
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', flex: 1 }}>
+                    <div className="flex flex-wrap gap-2 items-center flex-1">
                       {(company.industries || []).length === 0 ? (
-                        <span style={{ color: '#94a3b8', fontSize: '0.925rem', paddingLeft: '4px' }}>-- Chọn một hoặc nhiều lĩnh vực --</span>
+                        <span className="text-gray-400 text-sm px-2">-- Chọn lĩnh vực --</span>
                       ) : (
                         <>
                           {(company.industries || []).slice(0, 3).map((ind) => (
-                            <span
-                              key={ind.categoryId}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                background: '#d1fae5',
-                                color: '#047857',
-                                border: '1px solid #a7f3d0',
-                                padding: '3px 8px',
-                                borderRadius: '16px',
-                                fontSize: '0.825rem',
-                                fontWeight: 600,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                              }}
-                            >
+                            <span key={ind.categoryId} className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-sm font-medium">
                               {ind.categoryName}
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   const updatedInds = (company.industries || []).filter((ci) => ci.categoryId !== ind.categoryId);
-                                  const wasPrimary = ind.primary;
-                                  if (wasPrimary && updatedInds.length > 0) {
+                                  if (ind.primary && updatedInds.length > 0) {
                                     updatedInds[0].primary = true;
                                     setCompany({ ...company, industries: updatedInds, industry: updatedInds[0].categoryName || '' });
                                   } else if (updatedInds.length === 0) {
@@ -388,139 +388,175 @@ function CompanyVerificationPage() {
                                     setCompany({ ...company, industries: updatedInds });
                                   }
                                 }}
-                                style={{ background: 'transparent', border: 'none', color: '#047857', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1, padding: '0 2px' }}
-                                title="Xóa lĩnh vực này"
+                                className="text-emerald-500 hover:text-emerald-700 transition-colors p-0.5"
                               >
-                                ×
+                                <FiX className="w-3.5 h-3.5" />
                               </button>
                             </span>
                           ))}
                           {(company.industries || []).length > 3 && (
-                            <span style={{ background: '#e2e8f0', color: '#334155', padding: '3px 8px', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 600, cursor: 'help' }}>
+                            <span className="inline-flex items-center bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg text-sm font-medium" title={(company.industries || []).slice(3).map(i => i.categoryName).join(', ')}>
                               +{(company.industries || []).length - 3}
                             </span>
                           )}
                         </>
                       )}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    
+                    <div className="flex items-center gap-1 shrink-0 px-1 text-gray-400">
                       {(company.industries || []).length > 0 && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setCompany({ ...company, industries: [], industry: '' }); }} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.1rem', padding: '0 4px' }} title="Xóa tất cả">
-                          ×
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCompany({ ...company, industries: [], industry: '' });
+                          }}
+                          className="hover:text-red-500 transition-colors p-1"
+                        >
+                          <FiX className="w-4 h-4" />
                         </button>
                       )}
-                      <span style={{ color: '#64748b', fontSize: '0.75rem', transform: isIndustryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▼</span>
+                      <FiChevronDown className={`w-4 h-4 transition-transform duration-200 ${isIndustryDropdownOpen ? 'rotate-180' : ''}`} />
                     </div>
                   </div>
+
+                  {/* Dropdown List */}
                   {isIndustryDropdownOpen && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '6px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)', zIndex: 100, maxHeight: '260px', overflowY: 'auto', padding: '6px' }}>
-                      <div style={{ padding: '4px 6px', marginBottom: '4px', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
-                        <input
-                          type="text"
-                          placeholder="🔍 Tìm nhanh lĩnh vực..."
-                          value={industrySearchTerm}
-                          onChange={(e) => setIndustrySearchTerm(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}
-                        />
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-72 flex flex-col overflow-hidden">
+                      <div className="p-3 border-b border-gray-100 bg-gray-50/50">
+                        <div className="relative">
+                          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            placeholder="Tìm lĩnh vực..."
+                            value={industrySearchTerm}
+                            onChange={(e) => setIndustrySearchTerm(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-200 focus:border-emerald-500 outline-none text-sm"
+                          />
+                        </div>
                       </div>
-                      {categories.filter((c) => !c.parentId && (!industrySearchTerm || c.name.toLowerCase().includes(industrySearchTerm.toLowerCase()))).map((cat) => {
-                          const selectedInd = (company.industries || []).find((ci) => ci.categoryId === cat.id);
-                          const isChecked = !!selectedInd;
-                          return (
-                            <div key={cat.id} onClick={(e) => {
-                                e.stopPropagation();
-                                let currentInds = [...(company.industries || [])];
-                                if (!isChecked) {
-                                  const newIsPrimary = currentInds.length === 0;
-                                  currentInds.push({ categoryId: cat.id, categoryName: cat.name, primary: newIsPrimary });
-                                  setCompany({ ...company, industries: currentInds, industry: newIsPrimary ? cat.name : (company.industry || cat.name) });
-                                } else {
-                                  const wasPrimary = selectedInd?.primary;
-                                  currentInds = currentInds.filter((ci) => ci.categoryId !== cat.id);
-                                  if (wasPrimary && currentInds.length > 0) {
-                                    currentInds[0].primary = true;
-                                    setCompany({ ...company, industries: currentInds, industry: currentInds[0].categoryName || '' });
-                                  } else if (currentInds.length === 0) {
-                                    setCompany({ ...company, industries: [], industry: '' });
+                      <div className="overflow-y-auto p-2">
+                        {categories
+                          .filter((c) => !c.parentId && (!industrySearchTerm || c.name.toLowerCase().includes(industrySearchTerm.toLowerCase())))
+                          .map((cat) => {
+                            const isChecked = !!(company.industries || []).find((ci) => ci.categoryId === cat.id);
+                            return (
+                              <label
+                                key={cat.id}
+                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${isChecked ? 'bg-emerald-50/50 text-emerald-800' : 'hover:bg-gray-50 text-gray-700'}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  let currentInds = [...(company.industries || [])];
+                                  if (!isChecked) {
+                                    const newIsPrimary = currentInds.length === 0;
+                                    currentInds.push({ categoryId: cat.id, categoryName: cat.name, primary: newIsPrimary });
+                                    setCompany({ ...company, industries: currentInds, industry: newIsPrimary ? cat.name : (company.industry || cat.name) });
                                   } else {
-                                    setCompany({ ...company, industries: currentInds });
+                                    const wasPrimary = currentInds.find(ci => ci.categoryId === cat.id)?.primary;
+                                    currentInds = currentInds.filter((ci) => ci.categoryId !== cat.id);
+                                    if (wasPrimary && currentInds.length > 0) {
+                                      currentInds[0].primary = true;
+                                      setCompany({ ...company, industries: currentInds, industry: currentInds[0].categoryName || '' });
+                                    } else if (currentInds.length === 0) {
+                                      setCompany({ ...company, industries: [], industry: '' });
+                                    } else {
+                                      setCompany({ ...company, industries: currentInds });
+                                    }
                                   }
-                                }
-                              }}
-                              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '6px', cursor: 'pointer', background: isChecked ? '#eff6ff' : 'transparent', color: isChecked ? '#1d4ed8' : '#334155', fontWeight: isChecked ? 600 : 400, transition: 'background 0.1s' }}
-                            >
-                              <input type="checkbox" checked={isChecked} onChange={() => {}} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-                              <span style={{ fontSize: '0.9rem', flex: 1 }}>{cat.name}</span>
-                            </div>
-                          );
-                        })}
+                                }}
+                              >
+                                <input type="checkbox" checked={isChecked} readOnly className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300 pointer-events-none" />
+                                <span className="text-sm font-medium">{cat.name}</span>
+                              </label>
+                            );
+                          })}
+                      </div>
                     </div>
                   )}
+                  {fieldErrors.industries && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.industries}</p>}
                 </div>
 
-                <div>
-                  <label style={{ fontWeight: 600, fontSize: '0.95rem', color: '#0f172a', marginBottom: '8px', display: 'block' }}>
-                    2. Lĩnh vực / Ngành chính (Chọn 1 duy nhất) *
+                {/* Ngành chính (Single) */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    2. Ngành chính (Chọn 1) <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={(company.industries || []).find((ci) => ci.primary)?.categoryId || ((company.industries || []).length === 1 ? (company.industries || [])[0].categoryId : '')}
-                    onChange={(e) => {
-                      const selectedCatId = e.target.value;
-                      if (!selectedCatId) return;
-                      const updatedInds = (company.industries || []).map((ci) => ({ ...ci, primary: ci.categoryId === selectedCatId }));
-                      const primaryItem = updatedInds.find((ci) => ci.primary);
-                      setCompany({ ...company, industries: updatedInds, industry: primaryItem?.categoryName || company.industry });
-                    }}
-                    style={{ width: '100%', height: '46px', padding: '10px 14px', borderRadius: '8px', border: (company.industries && company.industries.length > 0) ? '1.5px solid #3b82f6' : '1px solid #cbd5e1', background: (company.industries && company.industries.length > 0) ? '#fff' : '#f1f5f9', fontSize: '0.95rem', fontWeight: 600, color: '#1e293b', cursor: (company.industries && company.industries.length > 0) ? 'pointer' : 'not-allowed', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-                    disabled={!(company.industries && company.industries.length > 0)}
-                  >
-                    <option value="">-- Chọn lĩnh vực chính trong các ngành đã chọn --</option>
-                    {(company.industries || []).map((ind) => (
-                      <option key={ind.categoryId} value={ind.categoryId}>
-                        {ind.categoryName} {ind.primary ? '(★ Đang là ngành chính)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={
+                        (company.industries || []).find((ci) => ci.primary)?.categoryId ||
+                        ((company.industries || []).length === 1 ? (company.industries || [])[0].categoryId : '')
+                      }
+                      onChange={(e) => {
+                        const selectedCatId = e.target.value;
+                        if (!selectedCatId) return;
+                        const updatedInds = (company.industries || []).map((ci) => ({ ...ci, primary: ci.categoryId === selectedCatId }));
+                        const primaryItem = updatedInds.find((ci) => ci.primary);
+                        setCompany({ ...company, industries: updatedInds, industry: primaryItem?.categoryName || company.industry });
+                      }}
+                      className={`w-full px-4 py-2.5 rounded-xl border outline-none transition-all appearance-none ${
+                        !(company.industries && company.industries.length > 0) 
+                          ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed' 
+                          : fieldErrors.industry 
+                          ? 'bg-white border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-200 cursor-pointer' 
+                          : 'bg-white border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 cursor-pointer'
+                      }`}
+                      disabled={!(company.industries && company.industries.length > 0)}
+                    >
+                      <option value="">-- Chọn ngành chính --</option>
+                      {(company.industries || []).map((ind) => (
+                        <option key={ind.categoryId} value={ind.categoryId}>
+                          {ind.categoryName} {ind.primary ? '(★)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <FiChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                  {fieldErrors.industry && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.industry}</p>}
                 </div>
               </div>
             </div>
 
-            <label>
-              Quy mô nhân sự
-              <input
-                type="number"
-                min="0"
-                value={company.companySize === undefined || company.companySize === null ? '' : company.companySize}
-                onChange={(e) => setCompany({ ...company, companySize: e.target.value ? parseInt(e.target.value) : undefined })}
-                placeholder="Số lượng nhân viên"
-              />
-            </label>
-
-            <label className="wide">
-              Mã số thuế
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Mã số thuế</label>
               <input
                 value={company.taxCode || ''}
                 onChange={(e) => setCompany({ ...company, taxCode: e.target.value })}
                 placeholder="Mã số thuế doanh nghiệp"
+                className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.taxCode ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
               />
-            </label>
+              {fieldErrors.taxCode && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.taxCode}</p>}
+            </div>
 
-            <label className="wide">
-              Mô tả / Giới thiệu công ty
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty</label>
               <textarea
                 value={company.description || ''}
                 onChange={(e) => setCompany({ ...company, description: e.target.value })}
                 placeholder="Giới thiệu về lịch sử, sứ mệnh, môi trường làm việc..."
+                rows={5}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all resize-y"
               />
-            </label>
+            </div>
           </div>
 
-          <div style={{ marginTop: '20px', display: 'flex', gap: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '24px' }}>
-            <button type="submit" disabled={saving} style={{ background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', padding: '10px 24px', borderRadius: '6px', fontWeight: 600, fontSize: '0.95rem', cursor: saving ? 'wait' : 'pointer' }}>
+          <div className="bg-gray-50 px-6 py-5 border-t border-gray-200 flex flex-col sm:flex-row gap-3">
+            <button 
+              type="submit" 
+              disabled={saving} 
+              className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
+            >
               {saving ? 'Đang xử lý...' : 'Lưu (Không gửi duyệt)'}
             </button>
-            <button type="button" disabled={saving} onClick={(e) => handleSubmit(e, true)} style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '6px', fontWeight: 600, fontSize: '0.95rem', cursor: saving ? 'wait' : 'pointer', boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)' }}>
+            <button 
+              type="button" 
+              disabled={saving} 
+              onClick={(e) => handleSubmit(e, true)} 
+              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${
+                saving ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
+              }`}
+            >
               {saving ? 'Đang xử lý...' : 'Lưu & Gửi duyệt'}
             </button>
           </div>
@@ -528,66 +564,42 @@ function CompanyVerificationPage() {
       )}
 
       {/* Upload Box */}
-      <div style={{
-        border: '2px dashed #cbd5e1',
-        borderRadius: '10px',
-        padding: '36px 24px',
-        textAlign: 'center',
-        background: '#f8fafc',
-        marginBottom: '32px',
-        transition: 'border-color 0.2s'
-      }}>
-        <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: '#0f172a', fontWeight: 600 }}>
+      <div className="border-2 border-dashed border-emerald-200 bg-emerald-50/50 rounded-2xl p-8 text-center transition-colors hover:border-emerald-300">
+        <FiUploadCloud className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
+        <h3 className="text-lg font-bold text-slate-800 mb-2">
           Tải lên tài liệu xác thực (PDF, JPG, PNG)
         </h3>
-        <p style={{ margin: '0 0 20px 0', color: '#64748b', fontSize: '0.875rem' }}>
+        <p className="text-slate-500 text-sm mb-6 max-w-lg mx-auto">
           Hỗ trợ tệp tin tối đa 10MB. Tài liệu được mã hóa và bảo mật tuyệt đối trên hệ thống cloud.
         </p>
 
-        <form onSubmit={handleUpload} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+        <form onSubmit={handleUpload} className="inline-flex flex-col items-center gap-4">
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
             accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-            style={{ display: 'none' }}
+            className="hidden"
             id="doc-upload-input"
           />
           <label
             htmlFor="doc-upload-input"
-            style={{
-              background: '#ffffff',
-              border: '1px solid #cbd5e1',
-              padding: '10px 22px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 500,
-              color: '#334155',
-              fontSize: '0.9rem',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              display: 'inline-block',
-              transition: 'all 0.2s'
-            }}
+            className="inline-flex items-center gap-2 bg-white border border-gray-200 px-6 py-2.5 rounded-xl text-sm font-semibold text-slate-700 cursor-pointer hover:bg-gray-50 transition-all shadow-sm"
           >
-            {selectedFile ? `Đã chọn: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB)` : '+ Chọn tệp từ máy tính'}
+            {selectedFile ? (
+              <><FiCheckCircle className="text-emerald-500" /> Đã chọn: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</>
+            ) : (
+              <><FiUploadCloud className="text-gray-400" /> + Chọn tệp từ máy tính</>
+            )}
           </label>
 
           {selectedFile && (
             <button
               type="submit"
               disabled={uploading}
-              style={{
-                background: '#2563eb',
-                color: '#fff',
-                border: 'none',
-                padding: '10px 26px',
-                borderRadius: '6px',
-                cursor: uploading ? 'not-allowed' : 'pointer',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-                transition: 'background-color 0.2s'
-              }}
+              className={`px-8 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-md ${
+                uploading ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
             >
               {uploading ? 'Đang tải lên hệ thống...' : 'Tải lên & Nộp kiểm duyệt'}
             </button>
@@ -596,191 +608,116 @@ function CompanyVerificationPage() {
       </div>
 
       {/* Document List */}
-      <h3 style={{ fontSize: '1.2rem', margin: '0 0 16px 0', color: '#0f172a', fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
-        Danh sách tài liệu đã gửi ({documents.length})
-      </h3>
-
-      {documents.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: '36px 0', color: '#64748b', margin: 0, fontSize: '0.95rem' }}>
-          Chưa có tài liệu nào được tải lên. Vui lòng chọn và tải lên tài liệu pháp lý ở khung phía trên.
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {documents.map((doc) => {
-            const docStatus = doc.status?.toLowerCase() || 'pending';
-            const statusStyle = docStatus === 'approved' || docStatus === 'verified'
-              ? { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0', label: 'Đã hợp lệ' }
-              : docStatus === 'rejected'
-              ? { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', label: 'Yêu cầu cập nhật' }
-              : { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', label: 'Chờ kiểm duyệt' };
-
-            return (
-              <div
-                key={doc.id}
-                style={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '18px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: '#ffffff',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                  flexWrap: 'wrap',
-                  gap: '16px'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: '1 1 300px' }}>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '8px',
-                    background: doc.fileType === 'pdf' ? '#fef2f2' : '#eff6ff',
-                    color: doc.fileType === 'pdf' ? '#dc2626' : '#2563eb',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    border: doc.fileType === 'pdf' ? '1px solid #fecaca' : '1px solid #bfdbfe',
-                    flexShrink: 0
-                  }}>
-                    {doc.fileType === 'pdf' ? 'PDF' : 'IMG'}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem', marginBottom: '6px' }}>
-                      {doc.fileName}
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span>Thời gian: {new Date(doc.uploadedAt).toLocaleString('vi-VN')}</span>
-                      <span style={{
-                        background: statusStyle.bg,
-                        color: statusStyle.color,
-                        border: `1px solid ${statusStyle.border}`,
-                        padding: '2px 10px',
-                        borderRadius: '12px',
-                        fontWeight: 600,
-                        fontSize: '0.75rem'
-                      }}>
-                        {statusStyle.label}
-                      </span>
-                    </div>
-                    {doc.rejectReason && (
-                      <div style={{ color: '#b91c1c', fontSize: '0.85rem', marginTop: '8px', background: '#fef2f2', border: '1px solid #fecaca', padding: '8px 12px', borderRadius: '6px', lineHeight: 1.4 }}>
-                        <strong>Phản hồi:</strong> {doc.rejectReason}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <a
-                    href={doc.fileType === 'pdf' || doc.fileName?.toLowerCase().endsWith('.pdf')
-                      ? `https://docs.google.com/gview?url=${encodeURIComponent(doc.fileUrl)}`
-                      : doc.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      background: '#f8fafc',
-                      color: '#334155',
-                      border: '1px solid #cbd5e1',
-                      padding: '8px 14px',
-                      borderRadius: '6px',
-                      textDecoration: 'none',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    Xem chi tiết
-                  </a>
-
-                  <a
-                    href={doc.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download={doc.fileName}
-                    style={{
-                      background: '#ffffff',
-                      color: '#475569',
-                      border: '1px solid #cbd5e1',
-                      padding: '8px 14px',
-                      borderRadius: '6px',
-                      textDecoration: 'none',
-                      fontSize: '0.85rem',
-                      fontWeight: 500,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    Tải về
-                  </a>
-
-                  {docStatus === 'pending' && (
-                    <button
-                      onClick={() => handleDelete(doc.id)}
-                      disabled={deletingId === doc.id}
-                      style={{
-                        background: '#ffffff',
-                        color: '#ef4444',
-                        border: '1px solid #fecaca',
-                        padding: '8px 14px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        fontWeight: 500,
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      {deletingId === doc.id ? 'Đang xử lý...' : 'Xóa'}
-                    </button>
-                  )}
-
-                  {docStatus === 'rejected' && (
-                    <>
-                      <input
-                        type="file"
-                        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                        style={{ display: 'none' }}
-                        ref={(el) => {
-                          replaceInputRefs.current[doc.id] = el;
-                        }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleReplace(doc.id, file);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => replaceInputRefs.current[doc.id]?.click()}
-                        disabled={replacingId === doc.id}
-                        style={{
-                          background: '#2563eb',
-                          color: '#fff',
-                          border: 'none',
-                          padding: '8px 14px',
-                          borderRadius: '6px',
-                          cursor: replacingId === doc.id ? 'not-allowed' : 'pointer',
-                          fontSize: '0.85rem',
-                          fontWeight: 600,
-                          boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-                        }}
-                      >
-                        {replacingId === doc.id ? 'Đang cập nhật...' : 'Cập nhật lại'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-5 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-slate-800">
+            Danh sách tài liệu đã gửi ({documents.length})
+          </h3>
         </div>
-      )}
+
+        <div className="p-6">
+          {documents.length === 0 ? (
+            <div className="text-center py-12">
+              <FiFileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500">
+                Chưa có tài liệu nào được tải lên. Vui lòng chọn và tải lên tài liệu pháp lý ở khung phía trên.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {documents.map((doc) => {
+                const docStatus = doc.status?.toLowerCase() || 'pending';
+                const statusStyle = docStatus === 'approved' || docStatus === 'verified'
+                  ? { bg: 'bg-emerald-100 text-emerald-700', label: 'Đã hợp lệ' }
+                  : docStatus === 'rejected'
+                  ? { bg: 'bg-red-100 text-red-700', label: 'Yêu cầu cập nhật' }
+                  : { bg: 'bg-blue-100 text-blue-700', label: 'Chờ kiểm duyệt' };
+
+                return (
+                  <div key={doc.id} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl border border-gray-200 hover:border-emerald-300 transition-colors shadow-sm bg-white">
+                    <div className="flex items-start md:items-center gap-4 flex-1">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${doc.fileType === 'pdf' ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-blue-50 text-blue-500 border border-blue-100'}`}>
+                        {doc.fileType === 'pdf' ? <FiFileText className="w-6 h-6" /> : <FiImage className="w-6 h-6" />}
+                      </div>
+                      
+                      <div className="flex-1">
+                        <div className="font-bold text-slate-800 mb-1">
+                          {doc.fileName}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                          <span className="flex items-center gap-1"><FiClock /> {new Date(doc.uploadedAt).toLocaleString('vi-VN')}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wide text-[10px] ${statusStyle.bg}`}>
+                            {statusStyle.label}
+                          </span>
+                        </div>
+                        {doc.rejectReason && (
+                          <div className="mt-3 bg-red-50 text-red-700 p-3 rounded-lg text-sm border border-red-100">
+                            <strong className="font-semibold">Phản hồi:</strong> {doc.rejectReason}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <a
+                        href={doc.fileType === 'pdf' || doc.fileName?.toLowerCase().endsWith('.pdf') ? `https://docs.google.com/gview?url=${encodeURIComponent(doc.fileUrl)}` : doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        <FiExternalLink className="w-4 h-4" /> Xem
+                      </a>
+
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={doc.fileName}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white border border-gray-200 text-slate-600 hover:bg-gray-50 transition-colors"
+                      >
+                        <FiDownload className="w-4 h-4" /> Tải về
+                      </a>
+
+                      {docStatus === 'pending' && (
+                        <button
+                          onClick={() => handleDelete(doc.id)}
+                          disabled={deletingId === doc.id}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <FiTrash2 className="w-4 h-4" /> {deletingId === doc.id ? 'Đang xóa...' : 'Xóa'}
+                        </button>
+                      )}
+
+                      {docStatus === 'rejected' && (
+                        <>
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                            className="hidden"
+                            ref={(el) => { replaceInputRefs.current[doc.id] = el; }}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleReplace(doc.id, file);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => replaceInputRefs.current[doc.id]?.click()}
+                            disabled={replacingId === doc.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                          >
+                            <FiUploadCloud className="w-4 h-4" /> {replacingId === doc.id ? 'Đang cập nhật...' : 'Cập nhật lại'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

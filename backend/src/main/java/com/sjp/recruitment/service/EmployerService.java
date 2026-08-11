@@ -792,8 +792,16 @@ public class EmployerService {
         }
 
         if (status != null && !status.trim().isEmpty()) {
+            Application.ApplicationStatus filterStatus = null;
+            try {
+                filterStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                filterStatus = Application.ApplicationStatus.fromDatabaseValue(status);
+            }
+            final Application.ApplicationStatus finalFilterStatus = filterStatus;
+
             list = list.stream()
-                    .filter(a -> status.equalsIgnoreCase(a.getStatus()))
+                    .filter(a -> a.getStatusEnum() == finalFilterStatus)
                     .toList();
         }
 

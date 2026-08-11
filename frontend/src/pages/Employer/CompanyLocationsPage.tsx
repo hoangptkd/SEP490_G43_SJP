@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { employerService } from '../../services/employerService';
 import type { CompanyLocation } from '../../types/job';
+import { FiPlus, FiEdit2, FiTrash2, FiMapPin, FiCheckCircle, FiAlertCircle } from '../../components/Icons';
 
 function CompanyLocationsPage() {
   const [locations, setLocations] = useState<CompanyLocation[]>([]);
@@ -8,6 +9,7 @@ function CompanyLocationsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<CompanyLocation>>({
@@ -64,11 +66,26 @@ function CompanyLocationsPage() {
     setShowForm(true);
     setMessage('');
     setError('');
+    setFieldErrors({});
+  }
+
+  function validateForm() {
+    const errors: Record<string, string> = {};
+    if (!formData.branchName?.trim()) {
+      errors.branchName = 'Vui lòng nhập tên chi nhánh / văn phòng.';
+    } else if (formData.branchName.length > 100) {
+      errors.branchName = 'Tên chi nhánh không được vượt quá 100 ký tự.';
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!formData.branchName) return;
+    if (!validateForm()) {
+      setError('Vui lòng kiểm tra lại thông tin không hợp lệ.');
+      return;
+    }
     setSaving(true);
     setMessage('');
     setError('');
@@ -108,242 +125,197 @@ function CompanyLocationsPage() {
     }
   }
 
-  if (loading) return <p className="loading">Đang tải...</p>;
+  if (loading) return (
+    <div className="flex justify-center items-center h-64">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div>
+    </div>
+  );
 
   return (
-    <section className="content-card">
-      <div className="company-profile-banner" style={{
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-        color: '#fff',
-        padding: '32px',
-        borderRadius: '10px',
-        marginBottom: '28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '20px',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.08)'
-      }}>
-        <div>
-          <h1 style={{ color: '#fff', marginBottom: '8px', fontSize: '1.75rem', fontWeight: 700 }}>Quản lý chi nhánh & Văn phòng</h1>
-          <p style={{ margin: 0, opacity: 0.85, fontSize: '0.95rem', color: '#cbd5e1' }}>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500 opacity-10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl pointer-events-none"></div>
+        
+        <div className="relative z-10 text-center md:text-left">
+          <h1 className="text-2xl font-bold mb-2">Quản lý chi nhánh & Văn phòng</h1>
+          <p className="text-slate-300 text-sm">
             Danh sách các địa điểm hoạt động và văn phòng làm việc của doanh nghiệp.
           </p>
         </div>
         <button
           type="button"
           onClick={handleOpenAdd}
-          style={{
-            background: '#2563eb',
-            color: '#fff',
-            border: 'none',
-            padding: '10px 20px',
-            borderRadius: '6px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontSize: '0.9rem',
-            boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-            transition: 'background-color 0.2s'
-          }}
+          className="relative z-10 inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all"
         >
-          + Thêm địa điểm mới
+          <FiPlus className="w-5 h-5" /> Thêm địa điểm mới
         </button>
       </div>
 
-      {message && <p className="success" style={{ marginBottom: '20px', padding: '12px 16px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', borderRadius: '6px', fontSize: '0.9rem' }}>{message}</p>}
-      {error && !showForm && <p className="error" style={{ marginBottom: '20px', padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', fontSize: '0.9rem' }}>{error}</p>}
+      {message && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl flex items-center gap-3">
+          <FiCheckCircle className="w-5 h-5 shrink-0" /> {message}
+        </div>
+      )}
+      
+      {error && !showForm && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3">
+          <FiAlertCircle className="w-5 h-5 shrink-0" /> {error}
+        </div>
+      )}
 
       {showForm && (
-        <div style={{
-          background: '#f8fafc',
-          border: '1px solid #e2e8f0',
-          borderRadius: '10px',
-          padding: '24px',
-          marginBottom: '28px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <h3 style={{ marginTop: 0, color: '#0f172a', marginBottom: '20px', fontSize: '1.2rem', fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
-            {editingId ? 'Chỉnh sửa thông tin chi nhánh' : 'Thêm chi nhánh văn phòng mới'}
-          </h3>
-          <form onSubmit={handleSubmit} className="form-grid two">
-            <label className="wide">
-              Tên chi nhánh / Văn phòng *
-              <input
-                required
-                value={formData.branchName || ''}
-                onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
-                placeholder="Ví dụ: Trụ sở Hà Nội, Chi nhánh HCM..."
-              />
-            </label>
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+            <h3 className="text-lg font-bold text-slate-800">
+              {editingId ? 'Chỉnh sửa thông tin chi nhánh' : 'Thêm chi nhánh văn phòng mới'}
+            </h3>
+          </div>
+          
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2 md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Tên chi nhánh / Văn phòng <span className="text-red-500">*</span></label>
+                <input
+                  required
+                  value={formData.branchName || ''}
+                  onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
+                  placeholder="Ví dụ: Trụ sở Hà Nội, Chi nhánh HCM..."
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all ${fieldErrors.branchName ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
+                />
+                {fieldErrors.branchName && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.branchName}</p>}
+              </div>
 
-            <label className="wide">
-              Địa chỉ chi tiết
-              <input
-                value={formData.address || ''}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="Số nhà, đường/phố, phường/xã..."
-              />
-            </label>
+              <div className="space-y-2 md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Địa chỉ chi tiết</label>
+                <input
+                  value={formData.address || ''}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  placeholder="Số nhà, đường/phố, phường/xã..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                />
+              </div>
 
-            <label>
-              Quận / Huyện
-              <input
-                value={formData.district || ''}
-                onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                placeholder="Ví dụ: Cầu Giấy, Quận 1..."
-              />
-            </label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Quận / Huyện</label>
+                <input
+                  value={formData.district || ''}
+                  onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                  placeholder="Ví dụ: Cầu Giấy, Quận 1..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                />
+              </div>
 
-            <label>
-              Tỉnh / Thành phố
-              <input
-                value={formData.city || ''}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                placeholder="Ví dụ: Hà Nội, TP. Hồ Chí Minh..."
-              />
-            </label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Tỉnh / Thành phố</label>
+                <input
+                  value={formData.city || ''}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  placeholder="Ví dụ: Hà Nội, TP. Hồ Chí Minh..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                />
+              </div>
 
-            <label>
-              Quốc gia
-              <input
-                value={formData.country || 'Vietnam'}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                placeholder="Vietnam"
-              />
-            </label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Quốc gia</label>
+                <input
+                  value={formData.country || 'Vietnam'}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  placeholder="Vietnam"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                />
+              </div>
+            </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '24px' }}>
+            <label className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
               <input
                 type="checkbox"
                 checked={formData.headquarter || false}
                 onChange={(e) => setFormData({ ...formData, headquarter: e.target.checked })}
+                className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300"
               />
-              <span style={{ fontWeight: 600, color: '#0f172a' }}>Đặt làm Trụ sở chính (Head Office)</span>
+              <span className="font-semibold text-slate-800">Đặt làm Trụ sở chính (Head Office)</span>
             </label>
 
-            <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-100">
               <button
                 type="submit"
                 disabled={saving}
-                style={{
-                  background: '#2563eb',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '10px 24px',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  cursor: saving ? 'wait' : 'pointer',
-                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-                  transition: 'background-color 0.2s'
-                }}
+                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${
+                  saving ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
+                }`}
               >
                 {saving ? 'Đang xử lý...' : (editingId ? 'Lưu thay đổi' : 'Thêm mới')}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                style={{
-                  background: 'transparent',
-                  color: '#64748b',
-                  border: 'none',
-                  padding: '10px 18px',
-                  borderRadius: '6px',
-                  fontWeight: 500,
-                  fontSize: '0.9rem',
-                  cursor: 'pointer'
-                }}
+                className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
               >
                 Hủy
               </button>
             </div>
-            {error && <p className="error wide" style={{ margin: '8px 0 0' }}>{error}</p>}
           </form>
         </div>
       )}
 
-      <div className="table-list">
+      <div>
         {locations.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-            <p style={{ color: '#64748b', fontSize: '1.05rem', margin: '0 0 16px 0' }}>
-              Chưa có địa điểm làm việc nào được cấu hình trên hệ thống.
+          <div className="text-center py-16 px-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+            <FiMapPin className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Chưa có địa điểm làm việc</h3>
+            <p className="text-slate-500 max-w-sm mx-auto">
+              Chưa có địa điểm làm việc nào được cấu hình trên hệ thống. Hãy thêm mới để ứng viên biết nơi làm việc.
             </p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: '14px' }}>
+          <div className="grid gap-4">
             {locations.map((loc) => (
-              <div key={loc.id} style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '18px 22px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '16px',
-                background: loc.headquarter ? '#f0fdf4' : '#ffffff',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-              }}>
+              <div key={loc.id} className={`flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl border transition-all ${
+                loc.headquarter ? 'bg-emerald-50/30 border-emerald-200 shadow-sm' : 'bg-white border-gray-200 hover:border-emerald-300 shadow-sm hover:shadow'
+              }`}>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                    <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontWeight: 700 }}>{loc.branchName}</strong>
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                    <strong className="text-lg text-slate-800 font-bold">{loc.branchName}</strong>
                     {loc.headquarter && (
-                      <span style={{
-                        background: '#059669',
-                        color: '#fff',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        padding: '2px 10px',
-                        borderRadius: '12px'
-                      }}>
+                      <span className="bg-emerald-600 text-white text-[10px] uppercase tracking-wide font-bold px-2.5 py-0.5 rounded-full">
                         Trụ sở chính
                       </span>
                     )}
                   </div>
-                  <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                    {loc.address ? `${loc.address}, ` : ''}
-                    {loc.district ? `${loc.district}, ` : ''}
-                    {loc.city || ''}
-                    {loc.country ? ` (${loc.country})` : ''}
+                  <p className="text-slate-500 text-sm flex items-start gap-1.5">
+                    <FiMapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>
+                      {loc.address ? `${loc.address}, ` : ''}
+                      {loc.district ? `${loc.district}, ` : ''}
+                      {loc.city || ''}
+                      {loc.country ? ` (${loc.country})` : ''}
+                    </span>
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                
+                <div className="flex gap-2 items-center">
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(loc)}
-                    style={{
-                      background: '#f8fafc',
-                      color: '#334155',
-                      border: '1px solid #cbd5e1',
-                      padding: '8px 16px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      fontSize: '0.85rem',
-                      transition: 'all 0.2s'
-                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white border border-gray-200 text-slate-700 hover:bg-slate-50 hover:text-emerald-600 transition-colors"
                   >
-                    Chỉnh sửa
+                    <FiEdit2 className="w-4 h-4" /> Chỉnh sửa
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(loc.id, loc.headquarter)}
-                    style={{
-                      background: loc.headquarter ? '#f1f5f9' : '#ffffff',
-                      color: loc.headquarter ? '#94a3b8' : '#ef4444',
-                      border: loc.headquarter ? '1px solid #cbd5e1' : '1px solid #fecaca',
-                      padding: '8px 16px',
-                      borderRadius: '6px',
-                      cursor: loc.headquarter ? 'not-allowed' : 'pointer',
-                      fontWeight: 500,
-                      fontSize: '0.85rem',
-                      transition: 'all 0.2s'
-                    }}
                     disabled={loc.headquarter}
                     title={loc.headquarter ? 'Không thể xóa trụ sở chính' : 'Xóa chi nhánh'}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                      loc.headquarter 
+                        ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed' 
+                        : 'bg-white border-red-200 text-red-600 hover:bg-red-50'
+                    }`}
                   >
-                    Xóa
+                    <FiTrash2 className="w-4 h-4" /> Xóa
                   </button>
                 </div>
               </div>
@@ -351,7 +323,7 @@ function CompanyLocationsPage() {
           </div>
         )}
       </div>
-    </section>
+    </div>
   );
 }
 

@@ -27,6 +27,7 @@ function EmployerJobsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [planLimitReached, setPlanLimitReached] = useState(false);
 
   const submitTargetRef = useRef<string | undefined>(undefined);
@@ -250,6 +251,42 @@ function EmployerJobsPage() {
     setError('');
     setPlanLimitReached(false);
 
+    // Validation
+    const errors: Record<string, string> = {};
+    if (!formData.title || formData.title.trim().length < 5) {
+      errors.title = 'Tên vị trí tuyển dụng phải có ít nhất 5 ký tự.';
+    }
+    if (Number(formData.vacancies) < 1) {
+      errors.vacancies = 'Số lượng tuyển phải lớn hơn hoặc bằng 1.';
+    }
+    if (formData.salaryType === 'range') {
+      if (Number(formData.salaryMax) <= Number(formData.salaryMin)) {
+        errors.salaryMax = 'Mức lương tối đa phải lớn hơn mức lương tối thiểu.';
+      }
+      if (Number(formData.salaryMin) < 0) {
+        errors.salaryMin = 'Mức lương tối thiểu không được âm.';
+      }
+    } else if (formData.salaryType === 'fixed') {
+      if (Number(formData.salaryMax) < 0) {
+        errors.salaryMax = 'Mức lương cố định không được âm.';
+      }
+    }
+    
+    if (formData.deadline) {
+      const selectedDate = new Date(formData.deadline);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        errors.deadline = 'Hạn nộp hồ sơ không được ở trong quá khứ.';
+      }
+    } else {
+      errors.deadline = 'Hạn nộp hồ sơ là bắt buộc.';
+    }
+
+    if (!formData.location || formData.location.trim() === '') {
+      errors.location = 'Địa điểm hiển thị trên tin tuyển dụng là bắt buộc.';
+    }
+
     const skillsArray = skillsInput
       .split(',')
       .map((s) => s.trim())
@@ -259,6 +296,30 @@ function EmployerJobsPage() {
       .split('\n')
       .map((r) => r.trim())
       .filter((r) => r.length > 0);
+
+    if (skillsArray.length === 0) {
+      errors.skills = 'Yêu cầu ít nhất 1 kỹ năng (ngăn cách bởi dấu phẩy).';
+    }
+    if (reqsArray.length === 0 && skillsArray.length === 0) {
+      errors.requirements = 'Yêu cầu công việc không được để trống.';
+    }
+
+    if (formData.rankingConfig?.weights) {
+      const totalWeights = Object.values(formData.rankingConfig.weights).reduce((sum, w) => sum + (w as number), 0);
+      if (totalWeights !== 100) {
+        errors.weights = `Tổng trọng số AI Ranking phải bằng 100% (Hiện tại: ${totalWeights}%).`;
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setSaving(false);
+      return;
+    }
+    setFieldErrors({});
+
+
+
 
     const statusToUse = submitTargetRef.current || formData.status || 'draft';
     const payload: any = {
@@ -318,84 +379,59 @@ function EmployerJobsPage() {
 
   return (
     <>
-    <section className="content-card">
-      <div style={{
-        background: 'linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%)',
-        color: '#fff',
-        padding: '28px',
-        borderRadius: '10px',
-        marginBottom: '24px',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 style={{ color: '#fff', margin: '0 0 8px 0', fontSize: '1.8rem', fontWeight: 800 }}>Quản lý & Đăng tin tuyển dụng</h1>
-            <p style={{ margin: 0, opacity: 0.9 }}>
-              Đăng tin tìm kiếm nhân tài và quản lý các vị trí đang mở tại {company.name}
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Quản lý & Đăng tin tuyển dụng</h1>
+            <p className="text-gray-500">
+              Đăng tin tìm kiếm nhân tài và quản lý các vị trí đang mở tại <span className="font-semibold text-gray-700">{company.name}</span>
             </p>
           </div>
           {isVerified && !showForm && (
             <button
               onClick={handleOpenAdd}
-              style={{
-                background: '#2563eb',
-                color: '#fff',
-                border: 'none',
-                padding: '10px 20px',
-                borderRadius: '6px',
-                fontWeight: 600,
-                fontSize: '0.95rem',
-                cursor: 'pointer',
-                boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-                transition: 'background-color 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
+              className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 w-full md:w-auto"
             >
-              + Tạo tin tuyển dụng mới
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              Tạo tin tuyển dụng mới
             </button>
           )}
         </div>
       </div>
 
-      {message && <p className="success" style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', background: '#d1e7dd', color: '#0f5132' }}>{message}</p>}
+      {message && (
+        <div className="mb-6 p-4 rounded-lg bg-green-50 border border-green-200 text-green-700 flex items-start gap-3">
+          <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <p className="font-medium">{message}</p>
+        </div>
+      )}
       {planLimitReached && error ? (
-        <div style={{ marginBottom: 16 }}>
+        <div className="mb-6">
           <PlanLimitAlert message={error} />
         </div>
       ) : error ? (
-        <p className="error" style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', background: '#f8d7da', color: '#842029' }}>{error}</p>
+        <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 flex items-start gap-3 whitespace-pre-wrap">
+          <svg className="w-5 h-5 text-red-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <p className="font-medium">{error}</p>
+        </div>
       ) : null}
 
       {!isVerified ? (
-        <div style={{
-          border: '2px solid #ffc107',
-          background: '#fff9db',
-          padding: '24px',
-          borderRadius: '10px',
-          color: '#856404',
-          marginBottom: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-          alignItems: 'flex-start'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '2rem' }}>🔒</span>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-8 flex flex-col items-start gap-4 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="p-2 bg-yellow-100 rounded-full text-yellow-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8V7a4 4 0 00-8 0v4h8z"></path></svg>
+            </div>
             <div>
-              <h3 style={{ margin: '0 0 6px 0', color: '#856404', fontSize: '1.3rem' }}>
+              <h3 className="text-lg font-semibold text-yellow-800 mb-1">
                 Chức năng Đăng tin tuyển dụng yêu cầu xác thực doanh nghiệp
               </h3>
-              <p style={{ margin: 0, lineHeight: 1.5 }}>
+              <p className="text-yellow-700 leading-relaxed">
                 Hiện tại công ty <strong>{company.name}</strong> có trạng thái pháp lý là:{' '}
-                <span style={{
-                  background: '#ffec99',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase'
-                }}>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-yellow-200 text-yellow-800 uppercase">
                   {company.verificationStatus || 'Chưa gửi duyệt'}
                 </span>
                 .<br />
@@ -403,112 +439,83 @@ function EmployerJobsPage() {
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+          <div className="flex flex-wrap gap-3 mt-2 ml-14">
             <Link
               to="/employer/verification"
-              style={{
-                background: '#856404',
-                color: '#fff',
-                padding: '10px 20px',
-                borderRadius: '6px',
-                fontWeight: 600,
-                textDecoration: 'none',
-                display: 'inline-block'
-              }}
+              className="inline-flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-2 rounded-lg font-medium transition-colors"
             >
-              → Đến trang Xác thực pháp lý
+              Đến trang Xác thực pháp lý
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
             </Link>
             <Link
               to="/employer/company-profile"
-              style={{
-                background: '#e9ecef',
-                color: '#495057',
-                padding: '10px 20px',
-                borderRadius: '6px',
-                fontWeight: 600,
-                textDecoration: 'none',
-                display: 'inline-block'
-              }}
+              className="inline-flex items-center bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-5 py-2 rounded-lg font-medium transition-colors"
             >
               Xem hồ sơ công ty
             </Link>
           </div>
         </div>
       ) : null}
-      
+
       {showForm && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '10px',
-            padding: '24px',
-            width: '100%',
-            maxWidth: '900px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-          }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
-            <h2 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem', fontWeight: 700 }}>
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+        <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white/95 backdrop-blur z-10">
+            <h2 className="m-0 text-xl font-bold text-gray-900">
               {editingId ? 'Chỉnh sửa tin tuyển dụng' : 'Tạo tin tuyển dụng mới'}
             </h2>
             <button
               type="button"
-              onClick={() => setShowForm(false)}
-              style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#475569', padding: '6px 14px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' }}
+              onClick={() => { setShowForm(false); setFieldErrors({}); }}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-colors"
             >
               Hủy
             </button>
           </div>
-          {editingId && (() => {
-            const editingJob = jobs.find((j) => j.id === editingId);
-            const st = editingJob?.status?.toLowerCase();
-            if (st !== 'rejected' && st !== 'awaiting_company') return null;
-            const isReportFix = st === 'awaiting_company';
-            return (
-            <div style={{ background: isReportFix ? '#fff7ed' : '#fef2f2', border: `1px solid ${isReportFix ? '#fed7aa' : '#fecaca'}`, borderLeft: `4px solid ${isReportFix ? '#ea580c' : '#dc2626'}`, padding: '16px 20px', borderRadius: '8px', marginBottom: '24px' }}>
-              <div style={{ fontWeight: 600, color: isReportFix ? '#9a3412' : '#991b1b', fontSize: '0.95rem', marginBottom: '8px' }}>
-                {isReportFix ? 'Yêu cầu chỉnh sửa từ Admin (tin bị báo cáo)' : 'Phản hồi từ Bộ phận kiểm duyệt'}
-              </div>
-              <div style={{ background: '#ffffff', padding: '12px 16px', borderRadius: '6px', border: `1px solid ${isReportFix ? '#ffedd5' : '#fee2e2'}`, color: isReportFix ? '#7c2d12' : '#7f1d1d', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '10px' }}>
-                {editingJob?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
-              </div>
-              {isReportFix && editingJob?.reportFixDeadline && (
-                <div style={{ fontSize: '0.9rem', color: '#9a3412', fontWeight: 600, marginBottom: '8px' }}>
-                  Hạn chỉnh sửa: {new Date(editingJob.reportFixDeadline).toLocaleString('vi-VN')}. Quá hạn tin sẽ bị gỡ tự động.
+          
+          <div className="p-6 lg:p-8 flex-1">
+            {editingId && (() => {
+              const editingJob = jobs.find((j) => j.id === editingId);
+              const st = editingJob?.status?.toLowerCase();
+              if (st !== 'rejected' && st !== 'awaiting_company') return null;
+              const isReportFix = st === 'awaiting_company';
+              return (
+              <div className={`mb-6 p-5 rounded-xl border-l-4 ${isReportFix ? 'bg-orange-50 border-orange-200 border-l-orange-600' : 'bg-red-50 border-red-200 border-l-red-600'}`}>
+                <div className={`font-semibold mb-2 ${isReportFix ? 'text-orange-800' : 'text-red-800'}`}>
+                  {isReportFix ? 'Yêu cầu chỉnh sửa từ Admin (tin bị báo cáo)' : 'Phản hồi từ Bộ phận kiểm duyệt'}
                 </div>
-              )}
-              <div style={{ fontSize: '0.85rem', color: isReportFix ? '#9a3412' : '#991b1b', opacity: 0.9, lineHeight: 1.5 }}>
-                Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để gửi lại cho Admin duyệt.
+                <div className={`bg-white p-3 rounded-lg border mb-3 text-sm leading-relaxed ${isReportFix ? 'border-orange-100 text-orange-900' : 'border-red-100 text-red-900'}`}>
+                  {editingJob?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
+                </div>
+                {isReportFix && editingJob?.reportFixDeadline && (
+                  <div className="text-sm font-semibold text-orange-800 mb-2">
+                    Hạn chỉnh sửa: {new Date(editingJob.reportFixDeadline).toLocaleString('vi-VN')}. Quá hạn tin sẽ bị gỡ tự động.
+                  </div>
+                )}
+                <div className={`text-sm opacity-90 ${isReportFix ? 'text-orange-800' : 'text-red-800'}`}>
+                  Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để gửi lại cho Admin duyệt.
+                </div>
               </div>
-            </div>
-            );
-          })()}
+              );
+            })()}
 
-          <form onSubmit={handleSubmit} className="form-grid two">
-            <label className="wide">
-              Tên vị trí tuyển dụng *
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
+              Tên vị trí tuyển dụng <span className="text-red-500">*</span>
               <input
                 required
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="Ví dụ: Senior Java Spring Boot Developer, Chuyên viên Marketing..."
               />
+              {fieldErrors.title && <span className="text-red-600 text-sm mt-1">{fieldErrors.title}</span>}
             </label>
 
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Loại hình công việc
               <select
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 value={formData.jobType}
                 onChange={(e) => setFormData({ ...formData, jobType: e.target.value })}
               >
@@ -520,9 +527,10 @@ function EmployerJobsPage() {
               </select>
             </label>
 
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Hình thức làm việc
               <select
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 value={formData.workMode}
                 onChange={(e) => setFormData({ ...formData, workMode: e.target.value })}
               >
@@ -532,9 +540,10 @@ function EmployerJobsPage() {
               </select>
             </label>
 
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Cấp bậc kinh nghiệm
               <select
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 value={formData.experienceLevel}
                 onChange={(e) => setFormData({ ...formData, experienceLevel: e.target.value })}
               >
@@ -547,20 +556,23 @@ function EmployerJobsPage() {
               </select>
             </label>
 
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Số lượng tuyển
               <input
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 type="number"
                 min="1"
                 required
                 value={formData.vacancies}
                 onChange={(e) => setFormData({ ...formData, vacancies: parseInt(e.target.value) || 1 })}
               />
+              {fieldErrors.vacancies && <span className="text-red-600 text-sm mt-1">{fieldErrors.vacancies}</span>}
             </label>
 
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Hình thức trả lương
               <select
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 value={formData.salaryType}
                 onChange={(e) => setFormData({ ...formData, salaryType: e.target.value })}
               >
@@ -572,37 +584,42 @@ function EmployerJobsPage() {
 
             {formData.salaryType !== 'negotiable' ? (
               <>
-                <label>
+                <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
                   Mức lương tối thiểu (VNĐ/tháng)
                   <input
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                     type="number"
                     min="0"
                     step="500000"
                     value={formData.salaryMin}
                     onChange={(e) => setFormData({ ...formData, salaryMin: parseInt(e.target.value) || 0 })}
                   />
+                  {fieldErrors.salaryMin && <span className="text-red-600 text-sm mt-1">{fieldErrors.salaryMin}</span>}
                 </label>
-                <label>
+                <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
                   {formData.salaryType === 'range' ? 'Mức lương tối đa (VNĐ/tháng)' : 'Mức lương cố định (VNĐ/tháng)'}
                   <input
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                     type="number"
                     min="0"
                     step="500000"
                     value={formData.salaryMax}
                     onChange={(e) => setFormData({ ...formData, salaryMax: parseInt(e.target.value) || 0 })}
                   />
+                  {fieldErrors.salaryMax && <span className="text-red-600 text-sm mt-1">{fieldErrors.salaryMax}</span>}
                 </label>
               </>
             ) : (
-              <div className="wide" style={{ padding: '10px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', color: '#475569', fontSize: '0.875rem', alignSelf: 'center' }}>
+              <div className="md:col-span-2 flex items-center justify-center p-4 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
                 Mức lương sẽ được hiển thị là "Thỏa thuận" đối với ứng viên.
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', gridColumn: 'span 2' }}>
-              <label>
+            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
                 Chọn chi nhánh (Branch)
                 <select
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                   value={formData.companyLocationId || ''}
                   onChange={(e) => {
                     const loc = locations.find((l) => l.id === e.target.value);
@@ -612,7 +629,6 @@ function EmployerJobsPage() {
                       location: loc ? `${loc.branchName}${loc.address ? ` (${loc.address})` : ''}` : formData.location,
                     });
                   }}
-                  style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', fontSize: '0.95rem' }}
                 >
                   <option value="">-- Chọn từ chi nhánh công ty --</option>
                   {locations.map((loc) => (
@@ -622,39 +638,44 @@ function EmployerJobsPage() {
                   ))}
                 </select>
                 {locations.length === 0 && (
-                  <span style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                    Chưa có chi nhánh nào. <a href="/employer/locations" target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 600 }}>+ Quản lý/Thêm chi nhánh</a>
+                  <span className="text-sm text-gray-500 mt-1">
+                    Chưa có chi nhánh nào. <a href="/employer/locations" target="_blank" rel="noreferrer" className="text-blue-600 font-semibold hover:underline">+ Quản lý/Thêm chi nhánh</a>
                   </span>
                 )}
               </label>
 
-              <label>
-                Địa điểm hiển thị trên tin tuyển dụng *
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
+                Địa điểm hiển thị trên tin tuyển dụng <span className="text-red-500">*</span>
                 <input
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                   required
                   value={formData.location || ''}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                   placeholder="Ví dụ: TP. HCM, Hà Nội hoặc địa chỉ cụ thể"
                 />
-                <span style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                <span className="text-xs text-gray-500">
                   Tự động điền theo chi nhánh được chọn (hoặc tự chỉnh sửa)
                 </span>
+                {fieldErrors.location && <span className="text-red-600 text-sm mt-1">{fieldErrors.location}</span>}
               </label>
             </div>
 
-            <label>
-              Hạn nộp hồ sơ (Deadline) *
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
+              Hạn nộp hồ sơ (Deadline) <span className="text-red-500">*</span>
               <input
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 type="date"
                 required
                 value={formData.deadline}
                 onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
               />
+              {fieldErrors.deadline && <span className="text-red-600 text-sm mt-1">{fieldErrors.deadline}</span>}
             </label>
 
-            <label className="wide">
+            <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Thời gian làm việc
               <select
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 value={PRESET_WORKING_TIMES.includes(formData.workingTime) ? formData.workingTime : 'CUSTOM'}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -664,7 +685,6 @@ function EmployerJobsPage() {
                     setFormData({ ...formData, workingTime: val });
                   }
                 }}
-                style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', fontSize: '0.95rem' }}
               >
                 {PRESET_WORKING_TIMES.map((time) => (
                   <option key={time} value={time}>
@@ -675,7 +695,7 @@ function EmployerJobsPage() {
               </select>
               {(!PRESET_WORKING_TIMES.includes(formData.workingTime) || formData.workingTime === '') && (
                 <input
-                  style={{ marginTop: '10px' }}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal mt-2 text-gray-900"
                   value={formData.workingTime}
                   onChange={(e) => setFormData({ ...formData, workingTime: e.target.value })}
                   placeholder="Nhập thời gian làm việc chi tiết (VD: Thứ 2 - Thứ 6 (07:30 - 16:30))"
@@ -683,19 +703,22 @@ function EmployerJobsPage() {
               )}
             </label>
 
-            <label className="wide">
-              Kỹ năng yêu cầu (Nhập các từ khóa ngăn cách bằng dấu phẩy) *
+            <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
+              Kỹ năng yêu cầu (Nhập các từ khóa ngăn cách bằng dấu phẩy) <span className="text-red-500">*</span>
               <input
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 required
                 value={skillsInput}
                 onChange={(e) => setSkillsInput(e.target.value)}
                 placeholder="Ví dụ: Java, Spring Boot, MySQL, Docker, ReactJS"
               />
+              {fieldErrors.skills && <span className="text-red-600 text-sm mt-1">{fieldErrors.skills}</span>}
             </label>
 
-            <label className="wide">
-              Mô tả công việc (Description) *
+            <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
+              Mô tả công việc (Description) <span className="text-red-500">*</span>
               <textarea
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal resize-y min-h-[120px] text-gray-900"
                 required
                 rows={5}
                 value={formData.description}
@@ -704,19 +727,22 @@ function EmployerJobsPage() {
               />
             </label>
 
-            <label className="wide">
+            <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Yêu cầu công việc (Requirements - Mỗi yêu cầu 1 dòng)
               <textarea
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal resize-y min-h-[120px] text-gray-900"
                 rows={4}
                 value={reqsInput}
                 onChange={(e) => setReqsInput(e.target.value)}
                 placeholder="Tốt nghiệp đại học chuyên ngành CNTT&#10;Có ít nhất 1 năm kinh nghiệm làm việc với Spring Boot&#10;Tư duy logic tốt, có tinh thần trách nhiệm cao"
               />
+              {fieldErrors.requirements && <span className="text-red-600 text-sm mt-1">{fieldErrors.requirements}</span>}
             </label>
 
-            <label className="wide">
+            <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Quyền lợi & Phúc lợi (Benefits)
               <textarea
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal resize-y min-h-[120px] text-gray-900"
                 rows={4}
                 value={formData.benefits}
                 onChange={(e) => setFormData({ ...formData, benefits: e.target.value })}
@@ -725,29 +751,27 @@ function EmployerJobsPage() {
             </label>
 
             {/* AI Ranking Configuration Section */}
-            <div style={{ width: '100%', marginTop: '32px', paddingTop: '24px', borderTop: '2px solid #e2e8f0', position: 'relative' }}>
+            <div className="md:col-span-2 relative mt-8 pt-6 border-t-2 border-gray-100">
                 {hasApplications && (
-                  <div style={{ position: 'absolute', top: '24px', left: 0, right: 0, bottom: 0, background: 'rgba(255,255,255,0.6)', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(1px)' }}>
-                    <div style={{ background: '#fff', padding: '16px 24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #cbd5e1', textAlign: 'center', maxWidth: '400px' }}>
-                      <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🔒</div>
-                      <h4 style={{ margin: '0 0 8px 0', color: '#0f172a', fontSize: '1.05rem' }}>Đã khóa Cấu hình AI</h4>
-                      <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem', lineHeight: '1.5' }}>Tin tuyển dụng này đã có người nộp CV. Để đảm bảo công bằng cho tất cả ứng viên, tiêu chí chấm điểm không thể thay đổi nữa.</p>
+                  <div className="absolute top-6 inset-x-0 bottom-0 bg-white/60 z-10 flex items-center justify-center backdrop-blur-[1px]">
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 text-center max-w-sm">
+                      <div className="text-3xl mb-2">🔒</div>
+                      <h4 className="text-lg font-semibold text-gray-900 mb-2">Đã khóa Cấu hình AI</h4>
+                      <p className="text-sm text-gray-600 leading-relaxed m-0">Tin tuyển dụng này đã có người nộp CV. Để đảm bảo công bằng cho tất cả ứng viên, tiêu chí chấm điểm không thể thay đổi nữa.</p>
                     </div>
                   </div>
                 )}
                 
-                <div 
-                  style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}
-                >
-                  <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', transition: 'background-color 0.2s' }}>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="bg-blue-50 p-2.5 rounded-lg flex items-center justify-center text-2xl">
                     🤖
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.15rem', fontWeight: 700 }}>Cấu hình AI chấm điểm (Smart Ranking)</h3>
-                    <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Hệ thống tự động đánh giá độ phù hợp của CV với Yêu cầu tuyển dụng.</p>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-gray-900 m-0">Cấu hình AI chấm điểm (Smart Ranking)</h3>
+                    <p className="text-sm text-gray-500 mt-1 m-0">Hệ thống tự động đánh giá độ phù hợp của CV với Yêu cầu tuyển dụng.</p>
                   </div>
                   
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: formData.rankingConfig?.enabled ? '#dcfce7' : '#f1f5f9', padding: '8px 16px', borderRadius: '20px', border: `1px solid ${formData.rankingConfig?.enabled ? '#86efac' : '#cbd5e1'}`, transition: 'all 0.3s' }}>
+                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-full border transition-all ${formData.rankingConfig?.enabled ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'}`}>
                     <input
                       type="checkbox"
                       checked={formData.rankingConfig?.enabled || false}
@@ -759,30 +783,34 @@ function EmployerJobsPage() {
                         });
                         setShowAiConfig(isEnabled); // Auto expand if enabled
                       }}
-                      style={{ cursor: 'pointer', width: '18px', height: '18px', accentColor: '#16a34a' }}
+                      className="cursor-pointer w-4 h-4 accent-emerald-600"
                     />
-                    <span style={{ fontWeight: 600, color: formData.rankingConfig?.enabled ? '#166534' : '#475569', fontSize: '0.95rem' }}>
+                    <span className={`font-semibold text-[15px] ${formData.rankingConfig?.enabled ? 'text-emerald-800' : 'text-gray-600'}`}>
                       {formData.rankingConfig?.enabled ? 'Đã Bật AI' : 'Bật AI'}
                     </span>
                   </label>
                   
                   {formData.rankingConfig?.enabled && (
-                    <div style={{ fontSize: '1.5rem', color: '#64748b', cursor: 'pointer', transform: showAiConfig ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s', padding: '8px' }} onClick={() => setShowAiConfig(!showAiConfig)}>
+                    <div 
+                      className={`text-gray-500 text-xl cursor-pointer p-2 transition-transform duration-300 ${showAiConfig ? 'rotate-180' : ''}`} 
+                      onClick={() => setShowAiConfig(!showAiConfig)}
+                    >
                       ▼
                     </div>
                   )}
                 </div>
 
                 {formData.rankingConfig?.enabled && showAiConfig && (
-                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                   
                   {/* Top Bar: Template Selection */}
-                  <div style={{ padding: '16px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                  <div className="p-4 md:p-6 bg-gray-50 border-b border-gray-200 flex flex-wrap justify-between items-center gap-4">
                     <div>
-                      <h4 style={{ margin: 0, color: '#1e293b', fontSize: '0.95rem', fontWeight: 600 }}>Mẫu phân bổ trọng số (Template)</h4>
-                      <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.85rem' }}>Chọn mẫu để tự động điền điểm cho các tiêu chí bên dưới.</p>
+                      <h4 className="text-[15px] font-semibold text-gray-900 m-0">Mẫu phân bổ trọng số (Template)</h4>
+                      <p className="text-sm text-gray-500 mt-1 m-0">Chọn mẫu để tự động điền điểm cho các tiêu chí bên dưới.</p>
                     </div>
                     <select
+                      className="px-4 py-2.5 rounded-lg border border-gray-300 text-[15px] font-medium text-gray-700 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[220px]"
                       value={formData.rankingConfig?.template || 'balanced'}
                       onChange={(e) => {
                         const template = e.target.value;
@@ -805,7 +833,6 @@ function EmployerJobsPage() {
                           }
                         });
                       }}
-                      style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: 500, color: '#334155', outline: 'none', cursor: 'pointer', background: '#fff', minWidth: '220px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
                     >
                       <option value="balanced">⚖️ Cân bằng (Balanced)</option>
                       <option value="skills_focus">🎯 Tập trung Kỹ năng</option>
@@ -815,12 +842,12 @@ function EmployerJobsPage() {
                     </select>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))' }}>
+                  <div className="grid grid-cols-1 lg:grid-cols-2">
                     
                     {/* Left Column: Scoring Criteria */}
-                    <div style={{ padding: '24px', borderRight: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: 600 }}>
+                    <div className="p-6 border-b lg:border-b-0 lg:border-r border-gray-200">
+                      <div className="flex justify-between items-center mb-5">
+                        <h4 className="m-0 text-base font-semibold text-gray-900">
                           Tiêu chí đánh giá
                         </h4>
                         {(() => {
@@ -829,27 +856,20 @@ function EmployerJobsPage() {
                             .reduce((sum, [, v]) => sum + Number(v), 0);
                           const isError = total !== 100;
                           return (
-                            <span style={{ 
-                              fontSize: '0.85rem', 
-                              padding: '4px 12px', 
-                              borderRadius: '20px', 
-                              background: isError ? '#fee2e2' : '#dcfce3', 
-                              color: isError ? '#ef4444' : '#16a34a',
-                              fontWeight: 600,
-                              border: `1px solid ${isError ? '#fca5a5' : '#86efac'}`
-                            }}>
+                            <span className={`text-[13px] px-3 py-1 rounded-full font-semibold border ${isError ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
                               Tổng: {total}% {isError && ' (Cần đúng 100%)'}
                             </span>
                           );
                         })()}
                       </div>
+                      {fieldErrors.weights && <div className="text-red-600 text-sm mb-4 bg-red-50 p-2 rounded-lg">{fieldErrors.weights}</div>}
                       
                       {['skills', 'experience', 'projects', 'education', 'certificates'].map(criteria => {
                         const isEnabled = formData.rankingConfig?.enabled_criteria?.includes(criteria) ?? true;
                         
                         return (
-                          <div key={criteria} style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', padding: '12px 16px', borderRadius: '8px', background: isEnabled ? '#f8fafc' : '#ffffff', border: `1px solid ${isEnabled ? '#cbd5e1' : '#e2e8f0'}`, transition: 'all 0.2s', opacity: isEnabled ? 1 : 0.6 }}>
-                            <label style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', margin: 0 }}>
+                          <div key={criteria} className={`flex items-center mb-3 p-3 rounded-lg border transition-all ${isEnabled ? 'bg-gray-50 border-gray-200 opacity-100' : 'bg-white border-gray-100 opacity-60'}`}>
+                            <label className="flex-1 flex items-center gap-3 cursor-pointer m-0">
                               <input
                                 type="checkbox"
                                 checked={isEnabled}
@@ -861,9 +881,9 @@ function EmployerJobsPage() {
                                     rankingConfig: { ...formData.rankingConfig, enabled_criteria: next }
                                   });
                                 }}
-                                style={{ cursor: 'pointer', width: '18px', height: '18px', accentColor: '#2563eb' }}
+                                className="cursor-pointer w-4 h-4 accent-blue-600"
                               />
-                              <span style={{ fontSize: '0.95rem', color: isEnabled ? '#0f172a' : '#64748b', fontWeight: isEnabled ? 600 : 400 }}>
+                              <span className={`text-[15px] ${isEnabled ? 'text-gray-900 font-semibold' : 'text-gray-500 font-medium'}`}>
                                 {criteria === 'skills' ? 'Kỹ năng (Skills)' : 
                                  criteria === 'experience' ? 'Kinh nghiệm (Experience)' : 
                                  criteria === 'projects' ? 'Dự án (Projects)' : 
@@ -872,7 +892,7 @@ function EmployerJobsPage() {
                             </label>
                             
                             {isEnabled && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div className="flex items-center gap-2">
                                 <input
                                   type="number"
                                   min="0" max="100"
@@ -887,9 +907,9 @@ function EmployerJobsPage() {
                                       }
                                     });
                                   }}
-                                  style={{ width: '65px', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'center', outline: 'none', fontWeight: 600, color: '#0f172a' }}
+                                  className="w-16 px-2.5 py-1.5 rounded-lg border border-gray-300 text-center font-semibold text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 />
-                                <span style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600 }}>%</span>
+                                <span className="text-gray-500 font-semibold">%</span>
                               </div>
                             )}
                           </div>
@@ -898,19 +918,19 @@ function EmployerJobsPage() {
                     </div>
 
                     {/* Right Column: Mandatory Requirements */}
-                    <div style={{ padding: '24px', background: '#fafafa' }}>
-                      <h4 style={{ margin: '0 0 12px 0', color: '#1e293b', fontSize: '1rem', fontWeight: 600 }}>
+                    <div className="p-6 bg-gray-50">
+                      <h4 className="m-0 mb-3 text-base font-semibold text-gray-900">
                         Yêu cầu Bắt buộc (Hard Filters)
                       </h4>
-                      <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '24px', lineHeight: '1.6' }}>
-                        Hệ thống sẽ đánh dấu Ứng viên là <strong style={{ color: '#ef4444', fontWeight: 600 }}>"Thiếu yêu cầu"</strong> nếu CV không đáp ứng các tiêu chí này. Hãy cẩn trọng để không loại nhầm ứng viên.
+                      <p className="text-[13.5px] text-gray-500 mb-6 leading-relaxed">
+                        Hệ thống sẽ đánh dấu Ứng viên là <strong className="text-red-500 font-semibold">"Thiếu yêu cầu"</strong> nếu CV không đáp ứng các tiêu chí này. Hãy cẩn trọng để không loại nhầm ứng viên.
                       </p>
 
-                      <div style={{ marginBottom: '24px' }}>
-                        <label style={{ display: 'block', fontWeight: 600, marginBottom: '8px', fontSize: '0.9rem', color: '#334155' }}>
+                      <div className="mb-6">
+                        <label className="block font-semibold mb-1.5 text-sm text-gray-700">
                           ⚡ Kỹ năng bắt buộc
                         </label>
-                        <p style={{ margin: '0 0 8px 0', fontSize: '0.8rem', color: '#94a3b8' }}>Cách nhau bằng dấu phẩy (,)</p>
+                        <p className="m-0 mb-2 text-xs text-gray-400">Cách nhau bằng dấu phẩy (,)</p>
                         <input
                           type="text"
                           value={formData.rankingConfig?.mandatory?.skills?.join(', ') || ''}
@@ -929,14 +949,14 @@ function EmployerJobsPage() {
                           }}
                           onInput={(e: any) => { e.target.dataset.raw = e.target.value; }}
                           placeholder="VD: Java, Spring Boot, MySQL..."
-                          style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)', transition: 'border-color 0.2s' }}
+                          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[15px] shadow-sm transition-colors"
                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontWeight: 600, marginBottom: '8px', fontSize: '0.9rem', color: '#334155' }}>
+                        <label className="block font-semibold mb-2 text-sm text-gray-700">
                           ⏳ Kinh nghiệm tối thiểu
                         </label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div className="flex items-center gap-3">
                           <input
                             type="number"
                             min="0" step="0.5"
@@ -955,9 +975,9 @@ function EmployerJobsPage() {
                               });
                             }}
                             placeholder="VD: 1.5, 2..."
-                            style={{ width: '130px', padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)' }}
+                            className="w-32 px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[15px] shadow-sm transition-colors"
                           />
-                          <span style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 500 }}>Năm</span>
+                          <span className="text-gray-600 font-medium text-[15px]">Năm</span>
                         </div>
                       </div>
                     </div>
@@ -966,7 +986,7 @@ function EmployerJobsPage() {
                 )}
               </div>
 
-            <div className="wide" style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+            <div className="md:col-span-2 flex flex-wrap gap-3 mt-6 pt-6 border-t border-gray-100">
               {(() => {
                 const totalWeight = Object.entries(formData.rankingConfig?.weights || {})
                   .filter(([k]) => formData.rankingConfig?.enabled_criteria?.includes(k))
@@ -988,18 +1008,11 @@ function EmployerJobsPage() {
                             submitTargetRef.current = formData.status;
                           }
                         }}
-                        style={{
-                          background: (saving || isInvalidConfig) ? '#94a3b8' : '#2563eb',
-                          color: '#fff',
-                          border: 'none',
-                          padding: '10px 24px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.9rem',
-                          cursor: (saving || isInvalidConfig) ? 'not-allowed' : 'pointer',
-                          boxShadow: (saving || isInvalidConfig) ? 'none' : '0 2px 4px rgba(37, 99, 235, 0.2)',
-                          transition: 'background-color 0.2s'
-                        }}
+                        className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
+                          (saving || isInvalidConfig) 
+                            ? 'bg-gray-400 text-white cursor-not-allowed' 
+                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                        }`}
                       >
                         {saving
                           ? 'Đang xử lý...'
@@ -1017,18 +1030,11 @@ function EmployerJobsPage() {
                             submitTargetRef.current = 'draft';
                             setFormData((prev) => ({ ...prev, status: 'draft' }));
                           }}
-                          style={{
-                            background: '#f1f5f9',
-                            color: '#334155',
-                            border: '1px solid #cbd5e1',
-                            padding: '10px 18px',
-                            borderRadius: '6px',
-                            fontWeight: 600,
-                            fontSize: '0.9rem',
-                            cursor: (saving || isInvalidConfig) ? 'not-allowed' : 'pointer',
-                            transition: 'all 0.2s',
-                            opacity: isInvalidConfig ? 0.6 : 1
-                          }}
+                          className={`px-5 py-2.5 rounded-lg font-semibold text-[15px] border transition-colors ${
+                            (saving || isInvalidConfig)
+                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                              : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300 shadow-sm'
+                          }`}
                         >
                           {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
                         </button>
@@ -1040,20 +1046,13 @@ function EmployerJobsPage() {
                               submitTargetRef.current = 'published';
                               setFormData((prev) => ({ ...prev, status: 'published' }));
                             }}
-                            style={{
-                              background: (saving || isInvalidConfig) ? '#94a3b8' : '#059669',
-                              color: '#fff',
-                              border: 'none',
-                              padding: '10px 22px',
-                              borderRadius: '6px',
-                              fontWeight: 600,
-                              fontSize: '0.9rem',
-                              cursor: (saving || isInvalidConfig) ? 'not-allowed' : 'pointer',
-                              boxShadow: (saving || isInvalidConfig) ? 'none' : '0 2px 4px rgba(5, 150, 105, 0.2)',
-                              transition: 'background-color 0.2s'
-                            }}
+                            className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
+                              (saving || isInvalidConfig)
+                                ? 'bg-gray-400 text-white cursor-not-allowed'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                            }`}
                           >
-                            {saving ? 'Đang xử lý...' : '🚀 Đăng tin ngay (Miễn kiểm duyệt)'}
+                            {saving ? 'Đang xử lý...' : 'Đăng tin ngay (Miễn duyệt)'}
                           </button>
                         ) : (
                           <button
@@ -1063,18 +1062,11 @@ function EmployerJobsPage() {
                               submitTargetRef.current = 'pending_review';
                               setFormData((prev) => ({ ...prev, status: 'pending_review' }));
                             }}
-                            style={{
-                              background: (saving || isInvalidConfig) ? '#94a3b8' : '#2563eb',
-                              color: '#fff',
-                              border: 'none',
-                              padding: '10px 22px',
-                              borderRadius: '6px',
-                              fontWeight: 600,
-                              fontSize: '0.9rem',
-                              cursor: (saving || isInvalidConfig) ? 'not-allowed' : 'pointer',
-                              boxShadow: (saving || isInvalidConfig) ? 'none' : '0 2px 4px rgba(37, 99, 235, 0.2)',
-                              transition: 'background-color 0.2s'
-                            }}
+                            className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
+                              (saving || isInvalidConfig)
+                                ? 'bg-gray-400 text-white cursor-not-allowed'
+                                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                            }`}
                           >
                             {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
                           </button>
@@ -1084,16 +1076,7 @@ function EmployerJobsPage() {
                     <button
                       type="button"
                       onClick={() => setShowForm(false)}
-                      style={{
-                        background: 'transparent',
-                        color: '#64748b',
-                        border: 'none',
-                        padding: '10px 16px',
-                        borderRadius: '6px',
-                        fontWeight: 500,
-                        fontSize: '0.9rem',
-                        cursor: 'pointer'
-                      }}
+                      className="px-5 py-2.5 rounded-lg font-semibold text-[15px] text-gray-600 hover:bg-gray-100 transition-colors bg-transparent"
                     >
                       Hủy
                     </button>
@@ -1104,6 +1087,7 @@ function EmployerJobsPage() {
           </form>
           </div>
         </div>
+      </div>
       )}
 
       <div>
@@ -1242,76 +1226,58 @@ function EmployerJobsPage() {
                     const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : 'Đã đóng';
 
                     return (
-                      <div key={job.id} style={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        padding: '16px',
-                        background: '#ffffff',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        flexWrap: 'wrap',
-                        gap: '12px',
-                        transition: 'border-color 0.2s, box-shadow 0.2s'
-                      }}>
-                        <div style={{ flex: '1 1 420px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 700 }}>
+                      <div key={job.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col lg:flex-row justify-between items-start gap-5">
+                        <div className="flex-1 w-full lg:w-auto">
+                          <div className="flex items-center gap-3 mb-3 flex-wrap">
+                            <h3 className="m-0 text-lg text-gray-900 font-bold">
                               {job.title}
                             </h3>
                             <span style={{
                               background: statusBg,
                               color: statusColor,
                               border: `1px solid ${statusBorder}`,
-                              padding: '4px 12px',
-                              borderRadius: '20px',
-                              fontSize: '0.8rem',
-                              fontWeight: 600,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px'
-                            }}>
-                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusDot }}></span>
+                            }} className="px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-2">
+                              <span style={{ background: statusDot }} className="w-1.5 h-1.5 rounded-full"></span>
                               {statusLabel}
                             </span>
                           </div>
 
-                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', color: '#64748b', fontSize: '0.875rem', marginBottom: '14px', alignItems: 'center' }}>
-                            <span>Địa điểm: <strong style={{ color: '#334155' }}>{job.location || 'Hà Nội'}</strong></span>
-                            <span style={{ color: '#cbd5e1' }}>•</span>
-                            <span>Mức lương: <strong style={{ color: '#059669' }}>{job.salaryType === 'negotiable' ? 'Thỏa thuận' : `${job.salaryMin ? job.salaryMin.toLocaleString() : 0} - ${job.salaryMax ? job.salaryMax.toLocaleString() : 0} VNĐ`}</strong></span>
-                            <span style={{ color: '#cbd5e1' }}>•</span>
-                            <span>Số lượng: <strong style={{ color: '#334155' }}>{job.vacancies || 1}</strong></span>
-                            <span style={{ color: '#cbd5e1' }}>•</span>
-                            <span>Lượt xem: <strong style={{ color: '#334155' }}>{job.viewsCount || 0}</strong></span>
-                            <span style={{ color: '#cbd5e1' }}>•</span>
-                            <Link to={`/employer/jobs/${job.id}/applications`} style={{
-                              background: '#eff6ff',
-                              color: '#1d4ed8',
-                              padding: '3px 10px',
-                              borderRadius: '6px',
-                              border: '1px solid #bfdbfe',
-                              fontWeight: 600,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              textDecoration: 'none'
-                            }}>
-                              📁 Đơn ứng tuyển: <strong style={{ fontSize: '0.95rem' }}>{job.applicationsCount || 0}</strong>
-                            </Link>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-gray-500 text-sm mb-4">
+                            <span className="flex items-center gap-1.5">
+                              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                              <strong className="text-gray-700 font-medium">{job.location || 'Hà Nội'}</strong>
+                            </span>
+                            <span className="hidden sm:inline text-gray-300">•</span>
+                            <span className="flex items-center gap-1.5">
+                              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                              <strong className="text-emerald-600 font-medium">{job.salaryType === 'negotiable' ? 'Thỏa thuận' : `${job.salaryMin ? job.salaryMin.toLocaleString() : 0} - ${job.salaryMax ? job.salaryMax.toLocaleString() : 0} VNĐ`}</strong>
+                            </span>
+                            <span className="hidden sm:inline text-gray-300">•</span>
+                            <span className="flex items-center gap-1.5">
+                              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                              <strong className="text-gray-700 font-medium">{job.vacancies || 1}</strong>
+                            </span>
+                            <span className="hidden sm:inline text-gray-300">•</span>
+                            <span className="flex items-center gap-1.5">
+                              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                              <strong className="text-gray-700 font-medium">{job.viewsCount || 0}</strong>
+                            </span>
+                            
                             {job.deadline && (
                               <>
-                                <span style={{ color: '#cbd5e1' }}>•</span>
-                                <span>Hạn nộp: <strong style={{ color: '#334155' }}>{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong></span>
+                                <span className="hidden sm:inline text-gray-300">•</span>
+                                <span className="flex items-center gap-1.5">
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                  Hạn nộp: <strong className="text-gray-700 font-medium">{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong>
+                                </span>
                               </>
                             )}
                           </div>
 
                     {job.skills && job.skills.length > 0 && (
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <div className="flex gap-2 flex-wrap mb-2">
                         {job.skills.map((s, idx) => (
-                          <span key={idx} style={{ background: '#f1f5f9', color: '#334155', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, border: '1px solid #e2e8f0' }}>
+                          <span key={idx} className="bg-slate-100 text-slate-700 px-3 py-1 rounded-md text-xs font-medium border border-slate-200">
                             {s}
                           </span>
                         ))}
@@ -1356,60 +1322,26 @@ function EmployerJobsPage() {
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className="flex flex-wrap items-center gap-2 mt-4 lg:mt-0">
                     <Link
                       to={`/employer/jobs/${job.id}/applications`}
-                      style={{
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
-                        color: '#1d4ed8',
-                        padding: '8px 16px',
-                        borderRadius: '6px',
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        transition: 'all 0.2s'
-                      }}
+                      className="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-lg font-semibold text-sm transition-colors"
                     >
-                      👥 Xem ứng viên ({job.applicationsCount || 0})
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                      Xem ứng viên ({job.applicationsCount || 0})
                     </Link>
                     {isVerified && st === 'draft' && (
                       <button
                         onClick={() => handleSubmitForReview(job.id, job.title)}
-                        style={{
-                          background: hasApprovedJob ? '#059669' : '#2563eb',
-                          border: 'none',
-                          color: '#fff',
-                          padding: '8px 16px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.875rem',
-                          cursor: 'pointer',
-                          boxShadow: hasApprovedJob ? '0 2px 4px rgba(5, 150, 105, 0.15)' : '0 2px 4px rgba(37, 99, 235, 0.15)',
-                          transition: 'background-color 0.2s'
-                        }}
+                        className={`inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm text-white transition-colors shadow-sm ${hasApprovedJob ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                       >
-                        {hasApprovedJob ? '🚀 Đăng tin ngay (Miễn kiểm duyệt)' : 'Nộp kiểm duyệt'}
+                        {hasApprovedJob ? 'Đăng tin ngay (Miễn duyệt)' : 'Nộp kiểm duyệt'}
                       </button>
                     )}
                     {isVerified && (st === 'rejected' || st === 'awaiting_company') && (
                       <button
                         onClick={() => handleOpenEdit(job)}
-                        style={{
-                          background: st === 'awaiting_company' ? '#ea580c' : '#dc2626',
-                          border: 'none',
-                          color: '#fff',
-                          padding: '8px 16px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.875rem',
-                          cursor: 'pointer',
-                          boxShadow: st === 'awaiting_company' ? '0 2px 4px rgba(234, 88, 12, 0.15)' : '0 2px 4px rgba(220, 38, 38, 0.15)',
-                          transition: 'background-color 0.2s'
-                        }}
+                        className={`inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm text-white transition-colors shadow-sm ${st === 'awaiting_company' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-red-600 hover:bg-red-700'}`}
                       >
                         {st === 'awaiting_company' ? 'Cập nhật & Gửi lại duyệt' : 'Cập nhật & Nộp lại'}
                       </button>
@@ -1417,89 +1349,29 @@ function EmployerJobsPage() {
                     {isVerified && st !== 'rejected' && st !== 'awaiting_company' && (
                       <button
                         onClick={() => handleOpenEdit(job)}
-                        style={{
-                          background: '#f8fafc',
-                          border: '1px solid #cbd5e1',
-                          color: '#334155',
-                          padding: '8px 16px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.875rem',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
+                        className="inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm bg-gray-50 hover:bg-gray-100 border border-gray-300 text-gray-700 transition-colors"
                       >
                         Chỉnh sửa
-                      </button>
-                    )}
-                    {isVerified && (st === 'published' || st === 'active') && (
-                      <button
-                        onClick={() => handleCloseJob(job.id, job.title)}
-                        style={{
-                          background: '#fffbeb',
-                          border: '1px solid #fde68a',
-                          color: '#b45309',
-                          padding: '8px 14px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.875rem',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        🔒 Đóng tin
                       </button>
                     )}
                     {isVerified && (st === 'closed' || st === 'expired') && (
                       <button
                         onClick={() => handleReopenJob(job)}
-                        style={{
-                          background: '#ecfdf5',
-                          border: '1px solid #6ee7b7',
-                          color: '#047857',
-                          padding: '8px 14px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '0.875rem',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-sm bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 transition-colors"
                       >
-                        🔓 Mở lại tin
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
+                        Mở lại tin
                       </button>
                     )}
                     <button
                       onClick={() => setViewingJob(job)}
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        color: '#475569',
-                        padding: '8px 14px',
-                        borderRadius: '6px',
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                        textDecoration: 'none',
-                        transition: 'all 0.2s',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
+                      className="inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 transition-colors"
                     >
-                      👀 Xem chi tiết
+                      Xem chi tiết
                     </button>
                     <button
                       onClick={() => handleDelete(job.id, job.title)}
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #fecaca',
-                        color: '#ef4444',
-                        padding: '8px 14px',
-                        borderRadius: '6px',
-                        fontWeight: 500,
-                        fontSize: '0.875rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                      }}
+                      className="inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm bg-white hover:bg-red-50 border border-red-200 text-red-600 transition-colors"
                     >
                       Xóa
                     </button>
@@ -1540,100 +1412,111 @@ function EmployerJobsPage() {
     </section>
 
     {viewingJob && (
-      <div style={{
-        position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '20px'
-      }}>
-        <div style={{
-          backgroundColor: '#fff',
-          borderRadius: '12px',
-          width: '100%',
-          maxWidth: '800px',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
-          position: 'relative'
-        }}>
-          <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
-            <h2 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a' }}>Chi tiết tin tuyển dụng</h2>
-            <button onClick={() => setViewingJob(null)} style={{ background: '#f1f5f9', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#475569', fontWeight: 600 }}>✕ Đóng</button>
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+        <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white/95 backdrop-blur z-10">
+            <h2 className="m-0 text-xl font-bold text-gray-900">Chi tiết tin tuyển dụng</h2>
+            <button 
+              onClick={() => setViewingJob(null)} 
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
           </div>
 
-          <div style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '1.5rem', margin: '0 0 16px 0', color: '#1e293b' }}>{viewingJob.title}</h3>
+          <div className="p-6 lg:p-8 flex-1">
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">{viewingJob.title}</h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px', background: '#f8fafc', padding: '16px', borderRadius: '8px' }}>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8 bg-gray-50 p-6 rounded-xl border border-gray-100">
               <div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Mức lương</div>
-                <div style={{ fontWeight: 600, color: '#059669' }}>
+                <div className="text-sm font-medium text-gray-500 mb-1">Mức lương</div>
+                <div className="font-semibold text-emerald-600">
                   {viewingJob.salaryType === 'negotiable' ? 'Thỏa thuận' : `${viewingJob.salaryMin?.toLocaleString() || 0} - ${viewingJob.salaryMax?.toLocaleString() || 0} VNĐ`}
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Địa điểm</div>
-                <div style={{ fontWeight: 600, color: '#334155' }}>{viewingJob.location || 'Hà Nội'}</div>
+                <div className="text-sm font-medium text-gray-500 mb-1">Địa điểm</div>
+                <div className="font-semibold text-gray-900">{viewingJob.location || 'Hà Nội'}</div>
               </div>
               <div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Kinh nghiệm</div>
-                <div style={{ fontWeight: 600, color: '#334155' }}>{viewingJob.experienceLevel}</div>
+                <div className="text-sm font-medium text-gray-500 mb-1">Kinh nghiệm</div>
+                <div className="font-semibold text-gray-900">{viewingJob.experienceLevel}</div>
               </div>
               <div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Hình thức</div>
-                <div style={{ fontWeight: 600, color: '#334155' }}>{viewingJob.workMode} / {viewingJob.jobType}</div>
+                <div className="text-sm font-medium text-gray-500 mb-1">Hình thức</div>
+                <div className="font-semibold text-gray-900">{viewingJob.workMode} / {viewingJob.jobType}</div>
               </div>
               <div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Số lượng</div>
-                <div style={{ fontWeight: 600, color: '#334155' }}>{viewingJob.vacancies} người</div>
+                <div className="text-sm font-medium text-gray-500 mb-1">Số lượng</div>
+                <div className="font-semibold text-gray-900">{viewingJob.vacancies} người</div>
               </div>
               <div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>Hạn nộp hồ sơ</div>
-                <div style={{ fontWeight: 600, color: '#dc2626' }}>{viewingJob.deadline ? new Date(viewingJob.deadline).toLocaleDateString('vi-VN') : 'Không giới hạn'}</div>
+                <div className="text-sm font-medium text-gray-500 mb-1">Hạn nộp hồ sơ</div>
+                <div className="font-semibold text-red-600">{viewingJob.deadline ? new Date(viewingJob.deadline).toLocaleDateString('vi-VN') : 'Không giới hạn'}</div>
               </div>
             </div>
 
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Mô tả công việc</h4>
-              <div style={{ whiteSpace: 'pre-wrap', color: '#475569', lineHeight: 1.6, fontSize: '0.95rem' }}>
-                {viewingJob.description}
-              </div>
+            <div className="space-y-8">
+              <section>
+                <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Mô tả công việc</h4>
+                <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
+                  {viewingJob.description}
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Yêu cầu công việc</h4>
+                <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
+                  {viewingJob.requirements?.join('\n') || viewingJob.skills?.join(', ')}
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Quyền lợi</h4>
+                <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
+                  {viewingJob.benefits || 'Theo quy định của công ty'}
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Kỹ năng chuyên môn</h4>
+                <div className="flex gap-2 flex-wrap mt-2">
+                  {viewingJob.skills?.map((s, idx) => (
+                    <span key={idx} className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Thời gian làm việc</h4>
+                <div className="text-gray-600 text-[15px]">
+                  {viewingJob.workingTime || 'Giờ hành chính'}
+                </div>
+              </section>
             </div>
 
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Yêu cầu công việc</h4>
-              <div style={{ whiteSpace: 'pre-wrap', color: '#475569', lineHeight: 1.6, fontSize: '0.95rem' }}>
-                {viewingJob.requirements?.join('\n') || viewingJob.skills?.join(', ')}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Quyền lợi</h4>
-              <div style={{ whiteSpace: 'pre-wrap', color: '#475569', lineHeight: 1.6, fontSize: '0.95rem' }}>
-                {viewingJob.benefits || 'Theo quy định của công ty'}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Kỹ năng chuyên môn</h4>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-                {viewingJob.skills?.map((s, idx) => (
-                  <span key={idx} style={{ background: '#f1f5f9', color: '#334155', padding: '6px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 500, border: '1px solid #e2e8f0' }}>
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '12px' }}>
-              <h4 style={{ fontSize: '1.1rem', margin: '0 0 12px 0', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>Thời gian làm việc</h4>
-              <div style={{ color: '#475569', fontSize: '0.95rem' }}>
-                {viewingJob.workingTime || 'Giờ hành chính'}
-              </div>
+            {/* Footer with Đóng tin button */}
+            <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end gap-3">
+              {isVerified && (viewingJob.status?.toLowerCase() === 'published' || viewingJob.status?.toLowerCase() === 'active') && (
+                <button
+                  onClick={async () => {
+                    await handleCloseJob(viewingJob.id, viewingJob.title);
+                    setViewingJob(null);
+                  }}
+                  className="inline-flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-5 py-2.5 rounded-lg font-semibold transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8V7a4 4 0 00-8 0v4h8z"></path></svg>
+                  Đóng tin tuyển dụng
+                </button>
+              )}
+              <button
+                onClick={() => setViewingJob(null)}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2.5 rounded-lg font-semibold transition-colors"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>
