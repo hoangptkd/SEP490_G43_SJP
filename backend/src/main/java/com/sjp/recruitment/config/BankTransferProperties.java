@@ -8,12 +8,12 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app.payment.bank-transfer")
 public class BankTransferProperties {
-    private boolean enabled = true;
-    private String bankName = "VietinBank";
+    private boolean enabled = false;
+    private String bankName = "";
     /** Mã BIN ngân hàng cho VietQR (VietinBank=970415, Vietcombank=970436, BIDV=970418, MB=970422) */
-    private String bankCode = "970415";
-    private String accountNumber = "100874697360";
-    private String accountName = "LUONG CHI DUNG";
+    private String bankCode = "";
+    private String accountNumber = "";
+    private String accountName = "";
     private String branch = "";
     /** Thời hạn thanh toán (phút) */
     private int expireMinutes = 15;

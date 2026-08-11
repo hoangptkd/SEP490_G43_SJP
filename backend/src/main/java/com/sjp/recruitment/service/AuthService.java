@@ -36,6 +36,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -172,6 +175,7 @@ public class AuthService {
         validatePassword(request.password());
         User user = token.getUser();
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+        bumpTokenVersion(user);
         token.setUsedAt(LocalDateTime.now());
         userRepository.save(user);
     }
@@ -284,6 +288,15 @@ public class AuthService {
     @Transactional(readOnly = true)
     public AccountResponse getAccount() {
         return toAccountResponse(getCurrentUser());
+    }
+
+    @Transactional
+    public void resendVerification(String email) {
+        userRepository.findByEmail(normalizeEmail(email)).ifPresent(user -> {
+            if (!user.isEmailVerified() && user.getStatusEnum() == User.UserStatus.PENDING_VERIFICATION) {
+                sendVerificationEmail(user);
+            }
+        });
     }
 
     @Transactional
@@ -418,9 +431,42 @@ public class AuthService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_FILE_TOO_LARGE", "Anh dai dien khong duoc vuot qua 2MB");
         }
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
-        if (!List.of("image/jpeg", "image/png", "image/webp").contains(contentType)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_INVALID_TYPE", "Chi ho tro anh JPG, PNG hoac WEBP");
+        if (!List.of("image/jpeg", "image/png").contains(contentType)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_INVALID_TYPE", "Chỉ hỗ trợ ảnh JPG hoặc PNG");
         }
+        try (ImageInputStream imageInput = ImageIO.createImageInputStream(file.getInputStream())) {
+            if (imageInput == null) {
+                throw invalidAvatarBytes();
+            }
+            var readers = ImageIO.getImageReaders(imageInput);
+            if (!readers.hasNext()) {
+                throw invalidAvatarBytes();
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(imageInput, true, true);
+                String detectedFormat = reader.getFormatName().toLowerCase(Locale.ROOT);
+                boolean formatMatches = ("image/jpeg".equals(contentType) && List.of("jpeg", "jpg").contains(detectedFormat))
+                        || ("image/png".equals(contentType) && "png".equals(detectedFormat));
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (!formatMatches || width < 1 || height < 1 || width > 4096 || height > 4096) {
+                    throw invalidAvatarBytes();
+                }
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException exception) {
+            throw invalidAvatarBytes();
+        }
+    }
+
+    private ApiException invalidAvatarBytes() {
+        return new ApiException(
+                HttpStatus.BAD_REQUEST,
+                "AVATAR_INVALID_CONTENT",
+                "Nội dung ảnh không hợp lệ hoặc kích thước ảnh vượt quá 4096x4096"
+        );
     }
 
     private void activateGoogleVerifiedUser(User user) {

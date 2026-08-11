@@ -8,10 +8,10 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app.payment.momo")
 public class MomoProperties {
-    private boolean enabled = true;
+    private boolean enabled = false;
     private String partnerCode = "MOMO";
-    private String accessKey = "F8BBA842ECF85";
-    private String secretKey = "K951B6PT2tD7wFGf5gct9wDu";
+    private String accessKey = "";
+    private String secretKey = "";
     private String endpoint = "https://test-payment.momo.vn/v2/gateway/api/create";
     private boolean sandbox = true;
 }

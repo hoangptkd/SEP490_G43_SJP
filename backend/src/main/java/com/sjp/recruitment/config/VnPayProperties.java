@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app.payment.vnpay")
 public class VnPayProperties {
-    private boolean enabled = true;
+    private boolean enabled = false;
     /** Terminal/merchant code from VNPay */
     private String tmnCode = "";
     private String hashSecret = "";

@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app.payment.payos")
 public class PayOsProperties {
-    private boolean enabled = true;
+    private boolean enabled = false;
     private String clientId = "";
     private String apiKey = "";
     private String checksumKey = "";

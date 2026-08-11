@@ -62,7 +62,7 @@ management:
       enabled: ${MAIL_HEALTH_ENABLED:false}
 
 jwt:
-  secret: ${JWT_SECRET:change-this-local-dev-secret-minimum-32-chars}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400000}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
@@ -79,6 +79,14 @@ app:
   email-verification-token-ttl-minutes: ${EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:1440}
   password-reset-token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
   oauth-role-selection-token-ttl-minutes: ${OAUTH_ROLE_SELECTION_TOKEN_TTL_MINUTES:15}
+  auth-rate-limit:
+    enabled: ${AUTH_RATE_LIMIT_ENABLED:true}
+    window-seconds: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:60}
+    login-requests: ${AUTH_RATE_LIMIT_LOGIN_REQUESTS:10}
+    register-requests: ${AUTH_RATE_LIMIT_REGISTER_REQUESTS:5}
+    forgot-password-requests: ${AUTH_RATE_LIMIT_FORGOT_PASSWORD_REQUESTS:5}
+    reset-password-requests: ${AUTH_RATE_LIMIT_RESET_PASSWORD_REQUESTS:10}
+    resend-verification-requests: ${AUTH_RATE_LIMIT_RESEND_VERIFICATION_REQUESTS:3}
   ai-interview:
     gladia-api-key: ${GLADIA_API_KEY:}
     gladia-base-url: ${GLADIA_BASE_URL:https://api.gladia.io}
@@ -101,18 +109,18 @@ app:
     voice-unclear-confirmation-delay-ms: ${AI_INTERVIEW_VOICE_UNCLEAR_CONFIRMATION_DELAY_MS:1200}
     costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
   storage:
-    cv-upload-dir: ${CV_UPLOAD_DIR:uploads/cvs}
-    avatar-upload-dir: ${AVATAR_UPLOAD_DIR:uploads/avatars}
+    cv-upload-dir: ${CV_UPLOAD_DIR:}
+    avatar-upload-dir: ${AVATAR_UPLOAD_DIR:}
   payment:
     momo:
-      enabled: ${MOMO_ENABLED:true}
+      enabled: ${MOMO_ENABLED:false}
       partner-code: ${MOMO_PARTNER_CODE:MOMO}
       access-key: ${MOMO_ACCESS_KEY:}
       secret-key: ${MOMO_SECRET_KEY:}
       endpoint: ${MOMO_ENDPOINT:https://test-payment.momo.vn/v2/gateway/api/create}
       sandbox: ${MOMO_SANDBOX:true}
     vnpay:
-      enabled: ${VNPAY_ENABLED:true}
+      enabled: ${VNPAY_ENABLED:false}
       tmn-code: ${VNPAY_TMN_CODE:}
       hash-secret: ${VNPAY_HASH_SECRET:}
       pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
@@ -120,15 +128,15 @@ app:
       version: ${VNPAY_VERSION:2.1.0}
       sandbox: ${VNPAY_SANDBOX:true}
     bank-transfer:
-      enabled: ${BANK_TRANSFER_ENABLED:true}
-      bank-name: ${BANK_TRANSFER_BANK_NAME:TPBank}
-      bank-code: ${BANK_TRANSFER_BANK_CODE:970423}
-      account-number: ${BANK_TRANSFER_ACCOUNT_NUMBER:18167888888}
-      account-name: ${BANK_TRANSFER_ACCOUNT_NAME:DAM HUY HOA}
+      enabled: ${BANK_TRANSFER_ENABLED:false}
+      bank-name: ${BANK_TRANSFER_BANK_NAME:}
+      bank-code: ${BANK_TRANSFER_BANK_CODE:}
+      account-number: ${BANK_TRANSFER_ACCOUNT_NUMBER:}
+      account-name: ${BANK_TRANSFER_ACCOUNT_NAME:}
       branch: ${BANK_TRANSFER_BRANCH:}
       expire-minutes: ${BANK_TRANSFER_EXPIRE_MINUTES:15}
     payos:
-      enabled: ${PAYOS_ENABLED:true}
+      enabled: ${PAYOS_ENABLED:false}
       client-id: ${PAYOS_CLIENT_ID:}
       api-key: ${PAYOS_API_KEY:}
       checksum-key: ${PAYOS_CHECKSUM_KEY:}

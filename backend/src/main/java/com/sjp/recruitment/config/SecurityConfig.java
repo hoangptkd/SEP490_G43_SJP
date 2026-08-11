@@ -46,6 +46,7 @@ public class SecurityConfig {
                     "/auth/forgot-password",
                     "/auth/reset-password",
                     "/auth/verify-email",
+                    "/auth/resend-verification",
                     "/auth/oauth/complete-role",
                     "/oauth2/**",
                     "/login/oauth2/**",
@@ -58,7 +59,7 @@ public class SecurityConfig {
                     "/payments/vnpay/return",
                     "/payments/payos/webhook"
                 ).permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**", "/categories", "/categories/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/jobs", "/jobs/**", "/categories", "/categories/**", "/companies/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/billing/plans").permitAll()
                 .requestMatchers("/candidate/**", "/applications/**").hasRole("CANDIDATE")
                 .requestMatchers("/employer/**").hasRole("EMPLOYER")

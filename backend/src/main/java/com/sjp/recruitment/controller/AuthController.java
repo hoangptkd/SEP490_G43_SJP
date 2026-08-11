@@ -15,6 +15,8 @@ import com.sjp.recruitment.model.dto.response.AuthResponse;
 import com.sjp.recruitment.model.dto.response.MessageResponse;
 import com.sjp.recruitment.model.dto.response.UserResponse;
 import com.sjp.recruitment.service.AuthService;
+import com.sjp.recruitment.service.AuthRateLimiter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -29,6 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class AuthController {
 
     private final AuthService authService;
+    private final AuthRateLimiter authRateLimiter;
     private final ObjectProvider<ClientRegistrationRepository> clientRegistrationRepository;
 
     @GetMapping("/config")
@@ -37,25 +40,29 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest servletRequest) {
+        authRateLimiter.check(AuthRateLimiter.Operation.REGISTER, request.getEmail(), servletRequest.getRemoteAddr());
         AuthResponse response = authService.register(request);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+        authRateLimiter.check(AuthRateLimiter.Operation.LOGIN, request.getEmail(), servletRequest.getRemoteAddr());
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<MessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<MessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest servletRequest) {
+        authRateLimiter.check(AuthRateLimiter.Operation.FORGOT_PASSWORD, request.email(), servletRequest.getRemoteAddr());
         authService.forgotPassword(request);
         return ResponseEntity.ok(new MessageResponse("Neu email ton tai, huong dan dat lai mat khau da duoc gui"));
     }
 
     @PostMapping("/reset-password")
-    public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+    public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request, HttpServletRequest servletRequest) {
+        authRateLimiter.check(AuthRateLimiter.Operation.RESET_PASSWORD, request.token(), servletRequest.getRemoteAddr());
         authService.resetPassword(request);
         return ResponseEntity.ok(new MessageResponse("Mat khau da duoc cap nhat"));
     }
@@ -63,6 +70,15 @@ public class AuthController {
     @PostMapping("/verify-email")
     public ResponseEntity<UserResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
         return ResponseEntity.ok(authService.verifyEmail(request.token()));
+    }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<MessageResponse> resendVerification(
+            @Valid @RequestBody ForgotPasswordRequest request,
+            HttpServletRequest servletRequest) {
+        authRateLimiter.check(AuthRateLimiter.Operation.RESEND_VERIFICATION, request.email(), servletRequest.getRemoteAddr());
+        authService.resendVerification(request.email());
+        return ResponseEntity.ok(new MessageResponse("Nếu tài khoản cần xác minh, email mới đã được gửi"));
     }
 
     @PostMapping("/oauth/complete-role")
