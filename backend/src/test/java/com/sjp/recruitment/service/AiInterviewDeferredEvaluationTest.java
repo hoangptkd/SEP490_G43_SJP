@@ -31,6 +31,8 @@ import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -70,6 +72,7 @@ class AiInterviewDeferredEvaluationTest {
     @Mock private JobService jobService;
     @Mock private AiInterviewRateLimiter rateLimiter;
     @Mock private AiInterviewResponseAssembler responseAssembler;
+    @Mock private TransactionTemplate transactions;
 
     @InjectMocks private AiInterviewService service;
 
@@ -107,8 +110,10 @@ class AiInterviewDeferredEvaluationTest {
         lenient().when(candidateService.getCurrentCandidateProfile()).thenReturn(candidate);
         lenient().when(sessionRepository.findByIdAndCandidateIdAndDeletedAtIsNull(session.getId(), candidateId))
                 .thenReturn(Optional.of(session));
+        lenient().when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
         lenient().when(questionRepository.findByIdAndSessionId(question.getId(), session.getId()))
                 .thenReturn(Optional.of(question));
+        lenient().when(answerRepository.findById(answer.getId())).thenReturn(Optional.of(answer));
         lenient().when(answerRepository.saveAndFlush(any(InterviewAnswer.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(answerRepository.save(any(InterviewAnswer.class)))
@@ -123,6 +128,10 @@ class AiInterviewDeferredEvaluationTest {
                 });
         lenient().when(questionRepository.save(any(InterviewQuestion.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(transactions.execute(any())).thenAnswer(invocation -> {
+            org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(new SimpleTransactionStatus());
+        });
     }
 
     @Test

@@ -83,6 +83,12 @@ public class ShopAiKeyClient {
                 Đây chỉ là feedback luyện tập, không phải quyết định tuyển dụng.
                 Chỉ trả JSON hợp lệ, không markdown.
                 Score bắt buộc là thang 0-100, không dùng thang 0-10.
+                Tự chấm trực tiếp trên tổng 100 điểm theo rubric:
+                - Đúng trọng tâm và chính xác: tối đa 40 điểm.
+                - Chiều sâu và mức độ đầy đủ: tối đa 30 điểm.
+                - Cấu trúc và diễn đạt rõ ràng: tối đa 20 điểm.
+                - Ví dụ hoặc bằng chứng cụ thể: tối đa 10 điểm.
+                Trường score là tổng điểm cuối cùng trên thang 0-100.
                 JSON schema:
                 {
                   "score": 0-100,
@@ -97,7 +103,7 @@ public class ShopAiKeyClient {
                 """.formatted(question.getContent(), transcript, buildSessionContext(session)));
         JsonNode json = callJson(prompt, 900, 0.2);
         return new AnswerFeedbackDraft(
-                clampScore(json.path("score").decimalValue()),
+                requireScore(json),
                 requireText(json, "feedback"),
                 stringList(json.path("strengths")),
                 stringList(json.path("weaknesses")),
@@ -317,15 +323,22 @@ public class ShopAiKeyClient {
         return values;
     }
 
-    private BigDecimal clampScore(BigDecimal score) {
-        if (score == null) {
-            return BigDecimal.ZERO;
+    private BigDecimal requireScore(JsonNode json) {
+        JsonNode scoreNode = json == null ? null : json.get("score");
+        if (scoreNode == null || !scoreNode.isNumber()) {
+            throw new AiProviderException(
+                    "AI_INVALID_SCORE",
+                    "AI không trả về điểm số hợp lệ trên thang 0-100."
+            );
         }
-        BigDecimal normalized = score.compareTo(BigDecimal.ZERO) > 0
-                && score.compareTo(BigDecimal.TEN) <= 0
-                ? score.multiply(BigDecimal.TEN)
-                : score;
-        return normalized.max(BigDecimal.ZERO).min(BigDecimal.valueOf(100));
+        BigDecimal score = scoreNode.decimalValue();
+        if (score.compareTo(BigDecimal.ZERO) < 0 || score.compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new AiProviderException(
+                    "AI_INVALID_SCORE",
+                    "AI trả về điểm nằm ngoài thang 0-100."
+            );
+        }
+        return score;
     }
 
     private int clampInt(int value, int min, int max) {

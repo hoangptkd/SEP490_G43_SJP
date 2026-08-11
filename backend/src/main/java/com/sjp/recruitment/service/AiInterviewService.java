@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -25,6 +26,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -52,6 +54,7 @@ public class AiInterviewService {
     private final AiInterviewResponseAssembler responseAssembler;
     private final FeatureLimitService featureLimitService;
     private final SystemSettingsService systemSettingsService;
+    private final TransactionTemplate transactions;
 
     @Transactional(readOnly = true)
     public AiInterviewConfigResponse configStatus() {
@@ -278,7 +281,6 @@ public class AiInterviewService {
         return responseAssembler.assemble(session);
     }
 
-    @Transactional
     public AiInterviewSessionResponse finishInterview(String sessionId, String questionId, String transcript) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
@@ -292,8 +294,12 @@ public class AiInterviewService {
             if (!hasText(questionId)) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "QUESTION_ID_REQUIRED", "Cần xác định câu hỏi cho phần trả lời hiện tại");
             }
-            InterviewQuestion question = requireQuestion(session, questionId);
-            confirmAnswer(session, question, transcript, false);
+            session = inTransaction(() -> {
+                InterviewSession currentSession = requireMutableSession(sessionId);
+                InterviewQuestion question = requireQuestion(currentSession, questionId);
+                confirmAnswer(currentSession, question, transcript, false);
+                return currentSession;
+            });
         }
 
         List<InterviewAnswer> answers = evaluableAnswers(session);
@@ -303,12 +309,14 @@ public class AiInterviewService {
 
         for (InterviewAnswer answer : answers) {
             if (!"completed".equals(answer.getFeedbackStatus())
+                    || answer.isEvaluationFallback()
+                    || !"provider".equals(answer.getEvaluationSource())
                     || answerFeedbackRepository.findByAnswerId(answer.getId()).isEmpty()) {
-                evaluateAnswer(session, answer);
+                evaluateAnswer(answer.getId());
             }
         }
-        generateSummary(session);
-        return responseAssembler.assemble(session);
+        generateSummary(session.getId());
+        return responseAssembler.assemble(requireSession(sessionId));
     }
 
     private void confirmAnswer(InterviewSession session,
@@ -342,24 +350,44 @@ public class AiInterviewService {
         }
     }
 
-    private void evaluateAnswer(InterviewSession session, InterviewAnswer answer) {
-        InterviewQuestion question = requireQuestion(session, answer.getQuestionId().toString());
-        answer.setFeedbackStatus("processing");
-        answer.setErrorMessage(null);
-        saveAnswerClaim(answer);
+    private void evaluateAnswer(UUID answerId) {
+        AnswerEvaluationContext context = inTransaction(() -> {
+            InterviewAnswer answer = answerRepository.findById(answerId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ANSWER_STALE", "Câu trả lời không còn tồn tại"));
+            InterviewSession session = answer.getSession();
+            prepareSessionForProvider(session);
+            InterviewQuestion question = requireQuestion(session, answer.getQuestionId().toString());
+            answer.setFeedbackStatus("processing");
+            answer.setErrorMessage(null);
+            saveAnswerClaim(answer);
+            return new AnswerEvaluationContext(session, question, answer.getTranscriptText());
+        });
         try {
-            ShopAiKeyClient.AnswerFeedbackDraft draft = shopAiKeyClient.evaluateAnswer(session, question, answer.getTranscriptText());
-            saveFeedback(answer, draft);
-            answer.setFeedbackStatus("completed");
-            answer.setEvaluationSource("provider");
-            answer.setEvaluationFallback(false);
-            answerRepository.save(answer);
+            ShopAiKeyClient.AnswerFeedbackDraft draft = shopAiKeyClient.evaluateAnswer(
+                    context.session(), context.question(), context.transcript());
+            inTransaction(() -> {
+                InterviewAnswer answer = answerRepository.findById(answerId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ANSWER_STALE", "Câu trả lời không còn tồn tại"));
+                saveFeedback(answer, draft);
+                answer.setFeedbackStatus("completed");
+                answer.setEvaluationSource("provider");
+                answer.setEvaluationFallback(false);
+                answer.setErrorMessage(null);
+                answerRepository.save(answer);
+                return null;
+            });
         } catch (AiProviderException exception) {
-            saveFeedback(answer, fallbackAnswerFeedback(answer.getTranscriptText()));
-            answer.setFeedbackStatus("completed");
-            answer.setEvaluationSource("fallback");
-            answer.setEvaluationFallback(true);
-            answerRepository.save(answer);
+            inTransaction(() -> {
+                InterviewAnswer answer = answerRepository.findById(answerId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ANSWER_STALE", "Câu trả lời không còn tồn tại"));
+                answer.setFeedbackStatus("failed");
+                answer.setEvaluationSource("provider");
+                answer.setEvaluationFallback(false);
+                answer.setErrorMessage(exception.getMessage());
+                answerRepository.save(answer);
+                return null;
+            });
+            throw providerApiException(exception, "chấm điểm câu trả lời");
         }
     }
 
@@ -393,7 +421,6 @@ public class AiInterviewService {
         return responseAssembler.assemble(session);
     }
 
-    @Transactional
     public AiInterviewSessionResponse retrySummary(String sessionId) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
@@ -405,11 +432,10 @@ public class AiInterviewService {
         if (evaluableAnswers(session).isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "SESSION_NOT_READY_FOR_SUMMARY", "Chưa có câu trả lời để tổng kết");
         }
-        generateSummary(session);
+        generateSummary(session.getId());
         return responseAssembler.assemble(session);
     }
 
-    @Transactional
     public AiInterviewSessionResponse retryFeedback(String sessionId, String questionId) {
         ensureEnabled();
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
@@ -425,27 +451,9 @@ public class AiInterviewService {
         if (answer.isSkipped()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "SKIPPED_ANSWER", "Cau hoi da bo qua khong can cham lai");
         }
-        answer.setFeedbackStatus("processing");
-        answer.setErrorMessage(null);
-        saveAnswerClaim(answer);
-        try {
-            ShopAiKeyClient.AnswerFeedbackDraft draft = shopAiKeyClient.evaluateAnswer(session, question, answer.getTranscriptText());
-            saveFeedback(answer, draft);
-            answer.setFeedbackStatus("completed");
-            answer.setEvaluationSource("provider");
-            answer.setEvaluationFallback(false);
-            answerRepository.save(answer);
-            generateSummary(session);
-            return responseAssembler.assemble(session);
-        } catch (AiProviderException exception) {
-            saveFeedback(answer, fallbackAnswerFeedback(answer.getTranscriptText()));
-            answer.setFeedbackStatus("completed");
-            answer.setEvaluationSource("fallback");
-            answer.setEvaluationFallback(true);
-            answerRepository.save(answer);
-            generateSummary(session);
-            return responseAssembler.assemble(session);
-        }
+        evaluateAnswer(answer.getId());
+        generateSummary(session.getId());
+        return responseAssembler.assemble(requireSession(sessionId));
     }
 
     private boolean hasOpenQuestion(InterviewSession session) {
@@ -502,15 +510,28 @@ public class AiInterviewService {
         sessionRepository.save(session);
     }
 
-    private void generateSummary(InterviewSession session) {
-        List<InterviewQuestion> questions = questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId());
-        List<InterviewAnswer> answers = evaluableAnswers(session);
-        BigDecimal average = averageScore(answers);
+    private void generateSummary(UUID sessionId) {
+        SessionSummaryContext context = inTransaction(() -> {
+            InterviewSession session = sessionRepository.findById(sessionId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "Không tìm thấy phiên phỏng vấn"));
+            prepareSessionForProvider(session);
+            List<InterviewQuestion> questions = questionRepository.findBySessionIdOrderByOrderIndexAsc(sessionId);
+            List<InterviewAnswer> answers = evaluableAnswers(session);
+            return new SessionSummaryContext(session, questions, answers, averageScore(answers));
+        });
+        ShopAiKeyClient.SessionSummaryDraft draft;
         try {
-            ShopAiKeyClient.SessionSummaryDraft draft = shopAiKeyClient.summarizeSession(session, questions, answers, average);
-            AiSessionFeedback summary = sessionFeedbackRepository.findBySessionId(session.getId()).orElseGet(AiSessionFeedback::new);
+            draft = shopAiKeyClient.summarizeSession(
+                    context.session(), context.questions(), context.answers(), context.average());
+        } catch (AiProviderException exception) {
+            throw providerApiException(exception, "tạo tổng kết phỏng vấn");
+        }
+        inTransaction(() -> {
+            InterviewSession session = sessionRepository.findById(sessionId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "Không tìm thấy phiên phỏng vấn"));
+            AiSessionFeedback summary = sessionFeedbackRepository.findBySessionId(sessionId).orElseGet(AiSessionFeedback::new);
             summary.setSession(session);
-            summary.setOverallScore(average);
+            summary.setOverallScore(context.average());
             summary.setAiSummary(draft.summary());
             summary.setStrengths(joinLines(draft.strengths()));
             summary.setWeaknesses(joinLines(draft.weaknesses()));
@@ -519,14 +540,13 @@ public class AiInterviewService {
             summary.setEvaluationSource("provider");
             summary.setEvaluationFallback(false);
             sessionFeedbackRepository.save(summary);
-            session.setOverallScore(average);
+            session.setOverallScore(context.average());
             session.setAiSummary(draft.summary());
             session.setCompletedAt(LocalDateTime.now());
             session.setStatus("completed");
             sessionRepository.save(session);
-        } catch (AiProviderException exception) {
-            saveFallbackSummary(session, average);
-        }
+            return null;
+        });
     }
 
     private void saveFeedback(InterviewAnswer answer, ShopAiKeyClient.AnswerFeedbackDraft draft) {
@@ -559,37 +579,6 @@ public class AiInterviewService {
                 baseQuestion,
                 properties.getAudioMaxSeconds()
         );
-    }
-
-    private ShopAiKeyClient.AnswerFeedbackDraft fallbackAnswerFeedback(String transcript) {
-        int wordCount = transcript == null || transcript.isBlank() ? 0 : transcript.trim().split("\\s+").length;
-        BigDecimal score = BigDecimal.valueOf(Math.max(35, Math.min(75, 35 + wordCount)));
-        return new ShopAiKeyClient.AnswerFeedbackDraft(
-                score,
-                "Feedback tạm thời: câu trả lời đã có ý chính, nhưng cần thêm bối cảnh, hành động cụ thể và kết quả đo lường được.",
-                wordCount >= 25 ? List.of("Câu trả lời có đủ thông tin để bắt đầu đánh giá.") : List.of(),
-                wordCount < 25 ? List.of("Câu trả lời còn ngắn, cần thêm bối cảnh và kết quả cụ thể.") : List.of("Nên làm rõ hơn tác động và kết quả có thể đo lường."),
-                List.of("Trả lời theo cấu trúc: bối cảnh, hành động, kết quả.", "Bổ sung ví dụ cụ thể và số liệu nếu có.")
-        );
-    }
-
-    private void saveFallbackSummary(InterviewSession session, BigDecimal average) {
-        AiSessionFeedback summary = sessionFeedbackRepository.findBySessionId(session.getId()).orElseGet(AiSessionFeedback::new);
-        summary.setSession(session);
-        summary.setOverallScore(average);
-        summary.setAiSummary("Tổng kết tạm thời: bạn đã hoàn thành buổi luyện tập. Hãy tiếp tục cải thiện độ cụ thể, cấu trúc câu trả lời và kết quả đo lường được.");
-        summary.setStrengths("Bạn đã hoàn thành đầy đủ các câu hỏi luyện tập.");
-        summary.setWeaknesses("Cần tiếp tục bổ sung ví dụ cụ thể và kết quả đo lường được trong câu trả lời.");
-        summary.setSuggestions("Ôn lại transcript từng câu.\nChuẩn bị câu trả lời theo cấu trúc bối cảnh, hành động, kết quả.\nThử luyện lại với các câu hỏi khó hơn.");
-        summary.setModelUsed(properties.getShopaikeyModel());
-        summary.setEvaluationSource("fallback");
-        summary.setEvaluationFallback(true);
-        sessionFeedbackRepository.save(summary);
-        session.setOverallScore(average);
-        session.setAiSummary(summary.getAiSummary());
-        session.setCompletedAt(LocalDateTime.now());
-        session.setStatus("completed");
-        sessionRepository.save(session);
     }
 
     private InterviewAnswer draftAnswer(InterviewSession session, InterviewQuestion question) {
@@ -625,6 +614,8 @@ public class AiInterviewService {
             return BigDecimal.ZERO;
         }
         List<BigDecimal> scores = answers.stream()
+                .filter(answer -> "provider".equals(answer.getEvaluationSource()))
+                .filter(answer -> !answer.isEvaluationFallback())
                 .map(answer -> answerFeedbackRepository.findByAnswerId(answer.getId())
                         .map(AiAnswerFeedback::getOverallScore)
                         .orElse(null))
@@ -743,6 +734,39 @@ public class AiInterviewService {
 
     private boolean isEnabledByAdmin() {
         return systemSettingsService == null || systemSettingsService.isAiInterviewEnabled();
+    }
+
+    private void prepareSessionForProvider(InterviewSession session) {
+        Job job = session.getJob();
+        if (job != null) {
+            job.getTitle();
+            job.getRequirementsText();
+        }
+    }
+
+    private <T> T inTransaction(Supplier<T> work) {
+        return transactions.execute(status -> work.get());
+    }
+
+    private ApiException providerApiException(AiProviderException exception, String operation) {
+        return new ApiException(
+                HttpStatus.BAD_GATEWAY,
+                exception.getCode(),
+                "AI không thể " + operation + ": " + exception.getMessage()
+        );
+    }
+
+    private record AnswerEvaluationContext(
+            InterviewSession session,
+            InterviewQuestion question,
+            String transcript) {
+    }
+
+    private record SessionSummaryContext(
+            InterviewSession session,
+            List<InterviewQuestion> questions,
+            List<InterviewAnswer> answers,
+            BigDecimal average) {
     }
 
     private void requireAiSession(User user) {
