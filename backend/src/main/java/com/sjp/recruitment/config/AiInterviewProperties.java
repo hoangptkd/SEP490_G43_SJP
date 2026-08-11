@@ -4,6 +4,9 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Component
 @ConfigurationProperties(prefix = "app.ai-interview")
 @Data
@@ -28,6 +31,15 @@ public class AiInterviewProperties {
     private int voiceConfirmationSilenceMs = 3_000;
     private int voiceUnclearConfirmationDelayMs = 1_200;
     private int costlyRequestsPerMinute = 12;
+    private List<String> gladiaLanguages = new ArrayList<>(List.of("vi", "en"));
+    private boolean gladiaCodeSwitchingEnabled = true;
+    private boolean gladiaCustomVocabularyEnabled = true;
+    private double gladiaCustomVocabularyIntensity = 0.5;
+    private int gladiaCustomVocabularyMaxItems = 100;
+    private List<String> gladiaBaseVocabulary = new ArrayList<>(List.of(
+            "Spring Boot", "Java", "REST API", "Hibernate", "JPA", "PostgreSQL",
+            "Docker", "Kubernetes", "Redis", "Kafka", "JWT", "OAuth", "React", "TypeScript"
+    ));
 
     public boolean isEnabled() {
         return hasText(gladiaApiKey) && hasText(shopaikeyApiKey);

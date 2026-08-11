@@ -11,8 +11,10 @@ import com.sjp.recruitment.model.dto.response.AiInterviewQuestionSetResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewSessionResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewSpeechTicketResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewTranscriptResponse;
+import com.sjp.recruitment.model.dto.response.HandsFreeAnswerCaptureResponse;
 import com.sjp.recruitment.service.AiInterviewService;
 import com.sjp.recruitment.service.AiInterviewSpeechService;
+import com.sjp.recruitment.service.HandsFreeAnswerCaptureService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -32,6 +34,7 @@ public class AiInterviewController {
 
     private final AiInterviewService aiInterviewService;
     private final AiInterviewSpeechService aiInterviewSpeechService;
+    private final HandsFreeAnswerCaptureService handsFreeAnswerCaptureService;
 
     @GetMapping("/config-status")
     public ResponseEntity<AiInterviewConfigResponse> configStatus() {
@@ -82,6 +85,23 @@ public class AiInterviewController {
             @RequestPart("file") MultipartFile file,
             @RequestPart(value = "durationSeconds", required = false) Integer durationSeconds) {
         return () -> ResponseEntity.ok(aiInterviewService.transcribeCurrentQuestion(sessionId, file, durationSeconds));
+    }
+
+    @PostMapping(value = "/sessions/{sessionId}/questions/{questionId}/answer-capture",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Callable<ResponseEntity<HandsFreeAnswerCaptureResponse>> processAnswerCapture(
+            @PathVariable String sessionId,
+            @PathVariable String questionId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestParam("captureId") String captureId,
+            @RequestParam(value = "captureVersion", required = false) Integer captureVersion,
+            @RequestPart("audioSegments") List<MultipartFile> audioSegments,
+            @RequestParam("segmentSequences") List<Integer> segmentSequences,
+            @RequestParam(value = "browserTranscript", required = false) String browserTranscript,
+            @RequestParam(value = "durationSeconds", required = false) List<Double> durationSeconds) {
+        return () -> ResponseEntity.ok(handsFreeAnswerCaptureService.process(
+                sessionId, questionId, idempotencyKey, captureId, captureVersion == null ? 1 : captureVersion,
+                audioSegments, segmentSequences, browserTranscript, durationSeconds));
     }
 
     @PostMapping("/sessions/{sessionId}/speech")

@@ -3,15 +3,21 @@ package com.sjp.recruitment.service.ai;
 import com.sjp.recruitment.config.AiInterviewProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,30 +34,38 @@ public class GladiaTranscriptionClient {
     public String transcribe(MultipartFile file) {
         try {
             RestClient client = buildClient();
-            String audioUrl = uploadAudio(client, file);
-            String transcriptionId = startTranscription(client, audioUrl);
+            InputStreamResource resource = new InputStreamResource(file.getInputStream()) {
+                @Override public String getFilename() {
+                    return file.getOriginalFilename() == null ? "answer.webm" : file.getOriginalFilename();
+                }
+                @Override public long contentLength() { return file.getSize(); }
+            };
+            String audioUrl = uploadAudio(client, resource, resource.getFilename(), file.getSize(), file.getContentType());
+            String transcriptionId = startTranscription(client, audioUrl, GladiaTranscriptionContext.empty());
             return pollTranscript(client, transcriptionId);
         } catch (IOException | RuntimeException exception) {
             throw new AiProviderException("STT_PROVIDER_FAILED", "He thong chua xu ly duoc cau tra loi nay, vui long thu lai.");
         }
     }
 
-    private String uploadAudio(RestClient client, MultipartFile file) throws IOException {
-        MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        InputStreamResource resource = new InputStreamResource(file.getInputStream()) {
-            @Override
-            public String getFilename() {
-                return file.getOriginalFilename() == null ? "answer.webm" : file.getOriginalFilename();
-            }
+    public String transcribe(Path path, String mimeType, GladiaTranscriptionContext context) {
+        try {
+            RestClient client = buildClient();
+            FileSystemResource resource = new FileSystemResource(path);
+            String audioUrl = uploadAudio(client, resource, path.getFileName().toString(), Files.size(path), mimeType);
+            String transcriptionId = startTranscription(client, audioUrl, context == null ? GladiaTranscriptionContext.empty() : context);
+            return pollTranscript(client, transcriptionId);
+        } catch (IOException | RuntimeException exception) {
+            if (exception instanceof AiProviderException providerException) throw providerException;
+            throw new AiProviderException("STT_PROVIDER_FAILED", "He thong chua xu ly duoc cau tra loi nay, vui long thu lai.");
+        }
+    }
 
-            @Override
-            public long contentLength() {
-                return file.getSize();
-            }
-        };
+    private String uploadAudio(RestClient client, Resource resource, String filename, long size, String mimeType) {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("audio", resource)
-                .filename(resource.getFilename())
-                .contentType(MediaType.parseMediaType(file.getContentType() == null ? "audio/webm" : file.getContentType()));
+                .filename(filename == null ? "answer.webm" : filename)
+                .contentType(MediaType.parseMediaType(mimeType == null || mimeType.isBlank() ? "audio/webm" : mimeType));
 
         Map<?, ?> response = client.post()
                 .uri("/v2/upload")
@@ -68,11 +82,17 @@ public class GladiaTranscriptionClient {
         return value;
     }
 
-    private String startTranscription(RestClient client, String audioUrl) {
-        Map<String, Object> body = Map.of(
-                "audio_url", audioUrl,
-                "language_config", Map.of("languages", List.of("vi"))
-        );
+    private String startTranscription(RestClient client, String audioUrl, GladiaTranscriptionContext context) {
+        Map<String, Object> body = transcriptionBody(audioUrl, context, true);
+        try {
+            return postTranscription(client, body);
+        } catch (HttpClientErrorException.BadRequest exception) {
+            if (!hasEnhancements(context)) throw exception;
+            return postTranscription(client, transcriptionBody(audioUrl, GladiaTranscriptionContext.empty(), false));
+        }
+    }
+
+    private String postTranscription(RestClient client, Map<String, Object> body) {
         Map<?, ?> response = client.post()
                 .uri("/v2/pre-recorded")
                 .header("x-gladia-key", properties.getGladiaApiKey())
@@ -86,6 +106,34 @@ public class GladiaTranscriptionClient {
             throw new AiProviderException("STT_START_FAILED", "Khong nhan duoc transcription id tu Gladia");
         }
         return value;
+    }
+
+    Map<String, Object> transcriptionBody(
+            String audioUrl, GladiaTranscriptionContext context, boolean includeEnhancements) {
+        Map<String, Object> languageConfig = new LinkedHashMap<>();
+        List<String> languages = properties.getGladiaLanguages() == null
+                ? List.of("vi", "en")
+                : properties.getGladiaLanguages().stream().filter(value -> value != null && !value.isBlank()).toList();
+        languageConfig.put("languages", languages);
+        if (includeEnhancements) {
+            languageConfig.put("code_switching", properties.isGladiaCodeSwitchingEnabled());
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("audio_url", audioUrl);
+        body.put("language_config", languageConfig);
+        if (includeEnhancements && properties.isGladiaCustomVocabularyEnabled() && !context.vocabulary().isEmpty()) {
+            body.put("custom_vocabulary", true);
+            body.put("custom_vocabulary_config", Map.of(
+                    "vocabulary", context.vocabulary(),
+                    "default_intensity", properties.getGladiaCustomVocabularyIntensity()
+            ));
+        }
+        return body;
+    }
+
+    private boolean hasEnhancements(GladiaTranscriptionContext context) {
+        return properties.isGladiaCodeSwitchingEnabled()
+                || (properties.isGladiaCustomVocabularyEnabled() && !context.vocabulary().isEmpty());
     }
 
     @SuppressWarnings("unchecked")

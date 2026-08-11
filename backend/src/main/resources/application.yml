@@ -108,6 +108,33 @@ app:
     voice-confirmation-silence-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_SILENCE_MS:3000}
     voice-unclear-confirmation-delay-ms: ${AI_INTERVIEW_VOICE_UNCLEAR_CONFIRMATION_DELAY_MS:1200}
     costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
+    gladia-languages: ${GLADIA_LANGUAGES:vi,en}
+    gladia-code-switching-enabled: ${GLADIA_CODE_SWITCHING_ENABLED:true}
+    gladia-custom-vocabulary-enabled: ${GLADIA_CUSTOM_VOCABULARY_ENABLED:true}
+    gladia-custom-vocabulary-intensity: ${GLADIA_CUSTOM_VOCABULARY_INTENSITY:0.5}
+    gladia-custom-vocabulary-max-items: ${GLADIA_CUSTOM_VOCABULARY_MAX_ITEMS:100}
+    gladia-base-vocabulary: ${GLADIA_BASE_VOCABULARY:Spring Boot,Java,REST API,Hibernate,JPA,PostgreSQL,Docker,Kubernetes,Redis,Kafka,JWT,OAuth,React,TypeScript}
+  vad:
+    enabled: ${VAD_ENABLED:true}
+    required: ${VAD_REQUIRED:false}
+    ffmpeg-path: ${VAD_FFMPEG_PATH:}
+    decode-timeout: ${VAD_DECODE_TIMEOUT:20s}
+    health-check-timeout: ${VAD_HEALTH_CHECK_TIMEOUT:3s}
+    max-input-bytes-per-segment: ${VAD_MAX_INPUT_BYTES_PER_SEGMENT:26214400}
+    max-output-bytes: ${VAD_MAX_OUTPUT_BYTES:5760000}
+    max-duration-seconds: ${VAD_MAX_DURATION_SECONDS:180}
+    max-concurrent-analyses: ${VAD_MAX_CONCURRENT_ANALYSES:2}
+    concurrency-acquire-timeout: ${VAD_CONCURRENCY_ACQUIRE_TIMEOUT:2s}
+    model:
+      resource: ${VAD_MODEL_RESOURCE:classpath:models/silero-vad/v6.2.1/silero_vad.onnx}
+      version: ${VAD_MODEL_VERSION:v6.2.1}
+      sha256: ${VAD_MODEL_SHA256:1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3}
+    segmentation:
+      speech-threshold: ${VAD_SPEECH_THRESHOLD:0.50}
+      negative-threshold: ${VAD_NEGATIVE_THRESHOLD:0.35}
+      min-speech-duration-ms: ${VAD_MIN_SPEECH_DURATION_MS:250}
+      min-silence-duration-ms: ${VAD_MIN_SILENCE_DURATION_MS:100}
+      speech-pad-ms: ${VAD_SPEECH_PAD_MS:30}
   storage:
     cv-upload-dir: ${CV_UPLOAD_DIR:}
     avatar-upload-dir: ${AVATAR_UPLOAD_DIR:}

@@ -4,9 +4,13 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "interview_answers", uniqueConstraints = {
@@ -34,6 +38,19 @@ public class InterviewAnswer {
 
     @Column(name = "transcript_text", columnDefinition = "TEXT")
     private String transcriptText;
+
+    @Column(name = "original_speech_transcript", columnDefinition = "TEXT")
+    private String originalSpeechTranscript;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "speech_analysis_json", columnDefinition = "jsonb", nullable = false)
+    private Map<String, Object> speechAnalysisJson = new HashMap<>();
+
+    @Column(name = "active_capture_id")
+    private UUID activeCaptureId;
+
+    @Column(name = "active_capture_version")
+    private Integer activeCaptureVersion;
 
     @Column(name = "audio_url")
     private String audioUrl;
