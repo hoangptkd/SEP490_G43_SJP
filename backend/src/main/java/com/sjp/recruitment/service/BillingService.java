@@ -1004,6 +1004,7 @@ public class BillingService {
                 featureLimitService.featureIntOrNull(featuresJson, "maxCv"),
                 featureLimitService.featureIntOrNull(featuresJson, "maxApplicationsPerDay"),
                 featureLimitService.featureIntOrNull(featuresJson, "maxAiSessionsPerDay"),
+                featureLimitService.featureIntOrNull(featuresJson, "maxAiJobSearchesPerMonth"),
                 featureLimitService.featureIntOrNull(featuresJson, "listingPriority")
         );
     }

@@ -22,6 +22,7 @@ public interface CandidateCvRepository extends JpaRepository<CandidateCv, UUID> 
     Optional<CandidateCv> findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID id, UUID candidateId, String sourceType);
     boolean existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(UUID candidateId, String sourceType);
     boolean existsByCandidateIdAndDeletedAtIsNull(UUID candidateId);
+    Optional<CandidateCv> findFirstByCandidateIdAndDefaultCvTrueAndDeletedAtIsNullOrderByUpdatedAtDesc(UUID candidateId);
 
     @Modifying(flushAutomatically = true)
     @Query("UPDATE CandidateCv cv SET cv.defaultCv = false WHERE cv.candidate.id = :candidateId AND cv.defaultCv = true")

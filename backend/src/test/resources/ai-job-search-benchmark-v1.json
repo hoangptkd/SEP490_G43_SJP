@@ -1,0 +1,48 @@
+{
+  "version": "ai-job-search-v1",
+  "description": "Fixture mẫu để benchmark thủ công Recall@10, NDCG@10 và độ grounded của explanation.",
+  "thresholds": {
+    "recallAt10": 0.8,
+    "ndcgAt10": 0.7,
+    "unsupportedJobRate": 0,
+    "groundedExplanationRate": 0.9
+  },
+  "candidates": [
+    {
+      "candidateKey": "java-backend-junior",
+      "profile": {
+        "headline": "Java Backend Developer",
+        "location": "Hà Nội",
+        "experienceYears": 2,
+        "experienceLevel": "JUNIOR",
+        "skills": ["Java", "Spring Boot", "PostgreSQL", "REST API"]
+      },
+      "cvText": "Phát triển REST API bằng Java và Spring Boot, sử dụng PostgreSQL, Docker và Git.",
+      "relevanceLabels": {
+        "java-spring-backend": 3,
+        "backend-api-engineer": 3,
+        "fullstack-java-react": 2,
+        "devops-aws-senior": 1,
+        "graphic-designer": 0
+      }
+    },
+    {
+      "candidateKey": "react-frontend-fresher",
+      "profile": {
+        "headline": "Frontend Developer",
+        "location": "TP.HCM",
+        "experienceYears": 1,
+        "experienceLevel": "FRESHER",
+        "skills": ["React", "TypeScript", "HTML", "CSS"]
+      },
+      "cvText": "Xây dựng giao diện responsive bằng React, TypeScript và CSS; có kiến thức accessibility cơ bản.",
+      "relevanceLabels": {
+        "react-frontend-fresher": 3,
+        "frontend-typescript": 3,
+        "fullstack-java-react": 2,
+        "senior-ui-architect": 1,
+        "data-engineer-python": 0
+      }
+    }
+  ]
+}

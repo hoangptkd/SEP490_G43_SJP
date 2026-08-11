@@ -52,4 +52,7 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
 
     @Query("SELECT a.job.id FROM Application a WHERE a.candidate.id = :candidateId AND a.job.id IN :jobIds")
     List<UUID> findAppliedJobIds(@Param("candidateId") UUID candidateId, @Param("jobIds") List<UUID> jobIds);
+
+    @Query("SELECT a.job.id, COUNT(a) FROM Application a WHERE a.job.id IN :jobIds GROUP BY a.job.id")
+    List<Object[]> countByJobIds(@Param("jobIds") List<UUID> jobIds);
 }

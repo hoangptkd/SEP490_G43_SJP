@@ -235,10 +235,39 @@ public class JobService {
     public List<RecommendationResponse> recommendations() {
         CandidateProfile candidate = currentCandidate()
                 .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "CANDIDATE_REQUIRED", "Chi ung vien moi co goi y viec lam"));
-        boolean lowConfidence = candidate.getSkills() == null || candidate.getSkills().isEmpty();
-        return jobRepository.findTop20ByStatusOrderByCreatedAtDesc("published")
-                .stream()
-                .map(job -> toRecommendation(candidate, job, lowConfidence))
+        Set<String> candidateSkills = normalized(candidate.getSkills());
+        boolean lowConfidence = candidateSkills.isEmpty();
+        List<UUID> jobIds = jobRepository.findRecommendationJobIds(PageRequest.of(0, 20));
+        if (jobIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, Job> jobsById = jobRepository.findRecommendationJobsByIds(jobIds).stream()
+                .collect(Collectors.toMap(Job::getId, job -> job));
+        Set<UUID> savedJobIds = new HashSet<>(savedJobRepository.findSavedJobIds(candidate.getId(), jobIds));
+        Set<UUID> appliedJobIds = new HashSet<>(applicationRepository.findAppliedJobIds(candidate.getId(), jobIds));
+        Map<UUID, Long> applicationCounts = applicationRepository.countByJobIds(jobIds).stream()
+                .collect(Collectors.toMap(
+                        row -> (UUID) row[0],
+                        row -> ((Number) row[1]).longValue()
+                ));
+        Map<UUID, Integer> listingPriorities = featureLimitService.resolveListingPrioritiesForUsers(
+                jobsById.values().stream().map(this::employerUserId).filter(Objects::nonNull).toList()
+        );
+
+        return jobIds.stream()
+                .map(jobsById::get)
+                .filter(Objects::nonNull)
+                .map(job -> toRecommendation(
+                        candidate,
+                        candidateSkills,
+                        job,
+                        lowConfidence,
+                        savedJobIds.contains(job.getId()),
+                        appliedJobIds.contains(job.getId()),
+                        applicationCounts.getOrDefault(job.getId(), 0L),
+                        listingPriorities.getOrDefault(employerUserId(job), 0)
+                ))
                 .sorted(Comparator
                         .comparingInt(RecommendationResponse::matchScore).reversed()
                         .thenComparing((RecommendationResponse r) ->
@@ -817,21 +846,32 @@ public class JobService {
     }
 
     public int calculateMatchScore(CandidateProfile candidate, Job job) {
-        Set<String> candidateSkills = normalized(candidate.getSkills());
+        return calculateMatchScore(normalized(candidate.getSkills()), candidate.getLocation(), job);
+    }
+
+    private int calculateMatchScore(Set<String> candidateSkills, String candidateLocation, Job job) {
         Set<String> jobSkills = normalized(job.getSkills() == null || job.getSkills().isEmpty() ? job.getRequirements() : job.getSkills());
         if (candidateSkills.isEmpty() || jobSkills.isEmpty()) {
             return 20;
         }
         long matches = jobSkills.stream().filter(candidateSkills::contains).count();
         int skillScore = (int) Math.round((matches * 70.0) / jobSkills.size());
-        int locationScore = candidate.getLocation() != null && job.getLocation() != null
-                && job.getLocation().toLowerCase().contains(candidate.getLocation().toLowerCase()) ? 20 : 0;
+        int locationScore = candidateLocation != null && job.getLocation() != null
+                && job.getLocation().toLowerCase().contains(candidateLocation.toLowerCase()) ? 20 : 0;
         int base = matches > 0 ? 10 : 0;
         return Math.min(100, skillScore + locationScore + base);
     }
 
-    private RecommendationResponse toRecommendation(CandidateProfile candidate, Job job, boolean lowConfidence) {
-        Set<String> candidateSkills = normalized(candidate.getSkills());
+    private RecommendationResponse toRecommendation(
+            CandidateProfile candidate,
+            Set<String> candidateSkills,
+            Job job,
+            boolean lowConfidence,
+            boolean saved,
+            boolean applied,
+            long applicationCount,
+            int listingPriority
+    ) {
         List<String> jobSkills = job.getSkills() == null ? List.of() : job.getSkills();
         List<String> matched = jobSkills.stream()
                 .filter(skill -> candidateSkills.contains(skill.toLowerCase()))
@@ -840,11 +880,20 @@ public class JobService {
                 .filter(skill -> !candidateSkills.contains(skill.toLowerCase()))
                 .limit(5)
                 .toList();
-        int score = calculateMatchScore(candidate, job);
+        int score = calculateMatchScore(candidateSkills, candidate.getLocation(), job);
         String reason = matched.isEmpty()
                 ? "Hoan thien ho so ky nang de nhan goi y chinh xac hon."
                 : "Phu hop vi ban co " + String.join(", ", matched) + ".";
-        return new RecommendationResponse(toJobResponse(job, candidate), score, matched, missing, reason, lowConfidence);
+        JobResponse jobResponse = dtoMapper.toJobResponse(
+                job, saved, applied, score, applicationCount, listingPriority
+        );
+        return new RecommendationResponse(jobResponse, score, matched, missing, reason, lowConfidence);
+    }
+
+    private UUID employerUserId(Job job) {
+        return job != null && job.getEmployer() != null && job.getEmployer().getUser() != null
+                ? job.getEmployer().getUser().getId()
+                : null;
     }
 
     private Optional<CandidateProfile> currentCandidate() {
@@ -863,7 +912,7 @@ public class JobService {
         if (user == null || user.getRoleEnum() != User.UserRole.CANDIDATE || !user.isEmailVerified() || user.getStatusEnum() != User.UserStatus.ACTIVE) {
             return Optional.empty();
         }
-        return candidateProfileRepository.findByUserId(user.getId());
+        return candidateProfileRepository.findWithSkillsByUserId(user.getId());
     }
 
     private Sort resolveSort(String sort) {

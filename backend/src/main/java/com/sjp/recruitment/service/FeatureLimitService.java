@@ -14,7 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -25,6 +30,8 @@ public class FeatureLimitService {
     public static final String CV_UPLOADS = "cv_uploads";
     public static final String APPLICATIONS = "applications";
     public static final String AI_SESSIONS = "ai_sessions";
+    public static final String AI_JOB_SEARCHES = "ai_job_searches";
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     /** Ưu tiên hiển thị tin (>= 1 thì hiện badge Nổi bật). Gợi ý: 0 free, 1/2/3 theo bậc gói. */
     public static final int FEATURED_PRIORITY_THRESHOLD = 1;
@@ -106,6 +113,44 @@ public class FeatureLimitService {
         bumpUsage(user, AI_SESSIONS, "maxAiSessionsPerDay", "max_ai_sessions_per_day", 3, true);
     }
 
+    @Transactional(readOnly = true)
+    public AiJobSearchQuota getAiJobSearchQuota(User user) {
+        OffsetDateTime now = OffsetDateTime.now(BUSINESS_ZONE);
+        OffsetDateTime start = now.withDayOfMonth(1).toLocalDate().atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
+        OffsetDateTime resetAt = start.plusMonths(1);
+        int used = countAiJobSearchesSince(user.getId(), start);
+        int limit = resolveLimit(user, "maxAiJobSearchesPerMonth", "max_ai_job_searches_per_month", 3);
+        int remaining = limit < 0 ? -1 : Math.max(0, limit - used);
+        return new AiJobSearchQuota(used, limit, remaining, resetAt);
+    }
+
+    @Transactional(readOnly = true)
+    public void requireAiJobSearch(User user) {
+        AiJobSearchQuota quota = getAiJobSearchQuota(user);
+        enforce(user, quota.used(), quota.limit(),
+                "Bạn đã đạt giới hạn tìm việc bằng AI trong tháng này (" + quota.used() + "/" + quota.limit() + ").");
+    }
+
+    @Transactional
+    public void consumeAiJobSearch(User user) {
+        String subscriptionId = findActiveSubscriptionId(user.getId());
+        if (subscriptionId == null) {
+            return;
+        }
+        int limit = resolveLimit(user, "maxAiJobSearchesPerMonth", "max_ai_job_searches_per_month", 3);
+        upsertMonthlyUsage(subscriptionId, AI_JOB_SEARCHES, limit);
+        jdbc.update("""
+                        UPDATE subscription_usages
+                        SET used_count = used_count + 1,
+                            updated_at = now()
+                        WHERE subscription_id = CAST(:subscriptionId AS uuid)
+                          AND feature_key = :featureKey
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("subscriptionId", subscriptionId)
+                        .addValue("featureKey", AI_JOB_SEARCHES));
+    }
+
     /**
      * Snapshot hạn mức theo gói đang active (hoặc free settings) — dùng live count.
      */
@@ -144,6 +189,14 @@ public class FeatureLimitService {
                     resolveLimit(user, "maxAiSessionsPerDay", "max_ai_sessions_per_day", 3),
                     true
             ));
+            AiJobSearchQuota aiJobSearchQuota = getAiJobSearchQuota(user);
+            rows.add(usage(
+                    AI_JOB_SEARCHES,
+                    "Tìm việc bằng AI trong tháng",
+                    aiJobSearchQuota.used(),
+                    aiJobSearchQuota.limit(),
+                    false
+            ));
         }
         return rows;
     }
@@ -154,6 +207,7 @@ public class FeatureLimitService {
         upsertUsage(subscriptionId, CV_UPLOADS, featureInt(featuresJson, "maxCv", 10), false);
         upsertUsage(subscriptionId, APPLICATIONS, featureInt(featuresJson, "maxApplicationsPerDay", 50), true);
         upsertUsage(subscriptionId, AI_SESSIONS, featureInt(featuresJson, "maxAiSessionsPerDay", 20), true);
+        upsertMonthlyUsage(subscriptionId, AI_JOB_SEARCHES, featureInt(featuresJson, "maxAiJobSearchesPerMonth", 10));
     }
 
     /** Khi admin sửa hạn mức gói → cập nhật limit_count cho mọi subscription đang active của gói đó. */
@@ -227,6 +281,32 @@ public class FeatureLimitService {
                         .addValue("daily", daily));
     }
 
+    private void upsertMonthlyUsage(String subscriptionId, String featureKey, int limitCount) {
+        jdbc.update("""
+                        INSERT INTO subscription_usages (id, subscription_id, feature_key, used_count, limit_count, reset_at, updated_at)
+                        VALUES (gen_random_uuid(), CAST(:subscriptionId AS uuid), :featureKey, 0, :limitCount,
+                                (date_trunc('month', now() AT TIME ZONE 'Asia/Ho_Chi_Minh') + interval '1 month') AT TIME ZONE 'Asia/Ho_Chi_Minh',
+                                now())
+                        ON CONFLICT (subscription_id, feature_key) DO UPDATE
+                        SET limit_count = EXCLUDED.limit_count,
+                            reset_at = CASE
+                                WHEN subscription_usages.reset_at IS NULL OR subscription_usages.reset_at <= now()
+                                    THEN EXCLUDED.reset_at
+                                ELSE subscription_usages.reset_at
+                            END,
+                            used_count = CASE
+                                WHEN subscription_usages.reset_at IS NULL OR subscription_usages.reset_at <= now()
+                                    THEN 0
+                                ELSE subscription_usages.used_count
+                            END,
+                            updated_at = now()
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("subscriptionId", subscriptionId)
+                        .addValue("featureKey", featureKey)
+                        .addValue("limitCount", limitCount));
+    }
+
     private int resolveLimit(User user, String planFeatureKey, String freeSettingKey, int freeDefault) {
         ActivePlan plan = findActivePlan(user.getId());
         if (plan != null) {
@@ -278,9 +358,9 @@ public class FeatureLimitService {
         try {
             JsonNode node = objectMapper.readTree(featuresJson).get(key);
             if (node != null && node.isNumber()) {
-                return Math.max(0, node.asInt());
+                return node.asInt();
             }
-            if (node != null && node.isTextual() && node.asText().matches("\\d+")) {
+            if (node != null && node.isTextual() && node.asText().matches("-?\\d+")) {
                 return Integer.parseInt(node.asText());
             }
         } catch (Exception ignored) {
@@ -304,6 +384,38 @@ public class FeatureLimitService {
             return 0;
         }
         return featureInt(plan.featuresJson(), "listingPriority", 0);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<UUID, Integer> resolveListingPrioritiesForUsers(Collection<UUID> userIds) {
+        List<UUID> distinctUserIds = userIds == null
+                ? List.of()
+                : userIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (distinctUserIds.isEmpty()) {
+            return Map.of();
+        }
+        List<ActivePlanForUser> plans = jdbc.query("""
+                        SELECT DISTINCT ON (s.user_id)
+                               s.user_id::text AS user_id,
+                               COALESCE(p.features::text, '{}') AS features_json
+                        FROM subscriptions s
+                        JOIN plans p ON p.id = s.plan_id
+                        WHERE s.user_id IN (:userIds)
+                          AND s.status = 'active'
+                          AND (s.end_date IS NULL OR s.end_date > now())
+                        ORDER BY s.user_id, s.start_date DESC NULLS LAST
+                        """,
+                new MapSqlParameterSource("userIds", distinctUserIds),
+                (rs, rowNum) -> new ActivePlanForUser(
+                        UUID.fromString(rs.getString("user_id")),
+                        rs.getString("features_json")
+                ));
+        Map<UUID, Integer> priorities = new LinkedHashMap<>();
+        plans.forEach(plan -> priorities.put(
+                plan.userId(),
+                featureInt(plan.featuresJson(), "listingPriority", 0)
+        ));
+        return priorities;
     }
 
     public static boolean isFeatured(int listingPriority) {
@@ -384,6 +496,28 @@ public class FeatureLimitService {
         return count == null ? 0 : count.intValue();
     }
 
+    private int countAiJobSearchesSince(UUID userId, OffsetDateTime start) {
+        Long count = jdbc.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM ai_job_search_runs r
+                        JOIN job_seekers js ON js.id = r.job_seeker_id
+                        WHERE js.user_id = CAST(:userId AS uuid)
+                          AND r.quota_consumed = true
+                          AND r.created_at >= :start
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("userId", userId.toString())
+                        .addValue("start", start),
+                Long.class);
+        return count == null ? 0 : count.intValue();
+    }
+
+    public record AiJobSearchQuota(int used, int limit, int remaining, OffsetDateTime resetAt) {
+    }
+
     private record ActivePlan(String subscriptionId, String featuresJson) {
+    }
+
+    private record ActivePlanForUser(UUID userId, String featuresJson) {
     }
 }

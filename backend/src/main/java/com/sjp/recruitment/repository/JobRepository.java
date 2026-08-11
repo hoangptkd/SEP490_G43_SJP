@@ -3,6 +3,7 @@ package com.sjp.recruitment.repository;
 import com.sjp.recruitment.model.entity.Job;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -71,7 +72,38 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     Page<Job> findByLocation(@Param("location") String location, Pageable pageable);
 
     List<Job> findTop20ByStatusOrderByCreatedAtDesc(String status);
+
+    @Query("SELECT j.id FROM Job j WHERE j.status = 'published' ORDER BY j.createdAt DESC")
+    List<UUID> findRecommendationJobIds(Pageable pageable);
+
+    @EntityGraph(attributePaths = {
+            "company", "employer", "employer.user", "companyLocation", "jobSkills", "jobSkills.skill"
+    })
+    @Query("SELECT DISTINCT j FROM Job j WHERE j.id IN :jobIds")
+    List<Job> findRecommendationJobsByIds(@Param("jobIds") List<UUID> jobIds);
+
     List<Job> findByStatusAndSalaryMinGreaterThan(String status, BigDecimal minSalary);
+
+    @Query("""
+            SELECT DISTINCT j FROM Job j
+            JOIN FETCH j.company c
+            LEFT JOIN FETCH j.jobSkills js
+            LEFT JOIN FETCH js.skill
+            WHERE LOWER(j.status) = 'published'
+              AND (j.deadline IS NULL OR j.deadline >= :today)
+              AND LOWER(COALESCE(c.status, '')) NOT IN ('removed', 'locked', 'suspended')
+            """)
+    List<Job> findPublicJobsForAi(@Param("today") LocalDate today);
+
+    @Query("""
+            SELECT j.id FROM Job j
+            JOIN j.company c
+            WHERE j.id IN :jobIds
+              AND LOWER(j.status) = 'published'
+              AND (j.deadline IS NULL OR j.deadline >= :today)
+              AND LOWER(COALESCE(c.status, '')) NOT IN ('removed', 'locked', 'suspended')
+            """)
+    List<UUID> findPublicAiJobIds(@Param("jobIds") List<UUID> jobIds, @Param("today") LocalDate today);
 
     @Query("""
             SELECT j FROM Job j

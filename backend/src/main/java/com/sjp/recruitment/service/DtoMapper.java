@@ -156,6 +156,22 @@ public class DtoMapper {
     }
 
     public JobResponse toJobResponse(Job job, boolean saved, boolean applied, Integer matchScore) {
+        long appsCount = (applicationRepository != null && job.getId() != null) ? applicationRepository.countByJobId(job.getId()) : 0L;
+        int listingPriority = 0;
+        if (featureLimitService != null && job.getEmployer() != null && job.getEmployer().getUser() != null) {
+            listingPriority = featureLimitService.resolveListingPriorityForUser(job.getEmployer().getUser().getId());
+        }
+        return toJobResponse(job, saved, applied, matchScore, appsCount, listingPriority);
+    }
+
+    public JobResponse toJobResponse(
+            Job job,
+            boolean saved,
+            boolean applied,
+            Integer matchScore,
+            long appsCount,
+            int listingPriority
+    ) {
         String rejectionReason = job.getRejectionReason();
         if (rejectionReason == null && "rejected".equalsIgnoreCase(job.getStatus()) && jobReviewHistoryRepository != null && job.getId() != null) {
             rejectionReason = jobReviewHistoryRepository.findFirstByJobIdAndActionOrderByReviewedAtDesc(job.getId(), "REJECTED")
@@ -166,11 +182,6 @@ public class DtoMapper {
         if (("PUBLISHED".equals(frontendStatus) || "ACTIVE".equals(frontendStatus))
                 && job.getDeadline() != null && job.getDeadline().isBefore(java.time.LocalDate.now())) {
             frontendStatus = "EXPIRED";
-        }
-        long appsCount = (applicationRepository != null && job.getId() != null) ? applicationRepository.countByJobId(job.getId()) : 0L;
-        int listingPriority = 0;
-        if (featureLimitService != null && job.getEmployer() != null && job.getEmployer().getUser() != null) {
-            listingPriority = featureLimitService.resolveListingPriorityForUser(job.getEmployer().getUser().getId());
         }
         return new JobResponse(
                 String.valueOf(job.getId()),

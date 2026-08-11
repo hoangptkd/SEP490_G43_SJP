@@ -17,6 +17,7 @@ public record PlanCatalogResponse(
         Integer maxCv,
         Integer maxApplicationsPerDay,
         Integer maxAiSessionsPerDay,
+        Integer maxAiJobSearchesPerMonth,
         Integer listingPriority
 ) {
 }

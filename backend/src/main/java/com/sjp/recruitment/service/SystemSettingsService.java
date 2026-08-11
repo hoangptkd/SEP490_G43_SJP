@@ -19,6 +19,8 @@ public class SystemSettingsService {
     public static final String MAINTENANCE_MODE = "maintenance_mode";
     public static final String COMPANY_REVIEW_REQUIRED = "company_review_required";
     public static final String AI_INTERVIEW_ENABLED = "ai_interview_enabled";
+    public static final String AI_JOB_SEARCH_ENABLED = "ai_job_search_enabled";
+    public static final String AI_JOB_SEARCH_POLICY_VERSION = "ai_job_search_policy_version";
     public static final String AI_SYSTEM_PROMPT = "ai_system_prompt";
     public static final String AI_FEEDBACK_PROMPT = "ai_feedback_prompt";
     public static final String PAYMENT_GATEWAY_ENABLED = "payment_gateway_enabled";
@@ -71,6 +73,10 @@ public class SystemSettingsService {
 
     public boolean isAiInterviewEnabled() {
         return getBoolean(AI_INTERVIEW_ENABLED, true);
+    }
+
+    public boolean isAiJobSearchEnabled() {
+        return getBoolean(AI_JOB_SEARCH_ENABLED, true);
     }
 
     public boolean isPaymentGatewayEnabled() {

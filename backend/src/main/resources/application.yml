@@ -135,6 +135,20 @@ app:
       min-speech-duration-ms: ${VAD_MIN_SPEECH_DURATION_MS:250}
       min-silence-duration-ms: ${VAD_MIN_SILENCE_DURATION_MS:100}
       speech-pad-ms: ${VAD_SPEECH_PAD_MS:30}
+  ai-job-search:
+    enabled: ${AI_JOB_SEARCH_ENABLED:true}
+    shopaikey-api-key: ${SHOPAIKEY_API_KEY:}
+    shopaikey-base-url: ${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}
+    shopaikey-model: ${SHOPAIKEY_MODEL:gpt-4.1-mini}
+    prompt-version: ${AI_JOB_SEARCH_PROMPT_VERSION:ai-job-search-v1}
+    provider-connect-timeout-ms: ${AI_JOB_SEARCH_CONNECT_TIMEOUT_MS:5000}
+    provider-read-timeout-ms: ${AI_JOB_SEARCH_READ_TIMEOUT_MS:25000}
+    cache-hours: ${AI_JOB_SEARCH_CACHE_HOURS:24}
+    max-candidate-jobs: ${AI_JOB_SEARCH_MAX_CANDIDATE_JOBS:30}
+    max-prompt-jobs: ${AI_JOB_SEARCH_MAX_PROMPT_JOBS:20}
+    max-results: ${AI_JOB_SEARCH_MAX_RESULTS:10}
+    max-cv-characters: ${AI_JOB_SEARCH_MAX_CV_CHARACTERS:12000}
+    retention-days: ${AI_JOB_SEARCH_RETENTION_DAYS:90}
   storage:
     cv-upload-dir: ${CV_UPLOAD_DIR:}
     avatar-upload-dir: ${AVATAR_UPLOAD_DIR:}
