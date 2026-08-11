@@ -1,25 +1,7 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ChangeEvent, FormEvent, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import AdminAuditPage from './pages/admin/AdminAuditPage';
-import AdminBillingPage from './pages/admin/AdminBillingPage';
-import AdminCompanyDetailPage from './pages/admin/AdminCompanyDetailPage';
-import AdminCompanyReviewPage from './pages/admin/AdminCompanyReviewPage';
-import AdminDashboardPage from './pages/admin/AdminDashboardPage';
-import AdminJobDetailPage from './pages/admin/AdminJobDetailPage';
-import AdminJobsPage from './pages/admin/AdminJobsPage';
 import AdminLayout, { AdminProtected } from './pages/admin/AdminLayout';
-import AdminLoginPage from './pages/admin/AdminLoginPage';
-import AdminPlanFormPage from './pages/admin/AdminPlanFormPage';
-import AdminProfilePage from './pages/admin/AdminProfilePage';
-import AdminSettingsPage from './pages/admin/AdminSettingsPage';
-import AdminStatisticsPage from './pages/admin/AdminStatisticsPage';
-import AdminUsersPage from './pages/admin/AdminUsersPage';
-import EmployerSubscriptionPage from './pages/billing/EmployerSubscriptionPage';
-import PaymentResultPage from './pages/billing/PaymentResultPage';
-import BankTransferCheckoutPage from './pages/billing/BankTransferCheckoutPage';
-import PaymentCheckoutPage from './pages/billing/PaymentCheckoutPage';
-import SubscriptionPlansPage from './pages/billing/SubscriptionPlansPage';
 import { authService } from './services/authService';
 import { employerService } from './services/employerService';
 import { aiInterviewService } from './services/aiInterviewService';
@@ -30,10 +12,6 @@ import PlanLimitAlert from './components/PlanLimitAlert';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
-import CompanyProfilePage from './pages/Employer/CompanyProfilePage';
-import CompanyLocationsPage from './pages/Employer/CompanyLocationsPage';
-import CompanyVerificationPage from './pages/Employer/CompanyVerificationPage';
-import EmployerJobsPage from './pages/Employer/EmployerJobsPage';
 import type {
   AiInterviewConfig,
   AiInterviewEligibleApplication,
@@ -41,20 +19,46 @@ import type {
   AiInterviewQuestionSet,
   AiInterviewSession,
 } from './types/aiInterview';
-import EmployerApplicationsPage from './pages/Employer/EmployerApplicationsPage';
-import EmployerNotificationsPage from './pages/Employer/EmployerNotificationsPage';
-import EmployerSettingsPage from './pages/Employer/EmployerSettingsPage';
-import EmployerDashboardPage from './pages/Employer/EmployerDashboardPage';
 import type {
   CandidateApplication,
   CandidateProfile,
   CvFile,
   CvVersion,
   NotificationItem,
+  JobAlert,
+  JobAlertInput,
+  SubmittedResume,
   SubscriptionView,
 } from './types/candidateDomain';
 import type { AccountView } from './types/auth';
-import type { Category, Job, JobFilters, Recommendation } from './types/job';
+import type { Category, Job, JobFilters, PublicCompany, Recommendation } from './types/job';
+
+const AdminAuditPage = lazy(() => import('./pages/admin/AdminAuditPage'));
+const AdminBillingPage = lazy(() => import('./pages/admin/AdminBillingPage'));
+const AdminCompanyDetailPage = lazy(() => import('./pages/admin/AdminCompanyDetailPage'));
+const AdminCompanyReviewPage = lazy(() => import('./pages/admin/AdminCompanyReviewPage'));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const AdminJobDetailPage = lazy(() => import('./pages/admin/AdminJobDetailPage'));
+const AdminJobsPage = lazy(() => import('./pages/admin/AdminJobsPage'));
+const AdminLoginPage = lazy(() => import('./pages/admin/AdminLoginPage'));
+const AdminPlanFormPage = lazy(() => import('./pages/admin/AdminPlanFormPage'));
+const AdminProfilePage = lazy(() => import('./pages/admin/AdminProfilePage'));
+const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
+const AdminStatisticsPage = lazy(() => import('./pages/admin/AdminStatisticsPage'));
+const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
+const EmployerSubscriptionPage = lazy(() => import('./pages/billing/EmployerSubscriptionPage'));
+const PaymentResultPage = lazy(() => import('./pages/billing/PaymentResultPage'));
+const BankTransferCheckoutPage = lazy(() => import('./pages/billing/BankTransferCheckoutPage'));
+const PaymentCheckoutPage = lazy(() => import('./pages/billing/PaymentCheckoutPage'));
+const SubscriptionPlansPage = lazy(() => import('./pages/billing/SubscriptionPlansPage'));
+const CompanyProfilePage = lazy(() => import('./pages/Employer/CompanyProfilePage'));
+const CompanyLocationsPage = lazy(() => import('./pages/Employer/CompanyLocationsPage'));
+const CompanyVerificationPage = lazy(() => import('./pages/Employer/CompanyVerificationPage'));
+const EmployerJobsPage = lazy(() => import('./pages/Employer/EmployerJobsPage'));
+const EmployerApplicationsPage = lazy(() => import('./pages/Employer/EmployerApplicationsPage'));
+const EmployerNotificationsPage = lazy(() => import('./pages/Employer/EmployerNotificationsPage'));
+const EmployerSettingsPage = lazy(() => import('./pages/Employer/EmployerSettingsPage'));
+const EmployerDashboardPage = lazy(() => import('./pages/Employer/EmployerDashboardPage'));
 
 // ─── Framer Motion variants ────────────────────────────────────────────────
 const fadeUp = {
@@ -142,6 +146,7 @@ function App() {
   }
 
   return (
+    <Suspense fallback={<div className="card" role="status" style={{ margin: 24 }}>Đang tải trang...</div>}>
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -153,6 +158,7 @@ function App() {
       <Route path="/select-role" element={<SelectRolePage />} />
       <Route path="/jobs" element={<JobsPage />} />
       <Route path="/jobs/:id" element={<JobDetailPage />} />
+      <Route path="/companies/:id" element={<CompanyDetailPage />} />
       <Route path="/candidate" element={<Protected role="CANDIDATE"><CandidateLayout /></Protected>}>
         <Route index element={<CandidateHome />} />
         <Route path="profile" element={<ProfilePage />} />
@@ -163,6 +169,7 @@ function App() {
         <Route path="applications/:id" element={<ApplicationDetailPage />} />
         <Route path="ai-interviews" element={<AiInterviewPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="job-alerts" element={<JobAlertsPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
         <Route path="subscription/plans" element={<SubscriptionPlansPage backTo="/candidate/subscription" backLabel="Quay lại gói dịch vụ" />} />
       </Route>
@@ -200,6 +207,7 @@ function App() {
         <Route path="profile" element={<AdminProfilePage />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }
 
@@ -421,6 +429,16 @@ function ApplyJobModal({
   const [preferredLocation, setPreferredLocation] = useState(job.location || '');
   const [coverLetter, setCoverLetter] = useState('');
   const [fileError, setFileError] = useState('');
+  const dirty = selectedResume !== defaultResume
+    || Boolean(file)
+    || preferredLocation !== (job.location || '')
+    || Boolean(coverLetter.trim());
+
+  const requestClose = useCallback(() => {
+    if (busy) return;
+    if (dirty && !window.confirm('Bạn có thông tin ứng tuyển chưa gửi. Bạn vẫn muốn đóng cửa sổ này?')) return;
+    onClose();
+  }, [busy, dirty, onClose]);
 
   useEffect(() => {
     setSelectedResume(defaultResume);
@@ -432,7 +450,7 @@ function ApplyJobModal({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape' && !busy) {
         event.preventDefault();
-        onClose();
+        requestClose();
       }
       keepFocusInsideDialog(event, modalRef.current);
     }
@@ -441,7 +459,7 @@ function ApplyJobModal({
       document.removeEventListener('keydown', onKeyDown);
       previousFocus?.focus();
     };
-  }, [busy, onClose]);
+  }, [busy, requestClose]);
 
   function validateFile(nextFile: File) {
     const name = nextFile.name.toLowerCase();
@@ -491,7 +509,7 @@ function ApplyJobModal({
     && !busy;
 
   return (
-    <div className="modal-backdrop application-modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop application-modal-backdrop" role="presentation" onMouseDown={requestClose}>
       <motion.form
         ref={modalRef}
         className="application-modal"
@@ -511,7 +529,7 @@ function ApplyJobModal({
             <h2 id="application-modal-title">Ứng tuyển</h2>
             <p>{job.title}</p>
           </div>
-          <button type="button" className="icon-button" aria-label="Đóng" onClick={onClose}>×</button>
+          <button type="button" className="icon-button" aria-label="Đóng" onClick={requestClose}>×</button>
         </div>
 
         <div className="application-modal-body">
@@ -613,6 +631,7 @@ function ApplyJobModal({
               value={preferredLocation}
               onChange={(event) => setPreferredLocation(event.target.value)}
               placeholder="Ví dụ: Hà Nội, Remote"
+              maxLength={255}
               required
             />
           </label>
@@ -661,11 +680,12 @@ function CandidateHomeActions() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [open, setOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notificationError, setNotificationError] = useState('');
 
   useEffect(() => {
     Promise.all([
       candidateService.getProfile().catch(() => null),
-      candidateService.getNotifications().catch(() => []),
+      candidateService.getNotifications(0, 20).then((result) => result.items).catch(() => []),
     ]).then(([profileData, notificationData]) => {
       setProfile(profileData);
       setNotifications(notificationData);
@@ -681,6 +701,16 @@ function CandidateHomeActions() {
     }
     document.addEventListener('mousedown', closeOnOutside);
     return () => document.removeEventListener('mousedown', closeOnOutside);
+  }, []);
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      setNotificationOpen(false);
+    }
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
   }, []);
 
   function logout() {
@@ -700,15 +730,27 @@ function CandidateHomeActions() {
   async function openNotification(item: NotificationItem) {
     if (!item.read) {
       setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry));
-      await candidateService.markNotificationRead(item.id).catch(() => {});
+      try {
+        await candidateService.markNotificationRead(item.id);
+      } catch (err) {
+        setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, read: false } : entry));
+        setNotificationError(readError(err));
+        return;
+      }
     }
     setNotificationOpen(false);
     navigate(notificationLink(item));
   }
 
   async function markAllHomeNotificationsRead() {
+    const previous = notifications;
     setNotifications((current) => current.map((entry) => ({ ...entry, read: true })));
-    await candidateService.markAllNotificationsRead().catch(() => {});
+    try {
+      await candidateService.markAllNotificationsRead();
+    } catch (err) {
+      setNotifications(previous);
+      setNotificationError(readError(err));
+    }
   }
 
   const displayName = profile?.fullName || user?.email?.split('@')[0] || 'Candidate';
@@ -726,6 +768,8 @@ function CandidateHomeActions() {
         type="button"
         className="home-icon-action"
         aria-label="Thông báo"
+        aria-expanded={notificationOpen}
+        aria-controls="candidate-notification-menu"
         onClick={() => {
           setNotificationOpen((value) => !value);
           setOpen(false);
@@ -737,7 +781,7 @@ function CandidateHomeActions() {
       <button type="button" className="home-avatar-trigger" onClick={() => {
         setOpen((value) => !value);
         setNotificationOpen(false);
-      }} aria-expanded={open}>
+      }} aria-expanded={open} aria-controls="candidate-account-menu" aria-label="Mở menu tài khoản">
         <span className="home-avatar">{initials}</span>
       </button>
 
@@ -745,6 +789,8 @@ function CandidateHomeActions() {
         {notificationOpen && (
           <motion.div
             className="candidate-notification-menu"
+            id="candidate-notification-menu"
+            role="menu"
             variants={scaleIn}
             initial="initial"
             animate="animate"
@@ -760,6 +806,7 @@ function CandidateHomeActions() {
               )}
             </div>
             <div className="notification-menu-list">
+              {notificationError && <div className="error-panel" role="alert">{notificationError}</div>}
               {notifications.length === 0 ? (
                 <div className="notification-menu-empty">Chưa có thông báo mới.</div>
               ) : notifications.slice(0, 6).map((item) => (
@@ -767,6 +814,7 @@ function CandidateHomeActions() {
                   key={item.id}
                   type="button"
                   className={`notification-menu-item ${item.read ? '' : 'unread'}`}
+                  role="menuitem"
                   onClick={() => void openNotification(item)}
                 >
                   <span>{item.title}</span>
@@ -782,6 +830,8 @@ function CandidateHomeActions() {
         {open && (
           <motion.div
             className="candidate-home-menu"
+            id="candidate-account-menu"
+            role="menu"
             variants={scaleIn}
             initial="initial"
             animate="animate"
@@ -804,9 +854,8 @@ function CandidateHomeActions() {
               <Link to="/candidate">Việc làm phù hợp với bạn</Link>
             </div>
             <div className="candidate-menu-group">
-              <strong>Quản lý CV & Cover letter</strong>
+              <strong>Quản lý CV</strong>
               <Link to="/candidate/cvs">CV của tôi</Link>
-              <Link to="/candidate/cvs">Cover Letter của tôi</Link>
             </div>
             <div className="candidate-menu-group">
               <strong>Cài đặt email & thông báo</strong>
@@ -880,6 +929,9 @@ function jobFiltersFromParams(params: URLSearchParams): JobFilters {
     location: params.get('location') || undefined,
     skills: params.get('skills') || undefined,
     experienceLevel: params.get('experienceLevel') || undefined,
+    category: params.get('category') || undefined,
+    jobType: params.get('jobType') || undefined,
+    workMode: params.get('workMode') || undefined,
     minSalary: numberParam(params, 'minSalary'),
     maxSalary: numberParam(params, 'maxSalary'),
     sort: params.get('sort') || 'newest',
@@ -891,7 +943,12 @@ function jobPageFromParams(params: URLSearchParams) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
 }
 
-function toJobSearchParams(filters: JobFilters, page = 0) {
+function jobSizeFromParams(params: URLSearchParams) {
+  const parsed = Number(params.get('size') || '12');
+  return [12, 24, 48].includes(parsed) ? parsed : 12;
+}
+
+function toJobSearchParams(filters: JobFilters, page = 0, size = 12) {
   const next = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null && String(value).trim() !== '') {
@@ -900,18 +957,81 @@ function toJobSearchParams(filters: JobFilters, page = 0) {
   });
   if (!next.get('sort')) next.set('sort', 'newest');
   if (page > 0) next.set('page', String(page));
+  if (size !== 12) next.set('size', String(size));
   return next;
 }
 
+function PaginationControls({
+  page,
+  totalPages,
+  onPageChange,
+  label,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  label: string;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <nav className="pagination-bar" aria-label={label}>
+      <button type="button" className="outline" disabled={page === 0} onClick={() => onPageChange(page - 1)}>
+        Trước
+      </button>
+      <span className="muted">Trang {page + 1} / {totalPages}</span>
+      <button type="button" className="outline" disabled={page >= totalPages - 1} onClick={() => onPageChange(page + 1)}>
+        Sau
+      </button>
+    </nav>
+  );
+}
+
+type NavigationState = { from?: string; scrollY?: number; restoreScrollY?: number };
+
+function internalOrigin(state: NavigationState | null | undefined, fallback: string) {
+  return state?.from?.startsWith('/') && !state.from.startsWith('//') ? state.from : fallback;
+}
+
+function useRestoreScrollPosition() {
+  const location = useLocation();
+  useEffect(() => {
+    const scrollY = (location.state as NavigationState | null)?.restoreScrollY;
+    if (typeof scrollY !== 'number') return;
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'auto' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.key, location.state]);
+}
+
 function Protected({ children, role }: { children: JSX.Element; role?: 'CANDIDATE' | 'EMPLOYER' | 'ADMIN' }) {
-  if (!getToken()) return <Navigate to="/login" replace />;
+  const token = getToken();
   const currentRole = localStorage.getItem('role');
-  if (role && currentRole !== role) {
-    const fallback = currentRole === 'CANDIDATE'
+  const [validatedRole, setValidatedRole] = useState<string | null | undefined>(token ? undefined : null);
+
+  useEffect(() => {
+    let active = true;
+    if (!token) {
+      setValidatedRole(null);
+      return () => { active = false; };
+    }
+    authService.getCurrentUser()
+      .then((user) => { if (active) setValidatedRole(user.role); })
+      .catch(() => {
+        if (!active) return;
+        clearAuthSession();
+        setValidatedRole(null);
+      });
+    return () => { active = false; };
+  }, [token]);
+
+  if (!token || validatedRole === null) return <Navigate to="/login" replace />;
+  if (validatedRole === undefined) return <div role="status" style={{ padding: 48, textAlign: 'center' }}>Đang xác thực phiên đăng nhập...</div>;
+  const effectiveRole = validatedRole || currentRole;
+  if (role && effectiveRole !== role) {
+    const fallback = effectiveRole === 'CANDIDATE'
       ? '/candidate'
-      : currentRole === 'EMPLOYER'
+      : effectiveRole === 'EMPLOYER'
         ? '/employer'
-        : currentRole === 'ADMIN'
+        : effectiveRole === 'ADMIN'
           ? '/admin'
           : '/login';
     return <Navigate to={fallback} replace />;
@@ -1815,6 +1935,13 @@ function ResetPasswordPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const token = params.get('token') || '';
+  const passwordRules = {
+    length: password.length >= 8,
+    upper: /[A-Z]/.test(password),
+    lower: /[a-z]/.test(password),
+    digit: /\d/.test(password),
+  };
+  const passwordValid = Object.values(passwordRules).every(Boolean);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1826,6 +1953,10 @@ function ResetPasswordPage() {
     }
     if (password !== confirmPassword) {
       setError('Mật khẩu nhập lại không khớp.');
+      return;
+    }
+    if (!passwordValid) {
+      setError('Mật khẩu chưa đáp ứng đầy đủ các yêu cầu bảo mật.');
       return;
     }
     setLoading(true);
@@ -1850,6 +1981,13 @@ function ResetPasswordPage() {
           <p>Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số</p>
         </div>
 
+        {!token && (
+          <div className="error-panel" role="alert">
+            Link đặt lại mật khẩu không hợp lệ hoặc thiếu token.
+            <div style={{ marginTop: 10 }}><Link to="/forgot-password">Yêu cầu link mới</Link></div>
+          </div>
+        )}
+
         <form className="auth-form" onSubmit={submit}>
           <label>
             Mật khẩu mới
@@ -1862,6 +2000,13 @@ function ResetPasswordPage() {
               autoComplete="new-password"
             />
           </label>
+
+          <ul className="muted" aria-label="Yêu cầu mật khẩu" style={{ margin: 0, paddingLeft: 20 }}>
+            <li>{passwordRules.length ? '✓' : '○'} Ít nhất 8 ký tự</li>
+            <li>{passwordRules.upper ? '✓' : '○'} Có chữ hoa</li>
+            <li>{passwordRules.lower ? '✓' : '○'} Có chữ thường</li>
+            <li>{passwordRules.digit ? '✓' : '○'} Có chữ số</li>
+          </ul>
 
           <label>
             Nhập lại mật khẩu
@@ -1891,7 +2036,7 @@ function ResetPasswordPage() {
             )}
           </AnimatePresence>
 
-          <button type="submit" disabled={loading || !token} style={{ width: '100%', minHeight: 44 }}>
+          <button type="submit" disabled={loading || !token || !passwordValid || password !== confirmPassword} style={{ width: '100%', minHeight: 44 }}>
             {loading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}
           </button>
         </form>
@@ -1908,6 +2053,8 @@ function ResetPasswordPage() {
 function VerifyEmailPage() {
   const [params] = useSearchParams();
   const [message, setMessage] = useState('Đang xác minh...');
+  const [email, setEmail] = useState('');
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     const token = params.get('token');
@@ -1917,12 +2064,34 @@ function VerifyEmailPage() {
       .catch((err) => setMessage(readError(err)));
   }, [params]);
 
+  async function resend(event: FormEvent) {
+    event.preventDefault();
+    setResending(true);
+    try {
+      const response = await authService.resendVerification(email);
+      setMessage(response.message);
+    } catch (err) {
+      setMessage(readError(err));
+    } finally {
+      setResending(false);
+    }
+  }
+
   return (
     <div className="auth-shell">
       <motion.div className="auth-card" variants={scaleIn} initial="initial" animate="animate"
         transition={{ duration: 0.25, ease: EASE_OUT }}>
         <div className="auth-logo"><h1>Xác minh Email</h1></div>
-        <p style={{ color: 'var(--on-muted)', textAlign: 'center' }}>{message}</p>
+        <p role="status" style={{ color: 'var(--on-muted)', textAlign: 'center' }}>{message}</p>
+        <form className="auth-form" onSubmit={resend}>
+          <label>
+            Gửi lại email xác minh
+            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
+          </label>
+          <button type="submit" className="outline" disabled={resending}>
+            {resending ? 'Đang gửi...' : 'Gửi lại email xác minh'}
+          </button>
+        </form>
         <div className="auth-footer"><Link to="/login">Về trang đăng nhập</Link></div>
       </motion.div>
     </div>
@@ -2022,33 +2191,55 @@ function SelectRolePage() {
 
 // ─── JOB SEARCH PAGE ────────────────────────────────────────────────────────
 function JobsPage() {
+  useRestoreScrollPosition();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [jobs, setJobs] = useState<Job[]>([]);
-  const filters = jobFiltersFromParams(params);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const filters = useMemo(() => jobFiltersFromParams(params), [params]);
   const page = jobPageFromParams(params);
+  const pageSize = jobSizeFromParams(params);
   const [draftFilters, setDraftFilters] = useState<JobFilters>(filters);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [error, setError] = useState('');
+  const [filterError, setFilterError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const filterRef = useRef<HTMLFormElement | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError('');
     try {
-      const response = await jobService.getAll(filters, page, 12);
+      const response = await jobService.getAll(filters, page, pageSize, signal);
+      if (signal?.aborted) return;
       setJobs(response.content);
       setTotalElements(response.totalElements);
       setTotalPages(response.totalPages);
+      if (response.page !== page) {
+        setParams(toJobSearchParams(filters, response.page, pageSize), { replace: true });
+      }
     } catch (err) {
-      setError(readLoginError(err));
+      if (!signal?.aborted) setError(readLoginError(err));
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
-  }, [filters.search, filters.location, filters.skills, filters.experienceLevel, filters.minSalary, filters.maxSalary, filters.sort, page]);
+  }, [filters, page, pageSize, setParams]);
 
-  useEffect(() => { void load(); }, [load]);
-  useEffect(() => { setDraftFilters(filters); }, [params]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
+  useEffect(() => {
+    let active = true;
+    jobService.getCategories()
+      .then((items) => { if (active) setCategories(items); })
+      .catch(() => { if (active) setCategories([]); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => { setDraftFilters(filters); }, [filters]);
 
   function updateDraft<K extends keyof JobFilters>(key: K, value: JobFilters[K]) {
     setDraftFilters((current) => ({ ...current, [key]: value || undefined }));
@@ -2056,30 +2247,53 @@ function JobsPage() {
 
   function applyFilters(event?: FormEvent) {
     event?.preventDefault();
-    setParams(toJobSearchParams(draftFilters, 0));
+    if (draftFilters.minSalary !== undefined && draftFilters.maxSalary !== undefined
+        && draftFilters.minSalary > draftFilters.maxSalary) {
+      setFilterError('Mức lương từ không được lớn hơn mức lương đến.');
+      return;
+    }
+    setFilterError('');
+    setParams(toJobSearchParams(draftFilters, 0, pageSize));
   }
 
   function resetFilters() {
+    setFilterError('');
     setDraftFilters({ sort: 'newest' });
-    setParams(toJobSearchParams({ sort: 'newest' }, 0));
+    setParams(toJobSearchParams({ sort: 'newest' }, 0, pageSize));
   }
 
   function changePage(nextPage: number) {
     const bounded = Math.max(0, Math.min(nextPage, Math.max(totalPages - 1, 0)));
-    setParams(toJobSearchParams(filters, bounded));
+    setParams(toJobSearchParams(filters, bounded, pageSize));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   const hasActiveFilters = Boolean(
-    filters.search || filters.location || filters.skills || filters.experienceLevel || filters.minSalary || filters.maxSalary,
+    filters.search || filters.location || filters.skills || filters.experienceLevel || filters.minSalary || filters.maxSalary
+      || filters.category || filters.jobType || filters.workMode,
   );
+
+  const activeFilterEntries = Object.entries(filters).filter(([key, value]) =>
+    key !== 'sort' && value !== undefined && value !== null && String(value).trim() !== '',
+  ) as [keyof JobFilters, string | number][];
+
+  function clearFilter(key: keyof JobFilters) {
+    setParams(toJobSearchParams({ ...filters, [key]: undefined }, 0, pageSize));
+  }
 
   return (
     <Shell>
       <div className="jobs-shell">
+        <button type="button" className="mobile-filter-toggle" aria-expanded={mobileFiltersOpen}
+          aria-controls="job-search-filters" onClick={() => {
+            setMobileFiltersOpen((value) => !value);
+            window.requestAnimationFrame(() => filterRef.current?.querySelector<HTMLInputElement>('input')?.focus());
+          }}>
+          {mobileFiltersOpen ? 'Đóng bộ lọc' : 'Mở bộ lọc tìm việc'}
+        </button>
         <div className="jobs-layout">
           {/* Filter Sidebar */}
-          <form className="filter-panel" onSubmit={applyFilters}>
+          <form ref={filterRef} id="job-search-filters" className={`filter-panel ${mobileFiltersOpen ? 'mobile-open' : ''}`} onSubmit={applyFilters}>
             <h2>Tìm việc làm</h2>
 
             <div>
@@ -2124,6 +2338,16 @@ function JobsPage() {
               />
             </div>
 
+            <div>
+              <label className="filter-label">Ngành / danh mục</label>
+              <select value={draftFilters.category || ''} onChange={(e) => updateDraft('category', e.target.value)}>
+                <option value="">Tất cả danh mục</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.slug || category.id}>{category.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="filter-split">
               <div>
                 <label className="filter-label">Lương từ</label>
@@ -2164,6 +2388,29 @@ function JobsPage() {
               </select>
             </div>
 
+            <div className="filter-split">
+              <div>
+                <label className="filter-label">Loại công việc</label>
+                <select value={draftFilters.jobType || ''} onChange={(e) => updateDraft('jobType', e.target.value)}>
+                  <option value="">Tất cả</option>
+                  <option value="full_time">Toàn thời gian</option>
+                  <option value="part_time">Bán thời gian</option>
+                  <option value="contract">Hợp đồng</option>
+                  <option value="internship">Thực tập</option>
+                  <option value="freelance">Tự do</option>
+                </select>
+              </div>
+              <div>
+                <label className="filter-label">Hình thức</label>
+                <select value={draftFilters.workMode || ''} onChange={(e) => updateDraft('workMode', e.target.value)}>
+                  <option value="">Tất cả</option>
+                  <option value="onsite">Tại văn phòng</option>
+                  <option value="remote">Từ xa</option>
+                  <option value="hybrid">Kết hợp</option>
+                </select>
+              </div>
+            </div>
+
             <div>
               <label className="filter-label">Sắp xếp</label>
               <select
@@ -2171,7 +2418,6 @@ function JobsPage() {
                 onChange={(e) => updateDraft('sort', e.target.value)}
               >
                 <option value="newest">Mới nhất</option>
-                <option value="relevance">Phù hợp nhất</option>
                 <option value="salary">Lương cao nhất</option>
                 <option value="deadline">Gần deadline</option>
               </select>
@@ -2189,17 +2435,46 @@ function JobsPage() {
               </button>
             )}
 
-            {error && <div className="error-panel">{error}</div>}
+            {filterError && <div className="error-panel" role="alert">{filterError}</div>}
+            {error && <div className="error-panel" role="alert">{error}</div>}
           </form>
 
           {/* Job List */}
           <div>
             <div className="jobs-list-header">
               <h1>Việc làm đang tuyển</h1>
-              {!loading && (
-                <span className="chip neutral">{totalElements} kết quả</span>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {localStorage.getItem('role') === 'CANDIDATE' && (
+                  <button type="button" className="outline sm"
+                    onClick={() => navigate(`/candidate/job-alerts?${toJobSearchParams(filters, 0, pageSize)}`)}>
+                    Lưu thành cảnh báo
+                  </button>
+                )}
+                {!loading && <span className="chip neutral">{totalElements} kết quả</span>}
+                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  Hiển thị
+                  <select
+                    aria-label="Số việc làm mỗi trang"
+                    value={pageSize}
+                    onChange={(event) => setParams(toJobSearchParams(filters, 0, Number(event.target.value)))}
+                  >
+                    <option value={12}>12</option>
+                    <option value={24}>24</option>
+                    <option value={48}>48</option>
+                  </select>
+                </label>
+              </div>
             </div>
+
+            {activeFilterEntries.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }} aria-label="Bộ lọc đang áp dụng">
+                {activeFilterEntries.map(([key, value]) => (
+                  <button key={key} type="button" className="chip neutral" onClick={() => clearFilter(key)}>
+                    {String(value)} ×
+                  </button>
+                ))}
+              </div>
+            )}
 
             {loading ? (
               <div className="job-grid">
@@ -2245,7 +2520,19 @@ function JobsPage() {
                 <button type="button" className="outline" disabled={page === 0} onClick={() => changePage(page - 1)}>
                   Trước
                 </button>
-                <span className="muted">Trang {page + 1} / {totalPages}</span>
+                {Array.from({ length: totalPages }, (_, index) => index)
+                  .filter((index) => index === 0 || index === totalPages - 1 || Math.abs(index - page) <= 1)
+                  .map((index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      className={index === page ? '' : 'outline'}
+                      aria-current={index === page ? 'page' : undefined}
+                      onClick={() => changePage(index)}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
                 <button type="button" className="outline" disabled={page >= totalPages - 1} onClick={() => changePage(page + 1)}>
                   Sau
                 </button>
@@ -2260,9 +2547,14 @@ function JobsPage() {
 
 // ─── JOB CARD ───────────────────────────────────────────────────────────────
 function JobCard({ job }: { job: Job }) {
+  const location = useLocation();
   const initials = job.company.name.slice(0, 2).toUpperCase();
   return (
-    <Link to={`/jobs/${job.id}`} style={{ display: 'block' }}>
+    <Link
+      to={`/jobs/${job.id}`}
+      state={{ from: `${location.pathname}${location.search}`, scrollY: window.scrollY } satisfies NavigationState}
+      style={{ display: 'block' }}
+    >
       <article className="job-card">
         <div className="job-card-header">
           <div className="job-company-logo">{initials}</div>
@@ -2328,9 +2620,89 @@ function JobCard({ job }: { job: Job }) {
   );
 }
 
+function CompanyDetailPage() {
+  const { id } = useParams();
+  const [params, setParams] = useSearchParams();
+  const page = jobPageFromParams(params);
+  const [company, setCompany] = useState<PublicCompany | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await jobService.getCompany(id, page, 10);
+      setCompany(data);
+      if (data.openJobs.totalPages > 0 && page >= data.openJobs.totalPages) {
+        setParams({ page: String(data.openJobs.totalPages - 1) }, { replace: true });
+      }
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [id, page, setParams]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  return (
+    <Shell>
+      <div className="jobs-shell" style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {loading ? (
+          <div className="card" style={{ padding: 48, textAlign: 'center' }}>Đang tải thông tin công ty...</div>
+        ) : error ? (
+          <div className="error-panel" role="alert">{error} <button className="outline sm" onClick={() => void load()}>Thử lại</button></div>
+        ) : company && (
+          <>
+            <section className="card" style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div className="job-company-logo" style={{ width: 72, height: 72 }}>
+                  {company.logoUrl ? <img src={company.logoUrl} alt="" /> : companyInitials(company.name)}
+                </div>
+                <div>
+                  <h1 style={{ margin: 0 }}>{company.name}</h1>
+                  <span className={`chip ${company.verified ? 'match' : 'neutral'}`}>
+                    {company.verified ? '✓ Đã xác minh' : 'Chưa xác minh'}
+                  </span>
+                </div>
+              </div>
+              {company.description && <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{company.description}</p>}
+              <div className="job-card-meta" style={{ marginTop: 16 }}>
+                {company.industry && <span className="job-meta-badge">Ngành: {company.industry}</span>}
+                {company.companySize && <span className="job-meta-badge">Quy mô: {company.companySize} nhân sự</span>}
+                {company.location && <span className="job-meta-badge">📍 {company.location}</span>}
+                {company.website && <a href={company.website} target="_blank" rel="noopener noreferrer">Website công ty</a>}
+              </div>
+              {company.locations.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <strong>Địa điểm làm việc</strong>
+                  <ul>{company.locations.map((item) => <li key={item.id}>{[item.branchName, item.address, item.city].filter(Boolean).join(' · ')}</li>)}</ul>
+                </div>
+              )}
+            </section>
+            <h2>Việc làm đang mở</h2>
+            {company.openJobs.items.length === 0 ? (
+              <div className="card empty-state">Công ty chưa có vị trí đang tuyển.</div>
+            ) : (
+              <div className="job-grid">{company.openJobs.items.map((job) => <JobCard key={job.id} job={job} />)}</div>
+            )}
+            <PaginationControls page={page} totalPages={company.openJobs.totalPages} label="Phân trang việc làm của công ty"
+              onPageChange={(nextPage) => setParams(nextPage > 0 ? { page: String(nextPage) } : {})} />
+          </>
+        )}
+      </div>
+    </Shell>
+  );
+}
+
 // ─── JOB DETAIL PAGE ────────────────────────────────────────────────────────
 function JobDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const navigationState = location.state as NavigationState | null;
+  const backTo = internalOrigin(navigationState, '/jobs');
   const [job, setJob] = useState<Job | null>(null);
   const [cvs, setCvs] = useState<CvFile[]>([]);
   const [versions, setVersions] = useState<CvVersion[]>([]);
@@ -2356,8 +2728,8 @@ function JobDetailPage() {
     setJob(await jobService.getById(id));
     if (isCandidate) {
       Promise.all([
-        candidateService.getCvs().catch(() => []),
-        candidateService.getCvVersions().catch(() => []),
+        candidateService.getCvs(0, 100).then((result) => result.items).catch(() => []),
+        candidateService.getCvVersions(0, 100).then((result) => result.items).catch(() => []),
         candidateService.getProfile().catch(() => null),
       ]).then(([uploadedCvs, builderVersions, profile]) => {
         setCvs(uploadedCvs);
@@ -2499,7 +2871,17 @@ function JobDetailPage() {
 
   return (
     <Shell>
-      <div className="job-detail-layout">
+      <div>
+        <div style={{ maxWidth: 1180, margin: '20px auto 0', padding: '0 24px' }}>
+          <Link
+            to={backTo}
+            state={{ restoreScrollY: navigationState?.scrollY } satisfies NavigationState}
+            style={{ color: 'var(--primary)', fontWeight: 600 }}
+          >
+            ← Quay lại danh sách
+          </Link>
+        </div>
+        <div className="job-detail-layout">
         {/* Left: Job details */}
         <div className="job-detail-main">
           {/* Header card */}
@@ -2510,7 +2892,7 @@ function JobDetailPage() {
                 {initials}
               </div>
               <div style={{ flex: 1 }}>
-                <p className="eyebrow">{job.company.name}</p>
+                <Link className="eyebrow" to={`/companies/${job.company.id}`}>{job.company.name}</Link>
                 <h1 className="job-detail-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   {job.title}
                   {job.featured && (
@@ -2722,11 +3104,15 @@ function JobDetailPage() {
                     </select>
                   </label>
                   <label className="filter-label">
-                    Mô tả thêm
+                    <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      Mô tả thêm
+                      <small>{reportDescription.length}/2000</small>
+                    </span>
                     <textarea
                       value={reportDescription}
-                      onChange={(e) => setReportDescription(e.target.value)}
+                      onChange={(e) => setReportDescription(e.target.value.slice(0, 2000))}
                       placeholder="Mô tả ngắn vấn đề bạn gặp phải..."
+                      maxLength={2000}
                       rows={3}
                     />
                   </label>
@@ -2774,6 +3160,7 @@ function JobDetailPage() {
           />
         )}
       </AnimatePresence>
+      </div>
     </Shell>
   );
 }
@@ -2782,10 +3169,11 @@ function JobDetailPage() {
 function CandidateLayout() {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    candidateService.getNotifications().then(data => {
-      setUnreadCount(data.filter(n => !n.read).length);
+    candidateService.getNotifications(0, 100).then(data => {
+      setUnreadCount(data.items.filter(n => !n.read).length);
     }).catch(() => {});
   }, []);
 
@@ -2801,12 +3189,17 @@ function CandidateLayout() {
     { to: '/candidate/applications', icon: '📋', label: 'Ứng tuyển' },
     { to: '/candidate/ai-interviews', icon: '🤖', label: 'AI Interview' },
     { to: '/candidate/notifications', icon: '🔔', label: 'Thông báo' },
+    { to: '/candidate/job-alerts', icon: '⏰', label: 'Cảnh báo việc làm' },
     { to: '/candidate/subscription', icon: '💎', label: 'Gói dịch vụ' },
   ];
 
   return (
     <div className="candidate-shell">
-      <aside className="candidate-nav">
+      <button type="button" className="candidate-mobile-nav-toggle" aria-expanded={mobileNavOpen}
+        aria-controls="candidate-navigation" onClick={() => setMobileNavOpen((value) => !value)}>
+        {mobileNavOpen ? 'Đóng menu' : 'Menu ứng viên'}
+      </button>
+      <aside id="candidate-navigation" className={`candidate-nav ${mobileNavOpen ? 'mobile-open' : ''}`}>
         <Link className="brand" to="/">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <rect x="2" y="7" width="20" height="14" rx="2" fill="var(--primary)" opacity="0.2"/>
@@ -2827,6 +3220,7 @@ function CandidateLayout() {
             key={to}
             to={to}
             end={end}
+            onClick={() => setMobileNavOpen(false)}
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
           >
             <span className="sidebar-link-icon">{icon}</span>
@@ -2888,17 +3282,17 @@ function CandidateHome() {
       try {
         const [recommendedJobs, savedJobs, applications, aiSessions, notifications] = await Promise.all([
           jobService.recommendations().catch(() => []),
-          candidateService.getSavedJobs().catch(() => []),
-          candidateService.getApplications().catch(() => []),
+          candidateService.getSavedJobs(0, 1).catch(() => null),
+          candidateService.getApplications(0, 1).catch(() => null),
           aiInterviewService.sessions().catch(() => []),
-          candidateService.getNotifications().catch(() => []),
+          candidateService.getNotifications(0, 100).catch(() => null),
         ]);
         setRecommendations(recommendedJobs);
         setMetrics({
-          savedJobs: savedJobs.length,
-          applications: applications.length,
+          savedJobs: savedJobs?.totalItems || 0,
+          applications: applications?.totalItems || 0,
           aiSessions: aiSessions.length,
-          unreadNotifications: notifications.filter((item) => !item.read).length,
+          unreadNotifications: notifications?.items.filter((item) => !item.read).length || 0,
         });
       } finally {
         setLoading(false);
@@ -3040,30 +3434,58 @@ function CandidateHome() {
 // ─── PROFILE PAGE ────────────────────────────────────────────────────────────
 function ProfilePage() {
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
-  const [skills, setSkills] = useState('');
+  const [skillDraft, setSkillDraft] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const savedSnapshotRef = useRef('');
 
   useEffect(() => {
     candidateService.getProfile().then((data) => {
       setProfile(data);
-      setSkills(data.skills.join(', '));
+      savedSnapshotRef.current = JSON.stringify(data);
     });
   }, []);
+
+  const dirty = Boolean(profile && (JSON.stringify(profile) !== savedSnapshotRef.current || skillDraft.trim()));
+
+  useEffect(() => {
+    function warnUnsaved(event: BeforeUnloadEvent) {
+      if (!dirty) return;
+      event.preventDefault();
+    }
+    window.addEventListener('beforeunload', warnUnsaved);
+    return () => window.removeEventListener('beforeunload', warnUnsaved);
+  }, [dirty]);
 
   async function save() {
     if (!profile) return;
     setSaving(true);
     try {
-      const saved = await candidateService.updateProfile({ ...profile, skills: skills.split(',').map((s) => s.trim()).filter(Boolean) });
+      const saved = await candidateService.updateProfile(profile);
       setProfile(saved);
-      setMessage('Da luu ho so thanh cong!');
+      savedSnapshotRef.current = JSON.stringify(saved);
+      setMessage('Đã lưu hồ sơ thành công!');
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
       setMessage(readError(err));
     } finally {
       setSaving(false);
     }
+  }
+
+  function addSkill(value = skillDraft) {
+    if (!profile) return;
+    const normalized = value.trim();
+    if (!normalized) return;
+    if (!profile.skills.some((skill) => skill.toLocaleLowerCase() === normalized.toLocaleLowerCase())) {
+      setProfile({ ...profile, skills: [...profile.skills, normalized] });
+    }
+    setSkillDraft('');
+  }
+
+  function removeSkill(value: string) {
+    if (!profile) return;
+    setProfile({ ...profile, skills: profile.skills.filter((skill) => skill !== value) });
   }
 
   function updateSectionItem(section: ProfileSectionKey, index: number, field: string, value: string) {
@@ -3130,6 +3552,26 @@ function ProfilePage() {
           </div>
         </div>
 
+        {!profile.applyReady && (
+          <div className="notice-panel" style={{ marginBottom: 20 }} role="status">
+            <strong>Hoàn thiện hồ sơ để ứng tuyển</strong>
+            <ul style={{ margin: '10px 0 0', paddingLeft: 20 }}>
+              {profile.missingReadinessItems.map((code) => (
+                <li key={code}>{({
+                  FULL_NAME: 'Thêm họ tên',
+                  PHONE: 'Thêm số điện thoại hợp lệ',
+                  LOCATION: 'Thêm địa điểm hiện tại',
+                  SKILLS: 'Thêm ít nhất một kỹ năng',
+                  CV: 'Tải lên ít nhất một CV PDF',
+                } as Record<string, string>)[code] || code}</li>
+              ))}
+            </ul>
+            {profile.missingReadinessItems.includes('CV') && (
+              <Link to="/candidate/cvs" className="button-link outline sm" style={{ marginTop: 10 }}>Đi đến quản lý CV</Link>
+            )}
+          </div>
+        )}
+
         <div className="form-grid two">
           <label>
             Họ tên
@@ -3164,12 +3606,61 @@ function ProfilePage() {
             />
           </label>
           <label>
+            Tiêu đề nghề nghiệp
+            <input maxLength={160} value={profile.headline || ''}
+              onChange={(e) => setProfile({ ...profile, headline: e.target.value })}
+              placeholder="Ví dụ: Backend Developer" />
+          </label>
+          <label>
+            Số năm kinh nghiệm
+            <input type="number" min={0} max={80} value={profile.experienceYears ?? 0}
+              onChange={(e) => setProfile({ ...profile, experienceYears: Number(e.target.value) })} />
+          </label>
+          <label>
+            Cấp độ kinh nghiệm
+            <select value={profile.experienceLevel || ''}
+              onChange={(e) => setProfile({ ...profile, experienceLevel: e.target.value || undefined })}>
+              <option value="">Chưa chọn</option>
+              <option value="intern">Thực tập</option>
+              <option value="fresher">Fresher</option>
+              <option value="junior">Junior</option>
+              <option value="middle">Middle</option>
+              <option value="senior">Senior</option>
+              <option value="lead">Lead</option>
+            </select>
+          </label>
+          <label>
+            LinkedIn
+            <input type="url" value={profile.linkedinUrl || ''}
+              onChange={(e) => setProfile({ ...profile, linkedinUrl: e.target.value })}
+              placeholder="https://linkedin.com/in/..." />
+          </label>
+          <label>
+            Portfolio
+            <input type="url" value={profile.portfolioUrl || ''}
+              onChange={(e) => setProfile({ ...profile, portfolioUrl: e.target.value })}
+              placeholder="https://..." />
+          </label>
+          <label className="wide">
             Kỹ năng
-            <input
-              value={skills}
-              onChange={(e) => setSkills(e.target.value)}
-              placeholder="Java, React, SQL (phân cách bằng dấu phẩy)"
-            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={skillDraft} onChange={(e) => setSkillDraft(e.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ',') {
+                    event.preventDefault();
+                    addSkill();
+                  }
+                }}
+                placeholder="Nhập kỹ năng rồi nhấn Enter" />
+              <button type="button" className="outline" onClick={() => addSkill()}>Thêm</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+              {profile.skills.map((skill) => (
+                <button key={skill} type="button" className="chip neutral" onClick={() => removeSkill(skill)}>
+                  {skill} ×
+                </button>
+              ))}
+            </div>
           </label>
           <label className="wide">
             Giới thiệu bản thân
@@ -3252,7 +3743,7 @@ function ProfilePage() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20, paddingTop: 16,
           borderTop: '1px solid var(--outline-variant)' }}>
-          <button onClick={save} disabled={saving}>
+          <button onClick={save} disabled={saving || !dirty}>
             {saving ? 'Đang lưu...' : '💾 Lưu hồ sơ'}
           </button>
           <AnimatePresence>
@@ -3279,6 +3770,7 @@ function AccountPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [deactivatePassword, setDeactivatePassword] = useState('');
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -3363,12 +3855,15 @@ function AccountPage() {
   async function deactivate(event: FormEvent) {
     event.preventDefault();
     resetNotice();
-    const confirmed = window.confirm('Ban chac chan muon vo hieu hoa tai khoan? Sau thao tac nay ban se bi dang xuat va can lien he ho tro neu muon khoi phuc.');
-    if (!confirmed) return;
+    setShowDeactivateConfirm(true);
+  }
+
+  async function confirmDeactivate() {
     setBusy('deactivate');
     try {
       await authService.deactivateAccount(deactivatePassword);
       clearAuthSession();
+      setShowDeactivateConfirm(false);
       navigate('/login');
     } catch (err) {
       setError(readError(err));
@@ -3454,13 +3949,13 @@ function AccountPage() {
               Chọn ảnh từ máy tính
               <input
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/png,image/jpeg"
                 onChange={(event) => setAvatarFile(event.target.files?.[0] || null)}
               />
             </label>
           </div>
           <p className="muted" style={{ margin: '10px 0 0', fontSize: '0.85rem' }}>
-            Hỗ trợ JPG, PNG hoặc WEBP, tối đa 2MB.
+            Hỗ trợ JPG hoặc PNG, tối đa 2MB, kích thước tối đa 4096x4096.
           </p>
           <button type="submit" disabled={busy === 'avatar'} style={{ marginTop: 16 }}>
             {busy === 'avatar' ? 'Đang tải...' : 'Tải ảnh đại diện'}
@@ -3531,6 +4026,19 @@ function AccountPage() {
           </button>
         </form>
       </div>
+      <AnimatePresence>
+        {showDeactivateConfirm && (
+          <ActionModal
+            title="Vô hiệu hóa tài khoản?"
+            description="Bạn sẽ bị đăng xuất ngay. Hồ sơ không còn truy cập được và bạn cần liên hệ hỗ trợ nếu muốn khôi phục tài khoản."
+            confirmLabel="Vô hiệu hóa tài khoản"
+            danger
+            busy={busy === 'deactivate'}
+            onClose={() => setShowDeactivateConfirm(false)}
+            onConfirm={() => void confirmDeactivate()}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -3539,6 +4047,10 @@ function AccountPage() {
 function CvPage() {
   const [cvs, setCvs] = useState<CvFile[]>([]);
   const [versions, setVersions] = useState<CvVersion[]>([]);
+  const [cvPage, setCvPage] = useState(0);
+  const [cvTotalPages, setCvTotalPages] = useState(0);
+  const [versionPage, setVersionPage] = useState(0);
+  const [versionTotalPages, setVersionTotalPages] = useState(0);
   const [message, setMessage] = useState('');
   const [planLimitReached, setPlanLimitReached] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -3548,12 +4060,18 @@ function CvPage() {
   const [pendingDeleteVersion, setPendingDeleteVersion] = useState<CvVersion | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
 
-  async function load() {
-    setCvs(await candidateService.getCvs());
-    setVersions(await candidateService.getCvVersions());
-  }
+  const load = useCallback(async () => {
+    const [cvResult, versionResult] = await Promise.all([
+      candidateService.getCvs(cvPage, 10),
+      candidateService.getCvVersions(versionPage, 10),
+    ]);
+    setCvs(cvResult.items);
+    setCvTotalPages(cvResult.totalPages);
+    setVersions(versionResult.items);
+    setVersionTotalPages(versionResult.totalPages);
+  }, [cvPage, versionPage]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, [load]);
 
   async function upload(file?: File) {
     if (!file) return;
@@ -3763,6 +4281,12 @@ function CvPage() {
               </div>
             ))}
           </div>
+          <PaginationControls
+            page={cvPage}
+            totalPages={cvTotalPages}
+            label="Phân trang CV đã tải lên"
+            onPageChange={setCvPage}
+          />
         </div>
       )}
 
@@ -3811,6 +4335,12 @@ function CvPage() {
             ))}
           </div>
         )}
+        <PaginationControls
+          page={versionPage}
+          totalPages={versionTotalPages}
+          label="Phân trang CV Builder"
+          onPageChange={setVersionPage}
+        />
       </div>
       <AnimatePresence>
         {pendingDeleteCv && (
@@ -3842,14 +4372,40 @@ function CvPage() {
 
 // ─── SAVED JOBS PAGE ─────────────────────────────────────────────────────────
 function SavedJobsPage() {
+  useRestoreScrollPosition();
+  const [params, setParams] = useSearchParams();
+  const page = jobPageFromParams(params);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(0);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    candidateService.getSavedJobs()
-      .then(setJobs)
+    setLoading(true);
+    setError('');
+    candidateService.getSavedJobs(page, 12)
+      .then((result) => {
+        setJobs(result.items);
+        setTotalPages(result.totalPages);
+        if (result.totalPages > 0 && page >= result.totalPages) {
+          setParams({ page: String(result.totalPages - 1) }, { replace: true });
+        }
+      })
+      .catch((err) => setError(readError(err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, reloadKey, setParams]);
+
+  async function removeSavedJob(job: Job) {
+    setError('');
+    setJobs((current) => current.filter((item) => item.id !== job.id));
+    try {
+      await candidateService.unsaveJob(job.id);
+    } catch (err) {
+      setJobs((current) => [job, ...current]);
+      setError(readError(err));
+    }
+  }
 
   return (
     <motion.div variants={fadeUp} initial="initial" animate="animate"
@@ -3858,6 +4414,14 @@ function SavedJobsPage() {
         <h1>Việc làm đã lưu</h1>
         <p>Các vị trí bạn đang quan tâm</p>
       </div>
+      {error && (
+        <div className="error-panel" role="alert" style={{ marginBottom: 16 }}>
+          {error}
+          <button type="button" className="outline sm" onClick={() => setReloadKey((value) => value + 1)} style={{ marginLeft: 10 }}>
+            Thử lại
+          </button>
+        </div>
+      )}
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2.5"
@@ -3875,16 +4439,30 @@ function SavedJobsPage() {
           </Link>
         </div>
       ) : (
-        <div className="job-grid">
-          {jobs.map((job, i) => (
-            <motion.div key={job.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, ease: EASE_OUT, delay: i * 0.05 }}>
-              <JobCard job={job} />
-            </motion.div>
-          ))}
-        </div>
+        <>
+          <div className="job-grid">
+            {jobs.map((job, i) => (
+              <motion.div key={job.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: EASE_OUT, delay: i * 0.05 }}>
+                <JobCard job={job} />
+                <div className="card" style={{ marginTop: -8, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span className={`chip ${job.applied ? 'match' : 'neutral'}`}>
+                    {job.applied ? 'Đã ứng tuyển' : (job.status === 'CLOSED' || (job.deadline && new Date(job.deadline) < new Date())) ? 'Đã đóng / hết hạn' : 'Đang tuyển'}
+                  </span>
+                  <button type="button" className="danger sm" onClick={() => void removeSavedJob(job)}>Bỏ lưu</button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            label="Phân trang việc làm đã lưu"
+            onPageChange={(nextPage) => setParams(nextPage > 0 ? { page: String(nextPage) } : {})}
+          />
+        </>
       )}
     </motion.div>
   );
@@ -3892,16 +4470,35 @@ function SavedJobsPage() {
 
 // ─── APPLICATIONS PAGE ───────────────────────────────────────────────────────
 function ApplicationsPage() {
+  useRestoreScrollPosition();
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const page = jobPageFromParams(params);
   const [applications, setApplications] = useState<CandidateApplication[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(0);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [message, setMessage] = useState('');
+  const [pageError, setPageError] = useState('');
 
-  useEffect(() => {
-    candidateService.getApplications()
-      .then(setApplications)
-      .finally(() => setLoading(false));
-  }, []);
+  const loadApplications = useCallback(async () => {
+    setLoading(true);
+    setPageError('');
+    try {
+      const result = await candidateService.getApplications(page, 10);
+      setApplications(result.items);
+      setTotalPages(result.totalPages);
+      if (result.totalPages > 0 && page >= result.totalPages) {
+        setParams({ page: String(result.totalPages - 1) }, { replace: true });
+      }
+    } catch (err) {
+      setPageError(readError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [page, setParams]);
+
+  useEffect(() => { void loadApplications(); }, [loadApplications]);
 
   const statusOptions = [
     { value: 'ALL', label: 'Tất cả', count: applications.length },
@@ -3916,10 +4513,10 @@ function ApplicationsPage() {
     : applications.filter((application) => application.status === statusFilter);
 
   async function openSubmittedCv(application: CandidateApplication) {
-    if (!application.cv?.id) return;
+    if (!application.submittedResume?.downloadAvailable && !application.cv?.id) return;
     setMessage('');
     try {
-      openBlobInNewTab(await candidateService.downloadCv(application.cv.id));
+      openBlobInNewTab(await candidateService.downloadSubmittedResume(application.id));
     } catch (err) {
       setMessage(readError(err));
     }
@@ -3932,6 +4529,7 @@ function ApplicationsPage() {
         <h1>Hồ sơ ứng tuyển</h1>
         <p>Theo dõi trạng thái từng công việc bạn đã nộp hồ sơ.</p>
       </div>
+      {pageError && <div className="error-panel" role="alert" style={{ marginBottom: 16 }}>{pageError} <button className="outline sm" onClick={() => void loadApplications()}>Thử lại</button></div>}
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>
@@ -3977,7 +4575,11 @@ function ApplicationsPage() {
               {filteredApplications.map((application, i) => {
                 const company = application.job.company;
                 const logoUrl = company.logoUrl;
-                const cvLabel = application.cv?.originalFileName || application.cvVersion?.title || 'Không có CV';
+                const cvLabel = application.submittedResume?.originalFileName
+                  || application.submittedResume?.title
+                  || application.cv?.originalFileName
+                  || application.cvVersion?.title
+                  || 'Không có CV';
                 const latestTimeline = application.timeline?.[application.timeline.length - 1];
                 return (
                   <motion.article
@@ -3998,7 +4600,11 @@ function ApplicationsPage() {
                     <div className="application-history-main">
                       <div className="application-history-title-row">
                         <div>
-                          <Link className="application-job-title" to={`/candidate/applications/${application.id}`}>
+                          <Link
+                            className="application-job-title"
+                            to={`/candidate/applications/${application.id}`}
+                            state={{ from: `${location.pathname}${location.search}`, scrollY: window.scrollY } satisfies NavigationState}
+                          >
                             {application.job.title}
                           </Link>
                           <p className="application-company-name">{company.name}</p>
@@ -4011,7 +4617,7 @@ function ApplicationsPage() {
                       <div className="application-history-meta">
                         <span>📅 Ứng tuyển: {formatDateTime(application.submittedAt)}</span>
                         <span>📍 {application.preferredLocation || application.job.location || 'Chưa có địa điểm'}</span>
-                        {application.cv?.id ? (
+                        {(application.submittedResume?.downloadAvailable || application.cv?.id) ? (
                           <button type="button" className="application-cv-link" onClick={() => void openSubmittedCv(application)}>
                             📄 CV ứng tuyển
                           </button>
@@ -4027,7 +4633,11 @@ function ApplicationsPage() {
                     </div>
 
                     <div className="application-history-actions">
-                      <Link className="button-link outline sm" to={`/candidate/applications/${application.id}`}>
+                      <Link
+                        className="button-link outline sm"
+                        to={`/candidate/applications/${application.id}`}
+                        state={{ from: `${location.pathname}${location.search}`, scrollY: window.scrollY } satisfies NavigationState}
+                      >
                         Xem chi tiết
                       </Link>
                     </div>
@@ -4036,15 +4646,87 @@ function ApplicationsPage() {
               })}
             </div>
           )}
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            label="Phân trang hồ sơ ứng tuyển"
+            onPageChange={(nextPage) => setParams(nextPage > 0 ? { page: String(nextPage) } : {})}
+          />
         </div>
       )}
     </motion.div>
   );
 }
 
+function SubmittedResumeSnapshotView({ resume }: { resume: SubmittedResume }) {
+  const snapshot = resume.builderSnapshot || {};
+  const primaryFields = [
+    ['fullName', 'Họ và tên'],
+    ['headline', 'Tiêu đề nghề nghiệp'],
+    ['phone', 'Số điện thoại'],
+    ['email', 'Email'],
+    ['location', 'Địa điểm'],
+    ['bio', 'Giới thiệu'],
+  ] as const;
+  const sections = [
+    ['education', 'Học vấn'],
+    ['workExperience', 'Kinh nghiệm làm việc'],
+    ['projects', 'Dự án'],
+    ['certifications', 'Chứng chỉ'],
+  ] as const;
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <dl style={{ display: 'grid', gap: 8, margin: 0 }}>
+        {primaryFields.map(([key, label]) => {
+          const value = snapshot[key];
+          if (typeof value !== 'string' || !value.trim()) return null;
+          return (
+            <div key={key}>
+              <dt className="muted" style={{ fontSize: '0.8rem' }}>{label}</dt>
+              <dd style={{ margin: '2px 0 0', whiteSpace: 'pre-wrap' }}>{value}</dd>
+            </div>
+          );
+        })}
+      </dl>
+      {Array.isArray(snapshot.skills) && snapshot.skills.length > 0 && (
+        <div>
+          <strong>Kỹ năng</strong>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {snapshot.skills.map((skill, index) => (
+              <span className="chip neutral" key={`${String(skill)}-${index}`}>{String(skill)}</span>
+            ))}
+          </div>
+        </div>
+      )}
+      {sections.map(([key, label]) => {
+        const items = snapshot[key];
+        if (!Array.isArray(items) || items.length === 0) return null;
+        return (
+          <section key={key}>
+            <strong>{label}</strong>
+            <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+              {items.map((item, index) => (
+                <div className="notice-panel" key={index}>
+                  {item && typeof item === 'object'
+                    ? Object.values(item as Record<string, unknown>).filter((value) => typeof value === 'string' && value.trim()).map(String).join(' · ')
+                    : String(item)}
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── APPLICATION DETAIL PAGE ─────────────────────────────────────────────────
 function ApplicationDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const navigationState = location.state as NavigationState | null;
+  const backTo = internalOrigin(navigationState, '/candidate/applications');
   const [application, setApplication] = useState<CandidateApplication | null>(null);
   const [message, setMessage] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
@@ -4063,10 +4745,10 @@ function ApplicationDetailPage() {
     void loadApplication().catch((err) => setMessage(readError(err)));
   }, [loadApplication]);
 
-  async function openBlobInNewTabFromCv(cvId: string) {
+  async function openSubmittedResume(applicationId: string) {
     setMessage('');
     try {
-      openBlobInNewTab(await candidateService.downloadCv(cvId));
+      openBlobInNewTab(await candidateService.downloadSubmittedResume(applicationId));
     } catch (err) {
       setMessage(readError(err));
     }
@@ -4134,7 +4816,11 @@ function ApplicationDetailPage() {
     <motion.div variants={fadeUp} initial="initial" animate="animate"
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div style={{ marginBottom: 20 }}>
-        <Link to="/candidate/applications" style={{ color: 'var(--primary)', fontSize: '0.875rem', fontWeight: 600 }}>
+        <Link
+          to={backTo}
+          state={{ restoreScrollY: navigationState?.scrollY } satisfies NavigationState}
+          style={{ color: 'var(--primary)', fontSize: '0.875rem', fontWeight: 600 }}
+        >
           ← Quay lại danh sách
         </Link>
       </div>
@@ -4147,14 +4833,39 @@ function ApplicationDetailPage() {
             {statusLabels[application.status] || application.status}
           </span>
           <span className="chip neutral">
-            CV: {application.cv?.originalFileName || application.cvVersion?.title || 'Không có'}
+            CV: {application.submittedResume?.originalFileName
+              || application.submittedResume?.title
+              || application.cv?.originalFileName
+              || application.cvVersion?.title
+              || 'Không có'}
           </span>
         </div>
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h2 style={{ marginBottom: 12 }}>CV da nop</h2>
-        {application.cvVersion ? (
+        {application.submittedResume?.sourceType === 'builder' ? (
+          <div>
+            <strong>{application.submittedResume.title || 'CV Builder'}</strong>
+            <p className="muted" style={{ margin: '4px 0 16px' }}>
+              Snapshot tại thời điểm ứng tuyển
+              {application.submittedResume.sourceUpdatedAt ? ` · Cập nhật ${formatDate(application.submittedResume.sourceUpdatedAt)}` : ''}
+            </p>
+            <SubmittedResumeSnapshotView resume={application.submittedResume} />
+          </div>
+        ) : application.submittedResume?.sourceType === 'uploaded' ? (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div>
+              <strong>{application.submittedResume.originalFileName || application.submittedResume.title || 'cv.pdf'}</strong>
+              <p className="muted" style={{ margin: '4px 0 0' }}>File snapshot tại thời điểm ứng tuyển</p>
+            </div>
+            {application.submittedResume.downloadAvailable && (
+              <button type="button" className="outline sm" onClick={() => openSubmittedResume(application.id)}>
+                Mở CV
+              </button>
+            )}
+          </div>
+        ) : application.cvVersion ? (
           <div>
             <strong>{application.cvVersion.title}</strong>
             <p className="muted" style={{ margin: '4px 0 0' }}>CV Builder - cap nhat {formatDate(application.cvVersion.updatedAt)}</p>
@@ -4165,7 +4876,7 @@ function ApplicationDetailPage() {
               <strong>{application.cv.originalFileName}</strong>
               <p className="muted" style={{ margin: '4px 0 0' }}>{formatDate(application.cv.createdAt)}</p>
             </div>
-            <button type="button" className="outline sm" onClick={() => openBlobInNewTabFromCv(application.cv!.id)}>
+            <button type="button" className="outline sm" onClick={() => openSubmittedResume(application.id)}>
               Mo CV
             </button>
           </div>
@@ -4377,24 +5088,182 @@ function ApplicationDetailPage() {
   );
 }
 
-// ─── NOTIFICATIONS PAGE ──────────────────────────────────────────────────────
-function NotificationsPage() {
-  const [items, setItems] = useState<NotificationItem[]>([]);
+function JobAlertsPage() {
+  const [params, setParams] = useSearchParams();
+  const page = jobPageFromParams(params);
+  const sourceFilters = jobFiltersFromParams(params);
+  const [items, setItems] = useState<JobAlert[]>([]);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState('');
+  const [deleteId, setDeleteId] = useState('');
+  const [draft, setDraft] = useState<JobAlertInput>(() => ({
+    name: sourceFilters.search ? `Việc làm: ${sourceFilters.search}` : 'Cảnh báo việc làm của tôi',
+    keyword: sourceFilters.search,
+    location: sourceFilters.location,
+    category: sourceFilters.category,
+    jobType: sourceFilters.jobType,
+    workMode: sourceFilters.workMode,
+    minSalary: sourceFilters.minSalary,
+    maxSalary: sourceFilters.maxSalary,
+    frequency: 'DAILY',
+    enabled: true,
+  }));
 
-  async function load() {
-    const data = await candidateService.getNotifications();
-    setItems(data);
-    setLoading(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await candidateService.getJobAlerts(page, 10);
+      setItems(result.items);
+      setTotalPages(result.totalPages);
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [page]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  function inputFromAlert(alert: JobAlert): JobAlertInput {
+    return {
+      name: alert.name, keyword: alert.keyword, location: alert.location, category: alert.category,
+      jobType: alert.jobType, workMode: alert.workMode, minSalary: alert.minSalary, maxSalary: alert.maxSalary,
+      frequency: alert.frequency, enabled: alert.enabled,
+    };
   }
 
-  useEffect(() => { load(); }, []);
+  async function saveAlert(event: FormEvent) {
+    event.preventDefault();
+    setError('');
+    try {
+      if (editingId) await candidateService.updateJobAlert(editingId, draft);
+      else await candidateService.createJobAlert(draft);
+      setEditingId('');
+      setDraft({ name: 'Cảnh báo việc làm của tôi', frequency: 'DAILY', enabled: true });
+      await load();
+    } catch (err) {
+      setError(readError(err));
+    }
+  }
+
+  async function toggleAlert(alert: JobAlert) {
+    const previous = items;
+    setItems((current) => current.map((item) => item.id === alert.id ? { ...item, enabled: !item.enabled } : item));
+    try {
+      await candidateService.updateJobAlert(alert.id, { ...inputFromAlert(alert), enabled: !alert.enabled });
+    } catch (err) {
+      setItems(previous);
+      setError(readError(err));
+    }
+  }
+
+  async function removeAlert() {
+    if (!deleteId) return;
+    try {
+      await candidateService.deleteJobAlert(deleteId);
+      setDeleteId('');
+      await load();
+    } catch (err) {
+      setError(readError(err));
+    }
+  }
+
+  return (
+    <motion.div variants={fadeUp} initial="initial" animate="animate" transition={{ duration: 0.25, ease: EASE_OUT }}>
+      <div className="page-header">
+        <h1>Cảnh báo việc làm</h1>
+        <p>Hệ thống kiểm tra theo lịch và gửi thông báo trong ứng dụng khi có việc mới phù hợp.</p>
+      </div>
+      <form className="card form-grid two" onSubmit={saveAlert} style={{ marginBottom: 20 }}>
+        <h2 className="wide">{editingId ? 'Sửa cảnh báo' : 'Tạo cảnh báo mới'}</h2>
+        <label>Tên cảnh báo<input required maxLength={120} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
+        <label>Từ khóa<input value={draft.keyword || ''} onChange={(e) => setDraft({ ...draft, keyword: e.target.value })} /></label>
+        <label>Địa điểm<input value={draft.location || ''} onChange={(e) => setDraft({ ...draft, location: e.target.value })} /></label>
+        <label>Ngành / danh mục<input value={draft.category || ''} onChange={(e) => setDraft({ ...draft, category: e.target.value })} /></label>
+        <label>Loại công việc<select value={draft.jobType || ''} onChange={(e) => setDraft({ ...draft, jobType: e.target.value })}>
+          <option value="">Tất cả</option><option value="full_time">Toàn thời gian</option><option value="part_time">Bán thời gian</option>
+          <option value="contract">Hợp đồng</option><option value="internship">Thực tập</option><option value="freelance">Tự do</option>
+        </select></label>
+        <label>Hình thức<select value={draft.workMode || ''} onChange={(e) => setDraft({ ...draft, workMode: e.target.value })}>
+          <option value="">Tất cả</option><option value="onsite">Văn phòng</option><option value="remote">Từ xa</option><option value="hybrid">Kết hợp</option>
+        </select></label>
+        <label>Lương tối thiểu<input type="number" min={0} value={draft.minSalary || ''} onChange={(e) => setDraft({ ...draft, minSalary: e.target.value ? Number(e.target.value) : undefined })} /></label>
+        <label>Lương tối đa<input type="number" min={0} value={draft.maxSalary || ''} onChange={(e) => setDraft({ ...draft, maxSalary: e.target.value ? Number(e.target.value) : undefined })} /></label>
+        <label>Tần suất<select value={draft.frequency} onChange={(e) => setDraft({ ...draft, frequency: e.target.value as 'DAILY' | 'WEEKLY' })}>
+          <option value="DAILY">Hàng ngày</option><option value="WEEKLY">Hàng tuần</option>
+        </select></label>
+        <div className="wide" style={{ display: 'flex', gap: 8 }}>
+          <button type="submit">{editingId ? 'Lưu thay đổi' : 'Tạo cảnh báo'}</button>
+          {editingId && <button type="button" className="outline" onClick={() => setEditingId('')}>Hủy</button>}
+        </div>
+      </form>
+      {error && <div className="error-panel" role="alert" style={{ marginBottom: 16 }}>{error} <button className="outline sm" onClick={() => void load()}>Thử lại</button></div>}
+      {loading ? <div className="card">Đang tải cảnh báo...</div> : items.length === 0 ? (
+        <div className="card empty-state">Bạn chưa có cảnh báo việc làm nào.</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {items.map((alert) => (
+            <div className="card" key={alert.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+              <div><strong>{alert.name}</strong><p className="muted" style={{ margin: '6px 0 0' }}>
+                {[alert.keyword, alert.location, alert.jobType, alert.workMode].filter(Boolean).join(' · ') || 'Tất cả việc làm'} · {alert.frequency === 'DAILY' ? 'Hàng ngày' : 'Hàng tuần'}
+              </p></div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className={alert.enabled ? '' : 'outline'} onClick={() => void toggleAlert(alert)}>{alert.enabled ? 'Đang bật' : 'Đã tắt'}</button>
+                <button type="button" className="outline" onClick={() => { setEditingId(alert.id); setDraft(inputFromAlert(alert)); }}>Sửa</button>
+                <button type="button" className="danger" onClick={() => setDeleteId(alert.id)}>Xóa</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <PaginationControls page={page} totalPages={totalPages} label="Phân trang cảnh báo việc làm"
+        onPageChange={(nextPage) => setParams(nextPage > 0 ? { page: String(nextPage) } : {})} />
+      <AnimatePresence>{deleteId && <ActionModal title="Xóa cảnh báo việc làm?" description="Cảnh báo sẽ ngừng tạo thông báo mới."
+        confirmLabel="Xóa cảnh báo" danger onClose={() => setDeleteId('')} onConfirm={removeAlert} />}</AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── NOTIFICATIONS PAGE ──────────────────────────────────────────────────────
+function NotificationsPage() {
+  const [params, setParams] = useSearchParams();
+  const page = jobPageFromParams(params);
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(0);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await candidateService.getNotifications(page, 20);
+      setItems(data.items);
+      setTotalPages(data.totalPages);
+      if (data.totalPages > 0 && page >= data.totalPages) {
+        setParams({ page: String(data.totalPages - 1) }, { replace: true });
+      }
+    } catch (err) {
+      setError(readError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [page, setParams]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const unreadCount = items.filter((item) => !item.read).length;
 
   async function markAllRead() {
-    await candidateService.markAllNotificationsRead();
-    await load();
+    try {
+      await candidateService.markAllNotificationsRead();
+      await load();
+    } catch (err) {
+      setError(readError(err));
+    }
   }
   const getIcon = (type: string) => {
     switch (type) {
@@ -4424,10 +5293,12 @@ function NotificationsPage() {
         <p>Cập nhật từ nhà tuyển dụng và hệ thống</p>
         {unreadCount > 0 && (
           <button className="outline" onClick={markAllRead} style={{ marginTop: 12 }}>
-            Danh dau tat ca da doc
+            Đánh dấu tất cả đã đọc
           </button>
         )}
       </div>
+
+      {error && <div className="error-panel" role="alert" style={{ marginBottom: 16 }}>{error} <button className="outline sm" onClick={() => void load()}>Thử lại</button></div>}
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>
@@ -4443,8 +5314,9 @@ function NotificationsPage() {
           <p className="muted">Bạn sẽ nhận thông báo khi có cập nhật từ nhà tuyển dụng.</p>
         </div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          {items.map((item, i) => {
+        <>
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {items.map((item, i) => {
             const link = getNotificationLink(item);
             return (
               <motion.div key={item.id}
@@ -4477,7 +5349,7 @@ function NotificationsPage() {
                 <div style={{ display: 'flex', gap: 8, flexDirection: 'column', alignItems: 'flex-end' }}>
                   {!item.read && (
                     <button className="outline sm"
-                      onClick={() => candidateService.markNotificationRead(item.id).then(load)}>
+                      onClick={() => candidateService.markNotificationRead(item.id).then(load).catch((err) => setError(readError(err)))}>
                       Đánh dấu đọc
                     </button>
                   )}
@@ -4489,8 +5361,15 @@ function NotificationsPage() {
                 </div>
               </motion.div>
             );
-          })}
-        </div>
+            })}
+          </div>
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            label="Phân trang thông báo"
+            onPageChange={(nextPage) => setParams(nextPage > 0 ? { page: String(nextPage) } : {})}
+          />
+        </>
       )}
     </motion.div>
   );

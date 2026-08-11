@@ -826,7 +826,7 @@ function EmployerJobsPage() {
                         {(() => {
                           const total = Object.entries(formData.rankingConfig?.weights || {})
                             .filter(([k]) => formData.rankingConfig?.enabled_criteria?.includes(k))
-                            .reduce((sum, [_, v]) => sum + Number(v), 0);
+                            .reduce((sum, [, v]) => sum + Number(v), 0);
                           const isError = total !== 100;
                           return (
                             <span style={{ 
@@ -970,7 +970,7 @@ function EmployerJobsPage() {
               {(() => {
                 const totalWeight = Object.entries(formData.rankingConfig?.weights || {})
                   .filter(([k]) => formData.rankingConfig?.enabled_criteria?.includes(k))
-                  .reduce((sum, [_, v]) => sum + Number(v), 0);
+                  .reduce((sum, [, v]) => sum + Number(v), 0);
                 const isInvalidConfig = formData.rankingConfig?.enabled ? (totalWeight !== 100) : false;
                 
                 return (

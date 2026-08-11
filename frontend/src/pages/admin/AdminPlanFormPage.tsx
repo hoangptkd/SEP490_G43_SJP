@@ -44,14 +44,6 @@ const PLAN_TIERS = [
   },
 ] as const;
 
-const DEFAULT_LIMITS: PlanLimits = {
-  maxJobs: 20,
-  maxCv: 10,
-  maxApplicationsPerDay: 50,
-  maxAiSessionsPerDay: 20,
-  listingPriority: 1,
-};
-
 const ROLE_OPTIONS = [
   { value: 'employer', label: 'Nhà tuyển dụng', hint: 'Đăng tin, quản lý ứng viên' },
   { value: 'job_seeker', label: 'Ứng viên', hint: 'Ứng tuyển, CV, phỏng vấn AI' },

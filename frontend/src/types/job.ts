@@ -46,6 +46,7 @@ export interface Job {
   matchScore?: number;
   applicationsCount?: number;
   rankingConfig?: {
+    enabled?: boolean;
     template?: string;
     weights?: Record<string, number>;
     enabled_criteria?: string[];
@@ -105,7 +106,18 @@ export interface JobFilters {
   experienceLevel?: string;
   skills?: string;
   category?: string;
+  jobType?: string;
+  workMode?: string;
   sort?: string;
+}
+
+export interface PublicCompany extends Company {
+  description?: string;
+  industry?: string;
+  companySize?: number;
+  verified: boolean;
+  locations: CompanyLocation[];
+  openJobs: import('./candidateDomain').PageResult<Job>;
 }
 
 export interface JobApiResponse {

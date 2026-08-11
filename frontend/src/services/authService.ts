@@ -66,6 +66,11 @@ export const authService = {
     return response.data;
   },
 
+  resendVerification: async (email: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/resend-verification', { email });
+    return response.data;
+  },
+
   completeOauthRole: async (token: string, role: 'CANDIDATE' | 'EMPLOYER'): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/auth/oauth/complete-role', { token, role });
     return response.data;

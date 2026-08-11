@@ -4,17 +4,33 @@ export interface CandidateProfile {
   id: string;
   userId: string;
   fullName?: string;
+  headline?: string;
   phone?: string;
   dateOfBirth?: string;
   age?: number;
   location?: string;
   bio?: string;
+  experienceYears?: number;
+  experienceLevel?: string;
+  linkedinUrl?: string;
+  portfolioUrl?: string;
   skills: string[];
-  education: Record<string, unknown>[];
-  workExperience: Record<string, unknown>[];
-  projects: Record<string, unknown>[];
-  certifications: Record<string, unknown>[];
+  education: ProfileSectionItem[];
+  workExperience: ProfileSectionItem[];
+  projects: ProfileSectionItem[];
+  certifications: ProfileSectionItem[];
   applyReady: boolean;
+  missingReadinessItems: string[];
+}
+
+export interface ProfileSectionItem {
+  [key: string]: unknown;
+  title: string;
+  organization?: string;
+  time?: string;
+  description?: string;
+  url?: string;
+  credentialUrl?: string;
 }
 
 export interface CvFile {
@@ -43,12 +59,36 @@ export interface ApplicationTimeline {
   createdAt: string;
 }
 
+export interface PageResult<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalItems: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+}
+
+export interface SubmittedResume {
+  sourceType: 'uploaded' | 'builder';
+  resumeId: string;
+  title?: string;
+  originalFileName?: string;
+  contentType?: string;
+  fileSize?: number;
+  templateKey?: string;
+  builderSnapshot?: Record<string, unknown>;
+  sourceUpdatedAt?: string;
+  downloadAvailable: boolean;
+}
+
 export interface CandidateApplication {
   id: string;
   job: Job;
   candidate?: CandidateProfile;
   cv?: CvFile;
   cvVersion?: CvVersion;
+  submittedResume?: SubmittedResume;
   preferredLocation?: string;
   coverLetter?: string;
   status: string;
@@ -74,6 +114,24 @@ export interface NotificationItem {
   relatedEntityId?: string;
   createdAt: string;
 }
+
+export interface JobAlert {
+  id: string;
+  name: string;
+  keyword?: string;
+  location?: string;
+  category?: string;
+  jobType?: string;
+  workMode?: string;
+  minSalary?: number;
+  maxSalary?: number;
+  frequency: 'DAILY' | 'WEEKLY';
+  enabled: boolean;
+  lastRunAt?: string;
+  createdAt: string;
+}
+
+export type JobAlertInput = Omit<JobAlert, 'id' | 'lastRunAt' | 'createdAt'>;
 
 export interface SubscriptionView {
   planCode: string;

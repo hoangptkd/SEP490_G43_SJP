@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { employerService } from '../../services/employerService';
 import type { CandidateApplication } from '../../types/candidateDomain';
@@ -28,6 +28,7 @@ export default function EmployerApplicationsPage() {
   const [selectedJobId, setSelectedJobId] = useState<string>(queryJobId);
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [searchKeyword, setSearchKeyword] = useState<string>('');
+  const [appliedSearchKeyword, setAppliedSearchKeyword] = useState<string>('');
 
   // Status update modal
   const [updatingApp, setUpdatingApp] = useState<CandidateApplication | null>(null);
@@ -68,10 +69,6 @@ export default function EmployerApplicationsPage() {
     loadJobs();
   }, []);
 
-  useEffect(() => {
-    loadApplications();
-  }, [selectedJobId, selectedStatus]);
-
   async function loadJobs() {
     try {
       const jobList = await employerService.getJobs();
@@ -81,14 +78,14 @@ export default function EmployerApplicationsPage() {
     }
   }
 
-  async function loadApplications() {
+  const loadApplications = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await employerService.getApplications({
         jobId: selectedJobId || undefined,
         status: selectedStatus || undefined,
-        search: searchKeyword || undefined,
+        search: appliedSearchKeyword || undefined,
       });
       setApplications(data);
     } catch (err: any) {
@@ -98,7 +95,11 @@ export default function EmployerApplicationsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [appliedSearchKeyword, selectedJobId, selectedStatus]);
+
+  useEffect(() => {
+    void loadApplications();
+  }, [loadApplications]);
 
   // Polling for AI Ranking
   useEffect(() => {
@@ -109,12 +110,12 @@ export default function EmployerApplicationsPage() {
       employerService.getApplications({
         jobId: selectedJobId || undefined,
         status: selectedStatus || undefined,
-        search: searchKeyword || undefined,
+        search: appliedSearchKeyword || undefined,
       }).then(data => setApplications(data)).catch(() => {});
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [applications, selectedJobId, selectedStatus, searchKeyword]);
+  }, [applications, appliedSearchKeyword, selectedJobId, selectedStatus]);
 
   const [bulkRanking, setBulkRanking] = useState(false);
   async function handleBulkAiRanking() {
@@ -154,7 +155,12 @@ export default function EmployerApplicationsPage() {
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
-    loadApplications();
+    const normalizedKeyword = searchKeyword.trim();
+    if (normalizedKeyword === appliedSearchKeyword) {
+      void loadApplications();
+      return;
+    }
+    setAppliedSearchKeyword(normalizedKeyword);
   }
 
   function getDetailedStatus(app: CandidateApplication) {
@@ -408,6 +414,7 @@ export default function EmployerApplicationsPage() {
             const st = getDetailedStatus(app);
             const candidateName = app.candidate?.fullName || 'Ứng viên ẩn danh';
             const candidateEmail = app.candidate?.phone ? `${app.candidate.phone}` : 'Chưa có SĐT';
+            const aiMatchScore = app.aiMatchScore;
 
             return (
               <div
@@ -560,16 +567,16 @@ export default function EmployerApplicationsPage() {
                   </div>
 
                   {/* AI Ranking Score */}
-                  {((app.aiMatchScore !== undefined && app.aiMatchScore !== null) || app.aiMatchAnalysis === 'PROCESSING' || app.aiMatchAnalysis === 'ERROR') && (
+                  {((aiMatchScore !== undefined && aiMatchScore !== null) || app.aiMatchAnalysis === 'PROCESSING' || app.aiMatchAnalysis === 'ERROR') && (
                     <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {app.aiMatchScore === -1 || app.aiMatchAnalysis === 'PROCESSING' ? (
+                      {aiMatchScore === -1 || app.aiMatchAnalysis === 'PROCESSING' ? (
                         <span style={{
                           background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '12px',
                           fontSize: '0.85rem', fontWeight: 600, border: '1px solid #bae6fd'
                         }}>
                           ⏳ Đang phân tích AI...
                         </span>
-                      ) : (app.aiMatchScore === -2 || app.aiMatchAnalysis === 'ERROR') ? (
+                      ) : (aiMatchScore === -2 || app.aiMatchAnalysis === 'ERROR') ? (
                         <span style={{
                           background: '#fee2e2', color: '#991b1b', padding: '4px 10px', borderRadius: '12px',
                           fontSize: '0.85rem', fontWeight: 600, border: '1px solid #fecaca'
@@ -578,18 +585,18 @@ export default function EmployerApplicationsPage() {
                         </span>
                       ) : (
                         <span style={{
-                          background: app.aiMatchScore >= 80 ? '#dcfce7' : app.aiMatchScore >= 50 ? '#fef9c3' : '#fee2e2',
-                          color: app.aiMatchScore >= 80 ? '#166534' : app.aiMatchScore >= 50 ? '#854d0e' : '#991b1b',
+                          background: aiMatchScore !== undefined && aiMatchScore >= 80 ? '#dcfce7' : aiMatchScore !== undefined && aiMatchScore >= 50 ? '#fef9c3' : '#fee2e2',
+                          color: aiMatchScore !== undefined && aiMatchScore >= 80 ? '#166534' : aiMatchScore !== undefined && aiMatchScore >= 50 ? '#854d0e' : '#991b1b',
                           padding: '4px 10px',
                           borderRadius: '12px',
                           fontSize: '0.85rem',
                           fontWeight: 600,
-                          border: `1px solid ${app.aiMatchScore >= 80 ? '#bbf7d0' : app.aiMatchScore >= 50 ? '#fef08a' : '#fecaca'}`
+                          border: `1px solid ${aiMatchScore !== undefined && aiMatchScore >= 80 ? '#bbf7d0' : aiMatchScore !== undefined && aiMatchScore >= 50 ? '#fef08a' : '#fecaca'}`
                         }}>
-                          ✨ AI Match: {app.aiMatchScore}%
+                          ✨ AI Match: {aiMatchScore}%
                         </span>
                       )}
-                      {app.needRerank && app.aiMatchScore !== null && app.aiMatchScore > -1 && (
+                      {app.needRerank && aiMatchScore !== undefined && aiMatchScore !== null && aiMatchScore > -1 && (
                         <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', background: '#fffbeb', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fde68a' }}>
                           ⚠️ JD thay đổi, cần chấm lại
                         </span>

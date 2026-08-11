@@ -5,6 +5,9 @@ import type {
   CvFile,
   CvVersion,
   NotificationItem,
+  PageResult,
+  JobAlert,
+  JobAlertInput,
   SubscriptionView,
 } from '../types/candidateDomain';
 import type { Job } from '../types/job';
@@ -20,8 +23,8 @@ export const candidateService = {
     return response.data;
   },
 
-  getCvs: async (): Promise<CvFile[]> => {
-    const response = await api.get<CvFile[]>('/candidate/cvs');
+  getCvs: async (page = 0, size = 20): Promise<PageResult<CvFile>> => {
+    const response = await api.get<PageResult<CvFile>>('/candidate/cvs', { params: { page, size } });
     return response.data;
   },
 
@@ -48,8 +51,8 @@ export const candidateService = {
     return response.data;
   },
 
-  getCvVersions: async (): Promise<CvVersion[]> => {
-    const response = await api.get<CvVersion[]>('/candidate/cv-versions');
+  getCvVersions: async (page = 0, size = 20): Promise<PageResult<CvVersion>> => {
+    const response = await api.get<PageResult<CvVersion>>('/candidate/cv-versions', { params: { page, size } });
     return response.data;
   },
 
@@ -72,8 +75,8 @@ export const candidateService = {
     await api.delete(`/candidate/cv-versions/${id}`);
   },
 
-  getSavedJobs: async (): Promise<Job[]> => {
-    const response = await api.get<Job[]>('/candidate/saved-jobs');
+  getSavedJobs: async (page = 0, size = 12): Promise<PageResult<Job>> => {
+    const response = await api.get<PageResult<Job>>('/candidate/saved-jobs', { params: { page, size } });
     return response.data;
   },
 
@@ -102,8 +105,8 @@ export const candidateService = {
     return response.data;
   },
 
-  getApplications: async (): Promise<CandidateApplication[]> => {
-    const response = await api.get<CandidateApplication[]>('/applications/me');
+  getApplications: async (page = 0, size = 10): Promise<PageResult<CandidateApplication>> => {
+    const response = await api.get<PageResult<CandidateApplication>>('/applications/me', { params: { page, size } });
     return response.data;
   },
 
@@ -112,8 +115,13 @@ export const candidateService = {
     return response.data;
   },
 
-  getNotifications: async (): Promise<NotificationItem[]> => {
-    const response = await api.get<NotificationItem[]>('/candidate/notifications');
+  downloadSubmittedResume: async (applicationId: string): Promise<Blob> => {
+    const response = await api.get<Blob>(`/applications/me/${applicationId}/resume`, { responseType: 'blob' });
+    return response.data;
+  },
+
+  getNotifications: async (page = 0, size = 20): Promise<PageResult<NotificationItem>> => {
+    const response = await api.get<PageResult<NotificationItem>>('/candidate/notifications', { params: { page, size } });
     return response.data;
   },
 
@@ -123,6 +131,25 @@ export const candidateService = {
 
   markAllNotificationsRead: async (): Promise<void> => {
     await api.patch('/candidate/notifications/read-all');
+  },
+
+  getJobAlerts: async (page = 0, size = 10): Promise<PageResult<JobAlert>> => {
+    const response = await api.get<PageResult<JobAlert>>('/candidate/job-alerts', { params: { page, size } });
+    return response.data;
+  },
+
+  createJobAlert: async (data: JobAlertInput): Promise<JobAlert> => {
+    const response = await api.post<JobAlert>('/candidate/job-alerts', data);
+    return response.data;
+  },
+
+  updateJobAlert: async (id: string, data: JobAlertInput): Promise<JobAlert> => {
+    const response = await api.put<JobAlert>(`/candidate/job-alerts/${id}`, data);
+    return response.data;
+  },
+
+  deleteJobAlert: async (id: string): Promise<void> => {
+    await api.delete(`/candidate/job-alerts/${id}`);
   },
 
   getSubscription: async (): Promise<SubscriptionView> => {
@@ -140,12 +167,17 @@ export const candidateService = {
   },
 
   respondToOffer: async (offerId: string, accepted: boolean, note?: string): Promise<import('../types/candidateDomain').JobOfferResponse> => {
-    const response = await api.put(`/v1/offers/${offerId}/response`, null, { params: { accepted, note } });
+    const response = await api.put(`/v1/offers/${offerId}/response`, {
+      decision: accepted ? 'ACCEPT' : 'REJECT',
+      note,
+    });
     return response.data;
   },
 
   finalRespondToOffer: async (offerId: string, accepted: boolean): Promise<import('../types/candidateDomain').JobOfferResponse> => {
-    const response = await api.put(`/v1/offers/${offerId}/candidate-final-response`, null, { params: { accepted } });
+    const response = await api.put(`/v1/offers/${offerId}/candidate-final-response`, {
+      decision: accepted ? 'ACCEPT' : 'REJECT',
+    });
     return response.data;
   },
 };

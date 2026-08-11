@@ -25,4 +25,16 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/framer-motion')) return 'motion';
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-router')) return 'react-vendor';
+          if (id.includes('node_modules/axios')) return 'http';
+          return undefined;
+        },
+      },
+    },
+  },
 })

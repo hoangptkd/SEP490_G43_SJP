@@ -26,7 +26,7 @@ function getRelativeTime(dateString: string) {
   return format(new Date(dateString), 'dd/MM/yyyy');
 }
 
-const EASE_OUT = [0.16, 1, 0.3, 1];
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 const fadeUp = {
   initial: { opacity: 0, y: 15 },
@@ -154,7 +154,7 @@ export default function EmployerDashboardPage() {
             {/* Bars */}
             <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '2%', height: '100%', paddingLeft: 40 }}>
               {trendData.map((day, idx) => (
-                <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, group: 'true', position: 'relative' }}>
+                <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, position: 'relative' }}>
                   <motion.div 
                     initial={{ height: 0 }}
                     animate={{ height: `${(day.count / maxTrend) * 100}%` }}
@@ -244,7 +244,9 @@ export default function EmployerDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {stats.recentApplications.map(app => (
+                {stats.recentApplications.map(app => {
+                  const candidateName = app.candidate?.fullName?.trim() || 'Ứng viên';
+                  return (
                   <tr key={app.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '20px 32px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -254,11 +256,11 @@ export default function EmployerDashboardPage() {
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontWeight: 700, fontSize: '1.1rem'
                         }}>
-                          {app.candidate.fullName.charAt(0)}
+                          {candidateName.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div style={{ fontWeight: 600 }}>{app.candidate.fullName}</div>
-                          <div className="muted" style={{ fontSize: '0.85rem' }}>{app.candidate.title || 'Ứng viên'}</div>
+                          <div style={{ fontWeight: 600 }}>{candidateName}</div>
+                          <div className="muted" style={{ fontSize: '0.85rem' }}>{app.candidate?.headline || 'Ứng viên'}</div>
                         </div>
                       </div>
                     </td>
@@ -280,7 +282,8 @@ export default function EmployerDashboardPage() {
                       <div className="muted" style={{ fontSize: '0.85rem' }}>{format(new Date(app.submittedAt), 'HH:mm')}</div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

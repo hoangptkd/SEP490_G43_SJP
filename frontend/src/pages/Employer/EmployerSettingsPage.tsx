@@ -9,11 +9,11 @@ const EmployerSettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'personal' | 'security'>('personal');
   
   // Personal Info Form State
-  const [avatarPreview, setAvatarPreview] = useState<string>(user?.avatarUrl || '');
+  const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [avatarLoading, setAvatarLoading] = useState(false);
-  const [fullName, setFullName] = useState(user?.fullName || '');
-  const [phone, setPhone] = useState(user?.phone || '');
-  const [position, setPosition] = useState(user?.employer?.position || '');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [position, setPosition] = useState('');
 
   useEffect(() => {
     employerService.getPersonalProfile().then(data => {
@@ -21,6 +21,9 @@ const EmployerSettingsPage: React.FC = () => {
       setPhone(data.phone || '');
       setPosition(data.position || '');
     }).catch(console.error);
+    authService.getAccount()
+      .then((account) => setAvatarPreview(account.avatarUrl || ''))
+      .catch(console.error);
   }, []);
   const [personalLoading, setPersonalLoading] = useState(false);
   const [personalMsg, setPersonalMsg] = useState({ type: '', text: '' });
@@ -34,7 +37,7 @@ const EmployerSettingsPage: React.FC = () => {
 
   // Deactivate Account State
   const [deactivateLoading, setDeactivateLoading] = useState(false);
-  const [deactivateReason, setDeactivateReason] = useState('');
+  const [deactivatePassword, setDeactivatePassword] = useState('');
 
 
   const handleUpdatePersonal = async (e: React.FormEvent) => {
@@ -78,9 +81,9 @@ const EmployerSettingsPage: React.FC = () => {
     setDeactivateLoading(true);
     setSecurityMsg({ type: '', text: '' });
     try {
-      await authService.requestDeactivate({ reason: deactivateReason });
-      setSecurityMsg({ type: 'success', text: 'Đã gửi yêu cầu vô hiệu hóa tài khoản.' });
-      setDeactivateReason('');
+      await authService.deactivateAccount(deactivatePassword);
+      setSecurityMsg({ type: 'success', text: 'Tài khoản đã được vô hiệu hóa.' });
+      setDeactivatePassword('');
     } catch (err: any) {
       setSecurityMsg({ type: 'error', text: err.response?.data?.message || 'Có lỗi xảy ra khi gửi yêu cầu' });
     } finally {
@@ -332,19 +335,22 @@ const EmployerSettingsPage: React.FC = () => {
                   Lưu ý: Quá trình này sẽ cần Admin phê duyệt. Khi tài khoản bị vô hiệu hóa, mọi tin tuyển dụng của công ty sẽ bị ẩn.
                 </p>
                 <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, color: '#334155', marginBottom: '8px' }}>Lý do (Tùy chọn)</label>
-                  <textarea
-                    value={deactivateReason}
-                    onChange={(e) => setDeactivateReason(e.target.value)}
-                    rows={3}
-                    placeholder="Cho chúng tôi biết lý do bạn muốn vô hiệu hóa tài khoản..."
+                  <label htmlFor="employer-deactivate-password" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, color: '#334155', marginBottom: '8px' }}>Mật khẩu hiện tại</label>
+                  <input
+                    id="employer-deactivate-password"
+                    type="password"
+                    value={deactivatePassword}
+                    onChange={(e) => setDeactivatePassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                    placeholder="Nhập mật khẩu để xác nhận"
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.95rem', boxSizing: 'border-box', fontFamily: 'inherit' }}
                   />
                 </div>
                 <button
                   type="button"
                   onClick={handleDeactivate}
-                  disabled={deactivateLoading}
+                  disabled={deactivateLoading || !deactivatePassword}
                   style={{
                     background: '#fff',
                     color: '#dc2626',
