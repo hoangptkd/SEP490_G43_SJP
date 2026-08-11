@@ -9,6 +9,7 @@ public record ApplicationResponse(
         CandidateProfileResponse candidate,
         CvResponse cv,
         CvVersionResponse cvVersion,
+        SubmittedResumeResponse submittedResume,
         String preferredLocation,
         String coverLetter,
         String status,

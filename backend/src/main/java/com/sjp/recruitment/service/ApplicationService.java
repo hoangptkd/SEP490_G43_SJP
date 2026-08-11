@@ -4,6 +4,7 @@ import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.ApplicationSubmitRequest;
 import com.sjp.recruitment.model.dto.response.ApplicationResponse;
 import com.sjp.recruitment.model.dto.response.ApplicationTimelineResponse;
+import com.sjp.recruitment.model.dto.response.PageResponse;
 import com.sjp.recruitment.model.entity.Application;
 import com.sjp.recruitment.model.entity.ApplicationStatusHistory;
 import com.sjp.recruitment.model.entity.CandidateCv;
@@ -11,6 +12,7 @@ import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.CvVersion;
 import com.sjp.recruitment.model.entity.Job;
 import com.sjp.recruitment.model.dto.JobSnapshot;
+import com.sjp.recruitment.model.dto.SubmittedResumeSnapshot;
 import com.sjp.recruitment.model.entity.Notification;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.repository.ApplicationRepository;
@@ -28,6 +30,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -110,6 +114,10 @@ public class ApplicationService {
         application.setJob(job);
         application.setCv(cv);
         application.setCvVersion(cvVersion);
+        application.setResumeSnapshot(hasUploadedCv
+                ? SubmittedResumeSnapshot.fromUploaded(cv)
+                : SubmittedResumeSnapshot.fromBuilder(cvVersion));
+        application.setResumeFileStorageKeySnapshot(hasUploadedCv ? cv.getStorageKey() : null);
         application.setPreferredLocation(trimToNull(request.preferredLocation()));
         application.setCoverLetter(cleanCoverLetter(request.coverLetter()));
         application.setStatus(Application.ApplicationStatus.SUBMITTED);
@@ -137,13 +145,13 @@ public class ApplicationService {
     }
 
     @Transactional(readOnly = true)
-    public List<ApplicationResponse> myApplications() {
+    public PageResponse<ApplicationResponse> myApplications(int page, int size) {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
-        return applicationRepository.findByCandidateId(candidate.getId(), Pageable.unpaged())
-                .getContent()
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        Page<Application> result = applicationRepository.findByCandidateId(
+                candidate.getId(),
+                PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, "submittedAt"))
+        );
+        return PageResponse.from(result, this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -153,6 +161,31 @@ public class ApplicationService {
                 .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
         return toResponse(application);
+    }
+
+    @Transactional(readOnly = true)
+    public CandidateService.CvDownload downloadMySubmittedCv(String id) {
+        CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
+        Application application = applicationRepository.findById(parseUuid(id, "APPLICATION_ID_INVALID"))
+                .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
+        return toSubmittedCvDownload(application);
+    }
+
+    public CandidateService.CvDownload toSubmittedCvDownload(Application application) {
+        SubmittedResumeSnapshot snapshot = application.getResumeSnapshot();
+        if (snapshot != null && "builder".equalsIgnoreCase(snapshot.sourceType())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_DOWNLOAD_NOT_AVAILABLE", "CV Builder duoc hien thi truc tiep, khong co file de tai");
+        }
+        String storageKey = application.getResumeFileStorageKeySnapshot();
+        String fileName = snapshot != null ? snapshot.originalFileName() : null;
+        String contentType = snapshot != null ? snapshot.contentType() : null;
+        if ((storageKey == null || storageKey.isBlank()) && application.getCv() != null) {
+            storageKey = application.getCv().getStorageKey();
+            fileName = application.getCv().getOriginalFileName();
+            contentType = application.getCv().getContentType();
+        }
+        return candidateService.toCvDownload(storageKey, fileName, contentType);
     }
 
     @Transactional

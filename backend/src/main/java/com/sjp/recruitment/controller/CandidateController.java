@@ -2,6 +2,7 @@ package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.dto.request.CandidateProfileRequest;
 import com.sjp.recruitment.model.dto.request.CvVersionRequest;
+import com.sjp.recruitment.model.dto.request.JobAlertRequest;
 import com.sjp.recruitment.model.dto.response.*;
 import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.JobService;
@@ -25,6 +26,7 @@ public class CandidateController {
 
     private final CandidateService candidateService;
     private final JobService jobService;
+    private final com.sjp.recruitment.service.JobAlertService jobAlertService;
 
     @GetMapping("/profile")
     public ResponseEntity<CandidateProfileResponse> getProfile() {
@@ -37,8 +39,10 @@ public class CandidateController {
     }
 
     @GetMapping("/cvs")
-    public ResponseEntity<List<CvResponse>> getCvs() {
-        return ResponseEntity.ok(candidateService.getCvs());
+    public ResponseEntity<PageResponse<CvResponse>> getCvs(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(candidateService.getCvs(page, size));
     }
 
     @PostMapping(value = "/cvs", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -71,8 +75,10 @@ public class CandidateController {
     }
 
     @GetMapping("/cv-versions")
-    public ResponseEntity<List<CvVersionResponse>> getCvVersions() {
-        return ResponseEntity.ok(candidateService.getCvVersions());
+    public ResponseEntity<PageResponse<CvVersionResponse>> getCvVersions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(candidateService.getCvVersions(page, size));
     }
 
     @PostMapping("/cv-versions")
@@ -92,8 +98,10 @@ public class CandidateController {
     }
 
     @GetMapping("/saved-jobs")
-    public ResponseEntity<List<JobResponse>> savedJobs() {
-        return ResponseEntity.ok(candidateService.getSavedJobs());
+    public ResponseEntity<PageResponse<JobResponse>> savedJobs(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        return ResponseEntity.ok(candidateService.getSavedJobs(page, size));
     }
 
     @PostMapping("/saved-jobs/{jobId}")
@@ -114,8 +122,10 @@ public class CandidateController {
     }
 
     @GetMapping("/notifications")
-    public ResponseEntity<List<NotificationResponse>> notifications() {
-        return ResponseEntity.ok(candidateService.getNotifications());
+    public ResponseEntity<PageResponse<NotificationResponse>> notifications(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(candidateService.getNotifications(page, size));
     }
 
     @PatchMapping("/notifications/{id}/read")
@@ -133,5 +143,28 @@ public class CandidateController {
     @GetMapping("/subscription")
     public ResponseEntity<SubscriptionResponse> subscription() {
         return ResponseEntity.ok(candidateService.getSubscription());
+    }
+
+    @GetMapping("/job-alerts")
+    public ResponseEntity<PageResponse<JobAlertResponse>> jobAlerts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(jobAlertService.list(page, size));
+    }
+
+    @PostMapping("/job-alerts")
+    public ResponseEntity<JobAlertResponse> createJobAlert(@Valid @RequestBody JobAlertRequest request) {
+        return ResponseEntity.ok(jobAlertService.create(request));
+    }
+
+    @PutMapping("/job-alerts/{id}")
+    public ResponseEntity<JobAlertResponse> updateJobAlert(@PathVariable String id, @Valid @RequestBody JobAlertRequest request) {
+        return ResponseEntity.ok(jobAlertService.update(id, request));
+    }
+
+    @DeleteMapping("/job-alerts/{id}")
+    public ResponseEntity<Void> deleteJobAlert(@PathVariable String id) {
+        jobAlertService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }

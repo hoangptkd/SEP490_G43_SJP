@@ -7,7 +7,7 @@ public record ApplicationSubmitRequest(
         @NotBlank @Size(max = 36) String jobId,
         @Size(max = 36) String cvId,
         @Size(max = 36) String cvVersionId,
-        String preferredLocation,
-        String coverLetter
+        @NotBlank @Size(max = 255) String preferredLocation,
+        @Size(max = 2000) String coverLetter
 ) {
 }

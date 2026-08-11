@@ -4,6 +4,7 @@ import com.sjp.recruitment.model.dto.request.InterviewCandidateResponseRequest;
 import com.sjp.recruitment.model.dto.request.InterviewResultRequest;
 import com.sjp.recruitment.model.dto.request.InterviewScheduleRequest;
 import com.sjp.recruitment.model.dto.request.JobOfferRequest;
+import com.sjp.recruitment.model.dto.request.CandidateOfferResponseRequest;
 import com.sjp.recruitment.model.dto.response.InterviewScheduleResponse;
 import com.sjp.recruitment.model.dto.response.JobOfferResponse;
 import com.sjp.recruitment.model.entity.CandidateProfile;
@@ -92,10 +93,9 @@ public class ApplicationWorkflowController {
     @PreAuthorize("hasRole('CANDIDATE')")
     public ResponseEntity<JobOfferResponse> candidateRespondToOffer(
             @PathVariable UUID id,
-            @RequestParam boolean accepted,
-            @RequestParam(required = false) String note) {
+            @Valid @RequestBody CandidateOfferResponseRequest request) {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
-        JobOfferResponse response = workflowService.candidateRespondToOffer(id, candidate.getId(), accepted, note);
+        JobOfferResponse response = workflowService.candidateRespondToOffer(id, candidate.getId(), request);
         return ResponseEntity.ok(response);
     }
 
@@ -114,9 +114,9 @@ public class ApplicationWorkflowController {
     @PreAuthorize("hasRole('CANDIDATE')")
     public ResponseEntity<JobOfferResponse> candidateFinalRespondToOffer(
             @PathVariable UUID id,
-            @RequestParam boolean accepted) {
+            @Valid @RequestBody CandidateOfferResponseRequest request) {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
-        JobOfferResponse response = workflowService.candidateFinalRespondToOffer(id, candidate.getId(), accepted);
+        JobOfferResponse response = workflowService.candidateFinalRespondToOffer(id, candidate.getId(), request);
         return ResponseEntity.ok(response);
     }
 }

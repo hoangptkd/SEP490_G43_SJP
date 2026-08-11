@@ -8,7 +8,9 @@ import com.sjp.recruitment.model.dto.response.RecommendationResponse;
 import com.sjp.recruitment.service.JobReportService;
 import com.sjp.recruitment.service.JobService;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -31,10 +33,13 @@ public class JobController {
             @RequestParam(required = false) String experienceLevel,
             @RequestParam(required = false) String skills,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String jobType,
+            @RequestParam(required = false) String workMode,
             @RequestParam(defaultValue = "newest") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(jobService.search(search, location, minSalary, maxSalary, experienceLevel, skills, category, sort, page, size));
+        return ResponseEntity.ok(jobService.search(
+                search, location, minSalary, maxSalary, experienceLevel, skills, category, jobType, workMode, sort, page, size));
     }
 
     @GetMapping("/{id}")
@@ -43,9 +48,10 @@ public class JobController {
     }
 
     @PostMapping("/{id}/reports")
+    @PreAuthorize("hasRole('CANDIDATE')")
     public ResponseEntity<JobReportResponse> reportJob(
             @PathVariable String id,
-            @RequestBody JobReportRequest request
+            @Valid @RequestBody JobReportRequest request
     ) {
         return ResponseEntity.ok(jobReportService.reportJob(id, request));
     }

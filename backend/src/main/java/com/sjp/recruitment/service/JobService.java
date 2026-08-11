@@ -66,7 +66,11 @@ public class JobService {
 
     @Transactional(readOnly = true)
     public JobPageResponse search(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
-                                  String experienceLevel, String skills, String category, String sort, int page, int size) {
+                                  String experienceLevel, String skills, String category, String jobType,
+                                  String workMode, String sort, int page, int size) {
+        if (minSalary != null && maxSalary != null && minSalary.compareTo(maxSalary) > 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "SALARY_RANGE_INVALID", "Mức lương tối thiểu không thể lớn hơn mức lương tối đa");
+        }
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -74,10 +78,16 @@ public class JobService {
                 .addValue("offset", (long) safePage * safeSize);
 
         String whereClause = buildRemoteJobWhereClause(
-                search, location, minSalary, maxSalary, experienceLevel, skills, category, params);
+                search, location, minSalary, maxSalary, experienceLevel, skills, category, jobType, workMode, params);
 
         String countSql = "SELECT COUNT(*) FROM jobs j JOIN companies c ON c.id = j.company_id\n" + whereClause;
         Long totalElements = namedParameterJdbcTemplate.queryForObject(countSql, params, Long.class);
+        long total = totalElements == null ? 0 : totalElements;
+        int totalPages = total == 0 ? 0 : (int) Math.ceil(total / (double) safeSize);
+        if (totalPages > 0 && safePage >= totalPages) {
+            safePage = totalPages - 1;
+            params.addValue("offset", (long) safePage * safeSize);
+        }
 
         String dataSql = """
                 SELECT
@@ -131,11 +141,16 @@ public class JobService {
                 + " LIMIT :limit OFFSET :offset";
         dataSql = dataSql.replace("__LISTING_PRIORITY__", FeatureLimitService.LISTING_PRIORITY_SQL.trim());
 
+        List<JobResponse> content = namedParameterJdbcTemplate.query(dataSql, params, this::mapRemoteJobResponse);
         CandidateProfile candidate = currentCandidate().orElse(null);
-        List<JobResponse> content = namedParameterJdbcTemplate.query(dataSql, params,
-                (resultSet, rowNumber) -> mapRemoteJobResponse(resultSet, rowNumber, candidate));
-        long total = totalElements == null ? 0 : totalElements;
-        int totalPages = total == 0 ? 0 : (int) Math.ceil(total / (double) safeSize);
+        if (candidate != null && !content.isEmpty()) {
+            List<UUID> jobIds = content.stream().map(job -> UUID.fromString(job.id())).toList();
+            Set<UUID> savedIds = new HashSet<>(savedJobRepository.findSavedJobIds(candidate.getId(), jobIds));
+            Set<UUID> appliedIds = new HashSet<>(applicationRepository.findAppliedJobIds(candidate.getId(), jobIds));
+            content = content.stream()
+                    .map(job -> withCandidateState(job, candidate, savedIds, appliedIds))
+                    .toList();
+        }
         return new JobPageResponse(content, safePage, safeSize, total, totalPages);
     }
 
@@ -884,7 +899,8 @@ public class JobService {
     }
 
     private String buildRemoteJobWhereClause(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
-                                             String experienceLevel, String skills, String category, MapSqlParameterSource params) {
+                                             String experienceLevel, String skills, String category, String jobType,
+                                             String workMode, MapSqlParameterSource params) {
         StringBuilder where = new StringBuilder("""
                 WHERE j.status = 'published'
                   AND (j.deadline IS NULL OR j.deadline >= CURRENT_DATE)
@@ -925,6 +941,16 @@ public class JobService {
         if (experienceLevel != null && !experienceLevel.isBlank()) {
             where.append("  AND LOWER(COALESCE(j.experience_level, '')) = :experienceLevel\n");
             params.addValue("experienceLevel", experienceLevel.trim().toLowerCase(Locale.ROOT));
+        }
+
+        if (jobType != null && !jobType.isBlank()) {
+            where.append("  AND LOWER(COALESCE(j.job_type, '')) = :jobType\n");
+            params.addValue("jobType", jobType.trim().toLowerCase(Locale.ROOT));
+        }
+
+        if (workMode != null && !workMode.isBlank()) {
+            where.append("  AND LOWER(COALESCE(j.work_mode, '')) = :workMode\n");
+            params.addValue("workMode", workMode.trim().toLowerCase(Locale.ROOT));
         }
 
         if (category != null && !category.isBlank()) {
@@ -1045,6 +1071,24 @@ public class JobService {
                 null,
                 listingPriority,
                 FeatureLimitService.isFeatured(listingPriority)
+        );
+    }
+
+    private JobResponse withCandidateState(JobResponse job, CandidateProfile candidate, Set<UUID> savedIds, Set<UUID> appliedIds) {
+        UUID jobId = UUID.fromString(job.id());
+        Job matchJob = new Job();
+        matchJob.setId(jobId);
+        matchJob.setLocation(job.location());
+        matchJob.setRequirements(job.requirements());
+        matchJob.setSkills(job.skills());
+        return new JobResponse(
+                job.id(), job.title(), job.description(), job.requirements(), job.skills(),
+                job.salaryMin(), job.salaryMax(), job.location(), job.experienceLevel(), job.deadline(),
+                job.status(), job.company(), job.companyLocationId(), job.companyLocation(),
+                savedIds.contains(jobId), appliedIds.contains(jobId), calculateMatchScore(candidate, matchJob),
+                job.benefits(), job.vacancies(), job.workingTime(), job.salaryType(), job.jobType(), job.workMode(),
+                job.viewsCount(), job.rejectionReason(), job.applicationsCount(), job.reportFixDeadline(),
+                job.rankingConfig(), job.listingPriority(), job.featured()
         );
     }
 

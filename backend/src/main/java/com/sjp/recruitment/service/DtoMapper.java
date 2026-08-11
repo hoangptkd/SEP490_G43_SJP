@@ -1,6 +1,7 @@
 package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.model.dto.response.*;
+import com.sjp.recruitment.model.dto.SubmittedResumeSnapshot;
 import com.sjp.recruitment.model.entity.*;
 import com.sjp.recruitment.repository.ApplicationRepository;
 import com.sjp.recruitment.repository.JobReviewHistoryRepository;
@@ -38,6 +39,11 @@ public class DtoMapper {
     }
 
     public CandidateProfileResponse toCandidateProfileResponse(CandidateProfile profile, boolean applyReady) {
+        return toCandidateProfileResponse(profile, applyReady, List.of());
+    }
+
+    public CandidateProfileResponse toCandidateProfileResponse(
+            CandidateProfile profile, boolean applyReady, List<String> missingReadinessItems) {
         if (profile == null) {
             return null;
         }
@@ -57,11 +63,17 @@ public class DtoMapper {
                 profile.getLocation(),
                 profile.getBio(),
                 safeList(profile.getSkills()),
-                safeObjectList(profile.getEducation()),
-                safeObjectList(profile.getWorkExperience()),
-                safeObjectList(profile.getProjects()),
-                safeObjectList(profile.getCertifications()),
-                applyReady
+                profile.getHeadline(),
+                profile.getExperienceYears(),
+                profile.getExperienceLevel(),
+                profile.getLinkedinUrl(),
+                profile.getPortfolioUrl(),
+                safeTypedList(profile.getEducation()),
+                safeTypedList(profile.getWorkExperience()),
+                safeTypedList(profile.getProjects()),
+                safeTypedList(profile.getCertifications()),
+                applyReady,
+                missingReadinessItems == null ? List.of() : List.copyOf(missingReadinessItems)
         );
     }
 
@@ -213,6 +225,27 @@ public class DtoMapper {
         CandidateCv submittedCv = application.getCv();
         CvVersion submittedVersion = application.getCvVersion();
         boolean builderResume = submittedVersion != null && "builder".equalsIgnoreCase(submittedVersion.getSourceType());
+        SubmittedResumeSnapshot resumeSnapshot = application.getResumeSnapshot();
+        if (resumeSnapshot == null && builderResume) {
+            resumeSnapshot = SubmittedResumeSnapshot.fromBuilder(submittedVersion);
+        } else if (resumeSnapshot == null && submittedCv != null) {
+            resumeSnapshot = SubmittedResumeSnapshot.fromUploaded(submittedCv);
+        }
+        SubmittedResumeResponse submittedResume = resumeSnapshot == null ? null : new SubmittedResumeResponse(
+                resumeSnapshot.sourceType(),
+                resumeSnapshot.resumeId(),
+                resumeSnapshot.title(),
+                resumeSnapshot.originalFileName(),
+                resumeSnapshot.contentType(),
+                resumeSnapshot.fileSize(),
+                resumeSnapshot.templateKey(),
+                resumeSnapshot.builderSnapshot(),
+                resumeSnapshot.sourceUpdatedAt(),
+                "uploaded".equalsIgnoreCase(resumeSnapshot.sourceType())
+                        && ((application.getResumeFileStorageKeySnapshot() != null
+                        && !application.getResumeFileStorageKeySnapshot().isBlank())
+                        || (submittedCv != null && submittedCv.getStorageKey() != null && !submittedCv.getStorageKey().isBlank()))
+        );
         com.sjp.recruitment.model.entity.AiRankingResult aiResult = application.getId() != null ? 
                 aiRankingResultRepository.findByApplicationId(application.getId()).orElse(null) : null;
 
@@ -222,6 +255,7 @@ public class DtoMapper {
                 application.getCandidate() != null ? toCandidateProfileResponse(application.getCandidate(), true) : null,
                 builderResume ? null : toCvResponse(submittedCv),
                 builderResume ? toCvVersionResponse(submittedVersion) : null,
+                submittedResume,
                 application.getPreferredLocation(),
                 application.getCoverLetter(),
                 toFrontendApplicationStatus(application.getStatus()),
@@ -259,7 +293,7 @@ public class DtoMapper {
         }
     }
 
-    private List<Object> safeObjectList(List<Object> values) {
+    private <T> List<T> safeTypedList(List<T> values) {
         try {
             return values == null ? List.of() : new ArrayList<>(values);
         } catch (Exception e) {

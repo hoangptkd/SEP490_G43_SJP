@@ -25,6 +25,10 @@ public class JobOffer {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Version
+    @Column(nullable = false)
+    private Long version = 0L;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "application_id", nullable = false)
     private Application application;

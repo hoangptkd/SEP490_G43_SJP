@@ -73,6 +73,17 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     List<Job> findTop20ByStatusOrderByCreatedAtDesc(String status);
     List<Job> findByStatusAndSalaryMinGreaterThan(String status, BigDecimal minSalary);
 
+    @Query("""
+            SELECT j FROM Job j
+            WHERE j.company.id = :companyId
+              AND j.status = 'published'
+              AND (j.deadline IS NULL OR j.deadline >= :today)
+            """)
+    Page<Job> findPublicJobsByCompanyId(
+            @Param("companyId") UUID companyId,
+            @Param("today") LocalDate today,
+            Pageable pageable);
+
     @Query("SELECT j FROM Job j WHERE j.status = 'published' AND j.deadline < :today")
     List<Job> findExpiredPublishedJobs(@Param("today") LocalDate today);
 }

@@ -49,4 +49,7 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
 
     boolean existsByCandidateIdAndJobId(UUID candidateId, UUID jobId);
     boolean existsByCvId(UUID cvId);
+
+    @Query("SELECT a.job.id FROM Application a WHERE a.candidate.id = :candidateId AND a.job.id IN :jobIds")
+    List<UUID> findAppliedJobIds(@Param("candidateId") UUID candidateId, @Param("jobIds") List<UUID> jobIds);
 }

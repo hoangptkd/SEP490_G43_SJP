@@ -9,6 +9,9 @@ import com.sjp.recruitment.repository.*;
 import com.sjp.recruitment.service.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -58,7 +61,8 @@ public class CandidateService {
     @Transactional(readOnly = true)
     public CandidateProfileResponse getProfile() {
         CandidateProfile profile = getCurrentCandidateProfile();
-        return dtoMapper.toCandidateProfileResponse(profile, isApplyReady(profile));
+        List<String> missing = missingReadinessItems(profile);
+        return dtoMapper.toCandidateProfileResponse(profile, missing.isEmpty(), missing);
     }
 
     @Transactional
@@ -69,32 +73,44 @@ public class CandidateService {
         profile.setDateOfBirth(request.dateOfBirth());
         profile.setLocation(request.location());
         profile.setBio(request.bio());
+        profile.setHeadline(request.headline());
+        profile.setExperienceYears(request.experienceYears() == null ? 0 : request.experienceYears());
+        profile.setExperienceLevel(emptyToNull(request.experienceLevel()));
+        profile.setLinkedinUrl(emptyToNull(request.linkedinUrl()));
+        profile.setPortfolioUrl(emptyToNull(request.portfolioUrl()));
         updateCandidateSkills(profile, request.skills() == null ? List.of() : request.skills());
         profile.setSkills(request.skills() == null ? List.of() : request.skills());
         profile.setEducation(request.education() == null ? List.of() : request.education());
         profile.setWorkExperience(request.workExperience() == null ? List.of() : request.workExperience());
         profile.setProjects(request.projects() == null ? List.of() : request.projects());
         profile.setCertifications(request.certifications() == null ? List.of() : request.certifications());
-        return dtoMapper.toCandidateProfileResponse(candidateProfileRepository.save(profile), isApplyReady(profile));
+        CandidateProfile saved = candidateProfileRepository.save(profile);
+        List<String> missing = missingReadinessItems(saved);
+        return dtoMapper.toCandidateProfileResponse(saved, missing.isEmpty(), missing);
     }
 
     @Transactional(readOnly = true)
     public boolean isApplyReady(CandidateProfile profile) {
-        return hasText(profile.getFullName())
-                && hasText(profile.getPhone())
-                && hasText(profile.getLocation())
-                && profile.getSkills() != null
-                && !profile.getSkills().isEmpty()
-                && candidateCvRepository.existsByCandidateIdAndDeletedAtIsNull(profile.getId());
+        return missingReadinessItems(profile).isEmpty();
     }
 
     @Transactional(readOnly = true)
-    public List<CvResponse> getCvs() {
+    public List<String> missingReadinessItems(CandidateProfile profile) {
+        java.util.ArrayList<String> missing = new java.util.ArrayList<>();
+        if (!hasText(profile.getFullName())) missing.add("FULL_NAME");
+        if (!hasText(profile.getPhone())) missing.add("PHONE");
+        if (!hasText(profile.getLocation())) missing.add("LOCATION");
+        if (profile.getSkills() == null || profile.getSkills().isEmpty()) missing.add("SKILLS");
+        if (!candidateCvRepository.existsByCandidateIdAndDeletedAtIsNull(profile.getId())) missing.add("CV");
+        return List.copyOf(missing);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<CvResponse> getCvs(int page, int size) {
         CandidateProfile profile = getCurrentCandidateProfile();
-        return candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(profile.getId(), SOURCE_UPLOADED)
-                .stream()
-                .map(dtoMapper::toCvResponse)
-                .toList();
+        Page<CandidateCv> result = candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNull(
+                profile.getId(), SOURCE_UPLOADED, pageRequest(page, size, "createdAt"));
+        return PageResponse.from(result, dtoMapper::toCvResponse);
     }
 
     @Transactional
@@ -170,12 +186,11 @@ public class CandidateService {
     }
 
     @Transactional(readOnly = true)
-    public List<CvVersionResponse> getCvVersions() {
+    public PageResponse<CvVersionResponse> getCvVersions(int page, int size) {
         CandidateProfile profile = getCurrentCandidateProfile();
-        return cvVersionRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByUpdatedAtDesc(profile.getId(), SOURCE_BUILDER)
-                .stream()
-                .map(dtoMapper::toCvVersionResponse)
-                .toList();
+        Page<CvVersion> result = cvVersionRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNull(
+                profile.getId(), SOURCE_BUILDER, pageRequest(page, size, "updatedAt"));
+        return PageResponse.from(result, dtoMapper::toCvVersionResponse);
     }
 
     @Transactional
@@ -210,13 +225,15 @@ public class CandidateService {
     }
 
     @Transactional(readOnly = true)
-    public List<JobResponse> getSavedJobs() {
+    public PageResponse<JobResponse> getSavedJobs(int page, int size) {
         CandidateProfile profile = getCurrentCandidateProfile();
-        return savedJobRepository.findByCandidateIdOrderByCreatedAtDesc(profile.getId())
-                .stream()
-                .map(saved -> dtoMapper.toJobResponse(saved.getJob(), true,
-                        applicationRepository.existsByCandidateIdAndJobId(profile.getId(), saved.getJob().getId()), null))
-                .toList();
+        Page<SavedJob> result = savedJobRepository.findByCandidateId(profile.getId(), pageRequest(page, size, "createdAt"));
+        List<UUID> jobIds = result.getContent().stream().map(saved -> saved.getJob().getId()).toList();
+        java.util.Set<UUID> appliedIds = jobIds.isEmpty()
+                ? java.util.Set.of()
+                : new java.util.HashSet<>(applicationRepository.findAppliedJobIds(profile.getId(), jobIds));
+        return PageResponse.from(result, saved -> dtoMapper.toJobResponse(
+                saved.getJob(), true, appliedIds.contains(saved.getJob().getId()), null));
     }
 
     @Transactional
@@ -242,12 +259,11 @@ public class CandidateService {
     }
 
     @Transactional(readOnly = true)
-    public List<NotificationResponse> getNotifications() {
+    public PageResponse<NotificationResponse> getNotifications(int page, int size) {
         User user = authService.getCurrentUser();
-        return notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
-                .stream()
-                .map(dtoMapper::toNotificationResponse)
-                .toList();
+        Page<Notification> result = notificationRepository.findByRecipientUserId(
+                user.getId(), pageRequest(page, size, "createdAt"));
+        return PageResponse.from(result, dtoMapper::toNotificationResponse);
     }
 
     @Transactional
@@ -309,32 +325,18 @@ public class CandidateService {
         if (cv == null || !isUploadedCv(cv) || cv.getStorageKey() == null || cv.getStorageKey().isBlank()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");
         }
+        return toCvDownload(cv.getStorageKey(), cv.getOriginalFileName(), cv.getContentType());
+    }
+
+    public CvDownload toCvDownload(String storageKey, String originalFileName, String contentType) {
+        if (storageKey == null || storageKey.isBlank()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");
+        }
         try {
-            org.springframework.core.io.Resource resource;
-            if (cv.getStorageKey().startsWith("http://") || cv.getStorageKey().startsWith("https://")) {
-                try {
-                    org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
-                    org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-                    headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-                    org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(headers);
-                    org.springframework.http.ResponseEntity<byte[]> response = restTemplate.exchange(
-                            cv.getStorageKey(),
-                            org.springframework.http.HttpMethod.GET,
-                            entity,
-                            byte[].class
-                    );
-                    byte[] fileBytes = response.getBody();
-                    if (fileBytes == null) throw new IOException("Could not download file from URL");
-                    resource = new org.springframework.core.io.ByteArrayResource(fileBytes);
-                } catch (Exception e) {
-                    throw new IOException("Failed to proxy CV from Cloudinary", e);
-                }
-            } else {
-                resource = storageService.loadCandidateCv(cv.getStorageKey());
-            }
+            org.springframework.core.io.Resource resource = storageService.loadCandidateCv(storageKey);
             return new CvDownload(
-                    cv.getOriginalFileName() == null || cv.getOriginalFileName().isBlank() ? "cv.pdf" : cv.getOriginalFileName(),
-                    cv.getContentType() == null || cv.getContentType().isBlank() ? "application/pdf" : cv.getContentType(),
+                    originalFileName == null || originalFileName.isBlank() ? "cv.pdf" : originalFileName,
+                    contentType == null || contentType.isBlank() ? "application/pdf" : contentType,
                     resource
             );
         } catch (IOException exception) {
@@ -442,5 +444,13 @@ public class CandidateService {
         } catch (IllegalArgumentException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, code, "Ma dinh danh khong hop le");
         }
+    }
+
+    private String emptyToNull(String value) {
+        return hasText(value) ? value.trim() : null;
+    }
+
+    private PageRequest pageRequest(int page, int size, String sortField) {
+        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, sortField));
     }
 }

@@ -3,6 +3,7 @@ package com.sjp.recruitment.model.entity;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sjp.recruitment.model.dto.JobSnapshot;
+import com.sjp.recruitment.model.dto.SubmittedResumeSnapshot;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -72,6 +73,13 @@ public class Application {
     private String coverLetter;
 
     @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "resume_snapshot_json", columnDefinition = "jsonb")
+    private JsonNode resumeSnapshotJson;
+
+    @Column(name = "resume_file_url_snapshot")
+    private String resumeFileStorageKeySnapshot;
+
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "job_snapshot_json", columnDefinition = "jsonb")
     private JsonNode jobSnapshotJson;
 
@@ -98,6 +106,21 @@ public class Application {
 
     public void setJobSnapshotJson(JobSnapshot snapshot) {
         this.jobSnapshotJson = snapshot == null ? null : SNAPSHOT_OBJECT_MAPPER.valueToTree(snapshot);
+    }
+
+    public SubmittedResumeSnapshot getResumeSnapshot() {
+        if (resumeSnapshotJson == null || resumeSnapshotJson.isNull()) {
+            return null;
+        }
+        try {
+            return SNAPSHOT_OBJECT_MAPPER.treeToValue(resumeSnapshotJson, SubmittedResumeSnapshot.class);
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    public void setResumeSnapshot(SubmittedResumeSnapshot snapshot) {
+        this.resumeSnapshotJson = snapshot == null ? null : SNAPSHOT_OBJECT_MAPPER.valueToTree(snapshot);
     }
 
     public void setStatus(ApplicationStatus status) {

@@ -5,6 +5,7 @@ import com.sjp.recruitment.model.dto.request.InterviewCandidateResponseRequest;
 import com.sjp.recruitment.model.dto.request.InterviewResultRequest;
 import com.sjp.recruitment.model.dto.request.InterviewScheduleRequest;
 import com.sjp.recruitment.model.dto.request.JobOfferRequest;
+import com.sjp.recruitment.model.dto.request.CandidateOfferResponseRequest;
 import com.sjp.recruitment.model.dto.response.InterviewScheduleResponse;
 import com.sjp.recruitment.model.dto.response.JobOfferResponse;
 import com.sjp.recruitment.model.entity.*;
@@ -265,7 +266,7 @@ public class ApplicationWorkflowService {
     }
 
     @Transactional
-    public JobOfferResponse candidateRespondToOffer(UUID offerId, UUID candidateId, boolean accepted, String note) {
+    public JobOfferResponse candidateRespondToOffer(UUID offerId, UUID candidateId, CandidateOfferResponseRequest request) {
         JobOffer offer = jobOfferRepository.findById(offerId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OFFER_NOT_FOUND", "Khong tim thay Job Offer"));
 
@@ -279,18 +280,19 @@ public class ApplicationWorkflowService {
             throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXPIRED", "Job Offer da het han");
         }
 
+        boolean accepted = request.accepted();
         offer.setStatus(accepted ? "accepted" : "rejected");
-        offer.setCandidateNote(note);
+        offer.setCandidateNote(request.note());
         offer.setRespondedAt(LocalDateTime.now());
 
-        JobOffer saved = jobOfferRepository.save(offer);
+        JobOffer saved = jobOfferRepository.saveAndFlush(offer);
 
         if (accepted) {
             // Application is now HIRED
             applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Job Offer");
         } else {
             // Do NOT change Application status to REJECTED yet, to allow negotiation.
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã từ chối Job Offer (Chờ phản hồi): " + note);
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã từ chối Job Offer (Chờ phản hồi): " + request.note());
         }
 
         // Notify employer
@@ -377,7 +379,7 @@ public class ApplicationWorkflowService {
     }
 
     @Transactional
-    public JobOfferResponse candidateFinalRespondToOffer(UUID offerId, UUID candidateId, boolean accepted) {
+    public JobOfferResponse candidateFinalRespondToOffer(UUID offerId, UUID candidateId, CandidateOfferResponseRequest request) {
         JobOffer offer = jobOfferRepository.findById(offerId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OFFER_NOT_FOUND", "Khong tim thay Job Offer"));
 
@@ -389,6 +391,7 @@ public class ApplicationWorkflowService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer khong o trang thai tu choi thuong luong");
         }
 
+        boolean accepted = request.accepted();
         if (accepted) {
             offer.setStatus("accepted");
             offer.setRespondedAt(LocalDateTime.now());
@@ -399,7 +402,7 @@ public class ApplicationWorkflowService {
             applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.REJECTED, "Ứng viên quyết định hủy bỏ Job Offer");
         }
 
-        JobOffer saved = jobOfferRepository.save(offer);
+        JobOffer saved = jobOfferRepository.saveAndFlush(offer);
 
         // Notify employer
         String responseText = accepted ? "đã chấp nhận Job Offer" : "quyết định từ chối Job Offer";

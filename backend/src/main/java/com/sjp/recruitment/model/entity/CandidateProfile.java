@@ -14,6 +14,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import com.sjp.recruitment.model.dto.profile.CertificationItem;
+import com.sjp.recruitment.model.dto.profile.EducationItem;
+import com.sjp.recruitment.model.dto.profile.ProjectItem;
+import com.sjp.recruitment.model.dto.profile.WorkExperienceItem;
 
 @Entity
 @Table(name = "job_seekers")
@@ -61,19 +65,19 @@ public class CandidateProfile {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "education_json", nullable = false)
-    private List<Object> education = List.of();
+    private List<EducationItem> education = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "work_experience_json", nullable = false)
-    private List<Object> workExperience = List.of();
+    private List<WorkExperienceItem> workExperience = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "projects_json", nullable = false)
-    private List<Object> projects = List.of();
+    private List<ProjectItem> projects = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "certifications_json", nullable = false)
-    private List<Object> certifications = List.of();
+    private List<CertificationItem> certifications = List.of();
 
     @CreatedDate
     @Column(nullable = false, updatable = false)

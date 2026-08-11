@@ -871,7 +871,7 @@ public class EmployerService {
                 || !application.getJob().getCompany().getId().equals(employer.getCompany().getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen truy cap CV cua don ung tuyen nay");
         }
-        return candidateService.toCvDownload(application.getCv());
+        return applicationService.toSubmittedCvDownload(application);
     }
 
     @Transactional(readOnly = true)
