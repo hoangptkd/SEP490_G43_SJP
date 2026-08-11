@@ -6176,6 +6176,23 @@ function AiInterviewRoom({
     return ticket.streamUrl;
   }, [config.voiceProvider, session.id]);
 
+  const finalizeHandsFreeCapture = useCallback(async (
+    segments: Array<{ sequence: number; file: File; durationSeconds: number }>,
+    captureId: string,
+    captureVersion: number,
+    browserTranscript: string,
+  ) => {
+    if (!currentQuestion) throw new Error('Câu hỏi hiện tại không còn hợp lệ.');
+    return aiInterviewService.finalizeHandsFreeCapture(
+      session.id,
+      currentQuestion.id,
+      captureId,
+      captureVersion,
+      segments,
+      browserTranscript,
+    );
+  }, [currentQuestion, session.id]);
+
   const voice = useVoiceConversation({
     questionId: currentQuestion?.id,
     questionText: currentQuestion?.content,
@@ -6185,6 +6202,7 @@ function AiInterviewRoom({
     unclearConfirmationDelayMs: config.voiceUnclearConfirmationDelayMs || 1200,
     disabled: Boolean(busy),
     onTranscript: setTranscript,
+    onFinalizeCapture: finalizeHandsFreeCapture,
     onConfirm: confirmVoiceAnswer,
     onSpeechUrl: config.voiceProvider === 'shopaikey_tts' ? createSpeechUrl : undefined,
   });
@@ -6266,7 +6284,7 @@ function AiInterviewRoom({
                     type="button"
                     className={voice.active ? 'danger' : ''}
                     aria-pressed={voice.active}
-                    disabled={Boolean(busy) || voice.phase === 'saving-answer'}
+                    disabled={Boolean(busy) || ['FINALIZING_AUDIO', 'TRANSCRIBING', 'SUBMITTING'].includes(voice.phase)}
                     onClick={() => {
                       if (voice.active) void finishInterview();
                       else voice.start();
@@ -6278,6 +6296,9 @@ function AiInterviewRoom({
                 <p className="voice-status" role="status" aria-live="polite">
                   Trạng thái: {voicePhaseLabel(voice.phase)}
                 </p>
+                {voice.transcriptNotice ? (
+                  <p className="voice-status" role="status" aria-live="polite">{voice.transcriptNotice}</p>
+                ) : null}
                 {voice.interimTranscript ? (
                   <p className="voice-interim" aria-live="polite">Đang nghe: {voice.interimTranscript}</p>
                 ) : null}
@@ -6370,14 +6391,18 @@ function findCurrentQuestion(session: AiInterviewSession) {
 
 function voicePhaseLabel(phase: VoicePhase) {
   const labels: Record<VoicePhase, string> = {
-    idle: 'Sẵn sàng',
-    'speaking-question': 'AI đang nói',
-    'listening-answer': 'Microphone đang nghe câu trả lời',
-    'asking-confirmation': 'AI đang hỏi xác nhận',
-    'listening-confirmation': 'Đang chờ bạn nói đã xong hoặc chưa xong',
-    'saving-answer': 'Đang lưu câu trả lời và chuẩn bị câu tiếp theo',
-    'awaiting-end': 'Đã hết câu hỏi, đang chờ kết thúc phỏng vấn',
-    error: 'Cần kiểm tra microphone',
+    IDLE: 'Sẵn sàng',
+    QUESTION_PLAYING: 'AI đang đọc câu hỏi',
+    STARTING_CAPTURE: 'Đang mở microphone',
+    LISTENING: 'Đang nghe...',
+    FINALIZING_AUDIO: 'Đang hoàn tất bản ghi âm',
+    TRANSCRIBING: 'Đang chuẩn hóa câu trả lời...',
+    TRANSCRIPT_READY: 'Đã chuẩn hóa transcript',
+    CONFIRMING: 'Đang chờ bạn nói đã xong hoặc chưa xong',
+    CONTINUING: 'Đang chuẩn bị để bạn nói tiếp',
+    SUBMITTING: 'Đang lưu câu trả lời và chuẩn bị câu tiếp theo',
+    COMPLETED: 'Đã hết câu hỏi, đang chờ kết thúc phỏng vấn',
+    ERROR_RECOVERABLE: 'Có lỗi tạm thời, câu trả lời vẫn được giữ',
   };
   return labels[phase];
 }

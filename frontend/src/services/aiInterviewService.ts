@@ -6,6 +6,8 @@ import type {
   AiInterviewSession,
   AiInterviewSpeechTicket,
   AiInterviewTranscript,
+  HandsFreeAnswerCaptureResult,
+  HandsFreeAudioSegmentUpload,
 } from '../types/aiInterview';
 
 export const aiInterviewService = {
@@ -66,6 +68,36 @@ export const aiInterviewService = {
       `/candidate/ai-interviews/sessions/${sessionId}/questions/current/audio`,
       form,
       { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data;
+  },
+
+  finalizeHandsFreeCapture: async (
+    sessionId: string,
+    questionId: string,
+    captureId: string,
+    captureVersion: number,
+    segments: HandsFreeAudioSegmentUpload[],
+    browserTranscript: string,
+  ): Promise<HandsFreeAnswerCaptureResult> => {
+    const form = new FormData();
+    form.append('captureId', captureId);
+    form.append('captureVersion', String(captureVersion));
+    form.append('browserTranscript', browserTranscript);
+    segments.forEach((segment) => {
+      form.append('audioSegments', segment.file);
+      form.append('segmentSequences', String(segment.sequence));
+      form.append('durationSeconds', String(segment.durationSeconds));
+    });
+    const response = await api.post<HandsFreeAnswerCaptureResult>(
+      `/candidate/ai-interviews/sessions/${sessionId}/questions/${questionId}/answer-capture`,
+      form,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Idempotency-Key': captureId,
+        },
+      },
     );
     return response.data;
   },

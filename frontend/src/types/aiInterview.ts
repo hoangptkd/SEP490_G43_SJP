@@ -97,6 +97,36 @@ export interface AiInterviewTranscript {
   transcriptStatus: string;
 }
 
+export interface HandsFreeVadMetrics {
+  speechSegments: Array<{ startMs: number; endMs: number }>;
+  speakingDurationSeconds: number;
+  speechOnsetSeconds?: number;
+  internalPauseCount: number;
+  longestInternalPauseSeconds: number;
+  totalInternalPauseDurationSeconds: number;
+  pauseDurationRatio: number;
+  modelVersion: string;
+  status: string;
+}
+
+export interface HandsFreeAnswerCaptureResult {
+  questionId: string;
+  captureId: string;
+  captureVersion: number;
+  browserTranscript: string;
+  gladiaTranscript?: string;
+  finalTranscript: string;
+  transcriptStatus: 'standardized' | 'fallback_browser';
+  dataQuality: string;
+  vadMetrics?: HandsFreeVadMetrics;
+}
+
+export interface HandsFreeAudioSegmentUpload {
+  sequence: number;
+  file: File;
+  durationSeconds: number;
+}
+
 export interface AiInterviewSpeechTicket {
   streamUrl: string;
   contentType: string;
