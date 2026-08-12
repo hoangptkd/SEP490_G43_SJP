@@ -154,6 +154,58 @@ export default function AdminBillingPage() {
     [payments],
   );
 
+  const employerPlans = useMemo(
+    () => plans
+      .filter((plan) => plan.targetRole === 'employer' || plan.targetRole === 'all')
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)),
+    [plans],
+  );
+
+  const candidatePlans = useMemo(
+    () => plans
+      .filter((plan) => plan.targetRole === 'job_seeker' || plan.targetRole === 'all')
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)),
+    [plans],
+  );
+
+  function renderPlanRow(plan: AdminPlan) {
+    const badge = statusBadge(plan.status);
+    const isInactive = (plan.status || '').toLowerCase() === 'inactive';
+    return (
+      <article key={`${plan.targetRole}-${plan.id}`} className="admin-plan-manage-row">
+        <div className="admin-plan-manage-body">
+          <div className="admin-review-title-line">
+            <strong>{plan.name}</strong>
+            <span className={`admin-status-badge ${badge.className}`}>{badge.text}</span>
+            {plan.targetRole === 'all' && (
+              <span className="admin-status-badge status-unverified">Chung</span>
+            )}
+          </div>
+          <div className="admin-review-meta">
+            <span>{money(plan.price, plan.currency)}</span>
+            <span>{plan.durationDays} ngày</span>
+          </div>
+          {plan.description && <p className="muted">{plan.description}</p>}
+        </div>
+        <div className="admin-plan-manage-actions">
+          <Link className="button-link outline" to={`/admin/billing/plans/${plan.id}/edit`}>
+            Chỉnh sửa
+          </Link>
+          <button
+            type="button"
+            className="outline"
+            onClick={() => togglePlanStatus(plan)}
+          >
+            {isInactive ? 'Mở bán lại' : 'Tạm tắt'}
+          </button>
+          <button type="button" className="danger" onClick={() => deletePlan(plan)}>
+            Xóa
+          </button>
+        </div>
+      </article>
+    );
+  }
+
   const paidActiveSubs = useMemo(
     () => subscriptions.filter((s) => s.status?.toLowerCase() === 'active'),
     [subscriptions],
@@ -307,6 +359,34 @@ export default function AdminBillingPage() {
     }
   }
 
+  async function togglePlanStatus(plan: AdminPlan) {
+    const isInactive = (plan.status || '').toLowerCase() === 'inactive';
+    const nextStatus = isInactive ? 'active' : 'inactive';
+    const actionLabel = isInactive ? 'mở bán lại' : 'tạm tắt';
+    if (!window.confirm(`Bạn muốn ${actionLabel} gói "${plan.name}"?`)) return;
+    try {
+      await adminService.updatePlan(plan.id, {
+        name: plan.name,
+        targetRole: plan.targetRole,
+        description: plan.description || '',
+        price: plan.price,
+        currency: plan.currency,
+        durationDays: plan.durationDays,
+        featuresJson: plan.featuresJson || '{}',
+        status: nextStatus,
+        sortOrder: plan.sortOrder,
+      });
+      setError('');
+      setSuccess(isInactive
+        ? `Đã mở bán lại gói "${plan.name}".`
+        : `Đã tạm tắt gói "${plan.name}".`);
+      await load();
+    } catch (err) {
+      setSuccess('');
+      setError(readError(err));
+    }
+  }
+
   async function cancelSubscription(item: AdminSubscription) {
     const reason = window.prompt(
       `Hủy gói "${item.planName}" của ${item.userEmail}?\nNhập lý do:`,
@@ -429,59 +509,98 @@ export default function AdminBillingPage() {
         <>
           <div className="admin-toolbar">
             <div className="admin-toolbar-group" role="tablist" aria-label="Lọc gói">
-              {['all', 'active', 'inactive'].map((item) => (
+              {[
+                { value: 'all', label: 'Tất cả' },
+                { value: 'active', label: 'Đang bán' },
+                { value: 'inactive', label: 'Tạm tắt' },
+              ].map((item) => (
                 <button
-                  key={item}
+                  key={item.value}
                   type="button"
                   role="tab"
-                  aria-selected={planFilter === item}
-                  className={planFilter === item ? 'active' : 'outline'}
-                  onClick={() => setPlanFilter(item)}
+                  aria-selected={planFilter === item.value}
+                  className={planFilter === item.value ? 'active' : 'outline'}
+                  onClick={() => setPlanFilter(item.value)}
                 >
-                  {statusLabel(item)}
+                  {item.label}
                 </button>
               ))}
             </div>
-            <Link className="button-link admin-toolbar-refresh" to="/admin/billing/plans/new">
-              + Tạo gói mới
-            </Link>
           </div>
-          <section className="admin-company-list-panel">
-            <div className="admin-company-list-header">
-              <h2>Danh sách gói</h2>
-              <span>{plans.length} gói</span>
-            </div>
-            <div className="admin-review-list">
-              {plans.map((plan) => {
-                const badge = statusBadge(plan.status);
-                return (
-                  <article key={plan.id} className="admin-review-row">
-                    <div className="admin-review-main">
-                      <div className="admin-review-title-line">
-                        <strong>{plan.name}</strong>
-                        <span className={`admin-status-badge ${badge.className}`}>{badge.text}</span>
-                      </div>
-                      <div className="admin-review-meta">
-                        <span>{statusLabel(plan.targetRole)}</span>
-                        <span>{money(plan.price, plan.currency)}</span>
-                        <span>{plan.durationDays} ngày</span>
-                      </div>
-                      {plan.description && <p className="muted">{plan.description}</p>}
-                    </div>
-                    <div className="admin-company-actions">
-                      <Link className="button-link outline" to={`/admin/billing/plans/${plan.id}/edit`}>
-                        Chỉnh sửa
+
+          <div className="admin-plan-split-grid">
+            <section className="admin-company-list-panel">
+              <div className="admin-company-list-header">
+                <div>
+                  <h2>Gói Nhà tuyển dụng</h2>
+                  <p className="muted" style={{ margin: '4px 0 0' }}>
+                    Quản lý gói dành riêng cho employer
+                  </p>
+                </div>
+                <div className="admin-company-actions">
+                  <span className="muted">{employerPlans.length} gói</span>
+                  {planFilter !== 'inactive' && (
+                    <Link className="button-link" to="/admin/billing/plans/new?role=employer">
+                      + Tạo gói NTD
+                    </Link>
+                  )}
+                </div>
+              </div>
+              <div className="admin-review-list">
+                {employerPlans.map(renderPlanRow)}
+                {!loading && employerPlans.length === 0 && (
+                  <div className="admin-placeholder-card">
+                    <p>
+                      {planFilter === 'inactive'
+                        ? 'Không có gói nhà tuyển dụng đang tạm tắt.'
+                        : 'Chưa có gói cho nhà tuyển dụng.'}
+                    </p>
+                    {planFilter !== 'inactive' && (
+                      <Link className="button-link" to="/admin/billing/plans/new?role=employer">
+                        Tạo gói NTD đầu tiên
                       </Link>
-                      <button type="button" className="danger" onClick={() => deletePlan(plan)}>
-                        Xóa
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-              {!loading && plans.length === 0 && <div className="admin-placeholder-card"><p>Chưa có gói dịch vụ.</p></div>}
-            </div>
-          </section>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="admin-company-list-panel">
+              <div className="admin-company-list-header">
+                <div>
+                  <h2>Gói Ứng viên</h2>
+                  <p className="muted" style={{ margin: '4px 0 0' }}>
+                    Quản lý gói dành riêng cho candidate
+                  </p>
+                </div>
+                <div className="admin-company-actions">
+                  <span className="muted">{candidatePlans.length} gói</span>
+                  {planFilter !== 'inactive' && (
+                    <Link className="button-link" to="/admin/billing/plans/new?role=job_seeker">
+                      + Tạo gói ứng viên
+                    </Link>
+                  )}
+                </div>
+              </div>
+              <div className="admin-review-list">
+                {candidatePlans.map(renderPlanRow)}
+                {!loading && candidatePlans.length === 0 && (
+                  <div className="admin-placeholder-card">
+                    <p>
+                      {planFilter === 'inactive'
+                        ? 'Không có gói ứng viên đang tạm tắt.'
+                        : 'Chưa có gói cho ứng viên.'}
+                    </p>
+                    {planFilter !== 'inactive' && (
+                      <Link className="button-link" to="/admin/billing/plans/new?role=job_seeker">
+                        Tạo gói ứng viên đầu tiên
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
         </>
       )}
 

@@ -19,7 +19,7 @@ class GlobalExceptionHandlerSecurityTest {
 
     @Test
     void dataConflictsDoNotExposeConstraintDetails() {
-        var response = handler.handleConcurrentWrite(new DataIntegrityViolationException("users_email_unique"));
+        var response = handler.handleDataIntegrity(new DataIntegrityViolationException("users_email_unique"));
 
         assertFalse(response.getBody().message().contains("users_email_unique"));
     }

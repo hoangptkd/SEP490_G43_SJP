@@ -1,0 +1,877 @@
+﻿CAPSTONE PROJECT REPORT
+Report 2 - Project Management Plan
+Smart Recruitment Portal (SRP) - SEP490_G43
+— Hanoi, August 2026 —
+Table of Contents
+[Cập nhật Table of Contents sau khi hoàn thiện tài liệu: References → Table of Contents → Update Table]
+List of Figures
+[Cập nhật danh sách hình sau khi hoàn thiện: References → Insert Table of Figures]
+List of Tables
+[Cập nhật danh sách bảng sau khi hoàn thiện: References → Insert Table of Figures (Label: Table)]
+I. Record of Changes
+*A - Added    M - Modified    D - Deleted
+Date
+A*/M/D
+In Charge
+Change Description
+Table 1: Record of Changes
+II. Release Package & User Guides
+1. Deliverable Package
+The following table lists all deliverable items included in this release of the Smart Recruitment Portal (SRP) project.
+No.
+Deliverable Item
+Sub-Items
+Type
+Version
+Code Package
+1
+Frontend
+Frontend.zip
+zip
+1.0
+2
+Backend
+Backend.zip
+zip
+1.0
+3
+Database
+Database_Migrations.zip
+zip
+1.0
+Documents
+4
+Project Introduction
+Report1_Project_Introduction
+pdf
+1.0
+5
+Project Management Plan
+Report2_Project_Management_Plan
+pdf
+1.0
+6
+Software Requirement Specification
+Report3_Software_Requirement_Specification
+pdf
+1.0
+7
+Software Design Document
+Report4_Software_Design_Document
+pdf
+1.0
+8
+Test Documentation
+Report5_Test_Documentation
+pdf
+1.0
+9
+Software User Guides
+Report6_Software_User_Guides
+pdf
+1.0
+10
+Final Project Report
+Report7_Final_Project_Report
+pdf
+1.0
+Testing
+11
+Unit Test
+Report5_Unit_Test
+xlsx
+1.0
+12
+Integration Test
+Report5_Integration_Test
+xlsx
+1.0
+13
+System Test
+Report5_System_Test
+xlsx
+1.0
+Slide
+14
+Presentation Slide
+G43_Slide
+pdf
+1.0
+Table 2: Project Deliverables
+2. Installation Guides
+2.1 System Requirements
+2.1.1 Hardware Specifications
+Component
+Minimum Requirement
+Recommended Specification
+Processor (CPU)
+Dual-core 2.0 GHz
+Quad-core 2.5 GHz or higher
+Memory (RAM)
+4 GB (Backend + Database)
+8 GB+ (Full-stack development)
+Disk Space
+10 GB available space
+20 GB+ (SSD recommended)
+Network
+Broadband Internet
+High-speed stable connection (Required for WebRTC/Video Call)
+Table 3: Hardware Specifications
+2.1.2 Software Dependencies & Tools
+Software
+Version
+Required For
+Download Link
+Java JDK
+17 or higher
+Backend Runtime
+https://adoptium.net/
+Maven
+3.8+
+Backend Build Tool
+https://maven.apache.org/
+Node.js
+v18 (LTS) or v20+
+Frontend Runtime
+https://nodejs.org/
+PostgreSQL
+v15 or higher
+Database System
+https://www.postgresql.org/download/
+Docker
+Latest Stable
+Containerization (Recommended)
+https://www.docker.com/products/docker-desktop/
+Git
+Latest Stable
+Version Control
+https://git-scm.com/
+VS Code / IntelliJ
+Latest Stable
+Code Editor (Optional)
+https://code.visualstudio.com/
+Table 4: Software Dependencies & Tools
+2.1.3 Network Configuration
+Service
+Default Port
+Protocol
+Description
+API Server
+8080
+TCP/HTTP
+Main Backend Interface (context-path: /api)
+PostgreSQL
+5432
+TCP
+Database Connection
+Frontend
+5173
+TCP/HTTP
+Web Client Interface (Vite Dev Server)
+Table 5: Network Configuration
+2.1.4 Third-Party Service Integration
+The Smart Recruitment Portal integrates with the following third-party services:
+Cloudinary: Cloud-based media storage (avatars, company logos)
+ShopAIKey (OpenAI-compatible): AI Interview question generation & evaluation
+Gladia: Speech-to-Text transcription for AI Interview
+MoMo: Mobile payment gateway
+VNPay: Banking payment gateway
+PayOS: Online payment gateway
+Google OAuth 2.0: Social login authentication
+SMTP (Gmail): Email notification service
+2.2 Installation Instructions
+2.2.1 Prerequisites Setup
+1. Install Java JDK 17
+Download: https://adoptium.net/
+Verify:
+java -version
+2. Install Node.js
+Download: https://nodejs.org/
+Verify:
+node --version && npm --version
+3. Install Maven
+Download: https://maven.apache.org/download.cgi
+Verify:
+mvn --version
+4. Install Docker & Docker Compose (highly recommended)
+Windows/macOS: https://www.docker.com/products/docker-desktop/
+Linux: Follow official guide
+Verify:
+docker --version && docker compose version
+2.2.2 Backend Setup
+Option A: Local Development (Recommended)
+1. Clone the repository
+git clone https://github.com/<your-org>/SEP490_G43_SJP.git
+cd SEP490_G43_SJP/backend
+2. Start PostgreSQL via Docker (recommended)
+docker run --name srp-postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=smart_recruitment \
+  -p 5432:5432 \
+  -d postgres:15-alpine
+3. Configure environment variables
+Create a .env file in the backend/ directory with the following variables:
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/smart_recruitment
+SPRING_DATASOURCE_USERNAME=postgres
+SPRING_DATASOURCE_PASSWORD=postgres
+JWT_SECRET=<your-secret-minimum-32-characters>
+FRONTEND_BASE_URL=http://localhost:5173
+# Optional: Configure third-party services
+# CLOUDINARY_CLOUD_NAME=...
+# SHOPAIKEY_API_KEY=...
+# GLADIA_API_KEY=...
+4. Build and run the application
+mvn clean install -DskipTests
+mvn spring-boot:run
+API available at: http://localhost:8080/api
+Swagger UI: http://localhost:8080/api/swagger-ui.html (if configured)
+Option B: Using Docker Compose (Best for consistency)
+cd SEP490_G43_SJP
+docker-compose up -d
+2.2.3 Frontend Setup
+1. Install packages
+cd frontend
+npm install
+2. Create .env.local
+VITE_API_BASE_URL=http://localhost:8080/api
+VITE_PORT=5173
+3. Start development server
+npm run dev
+Frontend available at: http://localhost:5173
+2.2.4 Verification Steps
+Component
+Verification Method
+Backend
+Open http://localhost:8080/api/actuator/healthCheck for successful DB connection
+Frontend
+Open http://localhost:5173No console errors
+Full-stack
+Perform user registration, login, test core features…
+Table 6: Verification Steps
+3. User Manual
+3.1 Overview
+Smart Recruitment Portal (SRP) is an online job recruitment platform that connects employers with candidates. The system provides intelligent features for job search & matching, AI-powered interview practice, application management, and subscription-based premium services.
+Core Features:
+Job search with advanced filtering (location, salary, experience, skills, category)
+AI-powered mock interview with speech recognition and real-time feedback
+Application workflow management (Submit → Review → Interview → Offer → Hire)
+Company profile & verification system
+Subscription & payment integration (MoMo, VNPay, PayOS, Bank Transfer)
+Admin dashboard with user management, job moderation, billing, and statistics
+Notification system for real-time updates
+CV management with multiple versions
+User Roles:
+Guest: Browse jobs, view company information
+Candidate: Apply for jobs, manage profile/CV, AI interview, subscription
+Employer: Post jobs, manage applications, company profile, interview scheduling
+Admin: System management, user management, billing, company review, settings
+[Chèn ảnh chụp màn hình tại đây]
+Figure 1: System Overview - Main User Roles & Features Diagram
+3.2 Details
+3.2.1 User Management & Authentication
+3.2.1.1 Email/Password Registration
+Step 1: Click button "Đăng ký" on the Homepage as shown in Figure below.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 2: Homepage - Registration Button
+The Registration form will appear as shown below.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 3: Register Page
+Step 2: Fill in all the required fields in the form and then click the "Tạo tài khoản mới" button to complete the registration.
+Email: Enter a valid email address
+Password: Minimum 6 characters
+Role: Select either "Ứng viên" (Candidate) or "Nhà tuyển dụng" (Employer)
+[Chèn ảnh chụp màn hình tại đây]
+Figure 4: Registration Form - Filled
+Step 3: Check your email inbox for the verification email. Click the verification link to activate your account.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 5: Email Verification - Inbox
+Note: If you do not receive the verification email, check your spam/junk folder.
+3.2.1.2 Google OAuth Login
+Step 1: Click the "Đăng nhập bằng Google" button on the Login page.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 6: Login Page - Google OAuth Button
+Step 2: Select your Google account and authorize the application.
+Step 3: If this is your first time logging in via Google, you will be prompted to select a role (Candidate or Employer).
+[Chèn ảnh chụp màn hình tại đây]
+Figure 7: Select Role Page (for new OAuth users)
+3.2.1.3 Login
+Step 1: Navigate to the Login page by clicking "Đăng nhập" on the Homepage.
+Step 2: Enter your registered email and password.
+Step 3: Click "Đăng nhập" to log in.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 8: Login Page
+Upon successful login, you will be redirected based on your role:
+Candidate → Candidate Dashboard (/candidate)
+Employer → Employer Dashboard (/employer)
+Admin → Admin Dashboard (/admin)
+3.2.1.4 Forgot Password
+Step 1: On the Login page, click "Quên mật khẩu?"
+Step 2: Enter your registered email address.
+Step 3: Click "Gửi email khôi phục" to receive a password reset link.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 9: Forgot Password Page
+Step 4: Check your email and click the reset link.
+Step 5: Enter your new password and confirm.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 10: Reset Password Page
+3.2.1.5 Account Settings
+Users can manage their account settings including:
+Change password
+Update avatar
+Deactivate account
+Step 1: Navigate to Account settings from the sidebar menu.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 11: Account Settings Page
+3.2.2 Guest Features
+3.2.2.1 Homepage
+The homepage provides an overview of the platform with quick access to job search and featured listings.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 12: Homepage - Full View
+3.2.2.2 Job Browsing & Search
+Step 1: Navigate to "Việc làm" from the main navigation menu or click "Tìm việc" on the homepage.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 13: Job Listing Page
+Step 2: Use the filter panel to refine your search:
+Search keyword (job title, company name)
+Location
+Salary range (Min – Max)
+Experience level
+Skills
+Category
+Sort by: Newest, Salary (High→Low), etc.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 14: Job Search - Filters Applied
+Step 3: Click on a job card to view the full job details.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 15: Job Detail Page
+3.2.3 Candidate Workflow
+After logging in as a Candidate, users can access the Candidate Dashboard with a sidebar navigation containing the following sections.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 16: Candidate Dashboard - Sidebar Navigation
+3.2.3.1 Candidate Home
+The Candidate Home page displays job recommendations, recent applications, and quick statistics.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 17: Candidate Home Page
+3.2.3.2 Profile Management
+Step 1: Click "Hồ sơ" from the sidebar navigation.
+Step 2: Fill in or update your personal information:
+Full name, phone number, date of birth
+Address, bio/summary
+Skills (add/remove)
+Experience level
+[Chèn ảnh chụp màn hình tại đây]
+Figure 18: Candidate Profile Page - Edit Mode
+Step 3: Click "Lưu" to save your profile changes.
+3.2.3.3 CV Management
+Step 1: Click "Quản lý CV" from the sidebar.
+Step 2: Click "Tải CV lên" to upload a new CV file (PDF format recommended).
+[Chèn ảnh chụp màn hình tại đây]
+Figure 19: CV Management Page
+Step 3: You can manage multiple CV files:
+Set a default CV for quick applications
+Download/preview existing CVs
+Delete unwanted CVs
+CV Versions:
+You can also create custom CV versions with different content tailored for specific job applications.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 20: CV Version Management
+3.2.3.4 Applying for a Job
+Step 1: Browse jobs and click on a job you are interested in.
+Step 2: On the Job Detail page, click "Ứng tuyển ngay".
+[Chèn ảnh chụp màn hình tại đây]
+Figure 21: Job Detail - Apply Button
+Step 3: Select a CV to attach with your application.
+Step 4: Optionally add a cover letter or note.
+Step 5: Click "Nộp đơn" to submit your application.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 22: Application Submission Form
+3.2.3.5 Application Tracking
+Step 1: Click "Đơn ứng tuyển" from the sidebar.
+The applications page shows all your submitted applications with their current status:
+Status
+Vietnamese Label
+Description
+SUBMITTED
+Đã nộp
+Application has been submitted successfully
+UNDER_REVIEW
+Đang xem xét
+Employer is reviewing your application
+SHORTLISTED
+Vào shortlist
+You've been shortlisted for the position
+INTERVIEW_SCHEDULED
+Hẹn phỏng vấn
+An interview has been scheduled
+INTERVIEWED
+Đã phỏng vấn
+Interview has been completed
+EVALUATED
+Đã đánh giá
+Your application has been evaluated
+ACCEPTED
+Chấp nhận
+Congratulations! You've been accepted
+REJECTED
+Từ chối
+Application was not selected
+HIRED
+Đã tuyển
+You've been officially hired
+Table 7: Application Status Descriptions
+[Chèn ảnh chụp màn hình tại đây]
+Figure 23: Applications List Page
+Step 2: Click on an application to view detailed information including:
+Application status history
+Interview schedule details
+Job offer information
+Employer notes
+[Chèn ảnh chụp màn hình tại đây]
+Figure 24: Application Detail Page
+3.2.3.6 Interview Response
+When an employer schedules an interview, candidates can:
+Accept the interview schedule
+Request reschedule with a proposed new time
+View interview details (time, location/link, notes)
+[Chèn ảnh chụp màn hình tại đây]
+Figure 25: Interview Schedule - Candidate Response
+3.2.3.7 Job Offer Response
+When an employer sends a job offer, candidates can:
+Accept the offer
+Reject the offer with a note
+View offer details (salary, start date, benefits)
+[Chèn ảnh chụp màn hình tại đây]
+Figure 26: Job Offer - Candidate Response
+3.2.3.8 Saved Jobs
+Step 1: On any job card or job detail page, click the bookmark/save icon to save a job.
+Step 2: View all saved jobs by clicking "Việc đã lưu" in the sidebar.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 27: Saved Jobs Page
+3.2.3.9 AI Interview Practice
+The AI Interview feature allows candidates to practice mock interviews powered by artificial intelligence. The system generates questions based on the job description and evaluates answers in real-time.
+Step 1: Click "Phỏng vấn AI" from the sidebar.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 28: AI Interview - Main Page
+Step 2: Choose interview mode:
+Application Interview: Practice for a specific job you've applied to
+Practice Interview: General practice with custom question sets
+[Chèn ảnh chụp màn hình tại đây]
+Figure 29: AI Interview - Mode Selection
+Step 3: During the interview session:
+Listen to the AI-generated question (with text-to-speech)
+Record your answer using the microphone button
+The system transcribes your speech automatically
+Review and confirm your answer or re-record
+Receive real-time AI feedback on each answer
+[Chèn ảnh chụp màn hình tại đây]
+Figure 30: AI Interview - Active Session
+Step 4: After completing all questions, view your interview summary:
+Overall score and assessment
+Per-question feedback with scores
+Improvement suggestions
+[Chèn ảnh chụp màn hình tại đây]
+Figure 31: AI Interview - Summary Report
+Note: Microphone access is required. Ensure your browser has permission to use the microphone.
+3.2.3.10 Notifications
+Step 1: Click the bell icon or "Thông báo" in the sidebar to view notifications.
+Notifications include:
+Application status updates
+Interview schedule notifications
+Job offer notifications
+System announcements
+[Chèn ảnh chụp màn hình tại đây]
+Figure 32: Notifications Page
+3.2.3.11 Subscription & Payment
+Step 1: Click "Gói dịch vụ" from the sidebar to view your current subscription status.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 33: Subscription Page - Current Plan
+Step 2: Click "Xem các gói" to browse available subscription plans.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 34: Subscription Plans Page
+Step 3: Select a plan and choose a payment method:
+MoMo
+VNPay
+PayOS
+Bank Transfer
+[Chèn ảnh chụp màn hình tại đây]
+Figure 35: Payment Checkout Page
+Step 4: Complete the payment process. You will be redirected to the payment result page.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 36: Payment Result Page
+3.2.4 Employer Workflow
+After logging in as an Employer, users access the Employer Dashboard with a sidebar navigation containing the following sections.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 37: Employer Dashboard - Sidebar Navigation
+3.2.4.1 Employer Dashboard
+The dashboard displays key metrics:
+Total active job postings
+Total applications received
+Applications by status breakdown
+Recent application activity
+[Chèn ảnh chụp màn hình tại đây]
+Figure 38: Employer Dashboard Page
+3.2.4.2 Company Profile Management
+Step 1: Click "Hồ sơ công ty" from the sidebar.
+Step 2: Fill in company information:
+Company name, description, website
+Industry, company size
+Upload company logo
+Contact information
+[Chèn ảnh chụp màn hình tại đây]
+Figure 39: Company Profile Page - Edit
+Step 3: Click "Lưu" to save changes.
+3.2.4.3 Company Locations
+Step 1: Click "Địa điểm" from the sidebar.
+Step 2: Click "Thêm địa điểm" to add a new office location.
+Step 3: Fill in address details and save.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 40: Company Locations Management Page
+3.2.4.4 Company Verification
+Companies must be verified by an Admin before job postings become visible. Upload required verification documents:
+Business registration certificate
+Tax registration certificate
+Other supporting documents
+Step 1: Click "Xác minh" from the sidebar.
+Step 2: Upload verification documents.
+Step 3: Wait for Admin review and approval.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 41: Company Verification Page
+Note: Job postings will only be visible to candidates after company verification is approved.
+3.2.4.5 Job Posting Management
+Step 1: Click "Việc làm" from the sidebar.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 42: Employer Jobs List Page
+Step 2: Click "Tạo việc làm mới" to create a new job posting.
+Step 3: Fill in job details:
+Job title, description
+Category, experience level
+Required skills
+Salary range
+Location
+Application deadline
+[Chèn ảnh chụp màn hình tại đây]
+Figure 43: Create/Edit Job Form
+Step 4: Click "Lưu nháp" to save as draft or "Gửi duyệt" to submit for Admin review.
+Job Status Flow:
+Status
+Description
+DRAFT
+Job is saved but not submitted for review
+PENDING_REVIEW
+Job is submitted and waiting for Admin approval
+APPROVED / ACTIVE
+Job is approved and visible to candidates
+REJECTED
+Job was rejected by Admin (can be edited and resubmitted)
+CLOSED
+Job is no longer accepting applications
+ARCHIVED
+Job has been archived
+Table 8: Job Status Flow
+3.2.4.6 Application Management
+Step 1: Click "Đơn ứng tuyển" from the sidebar or access from a specific job.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 44: Employer Applications Page
+Step 2: Review applications:
+View candidate CV (download)
+View candidate profile
+Filter by status or search by name
+Step 3: Update application status:
+Shortlist promising candidates
+Schedule interviews
+Record interview results
+Send job offers
+Reject applications with notes
+[Chèn ảnh chụp màn hình tại đây]
+Figure 45: Application Detail - Employer View
+3.2.4.7 Interview Scheduling
+Step 1: From the application detail, click "Hẹn phỏng vấn".
+Step 2: Fill in interview details:
+Date and time
+Location or online meeting link
+Notes for the candidate
+[Chèn ảnh chụp màn hình tại đây]
+Figure 46: Schedule Interview Form
+Step 3: After the interview, record the result:
+Pass / Fail
+Interview notes and evaluation
+[Chèn ảnh chụp màn hình tại đây]
+Figure 47: Interview Result Form
+3.2.4.8 Job Offer
+Step 1: From the application detail, click "Gửi Offer".
+Step 2: Fill in offer details:
+Offered salary
+Start date
+Benefits and conditions
+[Chèn ảnh chụp màn hình tại đây]
+Figure 48: Create Job Offer Form
+Step 3: Track offer response from the candidate.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 49: Job Offer Status Tracking
+3.2.4.9 Notifications
+Employer notifications include:
+New application submissions
+Candidate interview responses
+Offer acceptance/rejection
+Company verification updates
+Job review status changes
+[Chèn ảnh chụp màn hình tại đây]
+Figure 50: Employer Notifications Page
+3.2.4.10 Employer Subscription
+Employers can subscribe to premium plans for additional features:
+Increased job posting limits
+Priority listing in search results
+Advanced analytics
+Step 1: Click "Gói dịch vụ" from the sidebar.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 51: Employer Subscription Page
+3.2.4.11 Employer Settings
+Manage employer-specific settings:
+Personal profile information
+Notification preferences
+[Chèn ảnh chụp màn hình tại đây]
+Figure 52: Employer Settings Page
+3.2.5 Admin Workflow
+The Admin panel is accessible at /admin/login. Only users with the ADMIN role can access this area.
+3.2.5.1 Admin Login
+Step 1: Navigate to http://<domain>/admin/login
+Step 2: Enter admin credentials and click "Đăng nhập".
+[Chèn ảnh chụp màn hình tại đây]
+Figure 53: Admin Login Page
+3.2.5.2 Admin Dashboard
+The Admin Dashboard provides a comprehensive overview of the system:
+Total users, jobs, applications statistics
+Revenue and subscription metrics
+Recent activity feed
+[Chèn ảnh chụp màn hình tại đây]
+Figure 54: Admin Dashboard Page
+3.2.5.3 User Management
+Step 1: Click "Quản lý người dùng" from the sidebar.
+Step 2: View all registered users with filtering options:
+Search by name/email
+Filter by role (Candidate/Employer/Admin)
+Filter by status (Active/Inactive)
+[Chèn ảnh chụp màn hình tại đây]
+Figure 55: Admin Users Management Page
+Step 3: Actions available:
+View user details
+Activate/Deactivate accounts
+Change user roles
+3.2.5.4 Company Review & Approval
+Step 1: Click "Công ty" from the sidebar.
+Step 2: Filter companies by status (Pending/Approved/Rejected).
+[Chèn ảnh chụp màn hình tại đây]
+Figure 56: Admin Company Review List
+Step 3: Click on a company to review details:
+Company information
+Uploaded verification documents
+Review and approve/reject individual documents
+[Chèn ảnh chụp màn hình tại đây]
+Figure 57: Admin Company Detail Page
+Step 4: Approve or reject the company with review notes.
+3.2.5.5 Job Moderation
+Step 1: Click "Việc làm" from the sidebar.
+Step 2: View all job postings with filtering:
+Filter by status (Pending Review/Active/Rejected/Closed)
+Search by title or company
+[Chèn ảnh chụp màn hình tại đây]
+Figure 58: Admin Jobs Management Page
+Step 3: Click on a job to review and approve/reject.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 59: Admin Job Detail Review Page
+3.2.5.6 Billing & Plans Management
+Step 1: Click "Thanh toán" from the sidebar.
+Step 2: Manage subscription plans:
+View existing plans
+Create new plan
+Edit plan details (name, price, features, limits)
+Activate/deactivate plans
+[Chèn ảnh chụp màn hình tại đây]
+Figure 60: Admin Billing Management Page
+Step 3: Monitor payment transactions and subscription history.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 61: Admin Plan Create/Edit Form
+3.2.5.7 Categories & Settings
+Step 1: Click "Cài đặt" from the sidebar.
+Step 2: Manage system settings:
+Site name and support email
+Theme customization (primary color)
+Maintenance mode toggle
+Job categories management (add/edit/delete)
+Skills management
+[Chèn ảnh chụp màn hình tại đây]
+Figure 62: Admin Settings Page
+3.2.5.8 Statistics & Analytics
+Step 1: Click "Thống kê" from the sidebar.
+View comprehensive analytics:
+User registration trends
+Job posting statistics
+Application conversion rates
+Revenue reports
+System usage metrics
+[Chèn ảnh chụp màn hình tại đây]
+Figure 63: Admin Statistics Page
+3.2.5.9 Audit Logs
+Step 1: Click "Nhật ký hệ thống" from the sidebar.
+View system audit logs tracking all important actions:
+User login/logout events
+Admin actions (approve/reject)
+System configuration changes
+[Chèn ảnh chụp màn hình tại đây]
+Figure 64: Admin Audit Logs Page
+3.2.5.10 Admin Profile
+Step 1: Click your avatar/name in the top-right corner.
+Step 2: Update admin profile information.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 65: Admin Profile Page
+3.3 Application Workflow
+The following diagram illustrates the complete application lifecycle in the Smart Recruitment Portal, from job posting to hiring.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 66: Application Workflow Diagram (SUBMITTED → UNDER_REVIEW → SHORTLISTED → INTERVIEW_SCHEDULED → INTERVIEWED → EVALUATED → ACCEPTED/REJECTED → HIRED)
+Key workflow transitions:
+From Status
+To Status
+Action By
+Description
+—
+SUBMITTED
+Candidate
+Candidate submits application
+SUBMITTED
+UNDER_REVIEW
+Employer
+Employer opens application for review
+UNDER_REVIEW
+SHORTLISTED
+Employer
+Candidate added to shortlist
+SHORTLISTED
+INTERVIEW_SCHEDULED
+Employer
+Interview is scheduled
+INTERVIEW_SCHEDULED
+INTERVIEWED
+Employer
+Interview is completed
+INTERVIEWED
+EVALUATED
+Employer
+Application is evaluated
+EVALUATED
+ACCEPTED
+Employer
+Candidate is accepted, offer sent
+ACCEPTED
+HIRED
+Employer
+Candidate confirms and is hired
+Any
+REJECTED
+Employer
+Application is rejected at any stage
+Table 9: Application Workflow Transitions
+3.4 Payment Workflow
+The payment process for subscriptions follows these steps:
+Step 1: User selects a subscription plan.
+Step 2: System displays available payment methods:
+Payment Method
+Type
+Description
+MoMo
+Mobile Wallet
+QR code payment via MoMo app
+VNPay
+Banking Gateway
+Online banking payment via VNPay
+PayOS
+Online Payment
+Online payment via PayOS gateway
+Bank Transfer
+Manual Transfer
+Direct bank transfer with QR code
+Table 10: Supported Payment Methods
+Step 3: User selects a payment method and is redirected to the payment gateway.
+Step 4: After payment completion, user is redirected to the payment result page.
+[Chèn ảnh chụp màn hình tại đây]
+Figure 67: Payment Flow - Method Selection
+[Chèn ảnh chụp màn hình tại đây]
+Figure 68: Bank Transfer Payment - QR Code
+[Chèn ảnh chụp màn hình tại đây]
+Figure 69: Payment Result - Success
+Appendix
+A. Glossary
+Term
+Definition
+SRP
+Smart Recruitment Portal - The main platform name
+AI Interview
+Artificial Intelligence-powered mock interview feature
+OAuth
+Open Authorization - Protocol for Google login integration
+JWT
+JSON Web Token - Authentication token standard
+CV
+Curriculum Vitae - Resume document
+WebRTC
+Web Real-Time Communication - Used for voice features
+TTS
+Text-to-Speech - AI voice generation for interview questions
+STT
+Speech-to-Text - Voice transcription for interview answers
+MoMo
+Vietnamese mobile payment service
+VNPay
+Vietnamese online banking payment gateway
+PayOS
+Vietnamese online payment solution
+Table 11: Glossary of Terms
+B. System Architecture Summary
+Layer
+Technology
+Description
+Frontend
+React 18 + TypeScript + Vite
+Single-page application with responsive UI
+Styling
+Tailwind CSS
+Utility-first CSS framework
+State Management
+Redux Toolkit
+Centralized application state
+Backend
+Spring Boot 3.2.3 (Java 17)
+RESTful API server
+Database
+PostgreSQL 15
+Relational database with Flyway migrations
+Authentication
+JWT + Spring Security
+Token-based auth with role-based access
+File Storage
+Cloudinary
+Cloud-based media storage
+AI Services
+ShopAIKey (OpenAI-compatible)
+Interview question generation & evaluation
+Speech
+Gladia + Browser Web Speech
+STT and TTS capabilities
+Containerization
+Docker + Docker Compose
+Development environment
+Table 12: System Architecture Summary
+C. Default Port Configuration
+Service
+Port
+URL
+Frontend (Vite)
+5173
+http://localhost:5173
+Backend API
+8080
+http://localhost:8080/api
+PostgreSQL
+5432
+localhost:5432
+Table 13: Default Port Configuration

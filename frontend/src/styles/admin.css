@@ -1931,6 +1931,53 @@
   gap: 18px;
 }
 
+.admin-plan-split-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-plan-manage-row {
+  background: #fff;
+  border: 1px solid rgb(192 199 209 / 0.45);
+  border-radius: 14px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.admin-plan-manage-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-plan-manage-body > p {
+  margin: 0;
+}
+
+.admin-plan-manage-actions {
+  border-top: 1px solid rgb(226 232 240);
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+.admin-plan-manage-actions .button-link,
+.admin-plan-manage-actions button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .admin-plan-split-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-plan-layout {
   align-items: start;
   display: grid;
@@ -1970,42 +2017,128 @@
   margin: 0;
 }
 
+.admin-plan-role-locked {
+  background: #eef6ff;
+  border: 1.5px solid rgb(0 80 125 / 0.35);
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+}
+
+.admin-plan-role-locked strong {
+  font-size: 0.98rem;
+}
+
+.admin-plan-role-locked span {
+  color: var(--on-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
 .admin-plan-role-picker {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .admin-plan-role-card {
   background: #f8fafc;
   border: 1.5px solid rgb(192 199 209 / 0.7);
-  border-radius: 14px;
+  border-radius: 12px;
   color: inherit;
   cursor: pointer;
   display: grid;
   gap: 4px;
-  padding: 14px 12px;
+  padding: 14px 14px;
   text-align: left;
   transition:
     border-color 140ms var(--ease-out),
-    background-color 140ms var(--ease-out),
-    box-shadow 140ms var(--ease-out);
+    background-color 140ms var(--ease-out);
 }
 
 .admin-plan-role-card strong {
-  font-size: 0.92rem;
+  font-size: 0.95rem;
 }
 
 .admin-plan-role-card span {
   color: var(--on-muted);
   font-size: 0.78rem;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .admin-plan-role-card.active {
   background: #eef6ff;
-  border-color: rgb(0 80 125 / 0.45);
-  box-shadow: inset 0 0 0 1px rgb(0 80 125 / 0.12);
+  border-color: rgb(0 80 125 / 0.5);
+}
+
+.admin-plan-name-block {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-plan-tier-picker {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-plan-tier-option {
+  align-items: start;
+  background: #fff;
+  border: 1.5px solid rgb(203 213 225);
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-height: 72px;
+  padding: 12px 10px;
+  text-align: left;
+  transition:
+    border-color 140ms var(--ease-out),
+    background-color 140ms var(--ease-out);
+}
+
+.admin-plan-tier-option strong {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.admin-plan-tier-option span {
+  color: var(--on-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.admin-plan-tier-option.active {
+  background: #eef6ff;
+  border-color: rgb(0 80 125 / 0.55);
+}
+
+.admin-plan-tier-option-custom.active {
+  background: #f8fafc;
+  border-color: rgb(100 116 139 / 0.55);
+}
+
+.admin-plan-name-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.admin-plan-name-field-label {
+  color: var(--on-surface, #0f172a);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.admin-plan-name-field input.is-locked,
+.admin-plan-name-field input:disabled {
+  background: #f1f5f9;
+  color: #475569;
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 .admin-plan-select-all {
@@ -2289,7 +2422,8 @@
   font-weight: 600;
 }
 
-.admin-settings-grid label.full {
+.admin-settings-grid label.full,
+.admin-settings-grid .full {
   grid-column: 1 / -1;
 }
 
@@ -2738,6 +2872,12 @@
   }
 }
 
+@media (max-width: 1100px) {
+  .admin-plan-tier-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 980px) {
   .admin-plan-layout {
     grid-template-columns: 1fr;
@@ -2752,7 +2892,8 @@
   .admin-settings-grid,
   .admin-plan-role-picker,
   .admin-plan-benefit-grid,
-  .admin-plan-limit-grid {
+  .admin-plan-limit-grid,
+  .admin-plan-tier-picker {
     grid-template-columns: 1fr;
   }
 

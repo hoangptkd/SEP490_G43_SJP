@@ -52,6 +52,8 @@ public class FeatureLimitService {
                   AND LOWER(s.status) = 'active'
                   AND (s.end_date IS NULL OR s.end_date > now())
                 JOIN plans p ON p.id = s.plan_id
+                  AND LOWER(COALESCE(p.target_role, '')) IN ('employer', 'all')
+                  AND LOWER(COALESCE(p.status, 'active')) = 'active'
                 WHERE e.id = j.created_by_employer_id
                 ORDER BY s.start_date DESC NULLS LAST, s.created_at DESC
                 LIMIT 1
@@ -336,8 +338,9 @@ public class FeatureLimitService {
                         FROM subscriptions s
                         JOIN plans p ON p.id = s.plan_id
                         WHERE s.user_id = CAST(:userId AS uuid)
-                          AND s.status = 'active'
+                          AND LOWER(s.status) = 'active'
                           AND (s.end_date IS NULL OR s.end_date > now())
+                          AND LOWER(COALESCE(p.status, 'active')) = 'active'
                         ORDER BY s.start_date DESC NULLS LAST
                         LIMIT 1
                         """,
@@ -401,8 +404,10 @@ public class FeatureLimitService {
                         FROM subscriptions s
                         JOIN plans p ON p.id = s.plan_id
                         WHERE s.user_id IN (:userIds)
-                          AND s.status = 'active'
+                          AND LOWER(s.status) = 'active'
                           AND (s.end_date IS NULL OR s.end_date > now())
+                          AND LOWER(COALESCE(p.target_role, '')) IN ('employer', 'all')
+                          AND LOWER(COALESCE(p.status, 'active')) = 'active'
                         ORDER BY s.user_id, s.start_date DESC NULLS LAST
                         """,
                 new MapSqlParameterSource("userIds", distinctUserIds),

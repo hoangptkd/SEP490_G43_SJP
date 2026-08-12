@@ -73,7 +73,7 @@ public class AdminOpsService {
         }
 
         AdminPlanResponse current = findPlan(id);
-        String name = normalizePlanTier(request.name());
+        String name = normalizePlanName(request.name());
         String targetRole = StringUtils.hasText(request.targetRole())
                 ? request.targetRole().trim().toLowerCase(Locale.ROOT)
                 : current.targetRole();
@@ -81,7 +81,7 @@ public class AdminOpsService {
         BigDecimal price = request.price() != null ? request.price() : current.price();
         String currency = StringUtils.hasText(request.currency()) ? request.currency().trim().toUpperCase(Locale.ROOT) : current.currency();
         Integer durationDays = request.durationDays() != null ? request.durationDays() : current.durationDays();
-        String featuresJson = ensureListingPriority(StringUtils.hasText(request.featuresJson()) ? request.featuresJson().trim() : current.featuresJson(), name);
+        String featuresJson = ensureListingPriority(StringUtils.hasText(request.featuresJson()) ? request.featuresJson().trim() : current.featuresJson(), name, targetRole);
         String status = StringUtils.hasText(request.status())
                 ? request.status().trim().toLowerCase(Locale.ROOT)
                 : current.status();
@@ -112,7 +112,8 @@ public class AdminOpsService {
         );
         if (duplicate != null && duplicate > 0) {
             throw new ApiException(HttpStatus.CONFLICT, "PLAN_EXISTS",
-                    "Gói " + name + " cho đối tượng này đã tồn tại");
+                    "Đã tồn tại gói \"" + name + "\" dành cho " + planTargetRoleLabel(targetRole)
+                            + ". Vui lòng chọn tên khác hoặc đối tượng khác.");
         }
 
         namedParameterJdbcTemplate.update("""
@@ -154,17 +155,18 @@ public class AdminOpsService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "NAME_REQUIRED", "Vui lòng nhập tên gói dịch vụ");
         }
 
-        String name = normalizePlanTier(request.name());
+        String name = normalizePlanName(request.name());
         String targetRole = StringUtils.hasText(request.targetRole())
                 ? request.targetRole().trim().toLowerCase(Locale.ROOT)
-                : "all";
+                : "employer";
         String description = request.description() != null ? request.description().trim() : null;
         BigDecimal price = request.price() != null ? request.price() : BigDecimal.ZERO;
         String currency = StringUtils.hasText(request.currency()) ? request.currency().trim().toUpperCase(Locale.ROOT) : "VND";
         Integer durationDays = request.durationDays() != null ? request.durationDays() : 30;
         String featuresJson = ensureListingPriority(
                 StringUtils.hasText(request.featuresJson()) ? request.featuresJson().trim() : "{}",
-                name
+                name,
+                targetRole
         );
         String status = StringUtils.hasText(request.status())
                 ? request.status().trim().toLowerCase(Locale.ROOT)
@@ -194,7 +196,8 @@ public class AdminOpsService {
         );
         if (existing != null && existing > 0) {
             throw new ApiException(HttpStatus.CONFLICT, "PLAN_EXISTS",
-                    "Gói " + name + " cho đối tượng này đã tồn tại");
+                    "Đã tồn tại gói \"" + name + "\" dành cho " + planTargetRoleLabel(targetRole)
+                            + ". Không thể tạo trùng. Vui lòng chọn tên khác hoặc đối tượng khác.");
         }
 
         String id = namedParameterJdbcTemplate.query("""
@@ -832,9 +835,10 @@ public class AdminOpsService {
         }
     }
 
-    private String normalizePlanTier(String raw) {
+    /** Chuẩn hóa tên: Plus/Pro/Premium giữ casing chuẩn; tên khác cho phép tùy chỉnh. */
+    private String normalizePlanName(String raw) {
         if (!StringUtils.hasText(raw)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "NAME_REQUIRED", "Vui lòng chọn tên gói: Plus, Pro hoặc Premium");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "NAME_REQUIRED", "Vui lòng nhập tên gói dịch vụ");
         }
         String name = raw.trim();
         for (String tier : List.of("Plus", "Pro", "Premium")) {
@@ -842,8 +846,19 @@ public class AdminOpsService {
                 return tier;
             }
         }
-        throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PLAN_NAME",
-                "Tên gói chỉ được chọn: Plus, Pro, Premium");
+        if (name.length() > 80) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PLAN_NAME", "Tên gói tối đa 80 ký tự");
+        }
+        return name;
+    }
+
+    private String planTargetRoleLabel(String targetRole) {
+        return switch (targetRole) {
+            case "employer" -> "Nhà tuyển dụng";
+            case "job_seeker" -> "Ứng viên";
+            case "all" -> "Tất cả";
+            default -> targetRole;
+        };
     }
 
     private int tierPriority(String name) {
@@ -851,27 +866,38 @@ public class AdminOpsService {
             case "Plus" -> 1;
             case "Pro" -> 2;
             case "Premium" -> 3;
-            default -> 0;
+            default -> -1; // custom — giữ giá trị từ features JSON
         };
     }
 
     private int tierSortOrder(String name) {
-        return tierPriority(name);
+        int priority = tierPriority(name);
+        return priority > 0 ? priority : 10;
     }
 
-    private String ensureListingPriority(String featuresJson, String planName) {
+    private String ensureListingPriority(String featuresJson, String planName, String targetRole) {
         try {
             JsonNode node = objectMapper.readTree(StringUtils.hasText(featuresJson) ? featuresJson : "{}");
             ObjectNode root = node.isObject() ? (ObjectNode) node : objectMapper.createObjectNode();
+            // Chỉ gói nhà tuyển dụng mới có ưu tiên tin; gói ứng viên luôn = 0
+            if ("job_seeker".equals(targetRole)) {
+                root.put("listingPriority", 0);
+                return objectMapper.writeValueAsString(root);
+            }
             int priority = tierPriority(planName);
             if (priority > 0) {
+                // Plus / Pro / Premium: ưu tiên theo bậc cố định
                 root.put("listingPriority", priority);
-            } else {
+            } else if (!root.has("listingPriority") || root.get("listingPriority").isNull()) {
                 root.put("listingPriority", 0);
+            } else {
+                int custom = root.get("listingPriority").asInt(0);
+                root.put("listingPriority", Math.max(0, Math.min(3, custom)));
             }
             return objectMapper.writeValueAsString(root);
         } catch (Exception ex) {
-            return "{\"listingPriority\":" + tierPriority(planName) + "}";
+            int fallback = "job_seeker".equals(targetRole) ? 0 : Math.max(0, tierPriority(planName));
+            return "{\"listingPriority\":" + fallback + "}";
         }
     }
 
