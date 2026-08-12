@@ -712,7 +712,7 @@ export default function EmployerApplicationsPage() {
               >
                 Trước
               </button>
-              
+
               <div style={{ display: 'flex', gap: '8px' }}>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                   <button
