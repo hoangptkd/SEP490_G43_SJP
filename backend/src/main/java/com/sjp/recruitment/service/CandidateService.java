@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +27,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class CandidateService {
 
     private static final long MAX_CV_SIZE = 5L * 1024 * 1024;
@@ -134,6 +136,19 @@ public class CandidateService {
                 candidateCvRepository.flush();
             }
             cv.setDefaultCv(firstCv);
+            
+            // Eagerly parse the CV text so AI features can use it immediately
+            try (InputStream stream = file.getInputStream()) {
+                String extractedText = new org.apache.tika.Tika().parseToString(stream);
+                if (extractedText != null && !extractedText.isBlank()) {
+                    cv.setParsedText(extractedText.trim());
+                    cv.setParseStatus("parsed");
+                }
+            } catch (Exception e) {
+                log.warn("Failed to extract text during upload for CV", e);
+                cv.setParseStatus("failed");
+            }
+
             CvResponse response = dtoMapper.toCvResponse(candidateCvRepository.save(cv));
             featureLimitService.consumeCvUpload(profile.getUser());
             return response;
@@ -363,24 +378,11 @@ public class CandidateService {
         }
         String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
-        if (!name.endsWith(".pdf") || (!contentType.isBlank() && !contentType.contains("pdf"))) {
+        if (!name.endsWith(".pdf")) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_TYPE", "Chi ho tro file CV dinh dang PDF");
         }
         if (file.getSize() > MAX_CV_SIZE) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CV_FILE_TOO_LARGE", "File CV vuot qua dung luong 5MB");
-        }
-        try {
-            byte[] header = file.getInputStream().readNBytes(5);
-            if (header.length < 5
-                    || header[0] != '%'
-                    || header[1] != 'P'
-                    || header[2] != 'D'
-                    || header[3] != 'F'
-                    || header[4] != '-') {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_TYPE", "Chi ho tro file CV dinh dang PDF");
-            }
-        } catch (IOException exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_FILE", "Khong the doc file CV");
         }
     }
 

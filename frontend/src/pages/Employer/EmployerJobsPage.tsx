@@ -4,6 +4,7 @@ import type { Company, CompanyLocation, Job } from '../../types/job';
 import { Link } from 'react-router-dom';
 import PlanLimitAlert from '../../components/PlanLimitAlert';
 import { parseApiError } from '../../utils/planLimits';
+import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
 
 const PRESET_WORKING_TIMES = [
   'Thứ 2 - Thứ 6 (08:00 - 17:30)',
@@ -108,7 +109,7 @@ function EmployerJobsPage() {
 
     setFormData({
       title: '',
-      description: '',
+      description: 'Bảo hiểm y tế, BHXH theo quy định pháp luật\nThưởng lương tháng 13, thưởng hiệu quả\nDu lịch hàng năm, khám sức khỏe định kỳ',
       benefits: 'Bảo hiểm y tế, BHXH theo quy định pháp luật\nThưởng lương tháng 13, thưởng hiệu quả\nDu lịch hàng năm, khám sức khỏe định kỳ',
       vacancies: 1,
       workingTime: 'Thứ 2 - Thứ 6 (08:00 - 17:30)',
@@ -183,18 +184,18 @@ function EmployerJobsPage() {
   }
 
   async function handleDelete(id: string, title: string) {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa tin tuyển dụng "${title}" không?`)) return;
+    if (!(await customConfirm(`Bạn có chắc chắn muốn xóa tin tuyển dụng "${title}" không?`))) return;
     try {
       await employerService.deleteJob(id);
       setJobs(jobs.filter((j) => j.id !== id));
       setMessage('Xóa tin tuyển dụng thành công.');
     } catch (err: any) {
-      alert('Không thể xóa tin tuyển dụng này.');
+      await customAlert('Không thể xóa tin tuyển dụng này.');
     }
   }
 
   async function handleSubmitForReview(id: string, title: string) {
-    if (!window.confirm(`Bạn có chắc chắn muốn gửi duyệt tin tuyển dụng "${title}" cho Admin không?`)) return;
+    if (!(await customConfirm(`Bạn có chắc chắn muốn gửi duyệt tin tuyển dụng "${title}" cho Admin không?`))) return;
     try {
       const updated = await employerService.submitJobForReview(id);
       setJobs(jobs.map((j) => (j.id === id ? updated : j)));
@@ -205,30 +206,30 @@ function EmployerJobsPage() {
           : `Đã gửi duyệt tin "${title}" thành công. Vui lòng chờ Admin kiểm duyệt.`
       );
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Không thể gửi duyệt tin tuyển dụng này.');
+      await customAlert(err?.response?.data?.message || 'Không thể gửi duyệt tin tuyển dụng này.');
     }
   }
 
   async function handleCloseJob(id: string, title: string) {
-    if (!window.confirm(`Bạn có chắc chắn muốn ĐÓNG tin tuyển dụng "${title}" (ngừng nhận đơn ứng tuyển) không? Các ứng viên đã nộp đơn sẽ nhận được thông báo.`)) return;
+    if (!(await customConfirm(`Bạn có chắc chắn muốn ĐÓNG tin tuyển dụng "${title}" (ngừng nhận đơn ứng tuyển) không? Các ứng viên đã nộp đơn sẽ nhận được thông báo.`))) return;
     try {
       const updated = await employerService.closeJob(id);
       setJobs(jobs.map((j) => (j.id === id ? updated : j)));
       setMessage(`Đã đóng tin tuyển dụng "${title}" thành công.`);
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Không thể đóng tin tuyển dụng này.');
+      await customAlert(err?.response?.data?.message || 'Không thể đóng tin tuyển dụng này.');
     }
   }
 
   async function handleReopenJob(job: Job) {
-    if (!window.confirm(`Bạn có muốn MỞ LẠI tin tuyển dụng "${job.title}" để tiếp tục nhận ứng viên không?`)) return;
+    if (!(await customConfirm(`Bạn có muốn MỞ LẠI tin tuyển dụng "${job.title}" để tiếp tục nhận ứng viên không?`))) return;
     let newDeadline: string | undefined = undefined;
     if (job.deadline) {
       const isExpired = new Date(job.deadline).getTime() < new Date().setHours(0, 0, 0, 0);
       if (isExpired) {
-        const input = window.prompt('Tin tuyển dụng này đã hết hạn. Vui lòng nhập hạn nộp hồ sơ mới (YYYY-MM-DD):', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+        const input = await customPrompt('Tin tuyển dụng này đã hết hạn. Vui lòng nhập hạn nộp hồ sơ mới (YYYY-MM-DD):', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
         if (!input) {
-          alert('Bạn phải cập nhật hạn nộp hồ sơ mới để mở lại tin!');
+          await customAlert('Bạn phải cập nhật hạn nộp hồ sơ mới để mở lại tin!');
           return;
         }
         newDeadline = input;
@@ -239,7 +240,7 @@ function EmployerJobsPage() {
       setJobs(jobs.map((j) => (j.id === job.id ? updated : j)));
       setMessage(`Đã mở lại tin tuyển dụng "${job.title}" thành công.`);
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Không thể mở lại tin tuyển dụng này.');
+      await customAlert(err?.response?.data?.message || 'Không thể mở lại tin tuyển dụng này.');
     }
   }
 

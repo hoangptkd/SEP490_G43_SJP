@@ -221,6 +221,31 @@ public class EmailService {
         }
     }
 
+    public void sendInterviewResultPassedEmail(String email, String candidateName, String jobTitle, String companyName) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
+        message.setTo(email);
+        message.setSubject("Ket qua phong van vi tri " + jobTitle + " tai " + companyName);
+        message.setText("""
+                Chao %s,
+
+                Chuc mung ban da hoan thanh xuat sac buoi phong van cho vi tri %s tai %s.
+                Chung toi rat an tuong voi nang luc cua ban va xin thong bao ban da vuot qua vong phong van.
+                
+                Chung toi se som lien he lai de trao doi them hoac gui Loi moi lam viec (Job Offer) chinh thuc den ban. Vui long kiem tra email thuong xuyen nhe!
+
+                Tran trong,
+                Doi ngu Tuyen dung %s
+                """.formatted(candidateName, jobTitle, companyName, companyName));
+
+        try {
+            mailSender.send(message);
+            log.info("Email thong bao dau phong van da duoc gui toi {}", email);
+        } catch (Exception e) {
+            log.error("Khong the gui email thong bao dau phong van toi {}. Loi: {}", email, e.getMessage());
+        }
+    }
+
     public void sendJobOfferEmail(String email, String candidateName, String jobTitle, String companyName, JobOfferRequest request) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);

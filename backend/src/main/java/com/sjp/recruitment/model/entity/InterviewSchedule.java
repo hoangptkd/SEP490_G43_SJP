@@ -47,15 +47,21 @@ public class InterviewSchedule {
     private String location;
 
     @Column(nullable = false)
-    private String status = "scheduled";
+    private String status = "PENDING_RESPONSE";
 
     private String note;
 
-    @Column(name = "candidate_response")
-    private String candidateResponse = "pending";
+    @Column(name = "viewed_at")
+    private LocalDateTime viewedAt;
 
-    @Column(name = "candidate_response_at")
-    private LocalDateTime candidateResponseAt;
+    @Column(name = "responded_at")
+    private LocalDateTime respondedAt;
+
+    @Column(name = "response_deadline")
+    private LocalDateTime responseDeadline;
+
+    @Column(name = "last_reminder_at")
+    private LocalDateTime lastReminderAt;
 
     @Column(name = "candidate_reschedule_note")
     private String candidateRescheduleNote;
@@ -69,18 +75,7 @@ public class InterviewSchedule {
     @Column(name = "employer_reschedule_at")
     private LocalDateTime employerRescheduleAt;
 
-    @Column(name = "interview_result")
-    private String interviewResult = "pending";
 
-    @Column(name = "interview_result_note")
-    private String interviewResultNote;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "result_updated_by")
-    private User resultUpdatedBy;
-
-    @Column(name = "result_updated_at")
-    private LocalDateTime resultUpdatedAt;
 
     @CreatedDate
     @Column(nullable = false, updatable = false)

@@ -24,6 +24,8 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     long countByJobEmployerId(UUID employerId);
     long countByJobEmployerIdAndStatus(UUID employerId, String status);
     
+    List<Application> findByJobEmployerIdAndStatus(UUID employerId, String status);
+    
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.submittedAt >= :startDate")
     List<Application> findApplicationsByEmployerSince(@Param("employerId") UUID employerId, @Param("startDate") java.time.LocalDateTime startDate);
 

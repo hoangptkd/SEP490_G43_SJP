@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Pattern;
 
 public record InterviewResultRequest(
         @NotBlank(message = "Ket qua khong duoc de trong")
-        @Pattern(regexp = "^(pass|fail|no_show)$", message = "Ket qua khong hop le")
+        @Pattern(regexp = "^(COMPLETED|pass|fail|no_show)$", message = "Du lieu khong hop le")
         String result,
 
         String note

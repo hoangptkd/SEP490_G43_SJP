@@ -11,6 +11,7 @@ import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './uti
 import { parseApiError } from './utils/planLimits';
 import { filterAiJobSearchItems } from './utils/aiJobSearch';
 import PlanLimitAlert from './components/PlanLimitAlert';
+import { DialogContainer } from './components/common/DialogContainer';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
@@ -466,7 +467,7 @@ function ApplyJobModal({
 
   function validateFile(nextFile: File) {
     const name = nextFile.name.toLowerCase();
-    if (!name.endsWith('.pdf') || (nextFile.type && !nextFile.type.toLowerCase().includes('pdf'))) {
+    if (!name.endsWith('.pdf')) {
       return 'Chỉ hỗ trợ file PDF.';
     }
     if (nextFile.size > 5 * 1024 * 1024) {
@@ -5089,7 +5090,16 @@ function ApplicationDetailPage() {
 
   const loadApplication = useCallback(async () => {
     if (!id) return;
-    setApplication(await candidateService.getApplication(id));
+    const app = await candidateService.getApplication(id);
+    setApplication(app);
+    
+    // Auto-mark viewed for any pending response interview
+    if (app.interviews && app.interviews.length > 0) {
+      const pendingInterview = app.interviews.find(iv => iv.status === 'PENDING_RESPONSE' && !iv.viewedAt);
+      if (pendingInterview) {
+        candidateService.viewInterview(pendingInterview.id).catch(console.error);
+      }
+    }
   }, [id]);
 
   useEffect(() => {
@@ -5285,27 +5295,16 @@ function ApplicationDetailPage() {
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
                 <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
                   <strong>Phản hồi của bạn:</strong>{' '}
-                  {interview.candidateResponse === 'confirmed' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
-                   : interview.candidateResponse === 'request_reschedule' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
-                   : interview.candidateResponse === 'declined' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
+                  {interview.status === 'ACCEPTED' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
+                   : interview.status === 'RESCHEDULE_REQUESTED' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
+                   : interview.status === 'DECLINED' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
+                   : interview.status === 'NO_RESPONSE' ? <span style={{ color: '#b91c1c' }}>Quá hạn phản hồi</span>
+                   : interview.status === 'COMPLETED' ? <span style={{ color: '#4338ca' }}>Đã phỏng vấn xong</span>
+                   : interview.status === 'NO_SHOW' ? <span style={{ color: '#b91c1c' }}>Không tham gia</span>
                    : 'Chưa phản hồi'}
                 </p>
 
-                {interview.candidateResponse === 'request_reschedule' && interview.employerRescheduleResponse && (
-                  <p style={{ margin: '4px 0', fontSize: '0.9rem', color: '#4338ca' }}>
-                    <strong>Phản hồi từ Nhà tuyển dụng:</strong> {interview.employerRescheduleResponse === 'accept_reschedule' ? 'Đã đồng ý đổi lịch' : 'Không đồng ý đổi lịch'}.
-                    {interview.employerRescheduleNote && ` Lời nhắn: ${interview.employerRescheduleNote}`}
-                  </p>
-                )}
-
-                {interview.candidateResponse === 'request_reschedule' && interview.employerRescheduleResponse === 'reject_reschedule' && (
-                  <div className="button-row" style={{ marginTop: 12 }}>
-                    <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Đồng ý lịch cũ</button>
-                    <button className="danger sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'declined')}>Hủy phỏng vấn</button>
-                  </div>
-                )}
-
-                {(!interview.candidateResponse || interview.candidateResponse === 'pending') && (
+                {interview.status === 'PENDING_RESPONSE' && (
                   <div className="button-row" style={{ marginTop: 12 }}>
                     <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Đồng ý tham gia</button>
                     <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
@@ -5365,9 +5364,14 @@ function ApplicationDetailPage() {
               initial={{ opacity: 0, x: -12 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.06 }}>
-              <strong className={`chip ${statusColors[item.toStatus] || ''}`} style={{ display: 'inline-flex', marginBottom: 8 }}>
-                {statusLabels[item.toStatus] || item.toStatus}
-              </strong>
+              
+              {i > 0 && application.timeline[i - 1].toStatus === item.toStatus ? (
+                <span style={{ display: 'inline-block', marginBottom: 8, fontSize: '1.2rem', color: 'var(--text-muted)', opacity: 0.6 }}>↳</span>
+              ) : (
+                <strong className={`chip ${statusColors[item.toStatus] || ''}`} style={{ display: 'inline-flex', marginBottom: 8 }}>
+                  {statusLabels[item.toStatus] || item.toStatus}
+                </strong>
+              )}
               <span className="timeline-item-date">
                 {formatDateTime(item.createdAt)}
               </span>
@@ -5901,6 +5905,7 @@ function EmployerLayout() {
 
   return (
     <div className="employer-shell">
+      <DialogContainer />
       <aside className="employer-nav">
         <Link className="brand" to="/employer">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">

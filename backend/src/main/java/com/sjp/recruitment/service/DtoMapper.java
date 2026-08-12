@@ -355,14 +355,14 @@ public class DtoMapper {
                 schedule.getLocation(),
                 schedule.getStatus(),
                 schedule.getNote(),
-                schedule.getCandidateResponse(),
-                schedule.getCandidateResponseAt(),
+                schedule.getViewedAt(),
+                schedule.getRespondedAt(),
+                schedule.getResponseDeadline(),
+                schedule.getLastReminderAt(),
                 schedule.getCandidateRescheduleNote(),
                 schedule.getEmployerRescheduleResponse(),
                 schedule.getEmployerRescheduleNote(),
                 schedule.getEmployerRescheduleAt(),
-                schedule.getInterviewResult(),
-                schedule.getInterviewResultNote(),
                 schedule.getCreatedAt(),
                 schedule.getUpdatedAt()
         );

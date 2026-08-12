@@ -7,10 +7,37 @@ export interface EmployerDashboardStats {
   jobGrowthPercentage: number;
   activeJobs: number;
   totalApplications: number;
+  pipeline: {
+    appliedCount: number;
+    reviewedCount: number;
+    interviewCount: number;
+    offerCount: number;
+    hiredCount: number;
+    newlyAppliedCount: number;
+    shortlistedCount: number;
+    interviewScheduledCount: number;
+  };
   applicationGrowthPercentage: number;
   pendingApplications: number;
   applicationsByStatus: Record<string, number>;
   recentApplications: CandidateApplication[];
+  upcomingInterviews?: {
+    id: string;
+    candidateName: string;
+    jobTitle: string;
+    scheduledAt: string;
+    type: string;
+    status: string;
+    meetingLink?: string;
+  }[];
+  pendingTasks?: {
+    id: string;
+    title: string;
+    description: string;
+    taskType: string;
+    actionUrl: string;
+    createdAt: string;
+  }[];
   applicationTrend: { date: string; count: number }[];
 }
 

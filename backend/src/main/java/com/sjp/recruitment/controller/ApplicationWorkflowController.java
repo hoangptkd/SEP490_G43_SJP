@@ -89,6 +89,14 @@ public class ApplicationWorkflowController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/interviews/{id}/view")
+    @PreAuthorize("hasRole('CANDIDATE')")
+    public ResponseEntity<InterviewScheduleResponse> candidateViewInterview(@PathVariable UUID id) {
+        CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
+        InterviewScheduleResponse response = workflowService.candidateViewInterview(id, candidate.getId());
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/offers/{id}/response")
     @PreAuthorize("hasRole('CANDIDATE')")
     public ResponseEntity<JobOfferResponse> candidateRespondToOffer(

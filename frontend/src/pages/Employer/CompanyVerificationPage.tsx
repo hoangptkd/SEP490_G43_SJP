@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { employerService } from '../../services/employerService';
 import { jobService } from '../../services/jobService';
+import { customAlert, customConfirm } from '../../utils/dialog';
 import type { Company, CompanyDocument, Category } from '../../types/job';
 import { FiCheckCircle, FiClock, FiAlertCircle, FiUploadCloud, FiFileText, FiImage, FiDownload, FiTrash2, FiRefreshCw, FiExternalLink, FiChevronDown, FiX, FiSearch } from '../../components/Icons';
 
@@ -172,7 +173,7 @@ function CompanyVerificationPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tài liệu này?')) return;
+    if (!(await customConfirm('Bạn có chắc chắn muốn xóa tài liệu này?'))) return;
     setDeletingId(id);
     setError('');
     try {
