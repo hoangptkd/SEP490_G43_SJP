@@ -32,6 +32,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.sjp.recruitment.repository.JobOfferRepository;
+import com.sjp.recruitment.repository.InterviewScheduleRepository;
 import com.sjp.recruitment.repository.NotificationRepository;
 import com.sjp.recruitment.model.dto.response.NotificationResponse;
 import com.sjp.recruitment.model.entity.Notification;
@@ -69,9 +71,9 @@ public class EmployerService {
         UUID employerId = employer.getId();
         
         long totalJobs = jobRepository.countByEmployerId(employerId);
-        long activeJobs = jobRepository.countByEmployerIdAndStatus(employerId, "PUBLISHED");
+        long activeJobs = jobRepository.countByEmployerIdAndStatus(employerId, "published");
         long totalApplications = applicationRepository.countByJobEmployerId(employerId);
-        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatus(employerId, "pending");
+        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatus(employerId, "applied");
         
         List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployer(employerId);
         Map<String, Long> applicationsByStatus = statusCounts.stream()
@@ -116,6 +118,219 @@ public class EmployerService {
         
         Integer jobGrowthPercentage = 0; // Keeping 0 for now as Jobs rarely fluctuate week-over-week as much as applications.
                 
+        // Tasks & Schedules
+        List<EmployerDashboardResponse.PendingTask> pendingTasks = new ArrayList<>();
+        List<EmployerDashboardResponse.UpcomingInterview> upcomingInterviews = new ArrayList<>();
+
+        LocalDateTime startOfDay = now.toLocalDate().atStartOfDay();
+        LocalDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
+
+        // 1. New Applications
+        List<Application> appliedApps = applicationRepository.findByJobEmployerIdAndStatus(employerId, "applied");
+        for (Application a : appliedApps) {
+            String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
+            pendingTasks.add(new EmployerDashboardResponse.PendingTask(
+                    UUID.randomUUID(),
+                    "Hồ sơ mới cần duyệt: " + candidateName,
+                    "Vị trí: " + a.getJob().getTitle(),
+                    "new_application",
+                    "/employer/applications?appId=" + a.getId(),
+                    now
+            ));
+        }
+
+        // 2. Pending Interview Scheduling (Shortlisted without active interview)
+        List<Application> shortlistedApps = applicationRepository.findByJobEmployerIdAndStatus(employerId, "shortlisted");
+        for (Application a : shortlistedApps) {
+            String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
+            pendingTasks.add(new EmployerDashboardResponse.PendingTask(
+                    UUID.randomUUID(),
+                    "Chờ xếp lịch phỏng vấn: " + candidateName,
+                    "Vị trí: " + a.getJob().getTitle(),
+                    "pending_interview",
+                    "/employer/applications?appId=" + a.getId(),
+                    now
+            ));
+        }
+
+        // 3. Pending Evaluations (ACCEPTED interviews that have passed)
+        List<com.sjp.recruitment.model.entity.InterviewSchedule> acceptedInterviews = interviewScheduleRepository
+                .findByEmployerIdAndStatus(employerId, "ACCEPTED");
+        for (var iv : acceptedInterviews) {
+            if (iv.getScheduledAt().isBefore(startOfDay)) {
+                String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null ? iv.getCandidate().getFullName() : "Ứng viên";
+                pendingTasks.add(new EmployerDashboardResponse.PendingTask(
+                        UUID.randomUUID(),
+                        "Đánh giá phỏng vấn: " + candidateName,
+                        "Phỏng vấn ngày " + iv.getScheduledAt().toLocalDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                        "evaluate_interview",
+                        "/employer/applications?appId=" + iv.getApplication().getId(),
+                        now
+                ));
+            }
+        }
+
+        // 4. Pending Offers (COMPLETED interviews but no offer sent)
+        List<Application> interviewApps = applicationRepository.findByJobEmployerIdAndStatus(employerId, "interview_scheduled");
+        for (Application a : interviewApps) {
+            var ivs = interviewScheduleRepository.findByApplicationId(a.getId());
+            if (ivs.isEmpty()) continue;
+            var lastIv = ivs.get(ivs.size() - 1);
+            var offerOpt = jobOfferRepository.findByApplicationId(a.getId());
+            if ("COMPLETED".equals(lastIv.getStatus()) && offerOpt.isEmpty()) {
+                String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
+                pendingTasks.add(new EmployerDashboardResponse.PendingTask(
+                        UUID.randomUUID(),
+                        "Đạt PV, chờ gửi Offer: " + candidateName,
+                        "Vị trí: " + a.getJob().getTitle(),
+                        "pending_offer",
+                        "/employer/applications?appId=" + a.getId(),
+                        now
+                ));
+            }
+        }
+
+        // 5. Employer Response Needed (Reschedule requests & Rejected offers)
+        List<com.sjp.recruitment.model.entity.InterviewSchedule> rescheduleRequests = interviewScheduleRepository
+                .findByEmployerIdAndStatus(employerId, "RESCHEDULE_REQUESTED");
+        for (var iv : rescheduleRequests) {
+            String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null ? iv.getCandidate().getFullName() : "Ứng viên";
+            pendingTasks.add(new EmployerDashboardResponse.PendingTask(
+                    UUID.randomUUID(),
+                    "Xin đổi lịch phỏng vấn: " + candidateName,
+                    "Vị trí: " + iv.getApplication().getJob().getTitle(),
+                    "employer_response_needed",
+                    "/employer/applications?appId=" + iv.getApplication().getId(),
+                    now
+            ));
+        }
+
+        List<com.sjp.recruitment.model.entity.JobOffer> rejectedOffers = jobOfferRepository
+                .findByApplicationJobEmployerIdAndStatus(employerId, "rejected");
+        for (var offer : rejectedOffers) {
+            String candidateName = offer.getApplication().getCandidate() != null && offer.getApplication().getCandidate().getFullName() != null ? offer.getApplication().getCandidate().getFullName() : "Ứng viên";
+            pendingTasks.add(new EmployerDashboardResponse.PendingTask(
+                    UUID.randomUUID(),
+                    "Từ chối/Thương lượng Offer: " + candidateName,
+                    "Vị trí: " + offer.getPositionTitle(),
+                    "employer_response_needed",
+                    "/employer/applications?appId=" + offer.getApplication().getId(),
+                    now
+            ));
+        }
+
+        // 6. Today's Interviews & Upcoming Timeline
+        List<com.sjp.recruitment.model.entity.InterviewSchedule> futureInterviews = interviewScheduleRepository
+                .findByEmployerIdAndScheduledAtAfterOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1));
+
+        for (var interview : futureInterviews) {
+            if ("COMPLETED".equals(interview.getStatus()) || "NO_SHOW".equals(interview.getStatus()) || "CANCELLED".equals(interview.getStatus())) {
+                continue;
+            }
+            
+            String candidateName = interview.getCandidate() != null && interview.getCandidate().getFullName() != null 
+                    ? interview.getCandidate().getFullName() : "Ứng viên";
+            String jobTitle = interview.getApplication() != null && interview.getApplication().getJob() != null
+                    ? interview.getApplication().getJob().getTitle() : "Việc làm";
+            
+            if (interview.getScheduledAt().isBefore(endOfDay)) {
+                pendingTasks.add(new EmployerDashboardResponse.PendingTask(
+                        interview.getId(),
+                        "Phỏng vấn hôm nay: " + candidateName,
+                        "Vị trí " + jobTitle + " lúc " + interview.getScheduledAt().format(DateTimeFormatter.ofPattern("HH:mm")),
+                        "interview_today",
+                        "/employer/applications/" + interview.getApplication().getId(),
+                        interview.getScheduledAt()
+                ));
+            } else if ("ACCEPTED".equals(interview.getStatus()) || "PENDING_RESPONSE".equals(interview.getStatus())) {
+                upcomingInterviews.add(new EmployerDashboardResponse.UpcomingInterview(
+                        interview.getId(),
+                        candidateName,
+                        jobTitle,
+                        interview.getScheduledAt(),
+                        interview.getLocation() != null && interview.getLocation().toLowerCase().contains("online") ? "online" : "offline",
+                        interview.getStatus(),
+                        interview.getMeetingLink()
+                ));
+            }
+        }
+        // 7. TopCV Action Summary
+        long unreadMessagesCount = notificationRepository.countByRecipientUserIdAndReadFalse(employer.getUser().getId());
+        
+        long expiringJobsCount = jobRepository.findByEmployerIdAndStatus(employerId, "published").stream()
+                .filter(j -> j.getDeadline() != null && j.getDeadline().isBefore(now.toLocalDate().plusDays(4)) && !j.getDeadline().isBefore(now.toLocalDate()))
+                .count();
+
+        long todayInterviewsCount = futureInterviews.stream()
+                .filter(iv -> iv.getScheduledAt().isBefore(endOfDay) && "ACCEPTED".equals(iv.getStatus()))
+                .count();
+        
+        long pendingAppsCount = appliedApps.size();
+
+        EmployerDashboardResponse.ActionSummary actionSummary = new EmployerDashboardResponse.ActionSummary(
+                pendingAppsCount,
+                todayInterviewsCount,
+                expiringJobsCount,
+                unreadMessagesCount
+        );
+
+        // 8. TopCV Pipeline Stats
+        long countReviewed = applicationRepository.countByJobEmployerIdAndStatus(employerId, "reviewed");
+        long countInterview = applicationRepository.countByJobEmployerIdAndStatus(employerId, "shortlisted") + applicationRepository.countByJobEmployerIdAndStatus(employerId, "interview_scheduled");
+        long countOffer = applicationRepository.countByJobEmployerIdAndStatus(employerId, "accepted");
+        long countHired = applicationRepository.countByJobEmployerIdAndStatus(employerId, "hired");
+
+        long countNewlyApplied = applicationRepository.countByJobEmployerIdAndStatus(employerId, "applied");
+        long countShortlisted = applicationRepository.countByJobEmployerIdAndStatus(employerId, "shortlisted");
+        long countInterviewScheduled = applicationRepository.countByJobEmployerIdAndStatus(employerId, "interview_scheduled");
+        
+        EmployerDashboardResponse.PipelineStats pipelineStats = new EmployerDashboardResponse.PipelineStats(
+                totalApplications,
+                countReviewed,
+                countInterview,
+                countOffer,
+                countHired,
+                countNewlyApplied,
+                countShortlisted,
+                countInterviewScheduled
+        );
+
+        // 9. TopCV Active Jobs List
+        List<Job> activeJobsQuery = jobRepository.findByEmployerIdAndStatus(employerId, "published");
+        List<EmployerDashboardResponse.ActiveJobSummary> activeJobsList = new ArrayList<>();
+        for (Job j : activeJobsQuery) {
+            long appCount = applicationRepository.countByJobId(j.getId());
+            long daysLeft = j.getDeadline() != null ? java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), j.getDeadline()) : 0;
+            if (daysLeft < 0) daysLeft = 0;
+            
+            activeJobsList.add(new EmployerDashboardResponse.ActiveJobSummary(
+                    j.getId(),
+                    j.getTitle(),
+                    j.getLocation(),
+                    j.getJobType(),
+                    j.getStatus(),
+                    j.getViewsCount() != null ? j.getViewsCount() : 0,
+                    appCount,
+                    daysLeft
+            ));
+        }
+        
+        // Sort active jobs by days left (expiring soon first)
+        activeJobsList.sort(Comparator.comparing(EmployerDashboardResponse.ActiveJobSummary::daysLeft));
+
+        // 10. TopCV Activity Logs
+        List<com.sjp.recruitment.model.entity.Notification> notifications = notificationRepository
+                .findByRecipientUserId(employer.getUser().getId(), PageRequest.of(0, 10, Sort.by("createdAt").descending())).getContent();
+        List<EmployerDashboardResponse.ActivityLog> recentActivities = notifications.stream().map(n -> 
+                new EmployerDashboardResponse.ActivityLog(
+                        n.getId(),
+                        n.getTitle(),
+                        n.getMessage(),
+                        n.getCreatedAt(),
+                        n.getType()
+                )
+        ).toList();
+
         return new EmployerDashboardResponse(
                 totalJobs,
                 jobGrowthPercentage,
@@ -125,7 +340,13 @@ public class EmployerService {
                 pendingApplications,
                 applicationsByStatus,
                 recentApplications,
-                applicationTrend
+                applicationTrend,
+                upcomingInterviews,
+                pendingTasks,
+                actionSummary,
+                pipelineStats,
+                activeJobsList,
+                recentActivities
         );
     }
     private final EmployerRepository employerRepository;
@@ -138,6 +359,7 @@ public class EmployerService {
     private final JobService jobService;
     private final ApplicationRepository applicationRepository;
     private final ApplicationService applicationService;
+    private final com.sjp.recruitment.repository.InterviewScheduleRepository interviewScheduleRepository;
     private final CandidateService candidateService;
     private final Cloudinary cloudinary;
     private final DtoMapper dtoMapper;
@@ -145,6 +367,7 @@ public class EmployerService {
     private final SystemSettingsService systemSettingsService;
     private final NotificationRepository notificationRepository;
     private final com.sjp.recruitment.repository.UserRepository userRepository;
+    private final com.sjp.recruitment.repository.JobOfferRepository jobOfferRepository;
 
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {

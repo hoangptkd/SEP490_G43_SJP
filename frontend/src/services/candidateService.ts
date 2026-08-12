@@ -166,6 +166,11 @@ export const candidateService = {
     return response.data;
   },
 
+  viewInterview: async (interviewId: string): Promise<import('../types/candidateDomain').InterviewScheduleResponse> => {
+    const response = await api.put(`/v1/interviews/${interviewId}/view`);
+    return response.data;
+  },
+
   respondToOffer: async (offerId: string, accepted: boolean, note?: string): Promise<import('../types/candidateDomain').JobOfferResponse> => {
     const response = await api.put(`/v1/offers/${offerId}/response`, {
       decision: accepted ? 'ACCEPT' : 'REJECT',

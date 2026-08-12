@@ -82,10 +82,19 @@ public class ApplicationWorkflowService {
         schedule.setMeetingLink(request.meetingLink());
         schedule.setLocation(request.location());
         schedule.setNote(request.note());
+        schedule.setStatus("PENDING_RESPONSE");
+        
+        // Calculate response deadline (12 hours before interview, capped by now)
+        LocalDateTime deadline = request.scheduledAt().minusHours(12);
+        if (deadline.isBefore(LocalDateTime.now())) {
+            deadline = request.scheduledAt().minusHours(2);
+            if (deadline.isBefore(LocalDateTime.now())) deadline = request.scheduledAt();
+        }
+        schedule.setResponseDeadline(deadline);
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
 
-        applicationService.seedStatus(application, Application.ApplicationStatus.INTERVIEW_SCHEDULED, "Đã lên lịch phỏng vấn vòng " + roundNumber);
+        applicationService.seedStatus(application, Application.ApplicationStatus.INTERVIEW_SCHEDULED, "Đã lên lịch phỏng vấn");
 
         // Send email
         CandidateProfile candidate = application.getCandidate();
@@ -107,18 +116,32 @@ public class ApplicationWorkflowService {
     }
 
     @Transactional
+    public InterviewScheduleResponse candidateViewInterview(UUID scheduleId, UUID candidateId) {
+        InterviewSchedule schedule = interviewScheduleRepository.findByIdAndCandidateId(scheduleId, candidateId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Khong tim thay lich phong van"));
+
+        if (schedule.getViewedAt() == null) {
+            schedule.setViewedAt(LocalDateTime.now());
+            schedule = interviewScheduleRepository.save(schedule);
+        }
+
+        return dtoMapper.toInterviewScheduleResponse(schedule);
+    }
+
+    @Transactional
     public InterviewScheduleResponse candidateRespondToInterview(UUID scheduleId, UUID candidateId, InterviewCandidateResponseRequest request) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndCandidateId(scheduleId, candidateId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Khong tim thay lich phong van"));
 
-        schedule.setCandidateResponse(request.response());
-        schedule.setCandidateResponseAt(LocalDateTime.now());
+        schedule.setRespondedAt(LocalDateTime.now());
         schedule.setCandidateRescheduleNote(request.rescheduleNote());
 
         if ("request_reschedule".equals(request.response())) {
-            schedule.setStatus("rescheduled");
-        } else if ("confirmed".equals(request.response()) || "declined".equals(request.response())) {
-            schedule.setStatus(request.response()); // Update status if they finally confirm/decline
+            schedule.setStatus("RESCHEDULE_REQUESTED");
+        } else if ("confirmed".equals(request.response())) {
+            schedule.setStatus("ACCEPTED");
+        } else if ("declined".equals(request.response())) {
+            schedule.setStatus("DECLINED");
         }
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
@@ -133,6 +156,8 @@ public class ApplicationWorkflowService {
             }
         });
 
+        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Ứng viên " + responseText + " lịch phỏng vấn");
+
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
 
@@ -141,16 +166,14 @@ public class ApplicationWorkflowService {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndEmployerId(scheduleId, employerId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Khong tim thay lich phong van"));
 
-        schedule.setInterviewResult(request.result());
-        schedule.setInterviewResultNote(request.note());
-        schedule.setResultUpdatedAt(LocalDateTime.now());
-        // schedule.setResultUpdatedBy(...) - we don't have user id here easily, skip or fetch employer.getUser()
+        schedule.setStatus("COMPLETED".equalsIgnoreCase(request.result()) ? "COMPLETED" : "NO_SHOW".equalsIgnoreCase(request.result()) ? "NO_SHOW" : request.result());
+        schedule.setNote(request.note());
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
 
-        if ("fail".equals(request.result())) {
+        if ("NO_SHOW".equalsIgnoreCase(request.result()) || "fail".equalsIgnoreCase(request.result())) {
             Application application = schedule.getApplication();
-            applicationService.seedStatus(application, Application.ApplicationStatus.REJECTED, "Không đạt yêu cầu phỏng vấn vòng " + schedule.getRoundNumber());
+            applicationService.seedStatus(application, Application.ApplicationStatus.REJECTED, "Không đạt yêu cầu phỏng vấn");
 
             CandidateProfile candidate = application.getCandidate();
             Job job = application.getJob();
@@ -162,6 +185,20 @@ public class ApplicationWorkflowService {
                     job.getTitle(),
                     company.getName()
             );
+        } else if ("COMPLETED".equalsIgnoreCase(request.result())) {
+            Application application = schedule.getApplication();
+            CandidateProfile candidate = application.getCandidate();
+            Job job = application.getJob();
+            Company company = job.getCompany();
+
+            emailService.sendInterviewResultPassedEmail(
+                    candidate.getUser().getEmail(),
+                    candidate.getFullName(),
+                    job.getTitle(),
+                    company.getName()
+            );
+            
+            applicationService.seedStatus(application, application.getStatusEnum(), "Đánh giá phỏng vấn: Đạt");
         }
 
         return dtoMapper.toInterviewScheduleResponse(saved);
@@ -172,21 +209,27 @@ public class ApplicationWorkflowService {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndEmployerId(scheduleId, employerId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Khong tim thay lich phong van"));
 
-        if (!"request_reschedule".equals(schedule.getCandidateResponse())) {
+        if (!"RESCHEDULE_REQUESTED".equals(schedule.getStatus())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Ung vien chua yeu cau doi lich");
         }
 
         schedule.setEmployerRescheduleResponse(request.response());
         schedule.setEmployerRescheduleNote(request.note());
 
+        String oldTimeStr = schedule.getScheduledAt() != null ? schedule.getScheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")) : "Chưa có";
         if ("accept_reschedule".equals(request.response())) {
             if (request.scheduledAt() != null) {
                 schedule.setScheduledAt(request.scheduledAt());
+                
+                LocalDateTime deadline = request.scheduledAt().minusHours(12);
+                if (deadline.isBefore(LocalDateTime.now())) deadline = request.scheduledAt().minusHours(2);
+                schedule.setResponseDeadline(deadline);
             }
-            schedule.setCandidateResponse("pending"); // Reset candidate response so they can accept/reject the new time
-            schedule.setStatus("scheduled"); // Back to scheduled
+            schedule.setRespondedAt(null);
+            schedule.setViewedAt(null);
+            schedule.setStatus("PENDING_RESPONSE"); // Back to pending
         } else {
-            schedule.setStatus("rescheduled_rejected");
+            schedule.setStatus("CANCELLED"); // Or however we handle rejection of reschedule
         }
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
@@ -219,6 +262,13 @@ public class ApplicationWorkflowService {
                     request.note()
             );
         }
+        
+        String actionText = "accept_reschedule".equals(request.response()) ? "Chấp nhận đổi lịch phỏng vấn mới" : "Từ chối đổi lịch phỏng vấn";
+        if ("accept_reschedule".equals(request.response()) && request.scheduledAt() != null) {
+            String newTimeStr = request.scheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+            actionText += " (Lịch cũ: " + oldTimeStr + " -> Lịch mới: " + newTimeStr + ")";
+        }
+        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Nhà tuyển dụng phản hồi đổi lịch: " + actionText);
 
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
@@ -292,7 +342,8 @@ public class ApplicationWorkflowService {
             applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Job Offer");
         } else {
             // Do NOT change Application status to REJECTED yet, to allow negotiation.
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã từ chối Job Offer (Chờ phản hồi): " + request.note());
+            String currentSalaryStr = offer.getSalary() != null ? offer.getSalary().toString() + " " + offer.getSalaryCurrency() : "Chưa có";
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã từ chối Job Offer - Mức lương: " + currentSalaryStr + " (Chờ phản hồi): " + request.note());
         }
 
         // Notify employer
@@ -333,6 +384,9 @@ public class ApplicationWorkflowService {
         }
 
         if (isUpdating && updateRequest != null) {
+            String oldSalaryStr = offer.getSalary() != null ? offer.getSalary().toString() + " " + offer.getSalaryCurrency() : "Chưa có";
+            String newSalaryStr = updateRequest.salary() != null ? updateRequest.salary().toString() + " " + (updateRequest.salaryCurrency() != null ? updateRequest.salaryCurrency() : "VND") : "Chưa có";
+            
             offer.setPositionTitle(updateRequest.positionTitle());
             offer.setSalary(updateRequest.salary());
             offer.setSalaryCurrency(updateRequest.salaryCurrency() != null ? updateRequest.salaryCurrency() : "VND");
@@ -344,7 +398,7 @@ public class ApplicationWorkflowService {
             offer.setEmployerNote(updateRequest.employerNote());
             offer.setStatus("sent"); // Reset status back to sent
 
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Nhà tuyển dụng đã cập nhật lại Job Offer");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Nhà tuyển dụng đã cập nhật lại Job Offer (Mức lương: " + oldSalaryStr + " -> " + newSalaryStr + ")");
 
             // Send email again
             CandidateProfile candidate = offer.getApplication().getCandidate();

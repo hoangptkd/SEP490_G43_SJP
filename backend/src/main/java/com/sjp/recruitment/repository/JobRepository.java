@@ -25,6 +25,7 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     
     long countByEmployerId(UUID employerId);
     long countByEmployerIdAndStatus(UUID employerId, String status);
+    List<Job> findByEmployerIdAndStatus(UUID employerId, String status);
 
     List<Job> findByStatusIgnoreCaseOrderByUpdatedAtDesc(String status);
 

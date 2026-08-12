@@ -39,7 +39,7 @@ export default function EmployerNotificationsPage() {
       return `/employer/jobs`;
     }
     if (item.relatedEntityType === 'APPLICATION' && item.relatedEntityId) {
-      return `/employer/applications`;
+      return `/employer/applications?appId=${item.relatedEntityId}`;
     }
     return null;
   };

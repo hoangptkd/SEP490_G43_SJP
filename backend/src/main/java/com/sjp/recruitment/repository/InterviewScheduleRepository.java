@@ -23,7 +23,13 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     Page<InterviewSchedule> findByEmployerId(UUID employerId, Pageable pageable);
 
+    List<InterviewSchedule> findByEmployerIdAndStatus(UUID employerId, String status);
+
     Page<InterviewSchedule> findByCandidateId(UUID candidateId, Pageable pageable);
+
+    List<InterviewSchedule> findByEmployerIdAndScheduledAtBetweenOrderByScheduledAtAsc(UUID employerId, java.time.LocalDateTime start, java.time.LocalDateTime end);
+
+    List<InterviewSchedule> findByEmployerIdAndScheduledAtAfterOrderByScheduledAtAsc(UUID employerId, java.time.LocalDateTime start);
 
     @Query("SELECT COUNT(s) > 0 FROM InterviewSchedule s " +
            "WHERE s.application.id IN :applicationIds " +

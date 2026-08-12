@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getStoredUser } from '../../utils/authStorage';
 import { employerService } from '../../services/employerService';
 import { authService } from '../../services/authService';
+import { customAlert, customConfirm } from '../../utils/dialog';
 
 const EmployerSettingsPage: React.FC = () => {
   const user = getStoredUser();
@@ -77,7 +78,7 @@ const EmployerSettingsPage: React.FC = () => {
   };
 
   const handleDeactivate = async () => {
-    if (!window.confirm("Bạn có chắc chắn muốn yêu cầu vô hiệu hóa tài khoản không? Hành động này sẽ được Admin xem xét.")) return;
+    if (!(await customConfirm("Bạn có chắc chắn muốn yêu cầu vô hiệu hóa tài khoản không? Hành động này sẽ được Admin xem xét."))) return;
     setDeactivateLoading(true);
     setSecurityMsg({ type: '', text: '' });
     try {

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { employerService } from '../../services/employerService';
 import type { CompanyLocation } from '../../types/job';
 import { FiPlus, FiEdit2, FiTrash2, FiMapPin, FiCheckCircle, FiAlertCircle } from '../../components/Icons';
+import { customAlert, customConfirm } from '../../utils/dialog';
 
 function CompanyLocationsPage() {
   const [locations, setLocations] = useState<CompanyLocation[]>([]);
@@ -112,16 +113,17 @@ function CompanyLocationsPage() {
 
   async function handleDelete(id: string, isHq: boolean) {
     if (isHq) {
-      alert('Không thể xóa Trụ sở chính. Vui lòng đặt chi nhánh khác làm Trụ sở chính trước.');
+      await customAlert('Không thể xóa Trụ sở chính. Vui lòng đặt chi nhánh khác làm Trụ sở chính trước.');
       return;
     }
-    if (!confirm('Bạn có chắc chắn muốn xóa địa điểm làm việc này?')) return;
+    if (!(await customConfirm('Bạn có chắc chắn muốn xóa địa điểm làm việc này?'))) return;
     try {
       await employerService.deleteLocation(id);
       setMessage('Xóa địa điểm thành công.');
       await loadLocations();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Có lỗi xảy ra khi xóa địa điểm.');
+      console.error(err);
+      await customAlert(err.response?.data?.message || 'Có lỗi xảy ra khi xóa địa điểm.');
     }
   }
 

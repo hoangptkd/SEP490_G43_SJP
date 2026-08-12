@@ -12,14 +12,14 @@ public record InterviewScheduleResponse(
         String location,
         String status,
         String note,
-        String candidateResponse,
-        LocalDateTime candidateResponseAt,
+        LocalDateTime viewedAt,
+        LocalDateTime respondedAt,
+        LocalDateTime responseDeadline,
+        LocalDateTime lastReminderAt,
         String candidateRescheduleNote,
         String employerRescheduleResponse,
         String employerRescheduleNote,
         LocalDateTime employerRescheduleAt,
-        String interviewResult,
-        String interviewResultNote,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
