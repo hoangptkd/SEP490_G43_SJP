@@ -5424,8 +5424,9 @@ function ApplicationDetailPage() {
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
                 <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
                   <strong>Phản hồi của bạn:</strong>{' '}
-                  {['SCHEDULED', 'ACCEPTED', 'PENDING_RESPONSE'].includes(interview.status)
-                    ? <span style={{ color: '#047857' }}>Đã lên lịch · mặc định tham gia</span>
+                  {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status)
+                    ? <span style={{ color: '#b45309' }}>Đang chờ bạn xác nhận lịch phỏng vấn</span>
+                   : interview.status === 'ACCEPTED' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
                    : interview.status === 'RESCHEDULE_REQUESTED' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
                    : interview.status === 'DECLINED' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
                    : interview.status === 'COMPLETED' ? <span style={{ color: '#4338ca' }}>Đã phỏng vấn xong</span>
