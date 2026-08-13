@@ -12,7 +12,8 @@ public class AiJobSearchProperties {
     private String shopaikeyApiKey;
     private String shopaikeyBaseUrl = "https://api.shopaikey.com/v1";
     private String shopaikeyModel = "gpt-4.1-mini";
-    private String promptVersion = "ai-job-search-v1";
+    private String promptVersion = "ai-job-search-v2";
+    private String scoringVersion = "deterministic-match-v1";
     private int providerConnectTimeoutMs = 5_000;
     private int providerReadTimeoutMs = 25_000;
     private int cacheHours = 24;

@@ -62,6 +62,9 @@ public class AiJobSearchPersistenceService {
             AiJobSearchContext context,
             List<AiJobSearchResultValidator.RankedJob> ranked
     ) {
+        if (ranked == null || ranked.isEmpty()) {
+            throw new IllegalArgumentException("A successful AI job search must contain recommendations");
+        }
         AiJobSearchRun run = runRepository.findById(runId).orElseThrow();
         LocalDateTime now = LocalDateTime.now();
         List<AiJobRecommendation> recommendations = ranked.stream().map(item -> {
@@ -77,7 +80,13 @@ public class AiJobSearchPersistenceService {
                     "matchedSkills", item.matchedSkills(),
                     "missingSkills", item.missingSkills(),
                     "reason", item.reason(),
-                    "lowConfidence", context.lowConfidence()
+                    "lowConfidence", context.lowConfidence() || item.lowConfidenceEvidence(),
+                    "skillScore", item.scoreBreakdown().skillScore(),
+                    "experienceScore", item.scoreBreakdown().experienceScore(),
+                    "targetRoleScore", item.scoreBreakdown().targetRoleScore(),
+                    "cvJdScore", item.scoreBreakdown().cvJdScore(),
+                    "locationScore", item.scoreBreakdown().locationScore(),
+                    "scoringVersion", properties.getScoringVersion()
             ));
             return recommendation;
         }).toList();

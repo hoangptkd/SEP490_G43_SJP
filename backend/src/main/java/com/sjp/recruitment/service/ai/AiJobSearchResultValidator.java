@@ -1,105 +1,62 @@
 package com.sjp.recruitment.service.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.sjp.recruitment.config.AiJobSearchProperties;
 import com.sjp.recruitment.model.entity.Job;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 
 @Service
-@RequiredArgsConstructor
 public class AiJobSearchResultValidator {
-    private final AiJobSearchProperties properties;
 
     public List<RankedJob> validate(
             JsonNode response,
             AiJobSearchContext context,
             List<AiJobSearchCandidateSelector.SelectedJob> candidates
     ) {
-        JsonNode items = response == null ? null : response.path("items");
+        JsonNode items = response == null ? null : response.get("items");
         if (items == null || !items.isArray()) {
             throw new AiJobSearchValidationException("Missing items array");
         }
-        Map<UUID, Job> pool = new LinkedHashMap<>();
-        candidates.stream().limit(properties.getMaxPromptJobs())
-                .forEach(item -> pool.put(item.job().getId(), item.job()));
-        Set<UUID> seen = new HashSet<>();
-        List<RankedJob> ranked = new ArrayList<>();
+        if (candidates.isEmpty()) {
+            if (!items.isEmpty()) throw new AiJobSearchValidationException("Unexpected explanations for empty candidate list");
+            return List.of();
+        }
+        if (items.size() != candidates.size()) {
+            throw new AiJobSearchValidationException("Provider must explain every selected job");
+        }
+
+        Map<UUID, String> reasons = new HashMap<>();
+        Set<UUID> expected = new HashSet<>();
+        candidates.forEach(item -> expected.add(item.job().getId()));
         for (JsonNode item : items) {
-            if (ranked.size() >= properties.getMaxResults()) break;
             UUID jobId = parseUuid(item.path("jobId").asText(""));
-            Job job = pool.get(jobId);
-            if (job == null || !seen.add(jobId)) {
+            if (!expected.contains(jobId) || reasons.containsKey(jobId)) {
                 throw new AiJobSearchValidationException("Unsupported or duplicate jobId");
             }
-            int matchScore = item.path("matchScore").asInt(-1);
-            if (matchScore < 0 || matchScore > 100) {
-                throw new AiJobSearchValidationException("matchScore outside 0-100");
-            }
-            String reason = boundedText(item.path("reason").asText(""), 500, true);
-            List<String> matched = groundedMatchedSkills(item.path("matchedSkills"), context.skills(), job.getSkills());
-            List<String> missing = groundedMissingSkills(item.path("missingSkills"), context.skills(), job.getSkills());
-            ranked.add(new RankedJob(ranked.size() + 1, job, matchScore, matched, missing, reason));
+            reasons.put(jobId, boundedReason(item.path("reason").asText("")));
         }
-        if (!items.isEmpty() && ranked.isEmpty()) {
-            throw new AiJobSearchValidationException("No valid ranked items");
+
+        List<RankedJob> ranked = new ArrayList<>();
+        for (int index = 0; index < candidates.size(); index++) {
+            AiJobSearchCandidateSelector.SelectedJob selected = candidates.get(index);
+            Job job = selected.job();
+            String reason = reasons.get(job.getId());
+            if (reason == null) throw new AiJobSearchValidationException("Missing explanation for selected job");
+            ranked.add(new RankedJob(
+                    index + 1,
+                    job,
+                    selected.score(),
+                    reason
+            ));
         }
         return List.copyOf(ranked);
     }
 
-    private List<String> groundedMatchedSkills(JsonNode node, List<String> candidateSkills, List<String> jobSkills) {
-        Set<String> allowed = intersection(candidateSkills, jobSkills);
-        return boundedSkills(node, allowed);
-    }
-
-    private List<String> groundedMissingSkills(JsonNode node, List<String> candidateSkills, List<String> jobSkills) {
-        Set<String> candidate = normalizedSet(candidateSkills);
-        Set<String> allowed = new LinkedHashSet<>();
-        if (jobSkills != null) {
-            jobSkills.stream().filter(Objects::nonNull).filter(skill -> !candidate.contains(normalize(skill)))
-                    .forEach(skill -> allowed.add(normalize(skill)));
-        }
-        return boundedSkills(node, allowed);
-    }
-
-    private List<String> boundedSkills(JsonNode node, Set<String> allowed) {
-        if (node == null || !node.isArray()) return List.of();
-        List<String> result = new ArrayList<>();
-        for (JsonNode item : node) {
-            if (result.size() >= 8) break;
-            String value = boundedText(item.asText(""), 80, false);
-            if (!value.isBlank() && allowed.contains(normalize(value))) {
-                result.add(value);
-            }
-        }
-        return List.copyOf(result);
-    }
-
-    private Set<String> intersection(List<String> left, List<String> right) {
-        Set<String> rightSet = normalizedSet(right);
-        Set<String> result = new LinkedHashSet<>();
-        if (left != null) {
-            left.stream().filter(Objects::nonNull).map(this::normalize).filter(rightSet::contains).forEach(result::add);
-        }
-        return result;
-    }
-
-    private Set<String> normalizedSet(List<String> values) {
-        Set<String> result = new LinkedHashSet<>();
-        if (values != null) values.stream().filter(Objects::nonNull).map(this::normalize).forEach(result::add);
-        return result;
-    }
-
-    private String normalize(String value) {
-        return value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
-    }
-
-    private String boundedText(String value, int maxLength, boolean required) {
+    private String boundedReason(String value) {
         String normalized = value == null ? "" : value.replaceAll("\\s+", " ").trim();
-        if ((required && normalized.isBlank()) || normalized.length() > maxLength) {
-            throw new AiJobSearchValidationException("Invalid provider text field");
+        if (normalized.isBlank() || normalized.length() > 500) {
+            throw new AiJobSearchValidationException("Invalid provider reason");
         }
         return normalized;
     }
@@ -115,10 +72,12 @@ public class AiJobSearchResultValidator {
     public record RankedJob(
             int rank,
             Job job,
-            int matchScore,
-            List<String> matchedSkills,
-            List<String> missingSkills,
+            AiJobMatchScorer.ScoreBreakdown scoreBreakdown,
             String reason
     ) {
+        public int matchScore() { return scoreBreakdown.matchScore(); }
+        public List<String> matchedSkills() { return scoreBreakdown.matchedSkills(); }
+        public List<String> missingSkills() { return scoreBreakdown.missingSkills(); }
+        public boolean lowConfidenceEvidence() { return scoreBreakdown.lowConfidenceEvidence(); }
     }
 }

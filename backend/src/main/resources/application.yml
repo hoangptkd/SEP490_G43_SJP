@@ -141,7 +141,8 @@ app:
     shopaikey-api-key: ${SHOPAIKEY_API_KEY:}
     shopaikey-base-url: ${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}
     shopaikey-model: ${SHOPAIKEY_MODEL:gpt-4.1-mini}
-    prompt-version: ${AI_JOB_SEARCH_PROMPT_VERSION:ai-job-search-v1}
+    prompt-version: ${AI_JOB_SEARCH_PROMPT_VERSION:ai-job-search-v2}
+    scoring-version: ${AI_JOB_SEARCH_SCORING_VERSION:deterministic-match-v1}
     provider-connect-timeout-ms: ${AI_JOB_SEARCH_CONNECT_TIMEOUT_MS:5000}
     provider-read-timeout-ms: ${AI_JOB_SEARCH_READ_TIMEOUT_MS:25000}
     cache-hours: ${AI_JOB_SEARCH_CACHE_HOURS:24}
