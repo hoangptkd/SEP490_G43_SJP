@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { billingService } from '../../services/billingService';
 import type { PlanCatalogItem } from '../../types/billing';
+import '../../styles/admin.css';
 
 type Props = {
   backTo: string;
@@ -20,13 +21,22 @@ function roleLabel(targetRole: string) {
   return 'Tất cả';
 }
 
+const HIDDEN_DEFAULT_BENEFITS = [
+  'xem và quản lý ứng viên ứng tuyển',
+  'thống kê ứng tuyển cơ bản',
+];
+
+function checkedBenefits(plan: PlanCatalogItem) {
+  return (plan.benefits || []).filter((item) => {
+    const text = item.trim().toLowerCase();
+    return text.length > 0 && !HIDDEN_DEFAULT_BENEFITS.includes(text);
+  });
+}
+
 function planLimitLines(plan: PlanCatalogItem) {
   const lines: string[] = [];
   if (plan.targetRole === 'employer' || plan.targetRole === 'all') {
     if (plan.maxJobs != null) lines.push(`Tin đăng tối đa: ${plan.maxJobs}`);
-    if (plan.listingPriority != null && plan.listingPriority > 0) {
-      lines.push('Tin được ưu tiên hiển thị');
-    }
   }
   if (plan.targetRole === 'job_seeker' || plan.targetRole === 'all') {
     if (plan.maxCv != null) lines.push(`CV tối đa: ${plan.maxCv}`);
@@ -39,6 +49,13 @@ function planLimitLines(plan: PlanCatalogItem) {
     }
   }
   return lines;
+}
+
+function displayBenefits(plan: PlanCatalogItem) {
+  const selected = checkedBenefits(plan);
+  const selectedLower = new Set(selected.map((item) => item.trim().toLowerCase()));
+  const extraLimits = planLimitLines(plan).filter((line) => !selectedLower.has(line.trim().toLowerCase()));
+  return [...selected, ...extraLimits];
 }
 
 function readError(error: unknown) {
@@ -82,8 +99,17 @@ export default function SubscriptionPlansPage({
     navigate(`/payment/checkout?planId=${plan.id}`);
   }
 
+  const featuredPlanId = (() => {
+    const byName = plans.find((plan) => plan.name.trim().toLowerCase() === 'premium')
+      || plans.find((plan) => plan.name.trim().toLowerCase() === 'pro');
+    if (byName) return byName.id;
+    return plans.reduce<PlanCatalogItem | null>((best, plan) => (
+      !best || plan.price > best.price ? plan : best
+    ), null)?.id;
+  })();
+
   return (
-    <section className="admin-page" style={{ maxWidth: 1100 }}>
+    <section className="admin-page plan-catalog-page">
       <header className="admin-page-header">
         <div>
           <Link to={backTo} className="button-link outline" style={{ marginBottom: 12, display: 'inline-block' }}>
@@ -106,44 +132,51 @@ export default function SubscriptionPlansPage({
           <p>Chưa có gói nào đang bán cho loại tài khoản của bạn. Vui lòng liên hệ quản trị viên.</p>
         </div>
       ) : (
-        <div className="admin-metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-          {plans.map((plan) => (
-            <article key={plan.id} className="admin-metric-card" style={{ alignItems: 'flex-start', gap: 12 }}>
-              <span className={`admin-status-badge ${plan.targetRole === 'employer' ? 'status-pending' : 'status-verified'}`}>
-                {roleLabel(plan.targetRole)}
-              </span>
-              <strong style={{ fontSize: '1.2rem' }}>{plan.name}</strong>
-              {plan.description && <p className="muted" style={{ margin: 0 }}>{plan.description}</p>}
-              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--primary)' }}>
-                {formatMoney(plan.price, plan.currency)}
-              </div>
-              <p className="muted" style={{ margin: 0 }}>Thời hạn: {plan.durationDays} ngày</p>
-              {plan.benefits.length > 0 && (
-                <ul style={{ margin: '8px 0 0', paddingLeft: 18, width: '100%' }}>
-                  {plan.benefits.map((benefit) => (
-                    <li key={benefit}>{benefit}</li>
-                  ))}
-                </ul>
-              )}
-              {planLimitLines(plan).length > 0 && (
-                <div style={{ width: '100%', marginTop: 8, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                  <div className="muted" style={{ fontSize: '0.8rem', marginBottom: 6 }}>Hạn mức gói</div>
-                  <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {planLimitLines(plan).map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <button
-                type="button"
-                style={{ marginTop: 12, width: '100%' }}
-                onClick={() => handleBuy(plan)}
+        <div className="plan-catalog-grid">
+          {plans.map((plan) => {
+            const benefits = displayBenefits(plan);
+            const featured = plan.id === featuredPlanId && plans.length > 1;
+            return (
+              <article
+                key={plan.id}
+                className={`plan-catalog-card${featured ? ' is-featured' : ''}`}
               >
-                Mua
-              </button>
-            </article>
-          ))}
+                {featured && <div className="plan-catalog-ribbon">Phổ biến nhất</div>}
+                <div className="plan-catalog-head">
+                  <div className="plan-catalog-meta">
+                    <span className={`plan-catalog-role ${plan.targetRole === 'employer' ? 'is-employer' : 'is-candidate'}`}>
+                      {roleLabel(plan.targetRole)}
+                    </span>
+                    <span className="plan-catalog-term">{plan.durationDays} ngày</span>
+                  </div>
+                  <h2 className="plan-catalog-name">{plan.name}</h2>
+                  <div className="plan-catalog-price">
+                    <span className="plan-catalog-amount">{formatMoney(plan.price, plan.currency)}</span>
+                    <span className="plan-catalog-price-hint">/ {plan.durationDays} ngày</span>
+                  </div>
+                </div>
+
+                {benefits.length > 0 && (
+                  <div className="plan-catalog-block">
+                    <div className="plan-catalog-label">Quyền lợi</div>
+                    <ul className="plan-catalog-benefits">
+                      {benefits.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {plan.description?.trim() && (
+                  <p className="plan-catalog-desc">{plan.description.trim()}</p>
+                )}
+
+                <button type="button" className="plan-catalog-buy" onClick={() => handleBuy(plan)}>
+                  {featured ? 'Chọn gói này' : 'Mua ngay'}
+                </button>
+              </article>
+            );
+          })}
         </div>
       )}
     </section>

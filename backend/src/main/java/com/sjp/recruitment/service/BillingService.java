@@ -1029,7 +1029,15 @@ public class BillingService {
             var node = objectMapper.readTree(featuresJson);
             var benefits = node.get("benefits");
             if (benefits != null && benefits.isArray()) {
-                return objectMapper.convertValue(benefits, List.class);
+                List<String> parsed = objectMapper.convertValue(benefits, List.class);
+                return parsed.stream()
+                        .filter(item -> item != null && !item.isBlank())
+                        .filter(item -> {
+                            String text = item.trim().toLowerCase();
+                            return !text.equals("xem và quản lý ứng viên ứng tuyển")
+                                    && !text.equals("thống kê ứng tuyển cơ bản");
+                        })
+                        .toList();
             }
         } catch (Exception ignored) {
         }

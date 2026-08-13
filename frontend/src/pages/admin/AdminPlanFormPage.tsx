@@ -210,10 +210,7 @@ function buildFeaturesJson(state: FeatureState, role: string, planName: string):
   if (role === 'employer') {
     payload.maxJobs = Number(state.limits.maxJobs) || 0;
     payload.listingPriority = priority;
-    EMPLOYER_DEFAULT_BENEFITS.forEach((item) => benefitSet.add(item));
-    if (priority >= 1) {
-      benefitSet.add('Tin được ưu tiên hiển thị');
-    }
+    EMPLOYER_DEFAULT_BENEFITS.forEach((item) => benefitSet.delete(item));
   }
   if (role === 'job_seeker') {
     payload.maxCv = Number(state.limits.maxCv) || 0;
