@@ -231,8 +231,8 @@ export default function EmployerApplicationsPage() {
       const interview = app.interviews && app.interviews.length > 0 ? app.interviews[app.interviews.length - 1] : null;
       if (interview) {
         const iStatus = (interview.status || '').toUpperCase();
-        if (iStatus === 'ACCEPTED') return { label: 'Sắp phỏng vấn', color: '#0369a1', bg: '#e0f2fe' };
-        if (iStatus === 'SCHEDULED' || iStatus === 'PENDING_RESPONSE') return { label: 'Đã lên lịch · UV mặc định tham gia', color: '#047857', bg: '#d1fae5' };
+        if (iStatus === 'ACCEPTED') return { label: 'Ứng viên đã xác nhận', color: '#0369a1', bg: '#e0f2fe' };
+        if (iStatus === 'SCHEDULED' || iStatus === 'PENDING_RESPONSE') return { label: 'Chờ ứng viên xác nhận', color: '#92400e', bg: '#fef3c7' };
         if (iStatus === 'NO_RESPONSE') return { label: 'UV không phản hồi', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'RESCHEDULE_REQUESTED' || iStatus === 'DECLINED') return { label: 'UV xin đổi lịch / Từ chối', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'COMPLETED') return { label: 'Đạt (Chờ Offer)', color: '#047857', bg: '#d1fae5' };
@@ -1417,8 +1417,8 @@ export default function EmployerApplicationsPage() {
                       let statusColor = '#475569';
                       let statusText = iv.status;
                       
-                      if (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') { statusBg = '#d1fae5'; statusColor = '#047857'; statusText = 'Đã lên lịch · UV mặc định tham gia'; }
-                      else if (iv.status === 'ACCEPTED') { statusBg = '#dcfce7'; statusColor = '#166534'; statusText = 'UV Đã chấp nhận'; }
+                      if (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') { statusBg = '#fef3c7'; statusColor = '#92400e'; statusText = 'Chờ ứng viên xác nhận'; }
+                      else if (iv.status === 'ACCEPTED') { statusBg = '#dcfce7'; statusColor = '#166534'; statusText = 'Ứng viên đã xác nhận tham gia'; }
                       else if (iv.status === 'DECLINED') { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Từ chối'; }
                       else if (iv.status === 'RESCHEDULE_REQUESTED') { statusBg = '#ffedd5'; statusColor = '#c2410c'; statusText = 'UV Xin đổi lịch'; }
                       else if (iv.status === 'NO_RESPONSE') { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Không phản hồi'; }
@@ -1693,8 +1693,8 @@ export default function EmployerApplicationsPage() {
                     let statusColor = '#475569';
                     let statusText = iv.status;
                     
-                    if (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') { statusBg = '#d1fae5'; statusColor = '#047857'; statusText = 'Đã lên lịch · UV mặc định tham gia'; }
-                    else if (iv.status === 'ACCEPTED') { statusBg = '#dcfce7'; statusColor = '#166534'; statusText = 'UV Đã chấp nhận'; }
+                    if (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') { statusBg = '#fef3c7'; statusColor = '#92400e'; statusText = 'Chờ ứng viên xác nhận'; }
+                    else if (iv.status === 'ACCEPTED') { statusBg = '#dcfce7'; statusColor = '#166534'; statusText = 'Ứng viên đã xác nhận tham gia'; }
                     else if (iv.status === 'DECLINED') { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Từ chối'; }
                     else if (iv.status === 'RESCHEDULE_REQUESTED') { statusBg = '#ffedd5'; statusColor = '#c2410c'; statusText = 'UV Xin đổi lịch'; }
                     else if (iv.status === 'NO_RESPONSE') { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Không phản hồi'; }

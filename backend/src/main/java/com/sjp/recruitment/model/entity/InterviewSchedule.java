@@ -47,7 +47,7 @@ public class InterviewSchedule {
     private String location;
 
     @Column(nullable = false)
-    private String status = "SCHEDULED";
+    private String status = "PENDING_RESPONSE";
 
     private String note;
 

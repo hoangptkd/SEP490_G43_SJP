@@ -82,7 +82,7 @@ public class ApplicationWorkflowService {
         schedule.setMeetingLink(request.meetingLink());
         schedule.setLocation(request.location());
         schedule.setNote(request.note());
-        schedule.setStatus("SCHEDULED");
+        schedule.setStatus("PENDING_RESPONSE");
         schedule.setResponseDeadline(null);
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
@@ -129,7 +129,10 @@ public class ApplicationWorkflowService {
         schedule.setRespondedAt(LocalDateTime.now());
         schedule.setCandidateRescheduleNote(request.rescheduleNote());
 
-        if ("request_reschedule".equals(request.response())) {
+        if ("confirmed".equals(request.response())) {
+            schedule.setStatus("ACCEPTED");
+            schedule.setCandidateRescheduleNote(null);
+        } else if ("request_reschedule".equals(request.response())) {
             schedule.setStatus("RESCHEDULE_REQUESTED");
         } else if ("declined".equals(request.response())) {
             schedule.setStatus("DECLINED");
@@ -138,17 +141,19 @@ public class ApplicationWorkflowService {
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
 
         // Notify employer
-        String responseText = "declined".equals(request.response())
-                ? "Đã từ chối tham gia"
-                : "Yêu cầu đổi lịch phỏng vấn";
+        String responseText = switch (request.response()) {
+            case "confirmed" -> "xác nhận tham gia phỏng vấn";
+            case "declined" -> "từ chối tham gia phỏng vấn";
+            default -> "yêu cầu đổi lịch phỏng vấn";
+        };
         employerRepository.findByCompanyId(schedule.getApplication().getJob().getCompany().getId()).forEach(employer -> {
             if (employer.getUser() != null) {
                 createNotification(employer.getUser(), "CANDIDATE_RESPONDED_INTERVIEW", "Ứng viên phản hồi lịch phỏng vấn",
-                        "Ứng viên " + schedule.getCandidate().getFullName() + " đã phản hồi: " + responseText + " cho vị trí " + schedule.getApplication().getJob().getTitle(), schedule.getApplication().getId(), "APPLICATION");
+                        "Ứng viên " + schedule.getCandidate().getFullName() + " đã " + responseText + " cho vị trí " + schedule.getApplication().getJob().getTitle(), schedule.getApplication().getId(), "APPLICATION");
             }
         });
 
-        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Ứng viên " + responseText + " lịch phỏng vấn");
+        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Ứng viên đã " + responseText);
 
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
@@ -217,7 +222,8 @@ public class ApplicationWorkflowService {
             }
             schedule.setRespondedAt(null);
             schedule.setViewedAt(null);
-            schedule.setStatus("SCHEDULED");
+            schedule.setLastReminderAt(null);
+            schedule.setStatus("PENDING_RESPONSE");
         } else {
             schedule.setStatus("CANCELLED"); // Or however we handle rejection of reschedule
         }

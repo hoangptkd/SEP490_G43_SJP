@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Pattern;
 
 public record InterviewCandidateResponseRequest(
         @NotBlank(message = "Phan hoi khong duoc de trong")
-        @Pattern(regexp = "^(request_reschedule|declined)$", message = "Phan hoi khong hop le")
+        @Pattern(regexp = "^(confirmed|request_reschedule|declined)$", message = "Phan hoi khong hop le")
         String response,
 
         String rescheduleNote

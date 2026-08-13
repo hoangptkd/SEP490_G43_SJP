@@ -146,7 +146,7 @@ public class EmailService {
         if (note != null && !note.isBlank()) {
             sb.append(String.format("- Luu y tu nha tuyen dung: %s\n", note));
         }
-        sb.append("\nVui long kiem tra he thong Smart Recruitment Portal va luu lai lich moi.\n\n");
+        sb.append("\nVui long truy cap Smart Recruitment Portal de xac nhan tham gia lich phong van moi.\n\n");
         sb.append("Tran trong,\n");
         sb.append(String.format("Doi ngu Tuyen dung %s", companyName));
 

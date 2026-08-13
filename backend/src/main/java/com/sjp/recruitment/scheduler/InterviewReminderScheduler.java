@@ -26,7 +26,9 @@ public class InterviewReminderScheduler {
         LocalDateTime reminderWindow = now.plusHours(24);
 
         interviewScheduleRepository.findAll().stream()
-                .filter(schedule -> "SCHEDULED".equals(schedule.getStatus()))
+                .filter(schedule -> "SCHEDULED".equals(schedule.getStatus())
+                        || "PENDING_RESPONSE".equals(schedule.getStatus())
+                        || "ACCEPTED".equals(schedule.getStatus()))
                 .filter(schedule -> schedule.getScheduledAt() != null
                         && schedule.getScheduledAt().isAfter(now)
                         && !schedule.getScheduledAt().isAfter(reminderWindow))
@@ -40,6 +42,11 @@ public class InterviewReminderScheduler {
             return;
         }
         try {
+            boolean waitingForConfirmation = "SCHEDULED".equals(schedule.getStatus())
+                    || "PENDING_RESPONSE".equals(schedule.getStatus());
+            String reminderNote = waitingForConfirmation
+                    ? "Nhắc lịch phỏng vấn: bạn chưa xác nhận tham gia. Vui lòng xác nhận, xin đổi lịch hoặc từ chối trên hệ thống."
+                    : "Nhắc lịch phỏng vấn: bạn đã xác nhận tham gia. Vui lòng có mặt đúng giờ.";
             emailService.sendInterviewInvitationEmail(
                     application.getCandidate().getUser().getEmail(),
                     application.getCandidate().getFullName(),
@@ -48,8 +55,7 @@ public class InterviewReminderScheduler {
                     schedule.getScheduledAt().toString(),
                     schedule.getLocation(),
                     schedule.getMeetingLink(),
-                    "Nhắc lịch phỏng vấn: bạn được mặc định tham gia. Nếu không thể tham dự, hãy xin đổi lịch hoặc từ chối trên hệ thống.\n\n"
-                            + (schedule.getNote() == null ? "" : schedule.getNote())
+                    reminderNote + "\n\n" + (schedule.getNote() == null ? "" : schedule.getNote())
             );
             schedule.setLastReminderAt(LocalDateTime.now());
             interviewScheduleRepository.save(schedule);

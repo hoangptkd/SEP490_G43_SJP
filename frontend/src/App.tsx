@@ -5152,7 +5152,11 @@ function ApplicationDetailPage() {
     setMessage('');
     try {
       await candidateService.respondToInterview(interviewId, responseStatus, note);
-      setMessage('Đã cập nhật phản hồi phỏng vấn.');
+      setMessage(responseStatus === 'confirmed'
+        ? 'Đã xác nhận tham gia phỏng vấn.'
+        : responseStatus === 'declined'
+          ? 'Đã từ chối tham gia phỏng vấn.'
+          : 'Đã gửi yêu cầu đổi lịch phỏng vấn.');
       setRescheduleInterviewId('');
       setDeclineInterviewId('');
       setRescheduleNote('');
@@ -5328,8 +5332,9 @@ function ApplicationDetailPage() {
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
                 <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
                   <strong>Phản hồi của bạn:</strong>{' '}
-                  {['SCHEDULED', 'ACCEPTED', 'PENDING_RESPONSE'].includes(interview.status)
-                    ? <span style={{ color: '#047857' }}>Đã lên lịch · mặc định tham gia</span>
+                  {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status)
+                    ? <span style={{ color: '#b45309' }}>Đang chờ bạn xác nhận lịch phỏng vấn</span>
+                   : interview.status === 'ACCEPTED' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
                    : interview.status === 'RESCHEDULE_REQUESTED' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
                    : interview.status === 'DECLINED' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
                    : interview.status === 'COMPLETED' ? <span style={{ color: '#4338ca' }}>Đã phỏng vấn xong</span>
@@ -5337,7 +5342,14 @@ function ApplicationDetailPage() {
                    : interview.status}
                 </p>
 
-                {['SCHEDULED', 'ACCEPTED', 'PENDING_RESPONSE'].includes(interview.status) && (
+                {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
+                  <div className="button-row" style={{ marginTop: 12 }}>
+                    <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận tham gia</button>
+                    <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
+                    <button className="danger sm" disabled={actionBusy} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
+                  </div>
+                )}
+                {interview.status === 'ACCEPTED' && (
                   <div className="button-row" style={{ marginTop: 12 }}>
                     <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
                     <button className="danger sm" disabled={actionBusy} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
