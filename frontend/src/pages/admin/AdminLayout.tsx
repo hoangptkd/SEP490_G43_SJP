@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import { clearAuthSession, getStoredUser, getToken } from '../../utils/authStorage';
 import type { User } from '../../types/auth';
@@ -30,7 +30,9 @@ export function AdminProtected({ children }: { children: JSX.Element }) {
 
 export default function AdminLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<User | null>(getStoredUser());
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     if (!getToken()) return;
@@ -39,6 +41,15 @@ export default function AdminLayout() {
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.classList.toggle('admin-nav-locked', mobileNavOpen);
+    return () => document.body.classList.remove('admin-nav-locked');
+  }, [mobileNavOpen]);
+
   function logout() {
     clearAuthSession();
     navigate('/admin/login');
@@ -46,7 +57,26 @@ export default function AdminLayout() {
 
   return (
     <div className="admin-shell">
-      <aside className="admin-nav">
+      <button
+        type="button"
+        className="admin-mobile-nav-toggle"
+        aria-expanded={mobileNavOpen}
+        aria-controls="admin-navigation"
+        onClick={() => setMobileNavOpen((value) => !value)}
+      >
+        {mobileNavOpen ? 'Đóng menu' : 'Menu admin'}
+      </button>
+
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="admin-nav-backdrop"
+          aria-label="Đóng menu"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      <aside id="admin-navigation" className={`admin-nav${mobileNavOpen ? ' mobile-open' : ''}`}>
         <div className="admin-nav-header">
           <span className="admin-nav-badge">Quản trị</span>
           <strong>Smart Recruitment Portal</strong>

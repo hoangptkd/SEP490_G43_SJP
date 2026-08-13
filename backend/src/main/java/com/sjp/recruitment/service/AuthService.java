@@ -135,6 +135,24 @@ public class AuthService {
             throw new ApiException(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", "Email chua duoc xac minh");
         }
 
+        boolean adminPortal = request.getPortal() != null
+                && "admin".equalsIgnoreCase(request.getPortal().trim());
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(user.role());
+        if (isAdmin && !adminPortal) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "ADMIN_PORTAL_REQUIRED",
+                    "Tài khoản quản trị vui lòng đăng nhập tại /admin/login"
+            );
+        }
+        if (!isAdmin && adminPortal) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "ADMIN_REQUIRED",
+                    "Tài khoản này không có quyền quản trị"
+            );
+        }
+
         namedParameterJdbcTemplate.update(
                 "UPDATE users SET last_login_at = now(), updated_at = now() WHERE id = :id",
                 new MapSqlParameterSource("id", UUID.fromString(user.id()))
