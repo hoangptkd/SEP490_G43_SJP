@@ -54,6 +54,7 @@ const BENEFIT_PRESETS: Record<string, string[]> = {
   employer: [
     'Đăng tin tuyển dụng theo hạn mức gói',
     'Tin được ưu tiên hiển thị',
+    'Sử dụng tính năng AI Ranking (Smart Ranking)',
   ],
   job_seeker: [
     'Ứng tuyển việc làm theo hạn mức ngày',
@@ -135,7 +136,7 @@ function limitsFor(role: string, planName?: string): PlanLimits {
 function defaultFeaturesForRole(role: string, planName = 'Plus'): FeatureState {
   const presets = BENEFIT_PRESETS[role] || BENEFIT_PRESETS.employer;
   const limits = limitsFor(role, planName);
-  const selected = [...presets.slice(0, 2)];
+  const selected = role === 'employer' ? [...presets] : [...presets.slice(0, 2)];
   if (role === 'employer' && limits.listingPriority >= 1) {
     if (!selected.includes('Tin được ưu tiên hiển thị')) {
       selected.push('Tin được ưu tiên hiển thị');

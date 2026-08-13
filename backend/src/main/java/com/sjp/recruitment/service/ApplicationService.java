@@ -283,6 +283,92 @@ public class ApplicationService {
                 jobOffer);
     }
 
+    @Transactional(readOnly = true)
+    public List<ApplicationResponse> toResponseBulk(List<Application> applications) {
+        if (applications == null || applications.isEmpty()) return List.of();
+
+        List<UUID> appIds = applications.stream().map(Application::getId).toList();
+
+        // 1. Fetch related entities in bulk
+        java.util.Map<UUID, List<ApplicationStatusHistory>> historyMap = historyRepository.findByApplicationIdInOrderByCreatedAtAsc(appIds)
+                .stream().collect(java.util.stream.Collectors.groupingBy(h -> h.getApplication().getId()));
+
+        java.util.Map<UUID, List<com.sjp.recruitment.model.entity.InterviewSchedule>> interviewMap = interviewScheduleRepository.findByApplicationIdIn(appIds)
+                .stream().collect(java.util.stream.Collectors.groupingBy(i -> i.getApplication().getId()));
+
+        java.util.Map<UUID, List<com.sjp.recruitment.model.entity.JobOffer>> offerMap = jobOfferRepository.findByApplicationIdIn(appIds)
+                .stream().collect(java.util.stream.Collectors.groupingBy(o -> o.getApplication().getId()));
+
+        // 2. We can also bulk map Jobs, but for now we rely on the existing jobService.toJobResponse caching/batching 
+        // if JobService is not batched yet, this will still be N+1 for Job. 
+        // Wait, EmployerService.getCompanyApplications usually filters by 1 Job, so Job is already loaded.
+
+        return applications.stream().map(application -> {
+            List<ApplicationTimelineResponse> timeline = historyMap.getOrDefault(application.getId(), List.of())
+                    .stream()
+                    .map(dtoMapper::toTimelineResponse)
+                    .toList();
+
+            List<com.sjp.recruitment.model.dto.response.InterviewScheduleResponse> interviews = interviewMap.getOrDefault(application.getId(), List.of())
+                    .stream()
+                    .map(dtoMapper::toInterviewScheduleResponse)
+                    .toList();
+
+            com.sjp.recruitment.model.dto.response.JobOfferResponse jobOffer = offerMap.getOrDefault(application.getId(), List.of())
+                    .stream().findFirst()
+                    .map(dtoMapper::toJobOfferResponse)
+                    .orElse(null);
+
+            com.sjp.recruitment.model.dto.response.JobResponse jobResponse = application.getJob() != null
+                    ? jobService.toJobResponse(application.getJob(), application.getCandidate())
+                    : null;
+
+            if (jobResponse != null && application.getJobSnapshotJson() != null) {
+                JobSnapshot snap = application.getJobSnapshotJson();
+                jobResponse = new com.sjp.recruitment.model.dto.response.JobResponse(
+                        jobResponse.id(),
+                        snap.getTitle() != null ? snap.getTitle() : jobResponse.title(),
+                        snap.getDescription() != null ? snap.getDescription() : jobResponse.description(),
+                        snap.getRequirements() != null ? snap.getRequirements() : jobResponse.requirements(),
+                        jobResponse.skills(),
+                        snap.getSalaryMin() != null ? snap.getSalaryMin() : jobResponse.salaryMin(),
+                        snap.getSalaryMax() != null ? snap.getSalaryMax() : jobResponse.salaryMax(),
+                        snap.getLocation() != null ? snap.getLocation() : jobResponse.location(),
+                        snap.getExperienceLevel() != null ? snap.getExperienceLevel() : jobResponse.experienceLevel(),
+                        snap.getDeadline() != null ? snap.getDeadline().atStartOfDay() : jobResponse.deadline(),
+                        jobResponse.status(),
+                        jobResponse.company(),
+                        jobResponse.companyLocationId(),
+                        jobResponse.companyLocation(),
+                        jobResponse.saved(),
+                        jobResponse.applied(),
+                        jobResponse.matchScore(),
+                        snap.getBenefits() != null ? snap.getBenefits() : jobResponse.benefits(),
+                        snap.getVacancies() != null ? snap.getVacancies() : jobResponse.vacancies(),
+                        snap.getWorkingTime() != null ? snap.getWorkingTime() : jobResponse.workingTime(),
+                        snap.getSalaryType() != null ? snap.getSalaryType() : jobResponse.salaryType(),
+                        snap.getJobType() != null ? snap.getJobType() : jobResponse.jobType(),
+                        snap.getWorkMode() != null ? snap.getWorkMode() : jobResponse.workMode(),
+                        jobResponse.viewsCount(),
+                        jobResponse.rejectionReason(),
+                        jobResponse.applicationsCount(),
+                        jobResponse.reportFixDeadline(),
+                        jobResponse.rankingConfig(),
+                        jobResponse.listingPriority(),
+                        jobResponse.featured()
+                );
+            }
+
+            return dtoMapper.toApplicationResponse(
+                    application,
+                    jobResponse,
+                    timeline,
+                    interviews,
+                    jobOffer);
+        }).toList();
+    }
+
+
     private void addHistory(Application application, Application.ApplicationStatus from, Application.ApplicationStatus to, String note) {
         ApplicationStatusHistory history = new ApplicationStatusHistory();
         history.setApplication(application);

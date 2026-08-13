@@ -91,11 +91,12 @@ public class EmployerService {
         // Time Context Calculations
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime fourteenDaysAgo = now.minusDays(14);
-        List<Application> recentAppsFull = applicationRepository.findApplicationsByEmployerSince(employerId, fourteenDaysAgo);
         
-        Map<String, Long> trendMap = recentAppsFull.stream()
+        List<Object[]> dateRows = applicationRepository.findApplicationDatesByEmployerSince(employerId, fourteenDaysAgo);
+        
+        Map<String, Long> trendMap = dateRows.stream()
                 .collect(Collectors.groupingBy(
-                        a -> a.getSubmittedAt().toLocalDate().format(DateTimeFormatter.ISO_DATE),
+                        row -> ((LocalDateTime) row[1]).toLocalDate().format(DateTimeFormatter.ISO_DATE),
                         Collectors.counting()
                 ));
                 
@@ -106,8 +107,8 @@ public class EmployerService {
         }
         
         LocalDateTime sevenDaysAgo = now.minusDays(7);
-        long appsThisWeek = recentAppsFull.stream().filter(a -> a.getSubmittedAt().isAfter(sevenDaysAgo)).count();
-        long appsLastWeek = recentAppsFull.stream().filter(a -> a.getSubmittedAt().isBefore(sevenDaysAgo) || a.getSubmittedAt().isEqual(sevenDaysAgo)).count();
+        long appsThisWeek = dateRows.stream().filter(r -> ((LocalDateTime) r[1]).isAfter(sevenDaysAgo)).count();
+        long appsLastWeek = dateRows.stream().filter(r -> ((LocalDateTime) r[1]).isBefore(sevenDaysAgo) || ((LocalDateTime) r[1]).isEqual(sevenDaysAgo)).count();
         
         Integer applicationGrowthPercentage = 0;
         if (appsLastWeek > 0) {
@@ -125,8 +126,11 @@ public class EmployerService {
         LocalDateTime startOfDay = now.toLocalDate().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
 
-        // 1. New Applications
-        List<Application> appliedApps = applicationRepository.findByJobEmployerIdAndStatus(employerId, "applied");
+        // 1. New Applications (Top 5)
+        List<Application> appliedApps = applicationRepository
+            .findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(employerId, "applied", PageRequest.of(0, 5))
+            .getContent();
+            
         for (Application a : appliedApps) {
             String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
             pendingTasks.add(new EmployerDashboardResponse.PendingTask(
@@ -135,12 +139,15 @@ public class EmployerService {
                     "Vị trí: " + a.getJob().getTitle(),
                     "new_application",
                     "/employer/applications?appId=" + a.getId(),
-                    now
+                    a.getSubmittedAt() != null ? a.getSubmittedAt() : now
             ));
         }
 
-        // 2. Pending Interview Scheduling (Shortlisted without active interview)
-        List<Application> shortlistedApps = applicationRepository.findByJobEmployerIdAndStatus(employerId, "shortlisted");
+        // 2. Pending Interview Scheduling (Top 5 shortlisted)
+        List<Application> shortlistedApps = applicationRepository
+            .findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(employerId, "shortlisted", PageRequest.of(0, 5))
+            .getContent();
+            
         for (Application a : shortlistedApps) {
             String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
             pendingTasks.add(new EmployerDashboardResponse.PendingTask(
@@ -149,13 +156,14 @@ public class EmployerService {
                     "Vị trí: " + a.getJob().getTitle(),
                     "pending_interview",
                     "/employer/applications?appId=" + a.getId(),
-                    now
+                    a.getSubmittedAt() != null ? a.getSubmittedAt() : now
             ));
         }
 
-        // 3. Pending Evaluations (ACCEPTED interviews that have passed)
+        // 3. Pending Evaluations (ACCEPTED interviews that have passed - limit 5)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> acceptedInterviews = interviewScheduleRepository
-                .findByEmployerIdAndStatus(employerId, "ACCEPTED");
+                .findByEmployerIdAndStatusOrderByScheduledAtDesc(employerId, "ACCEPTED", PageRequest.of(0, 5))
+                .getContent();
         for (var iv : acceptedInterviews) {
             if (iv.getScheduledAt().isBefore(startOfDay)) {
                 String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null ? iv.getCandidate().getFullName() : "Ứng viên";
@@ -170,29 +178,28 @@ public class EmployerService {
             }
         }
 
-        // 4. Pending Offers (COMPLETED interviews but no offer sent)
-        List<Application> interviewApps = applicationRepository.findByJobEmployerIdAndStatus(employerId, "interview_scheduled");
-        for (Application a : interviewApps) {
-            var ivs = interviewScheduleRepository.findByApplicationId(a.getId());
-            if (ivs.isEmpty()) continue;
-            var lastIv = ivs.get(ivs.size() - 1);
-            var offerOpt = jobOfferRepository.findByApplicationId(a.getId());
-            if ("COMPLETED".equals(lastIv.getStatus()) && offerOpt.isEmpty()) {
-                String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
-                pendingTasks.add(new EmployerDashboardResponse.PendingTask(
-                        UUID.randomUUID(),
-                        "Đạt PV, chờ gửi Offer: " + candidateName,
-                        "Vị trí: " + a.getJob().getTitle(),
-                        "pending_offer",
-                        "/employer/applications?appId=" + a.getId(),
-                        now
-                ));
-            }
+        // 4. Pending Offers (COMPLETED interviews but no offer sent - limit 5)
+        List<com.sjp.recruitment.model.entity.InterviewSchedule> interviewApps = interviewScheduleRepository
+                .findCompletedInterviewsWithoutOffer(employerId, PageRequest.of(0, 5))
+                .getContent();
+        
+        for (var iv : interviewApps) {
+            Application a = iv.getApplication();
+            String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
+            pendingTasks.add(new EmployerDashboardResponse.PendingTask(
+                    UUID.randomUUID(),
+                    "Đạt PV, chờ gửi Offer: " + candidateName,
+                    "Vị trí: " + a.getJob().getTitle(),
+                    "pending_offer",
+                    "/employer/applications?appId=" + a.getId(),
+                    iv.getScheduledAt() != null ? iv.getScheduledAt() : now
+            ));
         }
 
         // 5. Employer Response Needed (Reschedule requests & Rejected offers)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> rescheduleRequests = interviewScheduleRepository
-                .findByEmployerIdAndStatus(employerId, "RESCHEDULE_REQUESTED");
+                .findByEmployerIdAndStatusOrderByScheduledAtDesc(employerId, "RESCHEDULE_REQUESTED", PageRequest.of(0, 5))
+                .getContent();
         for (var iv : rescheduleRequests) {
             String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null ? iv.getCandidate().getFullName() : "Ứng viên";
             pendingTasks.add(new EmployerDashboardResponse.PendingTask(
@@ -201,12 +208,13 @@ public class EmployerService {
                     "Vị trí: " + iv.getApplication().getJob().getTitle(),
                     "employer_response_needed",
                     "/employer/applications?appId=" + iv.getApplication().getId(),
-                    now
+                    iv.getScheduledAt() != null ? iv.getScheduledAt() : now
             ));
         }
 
         List<com.sjp.recruitment.model.entity.JobOffer> rejectedOffers = jobOfferRepository
-                .findByApplicationJobEmployerIdAndStatus(employerId, "rejected");
+                .findByApplicationJobEmployerIdAndStatusOrderByCreatedAtDesc(employerId, "rejected", PageRequest.of(0, 5))
+                .getContent();
         for (var offer : rejectedOffers) {
             String candidateName = offer.getApplication().getCandidate() != null && offer.getApplication().getCandidate().getFullName() != null ? offer.getApplication().getCandidate().getFullName() : "Ứng viên";
             pendingTasks.add(new EmployerDashboardResponse.PendingTask(
@@ -215,7 +223,7 @@ public class EmployerService {
                     "Vị trí: " + offer.getPositionTitle(),
                     "employer_response_needed",
                     "/employer/applications?appId=" + offer.getApplication().getId(),
-                    now
+                    offer.getCreatedAt() != null ? offer.getCreatedAt() : now
             ));
         }
 
@@ -908,10 +916,34 @@ public class EmployerService {
     @Transactional(readOnly = true)
     public List<JobResponse> getCompanyJobs(String status, String search) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
-        List<JobResponse> jobs = jobRepository.findByCompanyIdOrderByCreatedAtDesc(employer.getCompany().getId())
+        List<Job> jobEntities = jobRepository.findByCompanyIdOrderByCreatedAtDesc(employer.getCompany().getId())
                 .stream()
                 .filter(job -> !"archived".equalsIgnoreCase(job.getStatus()))
-                .map(job -> dtoMapper.toJobResponse(job, false, false, null))
+                .toList();
+
+        if (jobEntities.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> jobIds = jobEntities.stream().map(Job::getId).toList();
+        
+        java.util.Map<UUID, Long> appCounts = applicationRepository.countByJobIdIn(jobIds)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        row -> (UUID) row[0],
+                        row -> (Long) row[1]
+                ));
+
+        int listingPriority = featureLimitService != null ? featureLimitService.resolveListingPriorityForUser(employer.getUser().getId()) : 0;
+
+        List<JobResponse> jobs = jobEntities.stream()
+                .map(job -> dtoMapper.toJobResponse(
+                        job, 
+                        false, 
+                        false, 
+                        null, 
+                        appCounts.getOrDefault(job.getId(), 0L), 
+                        listingPriority))
                 .toList();
 
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
@@ -1044,9 +1076,7 @@ public class EmployerService {
                     .toList();
         }
 
-        return list.stream()
-                .map(applicationService::toResponse)
-                .toList();
+        return applicationService.toResponseBulk(list);
     }
 
     @Transactional

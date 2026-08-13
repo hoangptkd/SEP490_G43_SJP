@@ -354,6 +354,12 @@ public class FeatureLimitService {
         return plan == null ? null : plan.subscriptionId();
     }
 
+    @Transactional(readOnly = true)
+    public boolean hasActivePaidPlan(User user) {
+        if (user == null || user.getId() == null) return false;
+        return findActivePlan(user.getId()) != null;
+    }
+
     public Integer featureIntOrNull(String featuresJson, String key) {
         if (!StringUtils.hasText(featuresJson) || !StringUtils.hasText(key)) {
             return null;

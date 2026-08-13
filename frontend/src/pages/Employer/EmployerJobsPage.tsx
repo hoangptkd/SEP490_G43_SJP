@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState, useRef } from 'react';
 import { employerService } from '../../services/employerService';
 import type { Company, CompanyLocation, Job } from '../../types/job';
 import { Link } from 'react-router-dom';
+import { billingService, UserSubscription } from '../../services/billingService';
 import PlanLimitAlert from '../../components/PlanLimitAlert';
 import { parseApiError } from '../../utils/planLimits';
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
@@ -30,6 +31,7 @@ function EmployerJobsPage() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [planLimitReached, setPlanLimitReached] = useState(false);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
 
   const submitTargetRef = useRef<string | undefined>(undefined);
 
@@ -81,14 +83,16 @@ function EmployerJobsPage() {
     setLoading(true);
     setError('');
     try {
-      const [compData, jobsData, locsData] = await Promise.all([
+      const [compData, jobsData, locsData, subData] = await Promise.all([
         employerService.getCompanyProfile(),
         employerService.getJobs().catch(() => []),
         employerService.getLocations().catch(() => []),
+        billingService.getMySubscription().catch(() => null),
       ]);
       setCompany(compData);
       setJobs(jobsData);
       setLocations(locsData);
+      setSubscription(subData);
     } catch (err: any) {
       setError('Không thể tải thông tin tuyển dụng.');
     } finally {
@@ -770,11 +774,18 @@ function EmployerJobsPage() {
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-gray-900 m-0">Cấu hình AI chấm điểm (Smart Ranking)</h3>
                     <p className="text-sm text-gray-500 mt-1 m-0">Hệ thống tự động đánh giá độ phù hợp của CV với Yêu cầu tuyển dụng.</p>
+                    {(!subscription || !subscription.planId) && (
+                      <p className="text-sm text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8V7a4 4 0 00-8 0v4h8z"></path></svg>
+                        Tính năng nâng cao. Vui lòng <a href="/employer/subscription/plans" className="underline hover:text-red-700">nâng cấp gói dịch vụ</a> để sử dụng.
+                      </p>
+                    )}
                   </div>
                   
-                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-full border transition-all ${formData.rankingConfig?.enabled ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'}`}>
+                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-full border transition-all ${formData.rankingConfig?.enabled ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'} ${(!subscription || !subscription.planId) ? 'opacity-50 cursor-not-allowed' : ''}`}>
                     <input
                       type="checkbox"
+                      disabled={!subscription || !subscription.planId}
                       checked={formData.rankingConfig?.enabled || false}
                       onChange={(e) => {
                         const isEnabled = e.target.checked;
