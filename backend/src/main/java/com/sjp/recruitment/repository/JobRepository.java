@@ -23,6 +23,15 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     List<Job> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
     List<Job> findByEmployerIdOrderByCreatedAtDesc(UUID employerId);
     
+    @Query("SELECT j FROM Job j WHERE j.company.id = :companyId " +
+           "AND j.status <> 'archived' " +
+           "AND (:status = '' OR LOWER(j.status) = LOWER(:status)) " +
+           "AND (:search = '' OR LOWER(j.title) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Job> searchCompanyJobs(@Param("companyId") UUID companyId, 
+                                @Param("status") String status, 
+                                @Param("search") String search, 
+                                Pageable pageable);
+
     long countByEmployerId(UUID employerId);
     long countByEmployerIdAndStatus(UUID employerId, String status);
     List<Job> findByEmployerIdAndStatus(UUID employerId, String status);

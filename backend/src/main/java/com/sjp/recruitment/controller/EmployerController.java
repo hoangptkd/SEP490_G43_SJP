@@ -120,10 +120,12 @@ public class EmployerController {
     }
 
     @GetMapping("/jobs")
-    public ResponseEntity<List<JobResponse>> getCompanyJobs(
+    public ResponseEntity<com.sjp.recruitment.model.dto.response.PageResponse<JobResponse>> getCompanyJobs(
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String search) {
-        return ResponseEntity.ok(employerService.getCompanyJobs(status, search));
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(employerService.getCompanyJobs(status, search, page, size));
     }
 
     @PostMapping("/jobs")
@@ -172,19 +174,28 @@ public class EmployerController {
     }
 
     @GetMapping("/applications")
-    public ResponseEntity<List<ApplicationResponse>> getCompanyApplications(
+    public ResponseEntity<com.sjp.recruitment.model.dto.response.PageResponse<ApplicationResponse>> getCompanyApplications(
             @RequestParam(required = false) String jobId,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String search) {
-        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, status, search));
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, status, search, page, size));
     }
 
     @GetMapping("/jobs/{jobId}/applications")
-    public ResponseEntity<List<ApplicationResponse>> getJobApplications(
+    public ResponseEntity<com.sjp.recruitment.model.dto.response.PageResponse<ApplicationResponse>> getJobApplications(
             @PathVariable String jobId,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String search) {
-        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, status, search));
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, status, search, page, size));
+    }
+
+    @GetMapping("/applications/{id}")
+    public ResponseEntity<ApplicationResponse> getApplicationDetail(@PathVariable String id) {
+        return ResponseEntity.ok(employerService.getApplicationDetail(id));
     }
 
     @PutMapping("/applications/{id}/status")
