@@ -64,6 +64,8 @@ export default function EmployerApplicationsPage() {
   // Reschedule Action
   const [rescheduleInterviewId, setRescheduleInterviewId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState<string>('');
+  const [rejectInterviewId, setRejectInterviewId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('');
 
   // Interview Evaluation Action
   const [evaluatingInterviewId, setEvaluatingInterviewId] = useState<string | null>(null);
@@ -234,7 +236,8 @@ export default function EmployerApplicationsPage() {
         if (iStatus === 'ACCEPTED') return { label: 'Ứng viên đã xác nhận', color: '#0369a1', bg: '#e0f2fe' };
         if (iStatus === 'SCHEDULED' || iStatus === 'PENDING_RESPONSE') return { label: 'Chờ ứng viên xác nhận', color: '#92400e', bg: '#fef3c7' };
         if (iStatus === 'NO_RESPONSE') return { label: 'UV không phản hồi', color: '#be123c', bg: '#ffe4e6' };
-        if (iStatus === 'RESCHEDULE_REQUESTED' || iStatus === 'DECLINED') return { label: 'UV xin đổi lịch / Từ chối', color: '#be123c', bg: '#ffe4e6' };
+        if (iStatus === 'RESCHEDULE_REQUESTED') return { label: 'UV xin đổi lịch', color: '#be123c', bg: '#ffe4e6' };
+        if (iStatus === 'DECLINED') return { label: 'UV từ chối tham gia', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'COMPLETED') return { label: 'Đạt (Chờ Offer)', color: '#047857', bg: '#d1fae5' };
         if (iStatus === 'NO_SHOW') return { label: 'UV không đến PV', color: '#991b1b', bg: '#fee2e2' };
       }
@@ -865,22 +868,39 @@ export default function EmployerApplicationsPage() {
             )}
 
             {targetStatus === 'INTERVIEW_SCHEDULED' && (
-              <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>Thông tin Phỏng vấn</h4>
+              (() => {
+                const hasActiveInterview = updatingApp?.interviews?.some((iv: any) => 
+                  ['SCHEDULED', 'PENDING_RESPONSE', 'ACCEPTED', 'RESCHEDULE_REQUESTED'].includes(iv.status)
+                );
+                
+                if (hasActiveInterview) {
+                  return (
+                    <div style={{ background: '#fffbeb', padding: '16px', borderRadius: '8px', border: '1px solid #fde68a', marginBottom: '16px' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: '#92400e' }}>Đã có lịch phỏng vấn</h4>
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#b45309' }}>Hồ sơ này đang có lịch phỏng vấn chưa hoàn tất. Bạn không cần tạo thêm lịch mới lúc này. Vui lòng sử dụng tính năng <strong>Quản lý phỏng vấn</strong> ở ngoài danh sách.</p>
+                    </div>
+                  );
+                }
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Thời gian (*)</label>
-                  <input type="datetime-local" min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Địa điểm</label>
-                  <input type="text" placeholder="VD: Tầng 3, Tòa nhà ABC" value={location} onChange={e => setLocation(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Link họp trực tuyến (Nếu có)</label>
-                  <input type="url" placeholder="VD: https://meet.google.com/..." value={meetingLink} onChange={e => setMeetingLink(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-              </div>
+                return (
+                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>Thông tin Phỏng vấn</h4>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Thời gian (*)</label>
+                      <input type="datetime-local" min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Địa điểm</label>
+                      <input type="text" placeholder="VD: Tầng 3, Tòa nhà ABC" value={location} onChange={e => setLocation(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Link họp trực tuyến (Nếu có)</label>
+                      <input type="url" placeholder="VD: https://meet.google.com/..." value={meetingLink} onChange={e => setMeetingLink(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                  </div>
+                );
+              })()
             )}
 
             {(targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') && (
@@ -1736,17 +1756,18 @@ export default function EmployerApplicationsPage() {
                                   <button
                                     onClick={async () => {
                                       if (!rescheduleDate) {
-                                        await customAlert('Vui lòng chọn ngày/giờ mới');
+                                        showToast('Vui lòng chọn ngày/giờ mới', 'error');
                                         return;
                                       }
                                       const scheduledAtIso = new Date(rescheduleDate).toISOString();
                                       employerService.employerRespondToReschedule(iv.id, 'accept_reschedule', 'Đồng ý đổi lịch', scheduledAtIso).then(async () => {
-                                        await customAlert('Đã chốt lịch mới thành công!');
+                                        showToast('Đã chốt lịch mới thành công!', 'success');
                                         setRescheduleInterviewId(null);
-                                        const freshApps = await employerService.getApplications({ jobId: selectedJobId || undefined, status: selectedStatus || undefined, search: appliedSearchKeyword || undefined });
-                                        setApplications(freshApps);
-                                        const freshApp = freshApps.find(a => a.id === manageInterviewApp.id);
-                                        if (freshApp) setManageInterviewApp(freshApp);
+                                        await loadApplications();
+                                        try {
+                                          const freshApp = await employerService.getApplicationDetail(manageInterviewApp.id);
+                                          setManageInterviewApp(freshApp);
+                                        } catch(e) {}
                                       }).catch(console.error);
                                     }}
                                     style={{ background: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
@@ -1764,6 +1785,48 @@ export default function EmployerApplicationsPage() {
                                   </button>
                                 </div>
                               </div>
+                            ) : rejectInterviewId === iv.id ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151' }}>Lý do từ chối đổi lịch:</label>
+                                <textarea
+                                  value={rejectReason}
+                                  onChange={(e) => setRejectReason(e.target.value)}
+                                  placeholder="Nhập lý do từ chối..."
+                                  style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', minHeight: '60px', fontFamily: 'inherit', fontSize: '0.9rem' }}
+                                />
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                  <button
+                                    onClick={async () => {
+                                      if (!rejectReason.trim()) {
+                                        showToast('Vui lòng nhập lý do từ chối', 'error');
+                                        return;
+                                      }
+                                      employerService.employerRespondToReschedule(iv.id, 'reject_reschedule', rejectReason).then(async () => {
+                                        showToast('Đã từ chối yêu cầu đổi lịch!', 'success');
+                                        setRejectInterviewId(null);
+                                        setRejectReason('');
+                                        await loadApplications();
+                                        try {
+                                          const freshApp = await employerService.getApplicationDetail(manageInterviewApp.id);
+                                          setManageInterviewApp(freshApp);
+                                        } catch(e) {}
+                                      }).catch(console.error);
+                                    }}
+                                    style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
+                                  >
+                                    Xác nhận từ chối
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setRejectInterviewId(null);
+                                      setRejectReason('');
+                                    }}
+                                    style={{ background: '#e5e7eb', color: '#4b5563', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
+                                  >
+                                    Hủy
+                                  </button>
+                                </div>
+                              </div>
                             ) : (
                               <div style={{ display: 'flex', gap: '8px' }}>
                                 <button
@@ -1773,18 +1836,7 @@ export default function EmployerApplicationsPage() {
                                   Đồng ý đổi lịch
                                 </button>
                                 <button
-                                  onClick={async () => {
-                                    const note = await customPrompt('Lý do từ chối đổi lịch:');
-                                    if (note) {
-                                      employerService.employerRespondToReschedule(iv.id, 'reject_reschedule', note).then(async () => {
-                                        await customAlert('Đã từ chối yêu cầu đổi lịch!');
-                                        const freshApps = await employerService.getApplications({ jobId: selectedJobId || undefined, status: selectedStatus || undefined, search: appliedSearchKeyword || undefined });
-                                        setApplications(freshApps);
-                                        const freshApp = freshApps.find(a => a.id === manageInterviewApp.id);
-                                        if (freshApp) setManageInterviewApp(freshApp);
-                                      }).catch(console.error);
-                                    }
-                                  }}
+                                  onClick={() => setRejectInterviewId(iv.id)}
                                   style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
                                 >
                                   Từ chối

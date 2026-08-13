@@ -197,6 +197,10 @@ class AiJobSearchServiceTest {
         return run;
     }
 
+    private AiJobMatchScorer.ScoreBreakdown score(int matchScore, List<String> matched, List<String> missing) {
+        return new AiJobMatchScorer.ScoreBreakdown(matchScore, 20.0, 20.0, 15.0, 15.0, 10.0, matched, missing, false);
+    }
+
     private Job publicJob() {
         Job job = new Job();
         job.setId(UUID.randomUUID());

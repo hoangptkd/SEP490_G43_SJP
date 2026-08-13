@@ -76,4 +76,10 @@ class AiJobSearchResultValidatorTest {
                 matchScore, 0.8, 0.7, 0.6, 0.5, 0.4, matched, missing, false
         );
     }
+
+    private AiJobMatchScorer.ScoreBreakdown score(int matchScore) {
+        return new AiJobMatchScorer.ScoreBreakdown(
+                matchScore, 20.0, 20.0, 15.0, 15.0, 10.0, List.of(), List.of(), false
+        );
+    }
 }
