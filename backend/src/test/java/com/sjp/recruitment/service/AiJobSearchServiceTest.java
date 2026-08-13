@@ -95,7 +95,7 @@ class AiJobSearchServiceTest {
     @Test
     void sameEvaluationFingerprintReusesExactResultEvenWhenForceRefreshIsRequested() {
         Job job = publicJob();
-        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, 80);
+        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, score(80, List.of(), List.of()));
         AiJobSearchRun run = succeededRun();
         var stored = new AiJobSearchPersistenceService.StoredRecommendation(
                 1, job.getId(), 92, List.of("Java"), List.of("AWS"), "Phù hợp.", true);
@@ -126,7 +126,7 @@ class AiJobSearchServiceTest {
         AiJobSearchRun run = new AiJobSearchRun();
         run.setId(UUID.randomUUID());
         Job job = publicJob();
-        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, 80);
+        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, score(80, List.of(), List.of()));
         when(selector.select(context)).thenReturn(List.of(selected));
         when(selector.evaluationHash(context, List.of(selected))).thenReturn("changed-hash");
         when(runRepository.findFirstByCandidateIdAndStatusAndInputHashOrderByCreatedAtDesc(
@@ -148,9 +148,9 @@ class AiJobSearchServiceTest {
         processingRun.setId(UUID.randomUUID());
         AiJobSearchRun completedRun = succeededRun();
         Job job = publicJob();
-        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, 80);
+        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, score(80, List.of(), List.of()));
         var ranked = new AiJobSearchResultValidator.RankedJob(
-                1, job, 94, List.of("Java"), List.of("AWS"), "Phù hợp.");
+                1, job, score(94, List.of("Java"), List.of("AWS")), "Phù hợp.");
         var stored = new AiJobSearchPersistenceService.StoredRecommendation(
                 1, job.getId(), 94, List.of("Java"), List.of("AWS"), "Phù hợp.", true);
 
@@ -182,6 +182,10 @@ class AiJobSearchServiceTest {
         run.setCompletedAt(LocalDateTime.now().minusMinutes(2));
         run.setExpiresAt(LocalDateTime.now().plusHours(2));
         return run;
+    }
+
+    private AiJobMatchScorer.ScoreBreakdown score(int matchScore, List<String> matched, List<String> missing) {
+        return new AiJobMatchScorer.ScoreBreakdown(matchScore, 20.0, 20.0, 15.0, 15.0, 10.0, matched, missing, false);
     }
 
     private Job publicJob() {

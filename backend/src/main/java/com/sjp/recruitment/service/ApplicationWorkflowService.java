@@ -153,7 +153,11 @@ public class ApplicationWorkflowService {
             }
         });
 
-        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Ứng viên đã " + responseText);
+        if ("declined".equals(request.response())) {
+            applicationService.seedStatus(schedule.getApplication(), Application.ApplicationStatus.REJECTED, "Ứng viên đã từ chối tham gia phỏng vấn");
+        } else {
+            applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Ứng viên đã " + responseText);
+        }
 
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
@@ -220,13 +224,12 @@ public class ApplicationWorkflowService {
                 
                 schedule.setResponseDeadline(null);
             }
-            schedule.setRespondedAt(null);
-            schedule.setViewedAt(null);
-            schedule.setLastReminderAt(null);
-            schedule.setStatus("PENDING_RESPONSE");
-        } else {
-            schedule.setStatus("CANCELLED"); // Or however we handle rejection of reschedule
         }
+        
+        schedule.setRespondedAt(null);
+        schedule.setViewedAt(null);
+        schedule.setLastReminderAt(null);
+        schedule.setStatus("PENDING_RESPONSE");
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
 
