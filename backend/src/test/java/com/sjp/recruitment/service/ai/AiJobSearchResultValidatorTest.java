@@ -1,7 +1,6 @@
 package com.sjp.recruitment.service.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sjp.recruitment.config.AiJobSearchProperties;
 import com.sjp.recruitment.model.entity.Job;
 import com.sjp.recruitment.model.entity.JobSkill;
 import com.sjp.recruitment.model.entity.Skill;
@@ -22,10 +21,7 @@ class AiJobSearchResultValidatorTest {
 
     @BeforeEach
     void setUp() {
-        AiJobSearchProperties properties = new AiJobSearchProperties();
-        properties.setMaxPromptJobs(20);
-        properties.setMaxResults(10);
-        validator = new AiJobSearchResultValidator(properties);
+        validator = new AiJobSearchResultValidator();
 
         job = new Job();
         job.setId(UUID.randomUUID());
@@ -49,7 +45,7 @@ class AiJobSearchResultValidatorTest {
                 }]}
                 """.formatted(job.getId()));
 
-        var result = validator.validate(json, context, List.of(new AiJobSearchCandidateSelector.SelectedJob(job, 80)));
+        var result = validator.validate(json, context, List.of(new AiJobSearchCandidateSelector.SelectedJob(job, score(80))));
 
         assertEquals(1, result.size());
         assertEquals(List.of("Java"), result.get(0).matchedSkills());
@@ -70,7 +66,11 @@ class AiJobSearchResultValidatorTest {
                 """.formatted(UUID.randomUUID()));
 
         assertThrows(AiJobSearchValidationException.class,
-                () -> validator.validate(json, context, List.of(new AiJobSearchCandidateSelector.SelectedJob(job, 80))));
+                () -> validator.validate(json, context, List.of(new AiJobSearchCandidateSelector.SelectedJob(job, score(80)))));
+    }
+
+    private AiJobMatchScorer.ScoreBreakdown score(int matchScore) {
+        return new AiJobMatchScorer.ScoreBreakdown(matchScore, 20.0, 20.0, 15.0, 15.0, 10.0, List.of(), List.of(), false);
     }
 
     private JobSkill jobSkill(String name) {
