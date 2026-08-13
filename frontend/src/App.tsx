@@ -87,6 +87,7 @@ const PaymentCheckoutPage = lazy(() => import('./pages/billing/PaymentCheckoutPa
 const SubscriptionPlansPage = lazy(() => import('./pages/billing/SubscriptionPlansPage'));
 const CompanyProfilePage = lazy(() => import('./pages/Employer/CompanyProfilePage'));
 const CompanyLocationsPage = lazy(() => import('./pages/Employer/CompanyLocationsPage'));
+const CandidateOnboardingPage = lazy(() => import('./pages/CandidateOnboardingPage'));
 const CompanyVerificationPage = lazy(() => import('./pages/Employer/CompanyVerificationPage'));
 const EmployerJobsPage = lazy(() => import('./pages/Employer/EmployerJobsPage'));
 const EmployerApplicationsPage = lazy(() => import('./pages/Employer/EmployerApplicationsPage'));
@@ -191,6 +192,7 @@ function App() {
       <Route path="/jobs" element={<JobsPage />} />
       <Route path="/jobs/:id" element={<JobDetailPage />} />
       <Route path="/companies/:id" element={<CompanyDetailPage />} />
+      <Route path="/candidate/onboarding" element={<Protected role="CANDIDATE"><CandidateOnboardingPage /></Protected>} />
       <Route path="/candidate" element={<Protected role="CANDIDATE"><CandidateLayout /></Protected>}>
         <Route index element={<CandidateHome />} />
         <Route path="profile" element={<ProfilePage />} />
@@ -312,6 +314,22 @@ function keepFocusInsideDialog(event: KeyboardEvent, container: HTMLElement | nu
 
 function readError(error: unknown) {
   return parseApiError(error).message;
+}
+
+function safeInternalRedirect(value: string | null | undefined, fallback = '/candidate') {
+  return value?.startsWith('/') && !value.startsWith('//') ? value : fallback;
+}
+
+async function candidateDestination(requestedRedirect?: string | null) {
+  const returnTo = safeInternalRedirect(requestedRedirect);
+  try {
+    const onboarding = await candidateService.getOnboarding();
+    return onboarding.status === 'PENDING'
+      ? `/candidate/onboarding?returnTo=${encodeURIComponent(returnTo)}`
+      : returnTo;
+  } catch {
+    return returnTo;
+  }
 }
 
 function isPlanLimitError(error: unknown) {
@@ -1657,9 +1675,7 @@ function LoginPage() {
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
   const oauthError = params.get('oauthError');
   const requestedRedirect = params.get('redirect');
-  const candidateRedirect = requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
-    ? requestedRedirect
-    : '/';
+  const candidateRedirect = safeInternalRedirect(requestedRedirect);
   const oauthErrorMessage = oauthError === 'google_not_configured'
     ? 'Đăng nhập Google chưa được cấu hình trên môi trường này.'
     : oauthError === 'missing_profile'
@@ -1689,7 +1705,7 @@ function LoginPage() {
         setAuthSession(response.token, response.user);
       }
       if (response.user.role === 'EMPLOYER') navigate('/employer');
-      else if (response.user.role === 'CANDIDATE') navigate(candidateRedirect);
+      else if (response.user.role === 'CANDIDATE') navigate(await candidateDestination(candidateRedirect));
       else navigate('/jobs');
     } catch (err) {
       setError(readError(err));
@@ -2222,47 +2238,63 @@ function ResetPasswordPage() {
 // ─── VERIFY EMAIL ───────────────────────────────────────────────────────────
 function VerifyEmailPage() {
   const [params] = useSearchParams();
-  const [message, setMessage] = useState('Đang xác minh...');
-  const [email, setEmail] = useState('');
-  const [resending, setResending] = useState(false);
+  const navigate = useNavigate();
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [message, setMessage] = useState('Đang xác minh địa chỉ email của bạn...');
+  const [secondsLeft, setSecondsLeft] = useState(5);
 
   useEffect(() => {
     const token = params.get('token');
-    if (!token) { setMessage('Thiếu token xác minh.'); return; }
+    if (!token) {
+      setStatus('error');
+      setMessage('Liên kết xác minh không hợp lệ hoặc đã thiếu token.');
+      return;
+    }
     authService.verifyEmail(token)
-      .then(() => setMessage('Email đã được xác minh. Bạn có thể đăng nhập.'))
-      .catch((err) => setMessage(readError(err)));
+      .then(() => {
+        setStatus('success');
+        setMessage('Email đã được xác minh. Bạn có thể đăng nhập.');
+      })
+      .catch((err) => {
+        setStatus('error');
+        setMessage(readError(err));
+      });
   }, [params]);
 
-  async function resend(event: FormEvent) {
-    event.preventDefault();
-    setResending(true);
-    try {
-      const response = await authService.resendVerification(email);
-      setMessage(response.message);
-    } catch (err) {
-      setMessage(readError(err));
-    } finally {
-      setResending(false);
-    }
-  }
+  useEffect(() => {
+    if (status !== 'success') return;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const remaining = Math.max(0, 5 - Math.floor((Date.now() - startedAt) / 1000));
+      setSecondsLeft(remaining);
+      if (remaining === 0) {
+        window.clearInterval(timer);
+        navigate('/login', { replace: true });
+      }
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [navigate, status]);
 
   return (
-    <div className="auth-shell">
-      <motion.div className="auth-card" variants={scaleIn} initial="initial" animate="animate"
+    <div className="auth-shell verify-shell">
+      <motion.div className={`auth-card verify-card verify-card--${status}`} variants={scaleIn} initial="initial" animate="animate"
         transition={{ duration: 0.25, ease: EASE_OUT }}>
-        <div className="auth-logo"><h1>Xác minh Email</h1></div>
-        <p role="status" style={{ color: 'var(--on-muted)', textAlign: 'center' }}>{message}</p>
-        <form className="auth-form" onSubmit={resend}>
-          <label>
-            Gửi lại email xác minh
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
-          </label>
-          <button type="submit" className="outline" disabled={resending}>
-            {resending ? 'Đang gửi...' : 'Gửi lại email xác minh'}
-          </button>
-        </form>
-        <div className="auth-footer"><Link to="/login">Về trang đăng nhập</Link></div>
+        <div className="verify-icon" aria-hidden="true">
+          {status === 'loading' ? <span className="verify-spinner" /> : status === 'success' ? '✓' : '!'}
+        </div>
+        <div className="auth-logo">
+          <p className="verify-kicker">Smart Recruitment Portal</p>
+          <h1>{status === 'loading' ? 'Đang xác minh email' : status === 'success' ? 'Xác minh thành công' : 'Không thể xác minh'}</h1>
+        </div>
+        <p className="verify-message" role="status">{message}</p>
+        {status === 'success' && <>
+          <div className="verify-countdown" aria-live="polite">
+            <div className="verify-progress"><span key={status} /></div>
+            <p>Tự động chuyển tới trang đăng nhập sau <strong>{secondsLeft} giây</strong></p>
+          </div>
+          <button type="button" className="verify-login-button" onClick={() => navigate('/login', { replace: true })}>Về trang đăng nhập</button>
+        </>}
+        {status === 'error' && <Link className="button-link outline verify-login-button" to="/login">Về trang đăng nhập</Link>}
       </motion.div>
     </div>
   );
@@ -2281,7 +2313,7 @@ function OAuthCallbackPage() {
       authService.getCurrentUser()
         .then((user) => {
           setAuthSession(token, user);
-          if (user.role === 'CANDIDATE') navigate('/');
+          if (user.role === 'CANDIDATE') candidateDestination().then((destination) => navigate(destination));
           else if (user.role === 'EMPLOYER') navigate('/employer');
           else navigate('/jobs');
         })
@@ -2331,7 +2363,7 @@ function SelectRolePage() {
     try {
       const response = await authService.completeOauthRole(token, role);
       if (response.token) { setAuthSession(response.token, response.user); }
-      navigate(role === 'CANDIDATE' ? '/' : '/employer');
+      navigate(role === 'CANDIDATE' ? await candidateDestination() : '/employer');
     } catch (err) {
       setError(readError(err));
     }
@@ -3727,6 +3759,7 @@ function CandidateLayout() {
 // ─── CANDIDATE HOME ──────────────────────────────────────────────────────────
 function CandidateHome() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [onboardingStatus, setOnboardingStatus] = useState<'PENDING' | 'COMPLETED' | 'SKIPPED'>('COMPLETED');
   const [metrics, setMetrics] = useState({
     savedJobs: 0,
     applications: 0,
@@ -3739,14 +3772,16 @@ function CandidateHome() {
   useEffect(() => {
     async function loadHome() {
       try {
-        const [recommendedJobs, savedJobs, applications, aiSessions, notifications] = await Promise.all([
+        const [recommendedJobs, savedJobs, applications, aiSessions, notifications, onboarding] = await Promise.all([
           jobService.recommendations().catch(() => []),
           candidateService.getSavedJobs(0, 1).catch(() => null),
           candidateService.getApplications(0, 1).catch(() => null),
           aiInterviewService.sessions().catch(() => []),
           candidateService.getNotifications(0, 100).catch(() => null),
+          candidateService.getOnboarding().catch(() => null),
         ]);
         setRecommendations(recommendedJobs);
+        if (onboarding?.status) setOnboardingStatus(onboarding.status);
         setMetrics({
           savedJobs: savedJobs?.totalItems || 0,
           applications: applications?.totalItems || 0,
@@ -3781,6 +3816,13 @@ function CandidateHome() {
           Tìm việc ngay
         </Link>
       </motion.div>
+
+      {onboardingStatus === 'SKIPPED' && (
+        <div className="notice-panel" style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div><strong>Hoàn thiện mong muốn nghề nghiệp</strong><p className="muted" style={{ margin: '4px 0 0' }}>Bổ sung vị trí, mức lương và địa điểm để nhận gợi ý sát hơn.</p></div>
+          <Link className="button-link outline sm" to="/candidate/onboarding">Hoàn thiện ngay</Link>
+        </div>
+      )}
 
       <div className="metric-grid" style={{ marginTop: 24 }}>
         {[
@@ -3988,6 +4030,7 @@ function ProfilePage() {
       <div className="page-header">
         <h1>Hồ sơ Ứng viên</h1>
         <p>Cập nhật thông tin cá nhân để tăng cơ hội được tuyển</p>
+        <Link className="button-link outline sm" to="/candidate/onboarding">Mong muốn nghề nghiệp</Link>
       </div>
 
       <div className="card">

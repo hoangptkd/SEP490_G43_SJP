@@ -12,11 +12,13 @@ import com.sjp.recruitment.model.dto.response.JobResponse;
 import com.sjp.recruitment.model.dto.response.ApplicationResponse;
 import com.sjp.recruitment.model.dto.response.MessageResponse;
 import com.sjp.recruitment.model.dto.response.NotificationResponse;
+import com.sjp.recruitment.model.dto.response.TaxCodeLookupResponse;
 import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.EmployerService;
 import com.sjp.recruitment.service.AiRankingService;
 import com.sjp.recruitment.service.AuthService;
 import com.sjp.recruitment.service.FeatureLimitService;
+import com.sjp.recruitment.service.TaxCodeLookupService;
 import com.sjp.recruitment.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import jakarta.validation.Valid;
@@ -42,6 +44,7 @@ public class EmployerController {
     private final AiRankingService aiRankingService;
     private final AuthService authService;
     private final FeatureLimitService featureLimitService;
+    private final TaxCodeLookupService taxCodeLookupService;
 
     @GetMapping("/dashboard")
     public ResponseEntity<EmployerDashboardResponse> getDashboardStats() {
@@ -67,6 +70,11 @@ public class EmployerController {
     @PutMapping("/company")
     public ResponseEntity<CompanyProfileResponse> updateCompanyProfile(@Valid @RequestBody CompanyProfileRequest request) {
         return ResponseEntity.ok(employerService.updateCompanyProfile(request));
+    }
+
+    @GetMapping("/company/tax-code-lookup")
+    public ResponseEntity<TaxCodeLookupResponse> lookupTaxCode(@RequestParam String taxCode) {
+        return ResponseEntity.ok(taxCodeLookupService.lookup(taxCode));
     }
 
     @GetMapping("/company/locations")

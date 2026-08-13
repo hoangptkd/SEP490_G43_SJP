@@ -68,6 +68,10 @@ public class AiJobSearchCandidateContextBuilder {
         providerContext.put("location", safe(candidate.getLocation()));
         providerContext.put("experienceYears", candidate.getExperienceYears());
         providerContext.put("experienceLevel", safe(candidate.getExperienceLevel()));
+        providerContext.put("desiredJobTitles", safeList(candidate.getDesiredJobTitles()));
+        providerContext.put("expectedSalary", candidate.getExpectedSalary());
+        providerContext.put("preferredLocations", safeList(candidate.getPreferredLocations()));
+        providerContext.put("willingToRelocate", candidate.isWillingToRelocate());
         providerContext.put("skills", skills);
         providerContext.put("education", safeList(candidate.getEducation()));
         providerContext.put("workExperience", safeList(candidate.getWorkExperience()));
@@ -92,6 +96,10 @@ public class AiJobSearchCandidateContextBuilder {
                 safe(candidate.getLocation()),
                 candidate.getExperienceYears(),
                 safe(candidate.getExperienceLevel()),
+                safeStringList(candidate.getDesiredJobTitles()),
+                candidate.getExpectedSalary(),
+                safeStringList(candidate.getPreferredLocations()),
+                candidate.isWillingToRelocate(),
                 safeList(candidate.getEducation()),
                 safeList(candidate.getWorkExperience()),
                 safeList(candidate.getProjects()),
@@ -99,6 +107,14 @@ public class AiJobSearchCandidateContextBuilder {
                 cvText,
                 Collections.unmodifiableMap(providerContext)
         );
+    }
+
+    private List<String> safeStringList(List<String> values) {
+        return values == null ? List.of() : values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .toList();
     }
 
     private String normalizedCvText(CandidateCv cv, CandidateProfile candidate) {

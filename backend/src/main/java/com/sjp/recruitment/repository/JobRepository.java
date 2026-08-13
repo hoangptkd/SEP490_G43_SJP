@@ -83,6 +83,14 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
 
     List<Job> findTop20ByStatusOrderByCreatedAtDesc(String status);
 
+    @Query("""
+            SELECT DISTINCT j.title FROM Job j
+            WHERE j.status = 'published'
+              AND (:query = '' OR LOWER(j.title) LIKE LOWER(CONCAT('%', :query, '%')))
+            ORDER BY j.title
+            """)
+    List<String> findPublishedTitleSuggestions(@Param("query") String query, Pageable pageable);
+
     @Query("SELECT j.id FROM Job j WHERE j.status = 'published' ORDER BY j.createdAt DESC")
     List<UUID> findRecommendationJobIds(Pageable pageable);
 

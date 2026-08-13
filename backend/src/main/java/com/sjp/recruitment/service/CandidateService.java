@@ -2,6 +2,7 @@ package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.CandidateProfileRequest;
+import com.sjp.recruitment.model.dto.request.CandidateOnboardingRequest;
 import com.sjp.recruitment.model.dto.request.CvVersionRequest;
 import com.sjp.recruitment.model.dto.response.*;
 import com.sjp.recruitment.model.entity.*;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +51,7 @@ public class CandidateService {
     private final CandidateSkillRepository candidateSkillRepository;
     private final StorageService storageService;
     private final FeatureLimitService featureLimitService;
+    private final VietnamProvinceCatalog vietnamProvinceCatalog;
 
     public record CvDownload(String fileName, String contentType, org.springframework.core.io.Resource resource) {
     }
@@ -90,6 +93,53 @@ public class CandidateService {
         CandidateProfile saved = candidateProfileRepository.save(profile);
         List<String> missing = missingReadinessItems(saved);
         return dtoMapper.toCandidateProfileResponse(saved, missing.isEmpty(), missing);
+    }
+
+    @Transactional(readOnly = true)
+    public CandidateOnboardingResponse getOnboarding() {
+        return toOnboardingResponse(getCurrentCandidateProfile());
+    }
+
+    @Transactional
+    public CandidateOnboardingResponse completeOnboarding(CandidateOnboardingRequest request) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        List<String> desiredJobTitles = normalizedTextValues(request.desiredJobTitles(), 5);
+        List<String> preferredLocations = normalizedTextValues(request.preferredLocations(), 5);
+        if (desiredJobTitles.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DESIRED_JOB_TITLES_REQUIRED",
+                    "Vui lòng chọn ít nhất một vị trí mong muốn");
+        }
+        vietnamProvinceCatalog.requireAllValid(preferredLocations);
+
+        profile.setDesiredJobTitles(desiredJobTitles);
+        profile.setExpectedSalary(request.expectedSalary());
+        profile.setExperienceLevel(request.experienceLevel());
+        profile.setPreferredLocations(preferredLocations);
+        profile.setWillingToRelocate(request.willingToRelocate());
+        profile.setOnboardingStatus("COMPLETED");
+        profile.setOnboardingCompletedAt(LocalDateTime.now());
+        return toOnboardingResponse(candidateProfileRepository.save(profile));
+    }
+
+    @Transactional
+    public CandidateOnboardingResponse skipOnboarding() {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        profile.setOnboardingStatus("SKIPPED");
+        profile.setOnboardingCompletedAt(null);
+        return toOnboardingResponse(candidateProfileRepository.save(profile));
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> jobTitleSuggestions(String query, int size) {
+        getCurrentCandidateProfile();
+        String normalizedQuery = query == null ? "" : query.trim().replaceAll("\\s+", " ");
+        if (normalizedQuery.length() > 120) {
+            normalizedQuery = normalizedQuery.substring(0, 120);
+        }
+        return jobRepository.findPublishedTitleSuggestions(
+                normalizedQuery,
+                PageRequest.of(0, Math.min(Math.max(size, 1), 20))
+        );
     }
 
     @Transactional(readOnly = true)
@@ -435,6 +485,34 @@ public class CandidateService {
                 .filter(this::hasText)
                 .forEach(skillName -> uniqueByLowercase.putIfAbsent(skillName.toLowerCase(Locale.ROOT), skillName));
         return List.copyOf(uniqueByLowercase.values());
+    }
+
+    private List<String> normalizedTextValues(List<String> values, int limit) {
+        Map<String, String> uniqueByLowercase = new LinkedHashMap<>();
+        if (values == null) return List.of();
+        values.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::trim)
+                .map(value -> value.replaceAll("\\s+", " "))
+                .filter(this::hasText)
+                .forEach(value -> uniqueByLowercase.putIfAbsent(value.toLowerCase(Locale.ROOT), value));
+        if (uniqueByLowercase.size() > limit) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "TOO_MANY_ONBOARDING_VALUES",
+                    "Số lượng lựa chọn vượt quá giới hạn cho phép");
+        }
+        return List.copyOf(uniqueByLowercase.values());
+    }
+
+    private CandidateOnboardingResponse toOnboardingResponse(CandidateProfile profile) {
+        return new CandidateOnboardingResponse(
+                profile.getDesiredJobTitles() == null ? List.of() : List.copyOf(profile.getDesiredJobTitles()),
+                profile.getExpectedSalary(),
+                profile.getExperienceLevel(),
+                profile.getPreferredLocations() == null ? List.of() : List.copyOf(profile.getPreferredLocations()),
+                profile.isWillingToRelocate(),
+                profile.getOnboardingStatus(),
+                profile.getOnboardingCompletedAt()
+        );
     }
 
     private String slugify(String value) {

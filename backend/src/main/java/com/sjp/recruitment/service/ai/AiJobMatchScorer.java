@@ -35,7 +35,7 @@ public class AiJobMatchScorer {
         double experienceScore = experienceScore(context.experienceLevel(), job.getExperienceLevel());
         double targetRoleScore = targetRoleScore(context, job);
         double cvJdScore = cvJdScore(context, job);
-        double locationScore = locationScore(context.location(), job.getLocation(), job.getWorkMode());
+        double locationScore = locationScore(context, job.getLocation(), job.getWorkMode());
         int total = (int) Math.round(clamp(skillScore, 0, 40)
                 + clamp(experienceScore, 0, 20)
                 + clamp(targetRoleScore, 0, 15)
@@ -79,6 +79,9 @@ public class AiJobMatchScorer {
         Set<String> titleTokens = tokens(job.getTitle());
         if (titleTokens.isEmpty()) return 7.5;
         Set<String> candidateVocabulary = new LinkedHashSet<>(tokens(context.headline()));
+        if (context.desiredJobTitles() != null) {
+            context.desiredJobTitles().forEach(title -> candidateVocabulary.addAll(tokens(title)));
+        }
         if (context.skills() != null) context.skills().forEach(skill -> candidateVocabulary.addAll(tokens(skill)));
         long matched = titleTokens.stream().filter(candidateVocabulary::contains).count();
         return 15.0 * matched / titleTokens.size();
@@ -92,10 +95,21 @@ public class AiJobMatchScorer {
         return 15.0 * matched / jdKeywords.size();
     }
 
-    private double locationScore(String candidateLocation, String jobLocation, String workMode) {
+    private double locationScore(AiJobSearchContext context, String jobLocation, String workMode) {
         String normalizedMode = normalizePhrase(workMode);
         if (normalizedMode.equals("remote") || normalizedMode.contains("tu xa")) return 10.0;
-        String candidate = normalizePhrase(candidateLocation);
+        List<String> preferredLocations = context.preferredLocations() == null
+                ? List.of()
+                : context.preferredLocations();
+        if (!preferredLocations.isEmpty()) {
+            String job = normalizePhrase(jobLocation);
+            if (job.isBlank()) return 5.0;
+            boolean matches = preferredLocations.stream()
+                    .map(this::normalizePhrase)
+                    .anyMatch(location -> !location.isBlank() && (location.contains(job) || job.contains(location)));
+            return matches ? 10.0 : context.willingToRelocate() ? 5.0 : 0.0;
+        }
+        String candidate = normalizePhrase(context.location());
         String job = normalizePhrase(jobLocation);
         if (candidate.isBlank() || job.isBlank()) return 5.0;
         return candidate.contains(job) || job.contains(candidate) ? 10.0 : 0.0;

@@ -9,6 +9,8 @@ import type {
   JobAlert,
   JobAlertInput,
   SubscriptionView,
+  CandidateOnboarding,
+  CandidateOnboardingInput,
 } from '../types/candidateDomain';
 import type { Job } from '../types/job';
 
@@ -20,6 +22,28 @@ export const candidateService = {
 
   updateProfile: async (profile: Partial<CandidateProfile>): Promise<CandidateProfile> => {
     const response = await api.put<CandidateProfile>('/candidate/profile', profile);
+    return response.data;
+  },
+
+  getOnboarding: async (): Promise<CandidateOnboarding> => {
+    const response = await api.get<CandidateOnboarding>('/candidate/onboarding');
+    return response.data;
+  },
+
+  completeOnboarding: async (input: CandidateOnboardingInput): Promise<CandidateOnboarding> => {
+    const response = await api.put<CandidateOnboarding>('/candidate/onboarding', input);
+    return response.data;
+  },
+
+  skipOnboarding: async (): Promise<CandidateOnboarding> => {
+    const response = await api.post<CandidateOnboarding>('/candidate/onboarding/skip');
+    return response.data;
+  },
+
+  getJobTitleSuggestions: async (query = '', size = 10): Promise<string[]> => {
+    const response = await api.get<string[]>('/candidate/onboarding/job-title-suggestions', {
+      params: { query, size },
+    });
     return response.data;
   },
 

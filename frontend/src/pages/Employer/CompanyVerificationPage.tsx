@@ -1,9 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { employerService } from '../../services/employerService';
 import { jobService } from '../../services/jobService';
-import { customAlert, customConfirm } from '../../utils/dialog';
+import { customConfirm } from '../../utils/dialog';
 import type { Company, CompanyDocument, Category } from '../../types/job';
 import { FiCheckCircle, FiClock, FiAlertCircle, FiUploadCloud, FiFileText, FiImage, FiDownload, FiTrash2, FiRefreshCw, FiExternalLink, FiChevronDown, FiX, FiSearch } from '../../components/Icons';
+import { TaxCodeLookupField } from '../../components/employer/TaxCodeLookupField';
+import { isVietnamTaxCodeFormat } from '../../utils/taxCode';
 
 function CompanyVerificationPage() {
   const [company, setCompany] = useState<Company | null>(null);
@@ -90,8 +92,8 @@ function CompanyVerificationPage() {
       errors.industry = 'Vui lòng chọn lĩnh vực/ngành chính.';
     }
 
-    if (company?.taxCode && !/^[a-zA-Z0-9-]{10,15}$/.test(company.taxCode)) {
-      errors.taxCode = 'Mã số thuế không hợp lệ (10-15 ký tự).';
+    if (company?.taxCode && !isVietnamTaxCodeFormat(company.taxCode)) {
+      errors.taxCode = 'Mã số thuế phải gồm 10 chữ số hoặc 13 chữ số đối với đơn vị phụ thuộc.';
     }
 
     setFieldErrors(errors);
@@ -117,6 +119,9 @@ function CompanyVerificationPage() {
       await loadData();
     } catch (err: any) {
       if (err.response?.data?.message) {
+        if (err.response.data.code === 'INVALID_TAX_CODE') {
+          setFieldErrors((current) => ({ ...current, taxCode: err.response.data.message }));
+        }
         setError(err.response.data.message);
       } else {
         setError('Có lỗi xảy ra khi lưu thông tin công ty.');
@@ -520,16 +525,14 @@ function CompanyVerificationPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">Mã số thuế</label>
-              <input
-                value={company.taxCode || ''}
-                onChange={(e) => setCompany({ ...company, taxCode: e.target.value })}
-                placeholder="Mã số thuế doanh nghiệp"
-                className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.taxCode ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
-              />
-              {fieldErrors.taxCode && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.taxCode}</p>}
-            </div>
+            <TaxCodeLookupField
+              value={company.taxCode || ''}
+              onChange={(taxCode) => {
+                setCompany({ ...company, taxCode });
+                setFieldErrors((current) => ({ ...current, taxCode: '' }));
+              }}
+              error={fieldErrors.taxCode}
+            />
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty</label>

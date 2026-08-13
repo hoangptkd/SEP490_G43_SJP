@@ -1,6 +1,7 @@
 package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.dto.request.CandidateProfileRequest;
+import com.sjp.recruitment.model.dto.request.CandidateOnboardingRequest;
 import com.sjp.recruitment.model.dto.request.CvVersionRequest;
 import com.sjp.recruitment.model.dto.request.JobAlertRequest;
 import com.sjp.recruitment.model.dto.response.*;
@@ -36,6 +37,29 @@ public class CandidateController {
     @PutMapping("/profile")
     public ResponseEntity<CandidateProfileResponse> updateProfile(@Valid @RequestBody CandidateProfileRequest request) {
         return ResponseEntity.ok(candidateService.updateProfile(request));
+    }
+
+    @GetMapping("/onboarding")
+    public ResponseEntity<CandidateOnboardingResponse> getOnboarding() {
+        return ResponseEntity.ok(candidateService.getOnboarding());
+    }
+
+    @PutMapping("/onboarding")
+    public ResponseEntity<CandidateOnboardingResponse> completeOnboarding(
+            @Valid @RequestBody CandidateOnboardingRequest request) {
+        return ResponseEntity.ok(candidateService.completeOnboarding(request));
+    }
+
+    @PostMapping("/onboarding/skip")
+    public ResponseEntity<CandidateOnboardingResponse> skipOnboarding() {
+        return ResponseEntity.ok(candidateService.skipOnboarding());
+    }
+
+    @GetMapping("/onboarding/job-title-suggestions")
+    public ResponseEntity<List<String>> jobTitleSuggestions(
+            @RequestParam(defaultValue = "") String query,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(candidateService.jobTitleSuggestions(query, size));
     }
 
     @GetMapping("/cvs")

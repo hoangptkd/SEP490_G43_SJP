@@ -7,6 +7,7 @@ import {
   type VietnamAddressValue,
 } from '../../types/location';
 import './location-picker.css';
+import SearchableCombobox from './SearchableCombobox';
 
 interface VietnamAddressFieldsProps {
   value: VietnamAddressValue;
@@ -132,34 +133,32 @@ export function VietnamAddressFields({
         <div className="location-picker__grid">
           <div className="location-picker__field">
             <label htmlFor={provinceId}>Tỉnh / Thành phố{required && <span className="location-picker__required"> *</span>}</label>
-            <select
-              id={provinceId}
-              value={resolvedProvinceCode || ''}
-              onChange={(event) => updateProvince(event.target.value)}
+            <SearchableCombobox
+              inputId={provinceId}
+              value={resolvedProvinceCode ? String(resolvedProvinceCode) : ''}
+              options={provinces.map((province) => ({ value: String(province.code), label: province.name }))}
+              onChange={updateProvince}
+              placeholder="Nhập để tìm tỉnh / thành phố"
               required={required}
-              disabled={disabled || loadingProvinces || Boolean(provinceError)}
-              aria-describedby={provinceError ? `${provinceId}-error` : undefined}
-            >
-              <option value="">{loadingProvinces ? 'Đang tải...' : 'Chọn tỉnh / thành phố'}</option>
-              {provinces.map((province) => <option key={province.code} value={province.code}>{province.name}</option>)}
-            </select>
+              loading={loadingProvinces}
+              disabled={disabled || Boolean(provinceError)}
+            />
             {legacyProvince && <p className="location-picker__legacy">Giá trị cũ: {value.provinceName}. Vui lòng chọn lại.</p>}
             {provinceError && <div id={`${provinceId}-error`} className="location-picker__error" role="alert"><span>{provinceError}</span><button type="button" className="location-picker__retry" onClick={() => setProvinceRetry((version) => version + 1)}>Thử lại</button></div>}
           </div>
 
           <div className="location-picker__field">
             <label htmlFor={wardId}>Phường / Xã{required && <span className="location-picker__required"> *</span>}</label>
-            <select
-              id={wardId}
-              value={resolvedWardCode || ''}
-              onChange={(event) => updateWard(event.target.value)}
+            <SearchableCombobox
+              inputId={wardId}
+              value={resolvedWardCode ? String(resolvedWardCode) : ''}
+              options={wards.map((ward) => ({ value: String(ward.code), label: ward.name }))}
+              onChange={updateWard}
+              placeholder={resolvedProvinceCode ? 'Nhập để tìm phường / xã' : 'Chọn tỉnh trước'}
               required={required}
-              disabled={disabled || !resolvedProvinceCode || loadingWards || Boolean(wardError)}
-              aria-describedby={wardError ? `${wardId}-error` : undefined}
-            >
-              <option value="">{loadingWards ? 'Đang tải...' : resolvedProvinceCode ? 'Chọn phường / xã' : 'Chọn tỉnh trước'}</option>
-              {wards.map((ward) => <option key={ward.code} value={ward.code}>{ward.name}</option>)}
-            </select>
+              loading={loadingWards}
+              disabled={disabled || !resolvedProvinceCode || Boolean(wardError)}
+            />
             {legacyWard && <p className="location-picker__legacy">Giá trị cũ: {value.wardName}. Vui lòng chọn lại.</p>}
             {wardError && <div id={`${wardId}-error`} className="location-picker__error" role="alert"><span>{wardError}</span><button type="button" className="location-picker__retry" onClick={() => setWardRetry((version) => version + 1)}>Thử lại</button></div>}
           </div>

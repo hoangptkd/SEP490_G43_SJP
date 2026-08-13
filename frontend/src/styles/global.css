@@ -602,6 +602,122 @@ textarea {
   width: 100%;
 }
 
+.verify-shell {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0, 80, 125, 0.16), transparent 28rem),
+    linear-gradient(145deg, #eff6ff, #f8fbff 52%, #edf9f3);
+}
+
+.verify-card {
+  border-radius: 20px;
+  box-shadow: 0 24px 65px rgba(11, 28, 48, 0.13);
+  max-width: 500px;
+  padding: 2.25rem;
+  text-align: center;
+  width: 100%;
+}
+
+.verify-icon {
+  align-items: center;
+  background: var(--primary-softer);
+  border: 1px solid var(--primary-soft);
+  border-radius: 50%;
+  color: var(--primary);
+  display: flex;
+  font-family: Lexend, sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  height: 72px;
+  justify-content: center;
+  margin: 0 auto 1.15rem;
+  width: 72px;
+}
+
+.verify-card--success .verify-icon {
+  background: var(--secondary-soft);
+  border-color: #9aeaad;
+  color: var(--secondary);
+}
+
+.verify-card--error .verify-icon {
+  background: var(--danger-soft);
+  border-color: #ffb4ab;
+  color: var(--danger);
+}
+
+.verify-spinner {
+  animation: spin 0.8s linear infinite;
+  border: 3px solid var(--primary-soft);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  height: 30px;
+  width: 30px;
+}
+
+.verify-kicker {
+  color: var(--primary) !important;
+  font-size: 0.7rem !important;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.45rem !important;
+  text-transform: uppercase;
+}
+
+.verify-message {
+  color: var(--on-muted);
+  line-height: 1.6;
+  margin: 0.65rem 0 1.4rem;
+}
+
+.verify-countdown {
+  background: var(--surface-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+}
+
+.verify-progress {
+  background: var(--surface-highest);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.verify-progress span {
+  animation: verifyCountdown 5s linear forwards;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  display: block;
+  height: 100%;
+  transform-origin: left;
+  width: 100%;
+}
+
+.verify-countdown p {
+  color: var(--on-muted);
+  font-size: 0.78rem;
+  margin: 0.65rem 0 0;
+}
+
+.verify-login-button {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 46px;
+  text-decoration: none;
+  width: 100%;
+}
+
+@keyframes verifyCountdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verify-progress span { animation: none; transform: scaleX(1); }
+  .verify-spinner { animation-duration: 1.5s; }
+}
+
 .auth-logo {
   margin-bottom: 28px;
   text-align: center;

@@ -33,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -869,20 +870,40 @@ public class JobService {
     }
 
     public int calculateMatchScore(CandidateProfile candidate, Job job) {
-        return calculateMatchScore(normalized(candidate.getSkills()), candidate.getLocation(), job);
+        return calculateMatchScore(candidate, normalized(candidate.getSkills()), job);
     }
 
-    private int calculateMatchScore(Set<String> candidateSkills, String candidateLocation, Job job) {
+    private int calculateMatchScore(CandidateProfile candidate, Set<String> candidateSkills, Job job) {
         Set<String> jobSkills = normalized(job.getSkills() == null || job.getSkills().isEmpty() ? job.getRequirements() : job.getSkills());
-        if (candidateSkills.isEmpty() || jobSkills.isEmpty()) {
-            return 20;
-        }
         long matches = jobSkills.stream().filter(candidateSkills::contains).count();
-        int skillScore = (int) Math.round((matches * 70.0) / jobSkills.size());
-        int locationScore = candidateLocation != null && job.getLocation() != null
-                && job.getLocation().toLowerCase().contains(candidateLocation.toLowerCase()) ? 20 : 0;
-        int base = matches > 0 ? 10 : 0;
-        return Math.min(100, skillScore + locationScore + base);
+        int skillScore = jobSkills.isEmpty() ? 10 : (int) Math.round((matches * 50.0) / jobSkills.size());
+
+        String normalizedTitle = normalizeSearchText(job.getTitle());
+        List<String> desiredTitles = candidate.getDesiredJobTitles() == null ? List.of() : candidate.getDesiredJobTitles();
+        int titleScore = desiredTitles.isEmpty() ? 10 : desiredTitles.stream()
+                .map(this::normalizeSearchText)
+                .anyMatch(title -> !title.isBlank() && (normalizedTitle.contains(title) || title.contains(normalizedTitle))) ? 20 : 0;
+
+        List<String> preferredLocations = candidate.getPreferredLocations() == null ? List.of() : candidate.getPreferredLocations();
+        if (preferredLocations.isEmpty() && candidate.getLocation() != null) {
+            preferredLocations = List.of(candidate.getLocation());
+        }
+        String normalizedLocation = normalizeSearchText(job.getLocation());
+        int locationScore = "remote".equalsIgnoreCase(job.getWorkMode()) ? 15 : preferredLocations.isEmpty() ? 7
+                : normalizedLocation.isBlank() ? 7
+                : preferredLocations.stream().map(this::normalizeSearchText)
+                .anyMatch(location -> !location.isBlank()
+                        && (normalizedLocation.contains(location) || location.contains(normalizedLocation))) ? 15
+                        : candidate.isWillingToRelocate() ? 7 : 0;
+
+        Integer candidateLevel = experienceRank(candidate.getExperienceLevel());
+        Integer jobLevel = experienceRank(job.getExperienceLevel());
+        int experienceScore = candidateLevel == null || jobLevel == null ? 5
+                : candidateLevel >= jobLevel ? 10 : jobLevel - candidateLevel == 1 ? 5 : 0;
+
+        int salaryScore = candidate.getExpectedSalary() == null || job.getSalaryMax() == null ? 2
+                : job.getSalaryMax().compareTo(candidate.getExpectedSalary()) >= 0 ? 5 : 0;
+        return Math.min(100, skillScore + titleScore + locationScore + experienceScore + salaryScore);
     }
 
     private RecommendationResponse toRecommendation(
@@ -903,7 +924,7 @@ public class JobService {
                 .filter(skill -> !candidateSkills.contains(skill.toLowerCase()))
                 .limit(5)
                 .toList();
-        int score = calculateMatchScore(candidateSkills, candidate.getLocation(), job);
+        int score = calculateMatchScore(candidate, candidateSkills, job);
         String reason = matched.isEmpty()
                 ? "Hoan thien ho so ky nang de nhan goi y chinh xac hon."
                 : "Phu hop vi ban co " + String.join(", ", matched) + ".";
@@ -968,6 +989,26 @@ public class JobService {
                 .map(value -> value.trim().toLowerCase())
                 .filter(value -> !value.isBlank())
                 .collect(Collectors.toSet());
+    }
+
+    private String normalizeSearchText(String value) {
+        if (value == null) return "";
+        return Normalizer.normalize(value.trim().toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .replace('đ', 'd')
+                .replaceAll("\\s+", " ");
+    }
+
+    private Integer experienceRank(String value) {
+        return switch (value == null ? "" : value.toLowerCase(Locale.ROOT)) {
+            case "intern" -> 0;
+            case "fresher" -> 1;
+            case "junior" -> 2;
+            case "middle" -> 3;
+            case "senior" -> 4;
+            case "lead", "manager" -> 5;
+            default -> null;
+        };
     }
 
     private String buildRemoteJobWhereClause(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,

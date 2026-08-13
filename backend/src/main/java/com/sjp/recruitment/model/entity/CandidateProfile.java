@@ -11,6 +11,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -56,6 +57,26 @@ public class CandidateProfile {
 
     @Column(name = "portfolio_url")
     private String portfolioUrl;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "desired_job_titles", nullable = false)
+    private List<String> desiredJobTitles = List.of();
+
+    @Column(name = "expected_salary", precision = 14, scale = 2)
+    private BigDecimal expectedSalary;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "preferred_locations", nullable = false)
+    private List<String> preferredLocations = List.of();
+
+    @Column(name = "willing_to_relocate", nullable = false)
+    private boolean willingToRelocate;
+
+    @Column(name = "onboarding_status", nullable = false)
+    private String onboardingStatus = "PENDING";
+
+    @Column(name = "onboarding_completed_at")
+    private LocalDateTime onboardingCompletedAt;
 
     @OneToMany(mappedBy = "candidate", fetch = FetchType.LAZY)
     private List<CandidateSkill> candidateSkills = new ArrayList<>();

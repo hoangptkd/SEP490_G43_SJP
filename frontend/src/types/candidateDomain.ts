@@ -14,6 +14,12 @@ export interface CandidateProfile {
   experienceLevel?: string;
   linkedinUrl?: string;
   portfolioUrl?: string;
+  desiredJobTitles: string[];
+  expectedSalary?: number;
+  preferredLocations: string[];
+  willingToRelocate: boolean;
+  onboardingStatus: 'PENDING' | 'COMPLETED' | 'SKIPPED';
+  onboardingCompletedAt?: string;
   skills: string[];
   education: ProfileSectionItem[];
   workExperience: ProfileSectionItem[];
@@ -21,6 +27,24 @@ export interface CandidateProfile {
   certifications: ProfileSectionItem[];
   applyReady: boolean;
   missingReadinessItems: string[];
+}
+
+export interface CandidateOnboarding {
+  desiredJobTitles: string[];
+  expectedSalary?: number;
+  experienceLevel?: string;
+  preferredLocations: string[];
+  willingToRelocate: boolean;
+  status: 'PENDING' | 'COMPLETED' | 'SKIPPED';
+  completedAt?: string;
+}
+
+export interface CandidateOnboardingInput {
+  desiredJobTitles: string[];
+  expectedSalary: number;
+  experienceLevel: string;
+  preferredLocations: string[];
+  willingToRelocate: boolean;
 }
 
 export interface ProfileSectionItem {

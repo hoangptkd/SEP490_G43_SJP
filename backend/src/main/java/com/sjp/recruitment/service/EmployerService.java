@@ -379,6 +379,7 @@ public class EmployerService {
     private final NotificationRepository notificationRepository;
     private final com.sjp.recruitment.repository.UserRepository userRepository;
     private final com.sjp.recruitment.repository.JobOfferRepository jobOfferRepository;
+    private final TaxCodeLookupService taxCodeLookupService;
 
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {
@@ -456,7 +457,10 @@ public class EmployerService {
         String oldName = company.getName() == null ? "" : company.getName().trim();
         String newName = request.name() == null ? "" : request.name().trim();
         String oldTax = company.getTaxCode() == null ? "" : company.getTaxCode().trim();
-        String newTax = request.taxCode() == null ? "" : request.taxCode().trim();
+        String newTax = taxCodeLookupService.normalize(request.taxCode());
+        if (!newTax.isBlank()) {
+            newTax = taxCodeLookupService.lookup(newTax).taxCode();
+        }
 
         boolean nameOrTaxChanged = !oldName.equalsIgnoreCase(newName) || !oldTax.equals(newTax);
         boolean industryChanged = false;

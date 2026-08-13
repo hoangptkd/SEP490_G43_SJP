@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { provinceService } from '../../services/provinceService';
 import type { AdministrativeDivision } from '../../types/location';
+import SearchableCombobox from './SearchableCombobox';
 import './location-picker.css';
 
 interface ProvinceLocationSelectProps {
@@ -61,21 +62,22 @@ export default function ProvinceLocationSelect({
   return (
     <div className={`location-picker ${className}`.trim()} aria-busy={loading}>
       {label && <label className="location-picker__label" htmlFor={selectId}>{label}{required && <span className="location-picker__required"> *</span>}</label>}
-      <select
-        id={selectId}
-        className={selectClassName}
-        aria-label={label ? undefined : ariaLabel}
-        aria-describedby={(loading || error || helperText) ? statusId : undefined}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+      <SearchableCombobox
+        value={knownValue ? value : ''}
+        options={[
+          ...(allowRemote ? [{ value: 'Remote', label: 'Remote / Làm việc từ xa', keywords: 'tu xa' }] : []),
+          ...provinces.map((province) => ({ value: province.name, label: province.name })),
+        ]}
+        onChange={onChange}
+        placeholder={placeholder}
+        ariaLabel={label ? undefined : ariaLabel}
+        inputClassName={selectClassName}
+        inputId={selectId}
         required={required}
-        disabled={disabled || loading || Boolean(error)}
-      >
-        <option value="">{loading ? 'Đang tải tỉnh/thành phố...' : placeholder}</option>
-        {!knownValue && value && <option value={value}>Giá trị hiện tại: {value}</option>}
-        {allowRemote && <option value="Remote">Remote / Làm việc từ xa</option>}
-        {provinces.map((province) => <option key={province.code} value={province.name}>{province.name}</option>)}
-      </select>
+        disabled={disabled || Boolean(error)}
+        loading={loading}
+      />
+      {!knownValue && value && <p className="location-picker__legacy">Giá trị hiện tại: {value}. Vui lòng chọn lại.</p>}
       <div id={statusId} aria-live="polite">
         {error ? (
           <div className="location-picker__error" role="alert">

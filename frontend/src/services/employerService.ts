@@ -41,6 +41,13 @@ export interface EmployerDashboardStats {
   applicationTrend: { date: string; count: number }[];
 }
 
+export interface TaxCodeLookupResult {
+  taxCode: string;
+  companyName: string;
+  address?: string;
+  status?: string;
+}
+
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
     const response = await api.get<Company>('/employer/company');
@@ -54,6 +61,14 @@ export const employerService = {
 
   updateCompanyProfile: async (company: Partial<Company>): Promise<Company> => {
     const response = await api.put<Company>('/employer/company', company);
+    return response.data;
+  },
+
+  lookupTaxCode: async (taxCode: string, signal?: AbortSignal): Promise<TaxCodeLookupResult> => {
+    const response = await api.get<TaxCodeLookupResult>('/employer/company/tax-code-lookup', {
+      params: { taxCode },
+      signal,
+    });
     return response.data;
   },
 
