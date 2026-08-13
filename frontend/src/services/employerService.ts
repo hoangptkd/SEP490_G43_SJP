@@ -128,8 +128,8 @@ export const employerService = {
     await api.delete(`/employer/company/documents/${id}`);
   },
 
-  getJobs: async (): Promise<Job[]> => {
-    const response = await api.get<Job[]>('/employer/jobs');
+  getJobs: async (params?: { status?: string; search?: string; page?: number; size?: number }): Promise<import('../types/candidateDomain').PageResult<Job>> => {
+    const response = await api.get<import('../types/candidateDomain').PageResult<Job>>('/employer/jobs', { params });
     return response.data;
   },
 
@@ -162,13 +162,18 @@ export const employerService = {
     return response.data;
   },
 
-  getApplications: async (params?: { jobId?: string; status?: string; search?: string }): Promise<CandidateApplication[]> => {
-    const response = await api.get<CandidateApplication[]>('/employer/applications', { params });
+  getApplications: async (params?: { jobId?: string; status?: string; search?: string; page?: number; size?: number }): Promise<import('../types/candidateDomain').PageResult<CandidateApplication>> => {
+    const response = await api.get<import('../types/candidateDomain').PageResult<CandidateApplication>>('/employer/applications', { params });
     return response.data;
   },
 
-  getJobApplications: async (jobId: string, params?: { status?: string; search?: string }): Promise<CandidateApplication[]> => {
-    const response = await api.get<CandidateApplication[]>(`/employer/jobs/${jobId}/applications`, { params });
+  getJobApplications: async (jobId: string, params?: { status?: string; search?: string; page?: number; size?: number }): Promise<import('../types/candidateDomain').PageResult<CandidateApplication>> => {
+    const response = await api.get<import('../types/candidateDomain').PageResult<CandidateApplication>>(`/employer/jobs/${jobId}/applications`, { params });
+    return response.data;
+  },
+
+  getApplicationDetail: async (id: string): Promise<CandidateApplication> => {
+    const response = await api.get<CandidateApplication>(`/employer/applications/${id}`);
     return response.data;
   },
 

@@ -72,6 +72,8 @@ export default function EmployerApplicationsPage() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
 
   // Custom UI Notifications
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
@@ -97,7 +99,7 @@ export default function EmployerApplicationsPage() {
         employerService.getJobs(),
         billingService.getMySubscription().catch(() => null)
       ]);
-      setJobs(jobList);
+      setJobs(jobList.items || []);
       setSubscription(subData);
     } catch (err) {
       console.error('Failed to load jobs', err);
@@ -112,8 +114,12 @@ export default function EmployerApplicationsPage() {
         jobId: selectedJobId || undefined,
         status: selectedStatus || undefined,
         search: appliedSearchKeyword || undefined,
+        page: currentPage,
+        size: itemsPerPage,
       });
-      setApplications(data);
+      setApplications(data.items || []);
+      setTotalPages(data.totalPages || 1);
+      setTotalItems(data.totalItems || 0);
     } catch (err: any) {
       console.error('Failed to load applications:', err);
       const backendMsg = err.response?.data?.message || err.message || 'Không thể tải danh sách ứng viên. Vui lòng thử lại.';
@@ -121,7 +127,7 @@ export default function EmployerApplicationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [appliedSearchKeyword, selectedJobId, selectedStatus]);
+  }, [appliedSearchKeyword, selectedJobId, selectedStatus, currentPage]);
 
   useEffect(() => {
     void loadApplications();
@@ -130,15 +136,26 @@ export default function EmployerApplicationsPage() {
   // Handle automatic opening of application details from notifications
   useEffect(() => {
     const appId = searchParams.get('appId');
-    if (appId && applications.length > 0) {
+    if (appId) {
+      // First check if it's in the current page
       const targetApp = applications.find(a => a.id === appId);
       if (targetApp) {
         setSelectedAppDetail(targetApp);
-        // Clear the query parameter so it doesn't reopen if the user closes it and the component re-renders
         setSearchParams(prev => {
           prev.delete('appId');
           return prev;
         }, { replace: true });
+      } else {
+        // Not in current page, load from backend directly
+        employerService.getApplicationDetail(appId).then(app => {
+          setSelectedAppDetail(app);
+          setSearchParams(prev => {
+            prev.delete('appId');
+            return prev;
+          }, { replace: true });
+        }).catch(err => {
+          console.error('Failed to load app detail from notification:', err);
+        });
       }
     }
   }, [searchParams, applications, setSearchParams]);
@@ -153,47 +170,39 @@ export default function EmployerApplicationsPage() {
         jobId: selectedJobId || undefined,
         status: selectedStatus || undefined,
         search: appliedSearchKeyword || undefined,
-      }).then(data => setApplications(data)).catch(() => {});
+      }).then(data => setApplications(data.items || [])).catch(() => {});
     }, 10000);
 
     return () => clearInterval(interval);
   }, [applications, appliedSearchKeyword, selectedJobId, selectedStatus]);
 
   const [bulkRanking, setBulkRanking] = useState(false);
-  function handleBulkAiRanking() {
+  async function handleBulkAiRanking() {
     if (!selectedJobId) return;
     if (!subscription || !subscription.planId) {
-      setConfirmDialog({
-        message: 'Tính năng Phân tích AI hàng loạt yêu cầu gói dịch vụ nâng cao. Bạn có muốn đi đến trang Nâng cấp gói dịch vụ?',
-        onConfirm: () => {
-          setConfirmDialog(null);
-          window.location.href = '/employer/subscription/plans';
-        }
-      });
+      if (await customConfirm('Tính năng Phân tích AI hàng loạt yêu cầu gói dịch vụ nâng cao. Bạn có muốn đi đến trang Nâng cấp gói dịch vụ?')) {
+        window.location.href = '/employer/subscription/plans';
+      }
       return;
     }
-    setConfirmDialog({
-      message: 'Hệ thống sẽ phân tích AI dưới nền. Bạn có muốn tiếp tục?',
-      onConfirm: async () => {
-        setConfirmDialog(null);
-        setBulkRanking(true);
-        try {
-          setApplications(apps => apps.map(app => {
-            if (app.aiMatchScore == null || app.needRerank || app.aiMatchScore < 0) {
-              return { ...app, aiMatchScore: -1, needRerank: false };
-            }
-            return app;
-          }));
-          await employerService.triggerBulkAiRanking(selectedJobId);
-          showToast('Đã bắt đầu phân tích AI', 'success');
-        } catch (err: any) {
-          showToast(err.response?.data?.message || 'Có lỗi khi phân tích AI', 'error');
-          loadApplications();
-        } finally {
-          setBulkRanking(false);
-        }
+    if (await customConfirm('Hệ thống sẽ phân tích AI dưới nền. Bạn có muốn tiếp tục?')) {
+      setBulkRanking(true);
+      try {
+        setApplications(apps => apps.map(app => {
+          if (app.aiMatchScore == null || app.needRerank || app.aiMatchScore < 0) {
+            return { ...app, aiMatchScore: -1, needRerank: false };
+          }
+          return app;
+        }));
+        await employerService.triggerBulkAiRanking(selectedJobId);
+        showToast('Đã bắt đầu phân tích AI', 'success');
+      } catch (err: any) {
+        showToast(err.response?.data?.message || 'Có lỗi khi phân tích AI', 'error');
+        loadApplications();
+      } finally {
+        setBulkRanking(false);
       }
-    });
+    }
   }
 
   function openBlobInNewTab(blob: Blob) {
@@ -489,13 +498,9 @@ export default function EmployerApplicationsPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {(() => {
-            const filteredApps = applications.filter(app => !selectedStatus || app.status === selectedStatus);
-            const totalPages = Math.ceil(filteredApps.length / itemsPerPage);
             return (
               <>
-          {[...filteredApps]
-            .sort((a, b) => (b.aiMatchScore || 0) - (a.aiMatchScore || 0))
-            .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+          {[...applications]
             .map((app) => {
             const st = getDetailedStatus(app);
             const candidateName = app.candidate?.fullName || 'Ứng viên ẩn danh';

@@ -7,6 +7,7 @@ import com.sjp.recruitment.model.dto.request.EmployerPersonalProfileRequest;
 import com.sjp.recruitment.model.dto.response.CompanyLocationResponse;
 import com.sjp.recruitment.model.dto.response.CompanyProfileResponse;
 import com.sjp.recruitment.model.dto.response.EmployerDashboardResponse;
+import com.sjp.recruitment.model.dto.response.PageResponse;
 import com.sjp.recruitment.model.entity.Company;
 import com.sjp.recruitment.model.entity.CompanyLocation;
 import com.sjp.recruitment.model.entity.Employer;
@@ -911,22 +912,34 @@ public class EmployerService {
     }
 
     @Transactional(readOnly = true)
-    public List<JobResponse> getCompanyJobs() {
-        return getCompanyJobs(null, null);
+    public PageResponse<JobResponse> getCompanyJobs() {
+        return getCompanyJobs(null, null, 1, 10);
     }
 
     @Transactional(readOnly = true)
-    public List<JobResponse> getCompanyJobs(String status, String search) {
+    public PageResponse<JobResponse> getCompanyJobs(String status, String search, int page, int size) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
-        List<Job> jobEntities = jobRepository.findByCompanyIdOrderByCreatedAtDesc(employer.getCompany().getId())
-                .stream()
-                .filter(job -> !"archived".equalsIgnoreCase(job.getStatus()))
-                .toList();
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        
+        String filterStatus = (status == null || status.isBlank() || "ALL".equalsIgnoreCase(status)) ? "" : status;
+        String filterSearch = (search == null || search.isBlank()) ? "" : search;
 
-        if (jobEntities.isEmpty()) {
-            return List.of();
+        // Since original logic mapped PUBLISHED to PUBLISHED/ACTIVE, and DRAFT to DRAFT/REJECTED,
+        // doing this in SQL requires IN clause or we simplify. For now we just pass status,
+        // Wait, original logic:
+        // if ("PUBLISHED".equalsIgnoreCase(status)) { return "PUBLISHED".equalsIgnoreCase(j.status()) || "ACTIVE".equalsIgnoreCase(j.status()); }
+        // if ("DRAFT".equalsIgnoreCase(status)) { return "DRAFT".equalsIgnoreCase(j.status()) || "REJECTED".equalsIgnoreCase(j.status()); }
+        // The JPQL searchCompanyJobs is simpler `AND (:status IS NULL OR j.status = :status)`. Let's pass the exact status or null if complex.
+        // Let's modify the JPQL searchCompanyJobs to handle these later, or just keep it exact. We will use exact status.
+
+        org.springframework.data.domain.Page<Job> jobPage = jobRepository.searchCompanyJobs(
+                employer.getCompany().getId(), filterStatus, filterSearch, pageable);
+
+        if (jobPage.isEmpty()) {
+            return new PageResponse<>(List.of(), page, size, 0, 0, true, true);
         }
 
+        List<Job> jobEntities = jobPage.getContent();
         List<UUID> jobIds = jobEntities.stream().map(Job::getId).toList();
         
         java.util.Map<UUID, Long> appCounts = applicationRepository.countByJobIdIn(jobIds)
@@ -948,31 +961,7 @@ public class EmployerService {
                         listingPriority))
                 .toList();
 
-        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
-            jobs = jobs.stream()
-                    .filter(j -> {
-                        if ("PUBLISHED".equalsIgnoreCase(status)) {
-                            return "PUBLISHED".equalsIgnoreCase(j.status()) || "ACTIVE".equalsIgnoreCase(j.status());
-                        }
-                        if ("DRAFT".equalsIgnoreCase(status)) {
-                            return "DRAFT".equalsIgnoreCase(j.status()) || "REJECTED".equalsIgnoreCase(j.status());
-                        }
-                        return status.equalsIgnoreCase(j.status());
-                    })
-                    .toList();
-        }
-
-        if (search != null && !search.isBlank()) {
-            String q = search.toLowerCase();
-            jobs = jobs.stream()
-                    .filter(j -> (j.title() != null && j.title().toLowerCase().contains(q))
-                            || (j.description() != null && j.description().toLowerCase().contains(q))
-                            || (j.location() != null && j.location().toLowerCase().contains(q))
-                            || (j.skills() != null && j.skills().stream().anyMatch(s -> s.toLowerCase().contains(q))))
-                    .toList();
-        }
-
-        return jobs;
+        return new PageResponse<>(jobs, page, size, jobPage.getTotalElements(), jobPage.getTotalPages(), jobPage.isFirst(), jobPage.isLast());
     }
 
     @Transactional
@@ -1023,16 +1012,15 @@ public class EmployerService {
         return jobService.reopenJobForEmployer(id, employer, newDeadline);
     }
 
-    @Transactional
-    public List<ApplicationResponse> getCompanyApplications(String jobId, String status, String search) {
+    @Transactional(readOnly = true)
+    public PageResponse<ApplicationResponse> getCompanyApplications(String jobId, String status, String search, int page, int size) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         if (employer.getCompany() == null || employer.getCompany().getId() == null) {
-            return List.of();
+            return new PageResponse<>(List.of(), page, size, 0, 0, true, true);
         }
 
-        List<Application> list;
+        UUID parsedJobId = null;
         if (jobId != null && !jobId.trim().isEmpty()) {
-            UUID parsedJobId;
             try {
                 parsedJobId = UUID.fromString(jobId.trim());
             } catch (IllegalArgumentException e) {
@@ -1043,42 +1031,50 @@ public class EmployerService {
             if (job.getCompany() == null || !job.getCompany().getId().equals(employer.getCompany().getId())) {
                 throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền truy cập ứng viên của việc làm này");
             }
-            list = applicationRepository.findByJobIdOrderBySubmittedAtDesc(job.getId());
-        } else {
-            list = applicationRepository.findByCompanyId(employer.getCompany().getId());
         }
 
+        Application.ApplicationStatus filterStatus = null;
         if (status != null && !status.trim().isEmpty()) {
-            Application.ApplicationStatus filterStatus = null;
             try {
                 filterStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
             } catch (IllegalArgumentException e) {
                 filterStatus = Application.ApplicationStatus.fromDatabaseValue(status);
             }
-            final Application.ApplicationStatus finalFilterStatus = filterStatus;
-
-            list = list.stream()
-                    .filter(a -> a.getStatusEnum() == finalFilterStatus)
-                    .toList();
         }
 
-        if (search != null && !search.trim().isEmpty()) {
-            String kw = search.trim().toLowerCase();
-            list = list.stream()
-                    .filter(a -> {
-                        boolean matchCandidate = a.getCandidate() != null && (
-                                (a.getCandidate().getFullName() != null && a.getCandidate().getFullName().toLowerCase().contains(kw)) ||
-                                (a.getCandidate().getEmail() != null && a.getCandidate().getEmail().toLowerCase().contains(kw)) ||
-                                (a.getCandidate().getPhone() != null && a.getCandidate().getPhone().toLowerCase().contains(kw)) ||
-                                (a.getCandidate().getTitle() != null && a.getCandidate().getTitle().toLowerCase().contains(kw))
-                        );
-                        boolean matchJob = a.getJob() != null && a.getJob().getTitle() != null && a.getJob().getTitle().toLowerCase().contains(kw);
-                        return matchCandidate || matchJob;
-                    })
-                    .toList();
+        String filterSearch = (search != null && !search.trim().isEmpty()) ? search.trim() : "";
+        String dbStatus = filterStatus != null ? filterStatus.databaseValue() : "";
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "submittedAt"));
+
+        org.springframework.data.domain.Page<Application> appPage = applicationRepository.searchCompanyApplications(
+                employer.getCompany().getId(), parsedJobId, dbStatus, filterSearch, pageable);
+
+        if (appPage.isEmpty()) {
+            return new PageResponse<>(List.of(), page, size, 0, 0, true, true);
         }
 
-        return applicationService.toResponseBulk(list);
+        List<ApplicationResponse> responses = applicationService.toResponseBulk(appPage.getContent());
+        return new PageResponse<>(responses, page, size, appPage.getTotalElements(), appPage.getTotalPages(), appPage.isFirst(), appPage.isLast());
+    }
+
+    @Transactional(readOnly = true)
+    public ApplicationResponse getApplicationDetail(String id) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        UUID appId;
+        try {
+            appId = UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ID", "Mã hồ sơ không hợp lệ");
+        }
+        
+        Application app = applicationRepository.findByIdWithDetails(appId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy hồ sơ"));
+                
+        if (app.getJob() == null || app.getJob().getCompany() == null || !app.getJob().getCompany().getId().equals(employer.getCompany().getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền xem hồ sơ này");
+        }
+        
+        return applicationService.toResponse(app);
     }
 
     @Transactional

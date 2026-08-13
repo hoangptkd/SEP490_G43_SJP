@@ -64,17 +64,17 @@ public class AiRankingService {
                     .orElseThrow(() -> new RuntimeException("Application not found"));
 
             Job job = application.getJob();
-            if (job == null) return;
+            if (job == null) throw new RuntimeException("Job is null");
             
             if (job.getRankingConfig() != null && job.getRankingConfig().has("enabled") && !job.getRankingConfig().get("enabled").asBoolean()) {
                 log.info("AI Ranking is explicitly disabled for job {}. Skipping.", job.getId());
-                return;
+                throw new RuntimeException("AI Ranking disabled for job");
             }
             
             CandidateCv cv = application.getCv();
             if (cv == null) {
                 log.warn("Application {} has no CV, skipping ranking", application.getId());
-                return;
+                throw new RuntimeException("Application has no CV");
             }
 
             // 1. Extract CV Text using Tika if not already extracted
@@ -90,7 +90,7 @@ public class AiRankingService {
 
             if (cvText == null || cvText.isBlank()) {
                 log.warn("Failed to extract text for CV in application {}", application.getId());
-                return;
+                throw new RuntimeException("Failed to extract text for CV");
             }
 
             // 2. Call AI

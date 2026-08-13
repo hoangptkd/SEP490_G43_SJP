@@ -39,7 +39,8 @@ function EmployerJobsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const jobsPerPage = 7;
+  const jobsPerPage = 10;
+  const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT' | 'AWAITING_COMPANY'>('ALL');
   const [viewingJob, setViewingJob] = useState<Job | null>(null);
 
@@ -77,7 +78,7 @@ function EmployerJobsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentPage, statusFilter, searchTerm]);
 
   async function loadData() {
     setLoading(true);
@@ -85,12 +86,18 @@ function EmployerJobsPage() {
     try {
       const [compData, jobsData, locsData, subData] = await Promise.all([
         employerService.getCompanyProfile(),
-        employerService.getJobs().catch(() => []),
+        employerService.getJobs({
+          page: currentPage,
+          size: jobsPerPage,
+          status: statusFilter === 'ALL' ? undefined : statusFilter,
+          search: searchTerm || undefined
+        }).catch(() => ({ items: [], totalPages: 1 }) as import('../../types/candidateDomain').PageResult<Job>),
         employerService.getLocations().catch(() => []),
         billingService.getMySubscription().catch(() => null),
       ]);
       setCompany(compData);
-      setJobs(jobsData);
+      setJobs(jobsData.items || []);
+      setTotalPages(jobsData.totalPages || 1);
       setLocations(locsData);
       setSubscription(subData);
     } catch (err: any) {
@@ -1181,38 +1188,13 @@ function EmployerJobsPage() {
         </div>
 
         {(() => {
-          const filteredJobs = jobs.filter((job) => {
-            const st = job.status?.toUpperCase() || 'DRAFT';
-            if (statusFilter !== 'ALL') {
-              if (statusFilter === 'PUBLISHED' && st !== 'PUBLISHED' && st !== 'ACTIVE') return false;
-              if (statusFilter === 'PENDING_REVIEW' && st !== 'PENDING_REVIEW') return false;
-              if (statusFilter === 'AWAITING_COMPANY' && st !== 'AWAITING_COMPANY') return false;
-              if (statusFilter === 'CLOSED' && st !== 'CLOSED') return false;
-              if (statusFilter === 'EXPIRED' && st !== 'EXPIRED') return false;
-              if (statusFilter === 'DRAFT' && st !== 'DRAFT' && st !== 'REJECTED') return false;
-            }
-            if (searchTerm.trim()) {
-              const q = searchTerm.toLowerCase();
-              const matchTitle = job.title?.toLowerCase().includes(q);
-              const matchLocation = job.location?.toLowerCase().includes(q);
-              const matchSkills = job.skills?.some((s) => s.toLowerCase().includes(q));
-              if (!matchTitle && !matchLocation && !matchSkills) return false;
-            }
-            return true;
-          });
-
-          const totalPages = Math.ceil(filteredJobs.length / jobsPerPage);
-          const indexOfLastJob = currentPage * jobsPerPage;
-          const indexOfFirstJob = indexOfLastJob - jobsPerPage;
-          const currentJobs = filteredJobs.slice(indexOfFirstJob, indexOfLastJob);
-
           return (
             <>
               <h2 style={{ fontSize: '1.3rem', color: '#1e293b', marginBottom: '16px' }}>
-                Danh sách tin tuyển dụng ({filteredJobs.length}/{jobs.length})
+                Danh sách tin tuyển dụng
               </h2>
 
-              {filteredJobs.length === 0 ? (
+              {jobs.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                   <p style={{ color: '#64748b', fontSize: '1.05rem', margin: '0 0 16px 0' }}>
                     {jobs.length === 0 ? 'Công ty chưa có tin tuyển dụng nào được đăng trên hệ thống.' : 'Không tìm thấy tin tuyển dụng nào phù hợp với điều kiện lọc.'}
@@ -1229,7 +1211,7 @@ function EmployerJobsPage() {
               ) : (
                 <>
                   <div style={{ display: 'grid', gap: '12px' }}>
-                    {currentJobs.map((job) => {
+                    {jobs.map((job) => {
                     const st = job.status?.toLowerCase() || 'draft';
                     const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
                     const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : '#64748b';
