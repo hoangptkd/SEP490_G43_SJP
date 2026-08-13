@@ -15,6 +15,10 @@ import com.sjp.recruitment.model.dto.response.NotificationResponse;
 import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.EmployerService;
 import com.sjp.recruitment.service.AiRankingService;
+import com.sjp.recruitment.service.AuthService;
+import com.sjp.recruitment.service.FeatureLimitService;
+import com.sjp.recruitment.exception.ApiException;
+import org.springframework.http.HttpStatus;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -36,6 +40,8 @@ public class EmployerController {
 
     private final EmployerService employerService;
     private final AiRankingService aiRankingService;
+    private final AuthService authService;
+    private final FeatureLimitService featureLimitService;
 
     @GetMapping("/dashboard")
     public ResponseEntity<EmployerDashboardResponse> getDashboardStats() {
@@ -143,6 +149,9 @@ public class EmployerController {
 
     @PostMapping("/jobs/{id}/ai-rank-bulk")
     public ResponseEntity<MessageResponse> bulkRankApplications(@PathVariable String id) {
+        if (!featureLimitService.hasActivePaidPlan(authService.getCurrentUser())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "PLAN_UPGRADE_REQUIRED", "Tính năng Phân tích AI hàng loạt yêu cầu gói dịch vụ nâng cao.");
+        }
         java.util.UUID jobId = java.util.UUID.fromString(id);
         aiRankingService.markApplicationsAsProcessing(jobId);
         aiRankingService.rankApplicationsBulkAsync(jobId);

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { employerService } from '../../services/employerService';
+import { billingService, UserSubscription } from '../../services/billingService';
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
 import type { CandidateApplication } from '../../types/candidateDomain';
 import type { Job } from '../../types/job';
@@ -24,6 +25,7 @@ export default function EmployerApplicationsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
 
   // Filters
   const [selectedJobId, setSelectedJobId] = useState<string>(queryJobId);
@@ -91,8 +93,12 @@ export default function EmployerApplicationsPage() {
 
   async function loadJobs() {
     try {
-      const jobList = await employerService.getJobs();
+      const [jobList, subData] = await Promise.all([
+        employerService.getJobs(),
+        billingService.getMySubscription().catch(() => null)
+      ]);
       setJobs(jobList);
+      setSubscription(subData);
     } catch (err) {
       console.error('Failed to load jobs', err);
     }
@@ -156,6 +162,16 @@ export default function EmployerApplicationsPage() {
   const [bulkRanking, setBulkRanking] = useState(false);
   function handleBulkAiRanking() {
     if (!selectedJobId) return;
+    if (!subscription || !subscription.planId) {
+      setConfirmDialog({
+        message: 'Tính năng Phân tích AI hàng loạt yêu cầu gói dịch vụ nâng cao. Bạn có muốn đi đến trang Nâng cấp gói dịch vụ?',
+        onConfirm: () => {
+          setConfirmDialog(null);
+          window.location.href = '/employer/subscription/plans';
+        }
+      });
+      return;
+    }
     setConfirmDialog({
       message: 'Hệ thống sẽ phân tích AI dưới nền. Bạn có muốn tiếp tục?',
       onConfirm: async () => {
@@ -1721,7 +1737,11 @@ export default function EmployerApplicationsPage() {
                                       const scheduledAtIso = new Date(rescheduleDate).toISOString();
                                       employerService.employerRespondToReschedule(iv.id, 'accept_reschedule', 'Đồng ý đổi lịch', scheduledAtIso).then(async () => {
                                         await customAlert('Đã chốt lịch mới thành công!');
-                                        window.location.reload();
+                                        setRescheduleInterviewId(null);
+                                        const freshApps = await employerService.getApplications({ jobId: selectedJobId || undefined, status: selectedStatus || undefined, search: appliedSearchKeyword || undefined });
+                                        setApplications(freshApps);
+                                        const freshApp = freshApps.find(a => a.id === manageInterviewApp.id);
+                                        if (freshApp) setManageInterviewApp(freshApp);
                                       }).catch(console.error);
                                     }}
                                     style={{ background: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
@@ -1753,7 +1773,10 @@ export default function EmployerApplicationsPage() {
                                     if (note) {
                                       employerService.employerRespondToReschedule(iv.id, 'reject_reschedule', note).then(async () => {
                                         await customAlert('Đã từ chối yêu cầu đổi lịch!');
-                                        window.location.reload();
+                                        const freshApps = await employerService.getApplications({ jobId: selectedJobId || undefined, status: selectedStatus || undefined, search: appliedSearchKeyword || undefined });
+                                        setApplications(freshApps);
+                                        const freshApp = freshApps.find(a => a.id === manageInterviewApp.id);
+                                        if (freshApp) setManageInterviewApp(freshApp);
                                       }).catch(console.error);
                                     }
                                   }}

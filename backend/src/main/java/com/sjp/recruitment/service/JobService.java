@@ -682,6 +682,12 @@ public class JobService {
         job.setJobType(request.getJobType() != null ? request.getJobType() : "full_time");
         job.setWorkMode(request.getWorkMode() != null ? request.getWorkMode() : "onsite");
         job.setExperienceLevel(request.getExperienceLevel() != null ? request.getExperienceLevel() : "fresher");
+        
+        if (request.getRankingConfig() != null && request.getRankingConfig().has("enabled") && request.getRankingConfig().get("enabled").asBoolean()) {
+            if (!featureLimitService.hasActivePaidPlan(authService.getCurrentUser())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "PLAN_UPGRADE_REQUIRED", "Tính năng Smart Ranking yêu cầu gói dịch vụ nâng cao.");
+            }
+        }
         job.setRankingConfig(request.getRankingConfig());
 
         if (request.getDeadline() != null && !request.getDeadline().isBlank()) {

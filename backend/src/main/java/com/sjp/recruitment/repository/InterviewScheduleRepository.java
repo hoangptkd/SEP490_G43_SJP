@@ -21,9 +21,16 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     List<InterviewSchedule> findByApplicationId(UUID applicationId);
 
+    List<InterviewSchedule> findByApplicationIdIn(List<UUID> applicationIds);
+
     Page<InterviewSchedule> findByEmployerId(UUID employerId, Pageable pageable);
 
     List<InterviewSchedule> findByEmployerIdAndStatus(UUID employerId, String status);
+
+    Page<InterviewSchedule> findByEmployerIdAndStatusOrderByScheduledAtDesc(UUID employerId, String status, Pageable pageable);
+
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = 'COMPLETED' AND NOT EXISTS (SELECT o FROM JobOffer o WHERE o.application = i.application) ORDER BY i.scheduledAt DESC")
+    Page<InterviewSchedule> findCompletedInterviewsWithoutOffer(@Param("employerId") UUID employerId, Pageable pageable);
 
     Page<InterviewSchedule> findByCandidateId(UUID candidateId, Pageable pageable);
 
