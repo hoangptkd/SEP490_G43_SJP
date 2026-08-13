@@ -5,6 +5,7 @@ import { billingService, UserSubscription } from '../../services/billingService'
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
 import type { CandidateApplication } from '../../types/candidateDomain';
 import type { Job } from '../../types/job';
+import VietnamAddressPicker from '../../components/location/VietnamAddressPicker';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   SUBMITTED: { label: 'Mới nộp', color: '#1d4ed8', bg: '#dbeafe' },
@@ -269,6 +270,8 @@ export default function EmployerApplicationsPage() {
       if (targetStatus === 'INTERVIEW_SCHEDULED') {
         if (!scheduledAt) throw new Error('Vui lòng chọn ngày giờ phỏng vấn');
         if (new Date(scheduledAt).getTime() < Date.now()) throw new Error('Ngày giờ phỏng vấn không được ở trong quá khứ');
+        if (!location) throw new Error('Vui lòng chọn hình thức hoặc địa điểm phỏng vấn');
+        if (location === 'Trực tuyến' && !meetingLink) throw new Error('Vui lòng nhập link họp cho phỏng vấn trực tuyến');
         if (meetingLink && !/^https?:\/\/.+/.test(meetingLink)) throw new Error('Link họp trực tuyến phải bắt đầu bằng http:// hoặc https://');
         await employerService.scheduleInterview(updatingApp.id, {
           scheduledAt,
@@ -873,8 +876,14 @@ export default function EmployerApplicationsPage() {
                   <input type="datetime-local" min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
                 </div>
                 <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Địa điểm</label>
-                  <input type="text" placeholder="VD: Tầng 3, Tòa nhà ABC" value={location} onChange={e => setLocation(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                  <VietnamAddressPicker
+                    label="Hình thức / Địa điểm phỏng vấn"
+                    required
+                    allowOnline
+                    value={location}
+                    onChange={setLocation}
+                    detailPlaceholder="Tầng, phòng, tòa nhà, số nhà, tên đường..."
+                  />
                 </div>
                 <div style={{ marginBottom: '12px' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Link họp trực tuyến (Nếu có)</label>
@@ -917,8 +926,12 @@ export default function EmployerApplicationsPage() {
                   <input type="date" min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)} value={startDate} onChange={e => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
                 </div>
                 <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Nơi làm việc</label>
-                  <input type="text" value={workingLocation} onChange={e => setWorkingLocation(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                  <VietnamAddressPicker
+                    label="Nơi làm việc"
+                    allowRemote
+                    value={workingLocation}
+                    onChange={setWorkingLocation}
+                  />
                 </div>
                 <div style={{ marginBottom: '12px' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Phúc lợi</label>

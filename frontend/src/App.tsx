@@ -13,6 +13,7 @@ import { parseApiError } from './utils/planLimits';
 import { filterAiJobSearchItems } from './utils/aiJobSearch';
 import PlanLimitAlert from './components/PlanLimitAlert';
 import { DialogContainer } from './components/common/DialogContainer';
+import ProvinceLocationSelect from './components/location/ProvinceLocationSelect';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
@@ -628,16 +629,14 @@ function ApplyJobModal({
             </div>
           </section>
 
-          <label className="application-field">
-            Địa điểm làm việc mong muốn <span>*</span>
-            <input
-              value={preferredLocation}
-              onChange={(event) => setPreferredLocation(event.target.value)}
-              placeholder="Ví dụ: Hà Nội, Remote"
-              maxLength={255}
-              required
-            />
-          </label>
+          <ProvinceLocationSelect
+            className="application-field"
+            label="Địa điểm làm việc mong muốn"
+            value={preferredLocation}
+            onChange={setPreferredLocation}
+            allowRemote
+            required
+          />
 
           <label className="application-field">
             <span className="application-field-row">
@@ -1305,14 +1304,14 @@ function HomePage() {
                 onChange={(event) => setHomeSearch(event.target.value)}
               />
             </label>
-            <label className="home-search-field">
-              <span>Địa điểm</span>
-              <input
-                placeholder="Hà Nội, TP.HCM, Remote..."
-                value={homeLocation}
-                onChange={(event) => setHomeLocation(event.target.value)}
-              />
-            </label>
+            <ProvinceLocationSelect
+              className="home-search-field"
+              label="Địa điểm"
+              value={homeLocation}
+              onChange={setHomeLocation}
+              allowRemote
+              placeholder="Tất cả địa điểm"
+            />
             <button type="submit" className="home-search-btn">
               Tìm việc
             </button>
@@ -2574,22 +2573,13 @@ function JobsPage() {
               </div>
             </div>}
 
-            <div>
-              <label className="filter-label">Địa điểm</label>
-              <div className="input-icon-wrap">
-                <span className="input-icon">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                    <circle cx="12" cy="10" r="3"/>
-                  </svg>
-                </span>
-                <input
-                  placeholder="TP.HCM, Hà Nội..."
-                  value={draftFilters.location || ''}
-                  onChange={(e) => updateDraft('location', e.target.value)}
-                />
-              </div>
-            </div>
+            <ProvinceLocationSelect
+              label="Địa điểm"
+              value={draftFilters.location || ''}
+              onChange={(value) => updateDraft('location', value)}
+              allowRemote
+              placeholder="Tất cả địa điểm"
+            />
 
             {!aiMode && <div>
               <label className="filter-label">Kỹ năng</label>
@@ -3977,14 +3967,12 @@ function ProfilePage() {
               onChange={(e) => setProfile({ ...profile, dateOfBirth: e.target.value || undefined })}
             />
           </label>
-          <label>
-            Địa điểm
-            <input
-              value={profile.location || ''}
-              onChange={(e) => setProfile({ ...profile, location: e.target.value })}
-              placeholder="TP.HCM, Hà Nội..."
-            />
-          </label>
+          <ProvinceLocationSelect
+            label="Địa điểm"
+            value={profile.location || ''}
+            onChange={(value) => setProfile({ ...profile, location: value })}
+            allowRemote
+          />
           <label>
             Tiêu đề nghề nghiệp
             <input maxLength={160} value={profile.headline || ''}
@@ -5591,7 +5579,7 @@ function JobAlertsPage() {
         <h2 className="wide">{editingId ? 'Sửa cảnh báo' : 'Tạo cảnh báo mới'}</h2>
         <label>Tên cảnh báo<input required maxLength={120} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
         <label>Từ khóa<input value={draft.keyword || ''} onChange={(e) => setDraft({ ...draft, keyword: e.target.value })} /></label>
-        <label>Địa điểm<input value={draft.location || ''} onChange={(e) => setDraft({ ...draft, location: e.target.value })} /></label>
+        <ProvinceLocationSelect label="Địa điểm" value={draft.location || ''} onChange={(value) => setDraft({ ...draft, location: value })} allowRemote placeholder="Tất cả địa điểm" />
         <label>Ngành / danh mục<input value={draft.category || ''} onChange={(e) => setDraft({ ...draft, category: e.target.value })} /></label>
         <label>Loại công việc<select value={draft.jobType || ''} onChange={(e) => setDraft({ ...draft, jobType: e.target.value })}>
           <option value="">Tất cả</option><option value="full_time">Toàn thời gian</option><option value="part_time">Bán thời gian</option>

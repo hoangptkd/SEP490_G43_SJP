@@ -3,6 +3,8 @@ import { employerService } from '../../services/employerService';
 import type { CompanyLocation } from '../../types/job';
 import { FiPlus, FiEdit2, FiTrash2, FiMapPin, FiCheckCircle, FiAlertCircle } from '../../components/Icons';
 import { customAlert, customConfirm } from '../../utils/dialog';
+import { VietnamAddressFields } from '../../components/location/VietnamAddressPicker';
+import type { VietnamAddressValue } from '../../types/location';
 
 function CompanyLocationsPage() {
   const [locations, setLocations] = useState<CompanyLocation[]>([]);
@@ -77,6 +79,8 @@ function CompanyLocationsPage() {
     } else if (formData.branchName.length > 100) {
       errors.branchName = 'Tên chi nhánh không được vượt quá 100 ký tự.';
     }
+    if (!formData.city?.trim()) errors.city = 'Vui lòng chọn tỉnh/thành phố.';
+    if (!formData.district?.trim()) errors.district = 'Vui lòng chọn phường/xã.';
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -188,44 +192,31 @@ function CompanyLocationsPage() {
                 {fieldErrors.branchName && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.branchName}</p>}
               </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Địa chỉ chi tiết</label>
-                <input
-                  value={formData.address || ''}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Số nhà, đường/phố, phường/xã..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+              <div className="md:col-span-2">
+                <VietnamAddressFields
+                  label="Địa chỉ chi nhánh"
+                  required
+                  value={{
+                    provinceCode: null,
+                    provinceName: formData.city || '',
+                    wardCode: null,
+                    wardName: formData.district || '',
+                    detail: formData.address || '',
+                    mode: 'physical',
+                  }}
+                  onChange={(address: VietnamAddressValue) => setFormData({
+                    ...formData,
+                    city: address.provinceName,
+                    district: address.wardName,
+                    address: address.detail,
+                    country: 'Vietnam',
+                  })}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Quận / Huyện</label>
-                <input
-                  value={formData.district || ''}
-                  onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                  placeholder="Ví dụ: Cầu Giấy, Quận 1..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Tỉnh / Thành phố</label>
-                <input
-                  value={formData.city || ''}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  placeholder="Ví dụ: Hà Nội, TP. Hồ Chí Minh..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Quốc gia</label>
-                <input
-                  value={formData.country || 'Vietnam'}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                  placeholder="Vietnam"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                />
+                {(fieldErrors.city || fieldErrors.district) && (
+                  <p className="text-red-500 text-xs mt-2 font-medium" role="alert">
+                    {fieldErrors.city || fieldErrors.district}
+                  </p>
+                )}
               </div>
             </div>
 

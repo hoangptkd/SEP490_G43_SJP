@@ -6,6 +6,7 @@ import { billingService, UserSubscription } from '../../services/billingService'
 import PlanLimitAlert from '../../components/PlanLimitAlert';
 import { parseApiError } from '../../utils/planLimits';
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
+import VietnamAddressPicker from '../../components/location/VietnamAddressPicker';
 
 const PRESET_WORKING_TIMES = [
   'Thứ 2 - Thứ 6 (08:00 - 17:30)',
@@ -131,7 +132,9 @@ function EmployerJobsPage() {
       workMode: 'onsite',
       experienceLevel: 'fresher',
       deadline: deadlineStr,
-      location: defaultLoc ? defaultLoc.branchName : (company?.location || 'Hà Nội'),
+      location: defaultLoc
+        ? [defaultLoc.branchName, defaultLoc.address, defaultLoc.district, defaultLoc.city].filter(Boolean).join(', ')
+        : '',
       companyLocationId: defaultLoc ? defaultLoc.id : '',
       status: 'draft',
       rankingConfig: {
@@ -638,7 +641,9 @@ function EmployerJobsPage() {
                     setFormData({
                       ...formData,
                       companyLocationId: e.target.value,
-                      location: loc ? `${loc.branchName}${loc.address ? ` (${loc.address})` : ''}` : formData.location,
+                      location: loc
+                        ? [loc.branchName, loc.address, loc.district, loc.city].filter(Boolean).join(', ')
+                        : '',
                     });
                   }}
                 >
@@ -656,20 +661,26 @@ function EmployerJobsPage() {
                 )}
               </label>
 
-              <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-                Địa điểm hiển thị trên tin tuyển dụng <span className="text-red-500">*</span>
-                <input
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
-                  required
-                  value={formData.location || ''}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="Ví dụ: TP. HCM, Hà Nội hoặc địa chỉ cụ thể"
-                />
-                <span className="text-xs text-gray-500">
-                  Tự động điền theo chi nhánh được chọn (hoặc tự chỉnh sửa)
-                </span>
-                {fieldErrors.location && <span className="text-red-600 text-sm mt-1">{fieldErrors.location}</span>}
-              </label>
+              <div className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
+                {formData.companyLocationId ? (
+                  <>
+                    <span>Địa điểm hiển thị trên tin tuyển dụng</span>
+                    <div className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 font-normal text-gray-700">
+                      {formData.location}
+                    </div>
+                    <span className="text-xs text-gray-500">Địa điểm được lấy từ chi nhánh đã chọn.</span>
+                  </>
+                ) : (
+                  <VietnamAddressPicker
+                    label="Địa điểm hiển thị trên tin tuyển dụng"
+                    required
+                    allowRemote
+                    value={formData.location || ''}
+                    onChange={(value) => setFormData({ ...formData, location: value })}
+                  />
+                )}
+                {fieldErrors.location && <span className="text-red-600 text-sm mt-1" role="alert">{fieldErrors.location}</span>}
+              </div>
             </div>
 
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
