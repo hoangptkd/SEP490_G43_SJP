@@ -250,7 +250,9 @@ public class EmployerService {
                         "/employer/applications/" + interview.getApplication().getId(),
                         interview.getScheduledAt()
                 ));
-            } else if ("ACCEPTED".equals(interview.getStatus()) || "PENDING_RESPONSE".equals(interview.getStatus())) {
+            } else if ("SCHEDULED".equals(interview.getStatus())
+                    || "ACCEPTED".equals(interview.getStatus())
+                    || "PENDING_RESPONSE".equals(interview.getStatus())) {
                 upcomingInterviews.add(new EmployerDashboardResponse.UpcomingInterview(
                         interview.getId(),
                         candidateName,

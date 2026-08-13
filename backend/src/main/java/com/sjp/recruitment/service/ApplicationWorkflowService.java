@@ -82,15 +82,8 @@ public class ApplicationWorkflowService {
         schedule.setMeetingLink(request.meetingLink());
         schedule.setLocation(request.location());
         schedule.setNote(request.note());
-        schedule.setStatus("PENDING_RESPONSE");
-        
-        // Calculate response deadline (12 hours before interview, capped by now)
-        LocalDateTime deadline = request.scheduledAt().minusHours(12);
-        if (deadline.isBefore(LocalDateTime.now())) {
-            deadline = request.scheduledAt().minusHours(2);
-            if (deadline.isBefore(LocalDateTime.now())) deadline = request.scheduledAt();
-        }
-        schedule.setResponseDeadline(deadline);
+        schedule.setStatus("SCHEDULED");
+        schedule.setResponseDeadline(null);
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
 
@@ -138,8 +131,6 @@ public class ApplicationWorkflowService {
 
         if ("request_reschedule".equals(request.response())) {
             schedule.setStatus("RESCHEDULE_REQUESTED");
-        } else if ("confirmed".equals(request.response())) {
-            schedule.setStatus("ACCEPTED");
         } else if ("declined".equals(request.response())) {
             schedule.setStatus("DECLINED");
         }
@@ -147,8 +138,9 @@ public class ApplicationWorkflowService {
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
 
         // Notify employer
-        String responseText = "confirmed".equals(request.response()) ? "Đã xác nhận tham gia" :
-                             "declined".equals(request.response()) ? "Đã từ chối tham gia" : "Yêu cầu đổi lịch phỏng vấn";
+        String responseText = "declined".equals(request.response())
+                ? "Đã từ chối tham gia"
+                : "Yêu cầu đổi lịch phỏng vấn";
         employerRepository.findByCompanyId(schedule.getApplication().getJob().getCompany().getId()).forEach(employer -> {
             if (employer.getUser() != null) {
                 createNotification(employer.getUser(), "CANDIDATE_RESPONDED_INTERVIEW", "Ứng viên phản hồi lịch phỏng vấn",
@@ -221,13 +213,11 @@ public class ApplicationWorkflowService {
             if (request.scheduledAt() != null) {
                 schedule.setScheduledAt(request.scheduledAt());
                 
-                LocalDateTime deadline = request.scheduledAt().minusHours(12);
-                if (deadline.isBefore(LocalDateTime.now())) deadline = request.scheduledAt().minusHours(2);
-                schedule.setResponseDeadline(deadline);
+                schedule.setResponseDeadline(null);
             }
             schedule.setRespondedAt(null);
             schedule.setViewedAt(null);
-            schedule.setStatus("PENDING_RESPONSE"); // Back to pending
+            schedule.setStatus("SCHEDULED");
         } else {
             schedule.setStatus("CANCELLED"); // Or however we handle rejection of reschedule
         }

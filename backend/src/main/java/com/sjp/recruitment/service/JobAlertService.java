@@ -33,6 +33,7 @@ public class JobAlertService {
     private final JobRepository jobRepository;
     private final NotificationRepository notificationRepository;
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final CandidateRealtimeEventPublisher realtimeEventPublisher;
 
     @Transactional(readOnly = true)
     public PageResponse<JobAlertResponse> list(int page, int size) {
@@ -120,7 +121,9 @@ public class JobAlertService {
             notification.setRelatedEntityType("JOB");
             notification.setRelatedEntityId(job.getId());
             notification.setLinkUrl("/jobs/" + job.getId());
-            notificationRepository.save(notification);
+            Notification saved = notificationRepository.save(notification);
+            realtimeEventPublisher.publishAfterCommit(
+                    alert.getCandidate().getUser(), "NOTIFICATION_UPDATED", saved.getId());
         } catch (DataIntegrityViolationException ignored) {
             // Another scheduler instance already created this alert/job match.
         }

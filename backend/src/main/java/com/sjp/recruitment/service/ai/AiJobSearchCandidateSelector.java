@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 
 @Service
@@ -25,7 +27,8 @@ public class AiJobSearchCandidateSelector {
                 .map(job -> new SelectedJob(job, score(job, context, candidateSkills)))
                 .sorted(Comparator.comparingDouble(SelectedJob::prefilterScore).reversed()
                         .thenComparing(item -> Optional.ofNullable(item.job().getPublishedAt())
-                                .orElse(item.job().getCreatedAt()), Comparator.nullsLast(Comparator.reverseOrder())))
+                                .orElse(item.job().getCreatedAt()), Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(item -> item.job().getId()))
                 .limit(properties.getMaxCandidateJobs())
                 .toList();
         selected.forEach(item -> {
@@ -35,6 +38,45 @@ public class AiJobSearchCandidateSelector {
             }
         });
         return selected;
+    }
+
+    public String evaluationHash(AiJobSearchContext context, List<SelectedJob> selectedJobs) {
+        StringBuilder canonical = new StringBuilder(context.inputHash());
+        canonical.append('|').append(properties.getPromptVersion())
+                .append('|').append(properties.getShopaikeyModel());
+        selectedJobs.stream().limit(properties.getMaxPromptJobs()).forEach(item -> {
+            Job job = item.job();
+            canonical.append("\njob:").append(job.getId())
+                    .append('|').append(safe(job.getTitle()))
+                    .append('|').append(safe(job.getDescription()))
+                    .append('|').append(safe(job.getRequirementsText()))
+                    .append('|').append(safe(job.getBenefits()))
+                    .append('|').append(safe(job.getLocation()))
+                    .append('|').append(safe(job.getExperienceLevel()))
+                    .append('|').append(safe(job.getJobType()))
+                    .append('|').append(safe(job.getWorkMode()))
+                    .append('|').append(job.getSalaryMin())
+                    .append('|').append(job.getSalaryMax())
+                    .append('|').append(job.getDeadline())
+                    .append('|').append(job.getVacancies());
+            job.getSkills().stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .map(value -> value.toLowerCase(Locale.ROOT))
+                    .sorted()
+                    .forEach(skill -> canonical.append("|skill:").append(skill));
+        });
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (Exception exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
+    }
+
+    private String safe(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
     }
 
     private double score(Job job, AiJobSearchContext context, Set<String> candidateSkills) {

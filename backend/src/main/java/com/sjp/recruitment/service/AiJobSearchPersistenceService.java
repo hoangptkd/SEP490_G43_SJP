@@ -27,7 +27,7 @@ public class AiJobSearchPersistenceService {
     private final AiJobSearchProperties properties;
 
     @Transactional
-    public AiJobSearchRun start(AiJobSearchContext context) {
+    public AiJobSearchRun start(AiJobSearchContext context, String evaluationHash) {
         LocalDateTime now = LocalDateTime.now();
         runRepository.findFirstByCandidateIdAndStatusOrderByCreatedAtDesc(context.candidate().getId(), "PROCESSING")
                 .ifPresent(existing -> {
@@ -43,7 +43,7 @@ public class AiJobSearchPersistenceService {
         AiJobSearchRun run = new AiJobSearchRun();
         run.setCandidate(context.candidate());
         run.setStatus("PROCESSING");
-        run.setInputHash(context.inputHash());
+        run.setInputHash(evaluationHash);
         run.setProfileUpdatedAt(context.candidate().getUpdatedAt());
         run.setCvId(context.defaultCv() == null ? null : context.defaultCv().getId());
         run.setCvType(context.defaultCv() == null ? null

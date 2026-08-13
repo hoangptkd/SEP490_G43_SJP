@@ -53,6 +53,7 @@ public class SecurityConfig {
                     "/oauth2/**",
                     "/login/oauth2/**",
                     "/actuator/health",
+                    "/ws/**",
                     "/settings/public",
                     "/public/avatars/**",
                     "/candidate/ai-interviews/speech/**",

@@ -36,4 +36,12 @@ describe('aiJobSearchService', () => {
       policyVersion: 'ai-job-search-v1',
     });
   });
+
+  it('tải lại đúng đánh giá của job theo runId', async () => {
+    get.mockResolvedValueOnce({ data: { rank: 1, matchScore: 91 } });
+
+    await aiJobSearchService.recommendation('run-1', 'job-1');
+
+    expect(get).toHaveBeenCalledWith('/candidate/ai-job-search/runs/run-1/jobs/job-1');
+  });
 });

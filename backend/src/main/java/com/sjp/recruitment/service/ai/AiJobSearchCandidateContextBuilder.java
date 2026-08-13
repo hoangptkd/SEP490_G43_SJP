@@ -19,7 +19,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.Normalizer;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -80,8 +79,6 @@ public class AiJobSearchCandidateContextBuilder {
         hashInput.putAll(providerContext);
         hashInput.put("defaultCvId", cv == null ? null : cv.getId().toString());
         hashInput.put("defaultCvType", cv == null ? null : cvType(cv));
-        hashInput.put("defaultCvUpdatedAt", cv == null ? null : safeTime(cv.getUpdatedAt()));
-        hashInput.put("profileUpdatedAt", safeTime(candidate.getUpdatedAt()));
         hashInput.put("promptVersion", properties.getPromptVersion());
 
         return new AiJobSearchContext(
@@ -190,10 +187,6 @@ public class AiJobSearchCandidateContextBuilder {
 
     private String cvType(CandidateCv cv) {
         return "builder".equalsIgnoreCase(cv.getSourceType()) ? "BUILDER" : "UPLOADED";
-    }
-
-    private String safeTime(LocalDateTime value) {
-        return value == null ? "" : value.toString();
     }
 
     private List<?> safeList(List<?> value) {

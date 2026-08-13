@@ -182,6 +182,13 @@ export interface InterviewScheduleResponse {
   interviewResult?: string;
   interviewResultNote?: string;
   status: string;
+  viewedAt?: string;
+  respondedAt?: string;
+  responseDeadline?: string;
+  lastReminderAt?: string;
+  employerRescheduleAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface JobOfferRequest {

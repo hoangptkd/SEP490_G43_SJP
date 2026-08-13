@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/candidate/ai-job-search")
 @PreAuthorize("hasRole('CANDIDATE')")
@@ -37,5 +39,12 @@ public class AiJobSearchController {
     @PostMapping("/search")
     public ResponseEntity<AiJobSearchResponse> search(@RequestBody(required = false) AiJobSearchRequest request) {
         return ResponseEntity.ok(aiJobSearchService.search(request != null && request.forceRefresh()));
+    }
+
+    @GetMapping("/runs/{runId}/jobs/{jobId}")
+    public ResponseEntity<com.sjp.recruitment.model.dto.response.AiJobSearchItemResponse> recommendation(
+            @PathVariable UUID runId,
+            @PathVariable UUID jobId) {
+        return ResponseEntity.ok(aiJobSearchService.recommendation(runId, jobId));
     }
 }

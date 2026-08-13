@@ -223,7 +223,7 @@ export default function EmployerApplicationsPage() {
       if (interview) {
         const iStatus = (interview.status || '').toUpperCase();
         if (iStatus === 'ACCEPTED') return { label: 'Sắp phỏng vấn', color: '#0369a1', bg: '#e0f2fe' };
-        if (iStatus === 'PENDING_RESPONSE') return { label: 'Chờ UV phản hồi', color: '#b45309', bg: '#fef3c7' };
+        if (iStatus === 'SCHEDULED' || iStatus === 'PENDING_RESPONSE') return { label: 'Đã lên lịch · UV mặc định tham gia', color: '#047857', bg: '#d1fae5' };
         if (iStatus === 'NO_RESPONSE') return { label: 'UV không phản hồi', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'RESCHEDULE_REQUESTED' || iStatus === 'DECLINED') return { label: 'UV xin đổi lịch / Từ chối', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'COMPLETED') return { label: 'Đạt (Chờ Offer)', color: '#047857', bg: '#d1fae5' };
@@ -694,7 +694,7 @@ export default function EmployerApplicationsPage() {
                   </button>
 
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                    {(app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW' || app.status === 'INTERVIEW_SCHEDULED') && !app.interviews?.some((iv: any) => iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && (
+                    {(app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW' || app.status === 'INTERVIEW_SCHEDULED') && !app.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && (
                       <button
                         onClick={() => openUpdateModal(app, 'INTERVIEW_SCHEDULED')}
                         style={{ flex: 1, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -1412,7 +1412,7 @@ export default function EmployerApplicationsPage() {
                       let statusColor = '#475569';
                       let statusText = iv.status;
                       
-                      if (iv.status === 'PENDING_RESPONSE') { statusBg = '#fef3c7'; statusColor = '#b45309'; statusText = 'Chờ UV phản hồi'; }
+                      if (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') { statusBg = '#d1fae5'; statusColor = '#047857'; statusText = 'Đã lên lịch · UV mặc định tham gia'; }
                       else if (iv.status === 'ACCEPTED') { statusBg = '#dcfce7'; statusColor = '#166534'; statusText = 'UV Đã chấp nhận'; }
                       else if (iv.status === 'DECLINED') { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Từ chối'; }
                       else if (iv.status === 'RESCHEDULE_REQUESTED') { statusBg = '#ffedd5'; statusColor = '#c2410c'; statusText = 'UV Xin đổi lịch'; }
@@ -1540,7 +1540,7 @@ export default function EmployerApplicationsPage() {
               }}
             >
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {(selectedAppDetail.status === 'SUBMITTED' || selectedAppDetail.status === 'UNDER_REVIEW' || selectedAppDetail.status === 'INTERVIEW_SCHEDULED') && !selectedAppDetail.interviews?.some((iv: any) => iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && (
+                {(selectedAppDetail.status === 'SUBMITTED' || selectedAppDetail.status === 'UNDER_REVIEW' || selectedAppDetail.status === 'INTERVIEW_SCHEDULED') && !selectedAppDetail.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && (
                   <button
                     type="button"
                     onClick={() => openUpdateModal(selectedAppDetail, 'INTERVIEW_SCHEDULED')}
@@ -1688,7 +1688,7 @@ export default function EmployerApplicationsPage() {
                     let statusColor = '#475569';
                     let statusText = iv.status;
                     
-                    if (iv.status === 'PENDING_RESPONSE') { statusBg = '#fef3c7'; statusColor = '#b45309'; statusText = 'Chờ UV phản hồi'; }
+                    if (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') { statusBg = '#d1fae5'; statusColor = '#047857'; statusText = 'Đã lên lịch · UV mặc định tham gia'; }
                     else if (iv.status === 'ACCEPTED') { statusBg = '#dcfce7'; statusColor = '#166534'; statusText = 'UV Đã chấp nhận'; }
                     else if (iv.status === 'DECLINED') { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Từ chối'; }
                     else if (iv.status === 'RESCHEDULE_REQUESTED') { statusBg = '#ffedd5'; statusColor = '#c2410c'; statusText = 'UV Xin đổi lịch'; }
@@ -1790,7 +1790,7 @@ export default function EmployerApplicationsPage() {
                         )}
 
                         {/* Check if we should allow evaluation */}
-                        {(iv.status === 'ACCEPTED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'NO_RESPONSE') && (
+                        {(iv.status === 'SCHEDULED' || iv.status === 'ACCEPTED' || iv.status === 'PENDING_RESPONSE') && (
                           <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #fdba74' }}>
                             {iv.status !== 'ACCEPTED' ? (
                               <div style={{ color: '#b45309', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center' }}>

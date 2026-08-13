@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { AiJobSearchResult, AiJobSearchStatus } from '../types/aiJobSearch';
+import type { AiJobSearchItem, AiJobSearchResult, AiJobSearchStatus } from '../types/aiJobSearch';
 
 export const aiJobSearchService = {
   status: async (signal?: AbortSignal): Promise<AiJobSearchStatus> => {
@@ -21,6 +21,13 @@ export const aiJobSearchService = {
 
   search: async (forceRefresh = false): Promise<AiJobSearchResult> => {
     const response = await api.post<AiJobSearchResult>('/candidate/ai-job-search/search', { forceRefresh });
+    return response.data;
+  },
+
+  recommendation: async (runId: string, jobId: string): Promise<AiJobSearchItem> => {
+    const response = await api.get<AiJobSearchItem>(
+      `/candidate/ai-job-search/runs/${runId}/jobs/${jobId}`,
+    );
     return response.data;
   },
 };

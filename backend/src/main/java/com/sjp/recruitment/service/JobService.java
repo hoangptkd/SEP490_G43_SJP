@@ -63,6 +63,7 @@ public class JobService {
     private final SystemSettingsService systemSettingsService;
     private final FeatureLimitService featureLimitService;
     private final AuthService authService;
+    private final CandidateRealtimeEventPublisher realtimeEventPublisher;
 
     @Transactional(readOnly = true)
     public JobPageResponse search(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
@@ -156,16 +157,27 @@ public class JobService {
 
     @Transactional
     public JobResponse findJobResponseById(String id) {
+        return findJobResponseById(id, true);
+    }
+
+    @Transactional(readOnly = true)
+    public JobResponse findPublicJobResponseByIdWithoutViewIncrement(String id) {
+        return findJobResponseById(id, false);
+    }
+
+    private JobResponse findJobResponseById(String id, boolean incrementView) {
         try {
             UUID.fromString(id);
         } catch (IllegalArgumentException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_ID_INVALID", "Ma viec lam khong hop le");
         }
 
-        namedParameterJdbcTemplate.update(
-                "UPDATE jobs SET views_count = views_count + 1 WHERE id = CAST(:id AS uuid) AND status = 'published'",
-                new MapSqlParameterSource("id", id)
-        );
+        if (incrementView) {
+            namedParameterJdbcTemplate.update(
+                    "UPDATE jobs SET views_count = views_count + 1 WHERE id = CAST(:id AS uuid) AND status = 'published'",
+                    new MapSqlParameterSource("id", id)
+            );
+        }
 
         String sql = """
                 SELECT
@@ -367,7 +379,9 @@ public class JobService {
                             note.setMessage("Tin tuyển dụng [" + job.getTitle() + "] bạn đã ứng tuyển vừa có sự thay đổi. Vui lòng kiểm tra lại thông tin để đảm bảo quyền lợi của bạn.");
                             note.setRelatedEntityType("JOB");
                             note.setRelatedEntityId(job.getId());
-                            notificationRepository.save(note);
+                            Notification saved = notificationRepository.save(note);
+                            realtimeEventPublisher.publishAfterCommit(
+                                    app.getCandidate().getUser(), "NOTIFICATION_UPDATED", saved.getId());
                         } catch (Exception ex) {
                             // ignore individual fail
                         }
@@ -587,7 +601,9 @@ public class JobService {
             note.setMessage(message);
             note.setRelatedEntityType("JOB");
             note.setRelatedEntityId(job.getId());
-            notificationRepository.save(note);
+            Notification saved = notificationRepository.save(note);
+            realtimeEventPublisher.publishAfterCommit(
+                    app.getCandidate().getUser(), "NOTIFICATION_UPDATED", saved.getId());
         } catch (Exception ex) {
             // non-critical — gửi notification thất bại không làm rollback transaction
         }
@@ -658,7 +674,9 @@ public class JobService {
                         note.setMessage(message);
                         note.setRelatedEntityType("JOB");
                         note.setRelatedEntityId(job.getId());
-                        notificationRepository.save(note);
+                        Notification saved = notificationRepository.save(note);
+                        realtimeEventPublisher.publishAfterCommit(
+                                app.getCandidate().getUser(), "NOTIFICATION_UPDATED", saved.getId());
                     } catch (Exception ex) {
                         // ignore single notification save failure so transaction completes
                     }
@@ -847,8 +865,7 @@ public class JobService {
     public JobResponse toJobResponse(Job job, CandidateProfile candidate) {
         boolean saved = candidate != null && savedJobRepository.existsByCandidateIdAndJobId(candidate.getId(), job.getId());
         boolean applied = candidate != null && applicationRepository.existsByCandidateIdAndJobId(candidate.getId(), job.getId());
-        Integer score = candidate == null ? null : calculateMatchScore(candidate, job);
-        return dtoMapper.toJobResponse(job, saved, applied, score);
+        return dtoMapper.toJobResponse(job, saved, applied, null);
     }
 
     public int calculateMatchScore(CandidateProfile candidate, Job job) {
@@ -891,7 +908,7 @@ public class JobService {
                 ? "Hoan thien ho so ky nang de nhan goi y chinh xac hon."
                 : "Phu hop vi ban co " + String.join(", ", matched) + ".";
         JobResponse jobResponse = dtoMapper.toJobResponse(
-                job, saved, applied, score, applicationCount, listingPriority
+                job, saved, applied, null, applicationCount, listingPriority
         );
         return new RecommendationResponse(jobResponse, score, matched, missing, reason, lowConfidence);
     }
@@ -1112,7 +1129,7 @@ public class JobService {
                 clResp,
                 candidate != null && savedJobRepository.existsByCandidateIdAndJobId(candidate.getId(), java.util.UUID.fromString(resultSet.getString("id"))),
                 candidate != null && applicationRepository.existsByCandidateIdAndJobId(candidate.getId(), java.util.UUID.fromString(resultSet.getString("id"))),
-                candidate == null ? null : calculateMatchScore(candidate, toJobForMatch(resultSet)),
+                null,
                 resultSet.getString("benefits"),
                 resultSet.getInt("vacancies"),
                 resultSet.getString("working_time"),
@@ -1131,16 +1148,11 @@ public class JobService {
 
     private JobResponse withCandidateState(JobResponse job, CandidateProfile candidate, Set<UUID> savedIds, Set<UUID> appliedIds) {
         UUID jobId = UUID.fromString(job.id());
-        Job matchJob = new Job();
-        matchJob.setId(jobId);
-        matchJob.setLocation(job.location());
-        matchJob.setRequirements(job.requirements());
-        matchJob.setSkills(job.skills());
         return new JobResponse(
                 job.id(), job.title(), job.description(), job.requirements(), job.skills(),
                 job.salaryMin(), job.salaryMax(), job.location(), job.experienceLevel(), job.deadline(),
                 job.status(), job.company(), job.companyLocationId(), job.companyLocation(),
-                savedIds.contains(jobId), appliedIds.contains(jobId), calculateMatchScore(candidate, matchJob),
+                savedIds.contains(jobId), appliedIds.contains(jobId), null,
                 job.benefits(), job.vacancies(), job.workingTime(), job.salaryType(), job.jobType(), job.workMode(),
                 job.viewsCount(), job.rejectionReason(), job.applicationsCount(), job.reportFixDeadline(),
                 job.rankingConfig(), job.listingPriority(), job.featured()

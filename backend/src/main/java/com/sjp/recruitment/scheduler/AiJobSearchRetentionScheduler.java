@@ -20,9 +20,10 @@ public class AiJobSearchRetentionScheduler {
     @Scheduled(cron = "0 30 3 * * *", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void cleanup() {
-        long deleted = runRepository.deleteByCreatedAtBefore(LocalDateTime.now().minusDays(properties.getRetentionDays()));
+        long deleted = runRepository.deleteByStatusAndCreatedAtBefore(
+                "FAILED", LocalDateTime.now().minusDays(properties.getRetentionDays()));
         if (deleted > 0) {
-            log.info("Cleaned {} expired AI job search run metadata rows", deleted);
+            log.info("Cleaned {} failed AI job search run metadata rows", deleted);
         }
     }
 }

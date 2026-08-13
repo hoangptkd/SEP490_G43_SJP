@@ -7,6 +7,7 @@ import { employerService } from './services/employerService';
 import { aiInterviewService } from './services/aiInterviewService';
 import { aiJobSearchService } from './services/aiJobSearchService';
 import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversation';
+import { useCandidateRealtime } from './hooks/useCandidateRealtime';
 import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './utils/authStorage';
 import { parseApiError } from './utils/planLimits';
 import { filterAiJobSearchItems } from './utils/aiJobSearch';
@@ -94,13 +95,12 @@ const statusLabels: Record<string, string> = {
   SUBMITTED: 'Đã nộp',
   UNDER_REVIEW: 'Đang xem xét',
   SHORTLISTED: 'Vào shortlist',
-  INTERVIEW_SCHEDULED: 'Hẹn phỏng vấn',
+  INTERVIEW_SCHEDULED: 'Đã lên lịch phỏng vấn',
   INTERVIEWED: 'Đã phỏng vấn',
   EVALUATED: 'Đã đánh giá',
-  ACCEPTED: 'Chấp nhận',
+  ACCEPTED: 'Đã nhận Job Offer',
   REJECTED: 'Từ chối',
   HIRED: 'Đã tuyển',
-  WITHDRAWN: 'Đã rút',
 };
 
 const statusColors: Record<string, string> = {
@@ -113,7 +113,6 @@ const statusColors: Record<string, string> = {
   ACCEPTED: 'match',
   REJECTED: 'danger',
   HIRED: 'match',
-  WITHDRAWN: 'neutral',
 };
 
 // ─── App routes ────────────────────────────────────────────────────────────
@@ -686,15 +685,26 @@ function CandidateHomeActions() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationError, setNotificationError] = useState('');
 
-  useEffect(() => {
-    Promise.all([
+  const loadCandidateHeader = useCallback(async () => {
+    const [profileData, notificationData] = await Promise.all([
       candidateService.getProfile().catch(() => null),
       candidateService.getNotifications(0, 20).then((result) => result.items).catch(() => []),
-    ]).then(([profileData, notificationData]) => {
-      setProfile(profileData);
-      setNotifications(notificationData);
-    });
+    ]);
+    setProfile(profileData);
+    setNotifications(notificationData);
   }, []);
+
+  useEffect(() => {
+    void loadCandidateHeader();
+  }, [loadCandidateHeader]);
+
+  useCandidateRealtime((event) => {
+    if (event.type === 'NOTIFICATION_UPDATED' || event.type === 'REALTIME_RECONNECTED') {
+      void candidateService.getNotifications(0, 20)
+        .then((result) => setNotifications(result.items))
+        .catch(() => undefined);
+    }
+  });
 
   useEffect(() => {
     function closeOnOutside(event: MouseEvent) {
@@ -1198,7 +1208,7 @@ function HomePage() {
   const quickCategories = (parentCategories.length ? parentCategories : categories).slice(0, 8);
   const recommendationJobs = recommendations
     .slice(0, 4)
-    .map((item) => ({ ...item.job, matchScore: item.matchScore }));
+    .map((item) => ({ ...item.job, matchScore: undefined }));
   const hiringCompanies = Array.from(
     latestJobs.reduce((map, job) => {
       if (!map.has(job.company.id)) map.set(job.company.id, job.company);
@@ -2295,7 +2305,16 @@ function JobsPage() {
     try {
       const result = await aiJobSearchService.search(forceRefresh);
       setAiResult(result);
-      setAiStatus((current) => current ? { ...current, quota: result.quota } : current);
+      setAiStatus((current) => current ? {
+        ...current,
+        quota: result.quota,
+        cache: {
+          available: Boolean(result.runId),
+          generatedAt: result.generatedAt,
+          expiresAt: result.expiresAt,
+          stale: false,
+        },
+      } : current);
     } catch (err) {
       const parsed = parseApiError(err);
       setAiError(parsed.message);
@@ -2330,8 +2349,11 @@ function JobsPage() {
         } else if (status.consentRequired) {
           setShowAiConsent(true);
           setAiLoading(false);
-        } else {
+        } else if (status.cache.available && !status.cache.stale) {
           void runAiSearch(false);
+        } else {
+          setAiResult(null);
+          setAiLoading(false);
         }
       })
       .catch((err) => {
@@ -2411,7 +2433,6 @@ function JobsPage() {
       const status = await aiJobSearchService.consent(aiStatus.policyVersion);
       setAiStatus(status);
       setShowAiConsent(false);
-      await runAiSearch(false);
     } catch (err) {
       setAiError(readError(err));
     } finally {
@@ -2426,7 +2447,8 @@ function JobsPage() {
       setAiError('Bạn đã hết lượt tìm việc bằng AI trong tháng này.');
       return;
     }
-    if (window.confirm('Tìm lại sẽ sử dụng 1 lượt AI. Bạn muốn tiếp tục?')) {
+    const needsNewEvaluation = !aiStatus?.cache.available || aiStatus.cache.stale;
+    if (!needsNewEvaluation || window.confirm('Đánh giá mới có thể sử dụng 1 lượt AI. Bạn muốn tiếp tục?')) {
       void runAiSearch(true);
     }
   }
@@ -2483,13 +2505,13 @@ function JobsPage() {
                   </span>
                 )}
                 {aiResult?.generatedAt && <span>Tạo lúc: {formatAiDate(aiResult.generatedAt)}</span>}
-                {aiResult?.expiresAt && (
-                  <span>{aiResult.stale ? 'Cache đã hết hạn' : 'Cache đến'}: {formatAiDate(aiResult.expiresAt)}</span>
-                )}
-                {aiResult?.stale
-                  ? <span>Kết quả cũ · bấm Tìm lại để cập nhật</span>
-                  : aiResult?.cached && <span>Kết quả đã lưu</span>}
+                {aiResult?.cached && <span>Kết quả đã lưu · đầu vào không thay đổi</span>}
               </div>
+              {aiStatus?.cache.stale && !aiResult && (
+                <div className="warning-panel" role="status" style={{ marginTop: 12 }}>
+                  Hồ sơ hoặc thông tin việc làm đã được cập nhật. Hãy cập nhật kết quả AI để nhận đề xuất mới nhất.
+                </div>
+              )}
             </div>
             <div className="ai-job-banner-actions">
               {aiStatus?.consentRequired && !aiResult ? (
@@ -2497,8 +2519,14 @@ function JobsPage() {
                   Xem và đồng ý chính sách
                 </button>
               ) : (
-                <button type="button" onClick={refreshAiResults} disabled={aiLoading || !aiResult}>
-                  {aiLoading ? 'AI đang phân tích…' : 'Tìm lại (dùng 1 lượt)'}
+                <button type="button" onClick={refreshAiResults} disabled={aiLoading}>
+                  {aiLoading
+                    ? 'AI đang phân tích…'
+                    : aiStatus?.cache.stale
+                      ? 'Cập nhật kết quả AI'
+                      : aiResult
+                        ? 'Kiểm tra cập nhật kết quả'
+                        : 'Tìm việc phù hợp với AI'}
                 </button>
               )}
               <button type="button" className="outline" onClick={() => navigate('/jobs')}>
@@ -2515,7 +2543,7 @@ function JobsPage() {
                 <span>{aiError}</span>
                 <div>
                   {!aiPlanLimit && aiStatus?.enabled && (
-                    <button type="button" className="outline sm" onClick={() => void runAiSearch(Boolean(aiResult))} disabled={aiLoading}>
+                    <button type="button" className="outline sm" onClick={() => void runAiSearch(true)} disabled={aiLoading}>
                       Thử lại
                     </button>
                   )}
@@ -2733,7 +2761,9 @@ function JobsPage() {
             ) : (
               <div className="job-grid">
                 {aiMode
-                  ? filteredAiItems.map((item) => <AiRecommendationCard key={item.job.id} item={item} />)
+                  ? filteredAiItems.map((item) => (
+                    <AiRecommendationCard key={item.job.id} item={item} />
+                  ))
                   : jobs.map((job, i) => (
                     <motion.div
                       key={job.id}
@@ -2834,7 +2864,7 @@ function AiRecommendationCard({ item }: { item: AiJobSearchItem }) {
           </div>
         </div>
       </div>
-      <JobCard job={{ ...item.job, matchScore: item.matchScore }} />
+      <JobCard job={item.job} />
     </section>
   );
 }
@@ -2889,7 +2919,7 @@ function AiConsentDialog({
             Để sau
           </button>
           <button type="button" onClick={onAccept} disabled={busy} autoFocus>
-            {busy ? 'Đang xác nhận…' : 'Đồng ý và tìm việc'}
+            {busy ? 'Đang xác nhận…' : 'Đồng ý chính sách'}
           </button>
         </div>
       </div>
@@ -2961,9 +2991,6 @@ function JobCard({ job }: { job: Job }) {
         </div>
 
         <div className="job-card-footer">
-          {job.matchScore !== undefined && (
-            <span className="chip match">⚡ {job.matchScore}% phù hợp</span>
-          )}
           {job.saved && <span className="chip">🔖 Đã lưu</span>}
           {job.applied && <span className="chip neutral">✓ Đã nộp</span>}
         </div>
@@ -3077,7 +3104,8 @@ function JobDetailPage() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    setJob(await jobService.getById(id));
+    const jobData = await jobService.getById(id);
+    setJob(jobData);
     if (isCandidate) {
       Promise.all([
         candidateService.getCvs(0, 100).then((result) => result.items).catch(() => []),
@@ -3354,13 +3382,6 @@ function JobDetailPage() {
 
         {/* Right: Apply panel */}
         <aside className="apply-panel">
-          {job.matchScore !== undefined && (
-            <div className="match-score-ring">
-              {job.matchScore}%
-              <span>Phù hợp</span>
-            </div>
-          )}
-
           {isCandidate ? (
             <>
               <button
@@ -3523,11 +3544,18 @@ function CandidateLayout() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  useEffect(() => {
+  const loadUnreadCount = useCallback(() => {
     candidateService.getNotifications(0, 100).then(data => {
       setUnreadCount(data.items.filter(n => !n.read).length);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => { loadUnreadCount(); }, [loadUnreadCount]);
+  useCandidateRealtime((event) => {
+    if (event.type === 'NOTIFICATION_UPDATED' || event.type === 'REALTIME_RECONNECTED') {
+      loadUnreadCount();
+    }
+  });
 
   function logout() { void endAuthenticatedSession(() => navigate('/login')); }
 
@@ -4851,6 +4879,11 @@ function ApplicationsPage() {
   }, [page, setParams]);
 
   useEffect(() => { void loadApplications(); }, [loadApplications]);
+  useCandidateRealtime((event) => {
+    if (event.type === 'APPLICATION_UPDATED' || event.type === 'REALTIME_RECONNECTED') {
+      void loadApplications();
+    }
+  });
 
   const statusOptions = [
     { value: 'ALL', label: 'Tất cả', count: applications.length },
@@ -5083,6 +5116,7 @@ function ApplicationDetailPage() {
   const [message, setMessage] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [rescheduleInterviewId, setRescheduleInterviewId] = useState('');
+  const [declineInterviewId, setDeclineInterviewId] = useState('');
   const [rescheduleNote, setRescheduleNote] = useState('');
   const [rejectOfferId, setRejectOfferId] = useState('');
   const [offerNote, setOfferNote] = useState('');
@@ -5092,19 +5126,17 @@ function ApplicationDetailPage() {
     if (!id) return;
     const app = await candidateService.getApplication(id);
     setApplication(app);
-    
-    // Auto-mark viewed for any pending response interview
-    if (app.interviews && app.interviews.length > 0) {
-      const pendingInterview = app.interviews.find(iv => iv.status === 'PENDING_RESPONSE' && !iv.viewedAt);
-      if (pendingInterview) {
-        candidateService.viewInterview(pendingInterview.id).catch(console.error);
-      }
-    }
   }, [id]);
 
   useEffect(() => {
     void loadApplication().catch((err) => setMessage(readError(err)));
   }, [loadApplication]);
+  useCandidateRealtime((event) => {
+    if (event.type === 'REALTIME_RECONNECTED'
+        || (event.type === 'APPLICATION_UPDATED' && event.entityId === id)) {
+      void loadApplication().catch((err) => setMessage(readError(err)));
+    }
+  });
 
   async function openSubmittedResume(applicationId: string) {
     setMessage('');
@@ -5122,6 +5154,7 @@ function ApplicationDetailPage() {
       await candidateService.respondToInterview(interviewId, responseStatus, note);
       setMessage('Đã cập nhật phản hồi phỏng vấn.');
       setRescheduleInterviewId('');
+      setDeclineInterviewId('');
       setRescheduleNote('');
       await loadApplication();
     } catch (err) {
@@ -5295,20 +5328,19 @@ function ApplicationDetailPage() {
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
                 <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
                   <strong>Phản hồi của bạn:</strong>{' '}
-                  {interview.status === 'ACCEPTED' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
+                  {['SCHEDULED', 'ACCEPTED', 'PENDING_RESPONSE'].includes(interview.status)
+                    ? <span style={{ color: '#047857' }}>Đã lên lịch · mặc định tham gia</span>
                    : interview.status === 'RESCHEDULE_REQUESTED' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
                    : interview.status === 'DECLINED' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
-                   : interview.status === 'NO_RESPONSE' ? <span style={{ color: '#b91c1c' }}>Quá hạn phản hồi</span>
                    : interview.status === 'COMPLETED' ? <span style={{ color: '#4338ca' }}>Đã phỏng vấn xong</span>
                    : interview.status === 'NO_SHOW' ? <span style={{ color: '#b91c1c' }}>Không tham gia</span>
-                   : 'Chưa phản hồi'}
+                   : interview.status}
                 </p>
 
-                {interview.status === 'PENDING_RESPONSE' && (
+                {['SCHEDULED', 'ACCEPTED', 'PENDING_RESPONSE'].includes(interview.status) && (
                   <div className="button-row" style={{ marginTop: 12 }}>
-                    <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Đồng ý tham gia</button>
                     <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
-                    <button className="danger sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'declined')}>Từ chối</button>
+                    <button className="danger sm" disabled={actionBusy} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
                   </div>
                 )}
               </div>
@@ -5405,6 +5437,17 @@ function ApplicationDetailPage() {
               />
             </label>
           </ActionModal>
+        )}
+        {declineInterviewId && (
+          <ActionModal
+            title="Từ chối tham gia phỏng vấn?"
+            description="Nhà tuyển dụng sẽ nhận được thông báo rằng bạn không tham gia lịch phỏng vấn này."
+            confirmLabel="Xác nhận từ chối"
+            danger
+            busy={actionBusy}
+            onClose={() => setDeclineInterviewId('')}
+            onConfirm={() => respondToInterview(declineInterviewId, 'declined')}
+          />
         )}
         {rejectOfferId && (
           <ActionModal
@@ -5609,6 +5652,11 @@ function NotificationsPage() {
   }, [page, setParams]);
 
   useEffect(() => { void load(); }, [load]);
+  useCandidateRealtime((event) => {
+    if (event.type === 'NOTIFICATION_UPDATED' || event.type === 'REALTIME_RECONNECTED') {
+      void load();
+    }
+  });
 
   const unreadCount = items.filter((item) => !item.read).length;
 

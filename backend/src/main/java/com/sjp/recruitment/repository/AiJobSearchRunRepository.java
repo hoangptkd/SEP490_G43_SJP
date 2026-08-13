@@ -9,6 +9,9 @@ import java.util.UUID;
 
 public interface AiJobSearchRunRepository extends JpaRepository<AiJobSearchRun, UUID> {
     Optional<AiJobSearchRun> findFirstByCandidateIdAndStatusOrderByCreatedAtDesc(UUID candidateId, String status);
+    Optional<AiJobSearchRun> findFirstByCandidateIdAndStatusAndInputHashOrderByCreatedAtDesc(
+            UUID candidateId, String status, String inputHash);
+    Optional<AiJobSearchRun> findByIdAndCandidateIdAndStatus(UUID id, UUID candidateId, String status);
     long countByCandidateUserIdAndQuotaConsumedTrueAndCreatedAtGreaterThanEqual(UUID userId, LocalDateTime start);
-    long deleteByCreatedAtBefore(LocalDateTime cutoff);
+    long deleteByStatusAndCreatedAtBefore(String status, LocalDateTime cutoff);
 }

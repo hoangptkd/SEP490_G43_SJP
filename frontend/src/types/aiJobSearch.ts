@@ -37,6 +37,7 @@ export interface AiJobSearchItem {
 
 export interface AiJobSearchResult {
   source: 'AI';
+  runId?: string | null;
   cached: boolean;
   stale: boolean;
   lowConfidence: boolean;

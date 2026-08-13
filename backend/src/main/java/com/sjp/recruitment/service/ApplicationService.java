@@ -64,6 +64,7 @@ public class ApplicationService {
     private final FeatureLimitService featureLimitService;
     private final EmployerRepository employerRepository;
     private final AiRankingService aiRankingService;
+    private final CandidateRealtimeEventPublisher realtimeEventPublisher;
 
     @Transactional(readOnly = true)
     public Page<Application> findByCandidateId(String candidateId, Pageable pageable) {
@@ -127,6 +128,7 @@ public class ApplicationService {
         addHistory(saved, null, Application.ApplicationStatus.SUBMITTED, "Ho so ung tuyen da duoc gui thanh cong.");
         createNotification(user, "APPLICATION_SUBMITTED", "Da gui ho so ung tuyen",
                 "Ban da ung tuyen thanh cong vao vi tri " + job.getTitle() + ".", saved.getId());
+        realtimeEventPublisher.publishAfterCommit(user, "APPLICATION_UPDATED", saved.getId());
         featureLimitService.consumeApplication(user);
 
         if (job.getCompany() != null) {
@@ -196,6 +198,8 @@ public class ApplicationService {
         addHistory(application, from, toStatus, note);
         createNotification(application.getCandidate().getUser(), "APPLICATION_STATUS_CHANGED",
                 "Trang thai ung tuyen da cap nhat", note, application.getId());
+        realtimeEventPublisher.publishAfterCommit(
+                application.getCandidate().getUser(), "APPLICATION_UPDATED", application.getId());
         if (toStatus == Application.ApplicationStatus.HIRED && application.getJob() != null) {
             Job job = application.getJob();
             long hiredCount = applicationRepository.countByJobIdAndStatus(job.getId(), "hired");
@@ -386,7 +390,8 @@ public class ApplicationService {
         notification.setMessage(message);
         notification.setRelatedEntityType("APPLICATION");
         notification.setRelatedEntityId(applicationId);
-        notificationRepository.save(notification);
+        Notification saved = notificationRepository.save(notification);
+        realtimeEventPublisher.publishAfterCommit(user, "NOTIFICATION_UPDATED", saved.getId());
     }
 
     private String trimToNull(String value) {

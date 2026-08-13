@@ -408,6 +408,15 @@ textarea {
   animation: scaleIn 200ms var(--ease-out) both;
 }
 
+.warning-panel {
+  padding: 12px 14px;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+  line-height: 1.5;
+}
+
 /* ============================================================
    CHIPS & BADGES
    ============================================================ */

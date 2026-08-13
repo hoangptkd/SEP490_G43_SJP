@@ -94,7 +94,7 @@ class JobServiceRecommendationBatchTest {
                 .thenReturn(List.<Object[]>of(new Object[]{jobId, 4L}));
         when(featureLimitService.resolveListingPrioritiesForUsers(anyCollection()))
                 .thenReturn(Map.of(employerUserId, 2));
-        when(dtoMapper.toJobResponse(eq(job), eq(true), eq(true), anyInt(), eq(4L), eq(2)))
+        when(dtoMapper.toJobResponse(eq(job), eq(true), eq(true), isNull(), eq(4L), eq(2)))
                 .thenReturn(jobResponse);
 
         var recommendations = jobService.recommendations();

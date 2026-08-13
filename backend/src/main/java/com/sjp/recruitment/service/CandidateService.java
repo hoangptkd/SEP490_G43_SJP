@@ -43,6 +43,7 @@ public class CandidateService {
     private final JobRepository jobRepository;
     private final ApplicationRepository applicationRepository;
     private final NotificationRepository notificationRepository;
+    private final CandidateRealtimeEventPublisher realtimeEventPublisher;
     private final SubscriptionRepository subscriptionRepository;
     private final SkillRepository skillRepository;
     private final CandidateSkillRepository candidateSkillRepository;
@@ -287,6 +288,7 @@ public class CandidateService {
         Notification notification = notificationRepository.findByIdAndRecipientUserId(parseUuid(notificationId, "NOTIFICATION_ID_INVALID"), user.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "Khong tim thay thong bao"));
         notification.setRead(true);
+        realtimeEventPublisher.publishAfterCommit(user, "NOTIFICATION_UPDATED", notification.getId());
     }
 
     @Transactional
@@ -294,6 +296,7 @@ public class CandidateService {
         User user = authService.getCurrentUser();
         notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
                 .forEach(notification -> notification.setRead(true));
+        realtimeEventPublisher.publishAfterCommit(user, "NOTIFICATION_UPDATED", null);
     }
 
     @Transactional(readOnly = true)
