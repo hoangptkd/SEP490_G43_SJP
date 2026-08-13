@@ -363,11 +363,12 @@ function CompanyProfilePage() {
                           .map((cat) => {
                             const isChecked = !!(company.industries || []).find((ci) => ci.categoryId === cat.id);
                             return (
-                              <label
+                              <div
                                 key={cat.id}
                                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${isChecked ? 'bg-emerald-50/50 text-emerald-800' : 'hover:bg-gray-50 text-gray-700'}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  e.preventDefault();
                                   let currentInds = [...(company.industries || [])];
                                   if (!isChecked) {
                                     const newIsPrimary = currentInds.length === 0;
@@ -389,7 +390,7 @@ function CompanyProfilePage() {
                               >
                                 <input type="checkbox" checked={isChecked} readOnly className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300 pointer-events-none" />
                                 <span className="text-sm font-medium">{cat.name}</span>
-                              </label>
+                              </div>
                             );
                           })}
                       </div>

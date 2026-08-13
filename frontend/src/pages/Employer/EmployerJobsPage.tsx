@@ -7,6 +7,7 @@ import PlanLimitAlert from '../../components/PlanLimitAlert';
 import { parseApiError } from '../../utils/planLimits';
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
 import VietnamAddressPicker from '../../components/location/VietnamAddressPicker';
+import { IconLock, IconRobot } from '../../components/icons/PortalNavIcons';
 
 const PRESET_WORKING_TIMES = [
   'Thứ 2 - Thứ 6 (08:00 - 17:30)',
@@ -778,7 +779,7 @@ function EmployerJobsPage() {
                 {hasApplications && (
                   <div className="absolute top-6 inset-x-0 bottom-0 bg-white/60 z-10 flex items-center justify-center backdrop-blur-[1px]">
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 text-center max-w-sm">
-                      <div className="text-3xl mb-2">🔒</div>
+                      <div className="text-3xl mb-2 mono-icon"><IconLock size={32} /></div>
                       <h4 className="text-lg font-semibold text-gray-900 mb-2">Đã khóa Cấu hình AI</h4>
                       <p className="text-sm text-gray-600 leading-relaxed m-0">Tin tuyển dụng này đã có người nộp CV. Để đảm bảo công bằng cho tất cả ứng viên, tiêu chí chấm điểm không thể thay đổi nữa.</p>
                     </div>
@@ -786,8 +787,8 @@ function EmployerJobsPage() {
                 )}
                 
                 <div className="flex items-center gap-3 mb-5">
-                  <div className="bg-blue-50 p-2.5 rounded-lg flex items-center justify-center text-2xl">
-                    🤖
+                  <div className="bg-blue-50 p-2.5 rounded-lg flex items-center justify-center mono-icon">
+                    <IconRobot size={24} />
                   </div>
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-gray-900 m-0">Cấu hình AI chấm điểm (Smart Ranking)</h3>
@@ -1126,7 +1127,7 @@ function EmployerJobsPage() {
             <div style={{ flex: '1 1 300px', position: 'relative' }}>
               <input
                 type="text"
-                placeholder="🔍 Tìm kiếm theo tiêu đề vị trí, địa điểm, kỹ năng..."
+                placeholder="Tìm kiếm theo tiêu đề vị trí, địa điểm, kỹ năng..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{

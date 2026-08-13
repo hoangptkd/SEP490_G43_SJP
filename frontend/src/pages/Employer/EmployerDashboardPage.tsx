@@ -1,9 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { employerService } from '../../services/employerService';
 import axios from 'axios';
 import { format } from 'date-fns';
+import {
+  IconAlert,
+  IconBell,
+  IconBriefcase,
+  IconCalendar,
+  IconClipboard,
+  IconHandshake,
+  IconMail,
+  IconProfile,
+  IconUsers,
+} from '../../components/icons/PortalNavIcons';
+import '../../styles/admin.css';
 
 function readError(error: unknown) {
   if (axios.isAxiosError(error) && error.response?.data?.message) {
@@ -35,12 +47,12 @@ const fadeUp = {
 function TopActionCard({ 
   title, count, icon, buttonText, buttonLink, colorClass 
 }: { 
-  title: string, count: number, icon: string, buttonText: string, buttonLink: string, colorClass: string 
+  title: string, count: number, icon: ReactNode, buttonText: string, buttonLink: string, colorClass: string 
 }) {
   return (
     <div className={`top-action-card ${colorClass}`}>
       <div className="tac-header">
-        <div className="tac-icon">{icon}</div>
+        <div className="tac-icon mono-icon">{icon}</div>
         <div className="tac-badge">{count}</div>
       </div>
       <div className="tac-title">{title}</div>
@@ -101,7 +113,9 @@ export default function EmployerDashboardPage() {
   return (
     <motion.div className="topcv-dashboard" variants={fadeUp} initial="initial" animate="animate" transition={{ duration: 0.3, ease: EASE_OUT }}>
       <div className="topcv-header">
-        <h1 style={{ fontSize: '1.5rem', margin: 0 }}>💼 Xin chào, Nhà tuyển dụng</h1>
+        <h1 style={{ fontSize: '1.5rem', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <IconBriefcase size={24} /> Xin chào, Nhà tuyển dụng
+        </h1>
         <div style={{ display: 'flex', gap: 12 }}>
           <Link to="/employer/jobs/new" className="button primary" style={{ borderRadius: 6 }}>
             + Đăng tin mới
@@ -122,22 +136,22 @@ export default function EmployerDashboardPage() {
             <div className="top-actions-grid">
               <TopActionCard 
                 title="Ứng viên chờ duyệt" count={actionSummary.pendingApplicationsCount} 
-                icon="👤" buttonText="Xem ngay" buttonLink="/employer/applications?status=SUBMITTED" 
+                icon={<IconProfile size={22} />} buttonText="Xem ngay" buttonLink="/employer/applications?status=SUBMITTED" 
                 colorClass="tac-red" 
               />
               <TopActionCard 
                 title="Lịch phỏng vấn hôm nay" count={actionSummary.todayInterviewsCount} 
-                icon="📅" buttonText="Xem lịch" buttonLink="/employer/applications?status=INTERVIEW_SCHEDULED" 
+                icon={<IconCalendar size={22} />} buttonText="Xem lịch" buttonLink="/employer/applications?status=INTERVIEW_SCHEDULED" 
                 colorClass="tac-orange" 
               />
               <TopActionCard 
                 title="Tin sắp hết hạn" count={actionSummary.expiringJobsCount} 
-                icon="⚠️" buttonText="Gia hạn" buttonLink="/employer/jobs" 
+                icon={<IconAlert size={22} />} buttonText="Gia hạn" buttonLink="/employer/jobs" 
                 colorClass="tac-yellow" 
               />
               <TopActionCard 
                 title="Tin nhắn chưa đọc" count={actionSummary.unreadMessagesCount} 
-                icon="✉️" buttonText="Mở hộp thư" buttonLink="/employer/notifications" 
+                icon={<IconMail size={22} />} buttonText="Mở hộp thư" buttonLink="/employer/notifications" 
                 colorClass="tac-blue" 
               />
             </div>
@@ -160,7 +174,7 @@ export default function EmployerDashboardPage() {
             <p className="section-subtitle">Tổng quan hành trình ứng viên của tất cả tin đang chạy</p>
             <div className="funnel-container">
               <div className="funnel-step">
-                <div className="fs-icon">📩</div>
+                <div className="fs-icon mono-icon"><IconClipboard size={22} /></div>
                 <div className="fs-title">Ứng tuyển</div>
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.appliedCount}</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
@@ -169,7 +183,7 @@ export default function EmployerDashboardPage() {
               </div>
               <div className="funnel-arrow">→</div>
               <div className="funnel-step">
-                <div className="fs-icon">👥</div>
+                <div className="fs-icon mono-icon"><IconUsers size={22} /></div>
                 <div className="fs-title">Phỏng vấn</div>
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.interviewCount}</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
@@ -178,14 +192,14 @@ export default function EmployerDashboardPage() {
               </div>
               <div className="funnel-arrow">→</div>
               <div className="funnel-step">
-                <div className="fs-icon">💼</div>
+                <div className="fs-icon mono-icon"><IconBriefcase size={22} /></div>
                 <div className="fs-title">Offer</div>
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.offerCount}</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>(Đã gửi Offer)</div>
               </div>
               <div className="funnel-arrow">→</div>
               <div className="funnel-step">
-                <div className="fs-icon">🤝</div>
+                <div className="fs-icon mono-icon"><IconHandshake size={22} /></div>
                 <div className="fs-title">Nhận việc</div>
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.hiredCount}</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>(Đã nhận việc)</div>
@@ -249,16 +263,18 @@ export default function EmployerDashboardPage() {
           {stats.pendingTasks && stats.pendingTasks.length > 0 && (
             <div className="sidebar-box" style={{ marginBottom: 24 }}>
               <div className="sb-header">
-                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>🔥 Việc cần làm</h3>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <IconAlert size={18} /> Việc cần làm
+                </h3>
               </div>
               <div className="sb-content">
                 <div className="activity-list">
                   {stats.pendingTasks.slice(0, visibleTasksCount).map((task: any) => (
                     <div className="activity-item" key={task.id} style={{ padding: '12px 0' }}>
-                      <div className="act-icon" style={{ background: '#fef2f2', color: '#ef4444' }}>
-                        {task.taskType === 'new_application' ? '👤' : 
-                         task.taskType === 'pending_interview' ? '📅' :
-                         task.taskType === 'employer_response_needed' ? '⚠️' : '⚡'}
+                      <div className="act-icon mono-icon" style={{ background: '#f8fafc', color: '#111827' }}>
+                        {task.taskType === 'new_application' ? <IconProfile size={16} /> :
+                         task.taskType === 'pending_interview' ? <IconCalendar size={16} /> :
+                         task.taskType === 'employer_response_needed' ? <IconAlert size={16} /> : <IconBell size={16} />}
                       </div>
                       <div className="act-content">
                         <div className="act-title">
@@ -290,7 +306,9 @@ export default function EmployerDashboardPage() {
           {/* Lịch phỏng vấn */}
           <div className="sidebar-box">
             <div className="sb-header">
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>📅 Lịch phỏng vấn sắp tới</h3>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IconCalendar size={18} /> Lịch phỏng vấn sắp tới
+              </h3>
               <Link to="/employer/applications?status=INTERVIEW_SCHEDULED" style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'none' }}>Xem lịch ↗</Link>
             </div>
             <div className="sb-content">
@@ -316,7 +334,9 @@ export default function EmployerDashboardPage() {
           {/* Hoạt động */}
           <div className="sidebar-box" style={{ marginTop: 24 }}>
             <div className="sb-header">
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>📈 Hoạt động gần đây</h3>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IconBell size={18} /> Hoạt động gần đây
+              </h3>
               <Link to="/employer/notifications" style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'none' }}>Xem tất cả ↗</Link>
             </div>
             <div className="sb-content">
@@ -324,8 +344,8 @@ export default function EmployerDashboardPage() {
                 <div className="activity-list">
                   {recentActivities.slice(0, 5).map((act: any) => (
                     <div className="activity-item" key={act.id}>
-                      <div className="act-icon">
-                        {act.type === 'APPLICATION' ? '👤' : act.type === 'INTERVIEW' ? '📅' : '🔔'}
+                      <div className="act-icon mono-icon">
+                        {act.type === 'APPLICATION' ? <IconProfile size={16} /> : act.type === 'INTERVIEW' ? <IconCalendar size={16} /> : <IconBell size={16} />}
                       </div>
                       <div className="act-content">
                         <div className="act-title">

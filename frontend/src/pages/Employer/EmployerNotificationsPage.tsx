@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { employerService } from '../../services/employerService';
 import type { NotificationItem } from '../../types/candidateDomain';
+import { IconInbox, getNotificationTypeIcon } from '../../components/icons/PortalNavIcons';
 
 const fadeUp = {
   initial: { opacity: 0, y: 12 },
@@ -22,17 +23,6 @@ export default function EmployerNotificationsPage() {
   }
 
   useEffect(() => { load(); }, []);
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'JOB_UPDATED': return '📝';
-      case 'APPLICATION_STATUS_CHANGED': return '🔄';
-      case 'JOB_OFFER_SENT': return '🎉';
-      case 'INTERVIEW_SCHEDULED': return '📅';
-      case 'APPLICATION_RECEIVED': return '📩';
-      default: return '🔔';
-    }
-  };
 
   const getNotificationLink = (item: NotificationItem) => {
     if (item.relatedEntityType === 'JOB' && item.relatedEntityId) {
@@ -72,7 +62,7 @@ export default function EmployerNotificationsPage() {
         </div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📭</div>
+          <div className="empty-state-icon"><IconInbox size={36} /></div>
           <h3>Không có thông báo mới</h3>
           <p className="muted">Bạn sẽ nhận thông báo khi có hồ sơ ứng tuyển mới hoặc thông báo từ Admin.</p>
         </div>
@@ -93,8 +83,8 @@ export default function EmployerNotificationsPage() {
                   alignItems: 'center',
                   gap: 16
                 }}>
-                <div style={{ fontSize: '1.5rem', minWidth: 40, textAlign: 'center' }}>
-                  {getIcon(item.type)}
+                <div className="notification-type-icon">
+                  {getNotificationTypeIcon(item.type, 22)}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>

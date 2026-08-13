@@ -4,6 +4,8 @@ import type { AccountView, User } from '../types/auth';
 export interface LoginRequest {
   email: string;
   password: string;
+  /** "admin" cho trang quản trị; bỏ trống/"user" cho cổng người dùng */
+  portal?: 'admin' | 'user';
 }
 
 export interface RegisterRequest {

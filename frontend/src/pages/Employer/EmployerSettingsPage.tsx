@@ -3,6 +3,7 @@ import { getStoredUser } from '../../utils/authStorage';
 import { employerService } from '../../services/employerService';
 import { authService } from '../../services/authService';
 import { customAlert, customConfirm } from '../../utils/dialog';
+import { IconProfile } from '../../components/icons/PortalNavIcons';
 
 const EmployerSettingsPage: React.FC = () => {
   const user = getStoredUser();
@@ -167,7 +168,7 @@ const EmployerSettingsPage: React.FC = () => {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: '#94a3b8', fontSize: '2rem'
                 }}>
-                  {!avatarPreview && <span>👤</span>}
+                  {!avatarPreview && <span className="mono-icon"><IconProfile size={32} /></span>}
                 </div>
                 <div>
                   <input 

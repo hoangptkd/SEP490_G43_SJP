@@ -95,7 +95,7 @@ class AiJobSearchServiceTest {
     @Test
     void sameEvaluationFingerprintReusesExactResultEvenWhenForceRefreshIsRequested() {
         Job job = publicJob();
-        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, 80);
+        var selected = selectedJob(job, 80);
         AiJobSearchRun run = succeededRun();
         var stored = new AiJobSearchPersistenceService.StoredRecommendation(
                 1, job.getId(), 92, List.of("Java"), List.of("AWS"), "Phù hợp.", true);
@@ -126,7 +126,7 @@ class AiJobSearchServiceTest {
         AiJobSearchRun run = new AiJobSearchRun();
         run.setId(UUID.randomUUID());
         Job job = publicJob();
-        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, 80);
+        var selected = selectedJob(job, 80);
         when(selector.select(context)).thenReturn(List.of(selected));
         when(selector.evaluationHash(context, List.of(selected))).thenReturn("changed-hash");
         when(runRepository.findFirstByCandidateIdAndStatusAndInputHashOrderByCreatedAtDesc(
@@ -148,9 +148,9 @@ class AiJobSearchServiceTest {
         processingRun.setId(UUID.randomUUID());
         AiJobSearchRun completedRun = succeededRun();
         Job job = publicJob();
-        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, 80);
-        var ranked = new AiJobSearchResultValidator.RankedJob(
-                1, job, 94, List.of("Java"), List.of("AWS"), "Phù hợp.");
+        var score = scoreBreakdown(94, List.of("Java"), List.of("AWS"));
+        var selected = new AiJobSearchCandidateSelector.SelectedJob(job, score);
+        var ranked = new AiJobSearchResultValidator.RankedJob(1, job, score, "Phù hợp.");
         var stored = new AiJobSearchPersistenceService.StoredRecommendation(
                 1, job.getId(), 94, List.of("Java"), List.of("AWS"), "Phù hợp.", true);
 
@@ -175,6 +175,19 @@ class AiJobSearchServiceTest {
         verify(persistence).complete(processingRun.getId(), user, context, List.of(ranked));
     }
 
+    private AiJobSearchCandidateSelector.SelectedJob selectedJob(Job job, int matchScore) {
+        return new AiJobSearchCandidateSelector.SelectedJob(
+                job,
+                scoreBreakdown(matchScore, List.of("Java"), List.of("AWS"))
+        );
+    }
+
+    private AiJobMatchScorer.ScoreBreakdown scoreBreakdown(int matchScore, List<String> matched, List<String> missing) {
+        return new AiJobMatchScorer.ScoreBreakdown(
+                matchScore, 0.8, 0.7, 0.6, 0.5, 0.4, matched, missing, false
+        );
+    }
+
     private AiJobSearchRun succeededRun() {
         AiJobSearchRun run = new AiJobSearchRun();
         run.setId(UUID.randomUUID());
@@ -182,6 +195,10 @@ class AiJobSearchServiceTest {
         run.setCompletedAt(LocalDateTime.now().minusMinutes(2));
         run.setExpiresAt(LocalDateTime.now().plusHours(2));
         return run;
+    }
+
+    private AiJobMatchScorer.ScoreBreakdown score(int matchScore, List<String> matched, List<String> missing) {
+        return new AiJobMatchScorer.ScoreBreakdown(matchScore, 20.0, 20.0, 15.0, 15.0, 10.0, matched, missing, false);
     }
 
     private Job publicJob() {

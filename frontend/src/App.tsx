@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminLayout, { AdminProtected } from './pages/admin/AdminLayout';
@@ -14,6 +14,34 @@ import { filterAiJobSearchItems } from './utils/aiJobSearch';
 import PlanLimitAlert from './components/PlanLimitAlert';
 import { DialogContainer } from './components/common/DialogContainer';
 import ProvinceLocationSelect from './components/location/ProvinceLocationSelect';
+import {
+  IconBell,
+  IconBookmark,
+  IconBrandBriefcase,
+  IconBriefcase,
+  IconBuilding,
+  IconCalendar,
+  IconChevron,
+  IconClipboard,
+  IconClock,
+  IconDashboard,
+  IconDocument,
+  IconGem,
+  IconHome,
+  IconInbox,
+  IconLock,
+  IconLogout,
+  IconMapPin,
+  IconMic,
+  IconProfile,
+  IconRobot,
+  IconSearch,
+  IconSettings,
+  IconSpark,
+  IconUsers,
+  IconWallet,
+  getNotificationTypeIcon,
+} from './components/icons/PortalNavIcons';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
@@ -788,7 +816,7 @@ function CandidateHomeActions() {
           setOpen(false);
         }}
       >
-        <span aria-hidden="true">🔔</span>
+        <span aria-hidden="true"><IconBell size={18} /></span>
         {unreadCount > 0 && <strong>{unreadCount > 99 ? '99+' : unreadCount}</strong>}
       </button>
       <button type="button" className="home-avatar-trigger" onClick={() => {
@@ -1214,36 +1242,45 @@ function HomePage() {
       return map;
     }, new Map<string, Job['company']>()).values(),
   ).slice(0, 4);
-  const candidateTools = [
-    { title: 'Quản lý CV', desc: 'Cập nhật CV đã upload và CV Builder trước khi ứng tuyển.', to: '/candidate/cvs', icon: '📄' },
-    { title: 'Việc đã lưu', desc: 'Quay lại nhanh các công việc bạn đang cân nhắc.', to: '/candidate/saved-jobs', icon: '🔖' },
-    { title: 'Theo dõi ứng tuyển', desc: 'Xem trạng thái hồ sơ, lịch phỏng vấn và job offer.', to: '/candidate/applications', icon: '📋' },
-    { title: 'Luyện phỏng vấn', desc: 'Chuẩn bị câu trả lời cho các vị trí đang ứng tuyển.', to: '/candidate/ai-interviews', icon: '🎙️' },
+  const isEmployer = Boolean(token && role === 'EMPLOYER');
+  const isCandidate = Boolean(token && role === 'CANDIDATE');
+  const showCandidateHome = !isEmployer;
+  const candidateTools: Array<{ title: string; desc: string; to: string; icon: ReactNode }> = [
+    { title: 'Quản lý CV', desc: 'Cập nhật CV đã upload và CV Builder trước khi ứng tuyển.', to: '/candidate/cvs', icon: <IconDocument size={22} /> },
+    { title: 'Việc đã lưu', desc: 'Quay lại nhanh các công việc bạn đang cân nhắc.', to: '/candidate/saved-jobs', icon: <IconBookmark size={22} /> },
+    { title: 'Theo dõi ứng tuyển', desc: 'Xem trạng thái hồ sơ, lịch phỏng vấn và job offer.', to: '/candidate/applications', icon: <IconClipboard size={22} /> },
+    { title: 'Luyện phỏng vấn', desc: 'Chuẩn bị câu trả lời cho các vị trí đang ứng tuyển.', to: '/candidate/ai-interviews', icon: <IconMic size={22} /> },
+  ];
+  const employerTools: Array<{ title: string; desc: string; to: string; icon: ReactNode }> = [
+    { title: 'Đăng tin tuyển dụng', desc: 'Tạo và quản lý tin đăng theo hạn mức gói dịch vụ.', to: '/employer/jobs', icon: <IconBriefcase size={22} /> },
+    { title: 'Quản lý ứng viên', desc: 'Xem hồ sơ ứng tuyển, sắp xếp lịch và gửi offer.', to: '/employer/applications', icon: <IconUsers size={22} /> },
+    { title: 'Hồ sơ công ty', desc: 'Cập nhật thông tin công ty và xác thực pháp lý.', to: '/employer/company-profile', icon: <IconBuilding size={22} /> },
+    { title: 'Gói dịch vụ', desc: 'Nâng cấp hạn mức đăng tin và ưu tiên hiển thị.', to: '/employer/subscription', icon: <IconGem size={22} /> },
   ];
 
   return (
     <div className="home-shell">
       <header className={`home-topbar ${scrolled ? 'scrolled' : ''}`}>
         <Link className="brand" to="/">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <rect x="2" y="7" width="20" height="14" rx="2" fill="var(--primary)" opacity="0.15"/>
-            <rect x="8" y="3" width="8" height="6" rx="1.5" stroke="var(--primary)" strokeWidth="2" fill="none"/>
-            <path d="M12 13v4M10 15h4" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
+          <IconBrandBriefcase size={22} />
           Smart Recruitment
         </Link>
 
         <nav className="home-topbar-nav">
-          <Link to="/jobs" className="home-nav-link">Việc làm</Link>
-          {token && role === 'CANDIDATE' && (
+          {!isEmployer && <Link to="/jobs" className="home-nav-link">Việc làm</Link>}
+          {isCandidate && (
             <>
               <Link to="/candidate/saved-jobs" className="home-nav-link">Việc đã lưu</Link>
               <Link to="/candidate/applications" className="home-nav-link">Đã ứng tuyển</Link>
               <Link to="/candidate/cvs" className="home-nav-link">CV</Link>
             </>
           )}
-          {token && role === 'EMPLOYER' && (
-            <Link to="/employer" className="home-nav-link">Nhà tuyển dụng</Link>
+          {isEmployer && (
+            <>
+              <Link to="/employer" className="home-nav-link">Dashboard</Link>
+              <Link to="/employer/jobs" className="home-nav-link">Việc làm</Link>
+              <Link to="/employer/applications" className="home-nav-link">Ứng viên</Link>
+            </>
           )}
         </nav>
 
@@ -1259,8 +1296,8 @@ function HomePage() {
             </>
           ) : (
             <>
-              {role === 'CANDIDATE' && <CandidateHomeActions />}
-              {role === 'EMPLOYER' && (
+              {isCandidate && <CandidateHomeActions />}
+              {isEmployer && (
                 <Link to="/employer" className="button-link" style={{ minHeight: 38 }}>
                   Employer Portal
                 </Link>
@@ -1279,45 +1316,71 @@ function HomePage() {
             transition={{ duration: 0.5, ease: EASE_OUT }}
           >
             <span className="home-hero-eyebrow">
-              Cập nhật việc làm thật từ hệ thống tuyển dụng
+              {isEmployer
+                ? 'Cổng nhà tuyển dụng Smart Recruitment'
+                : 'Cập nhật việc làm thật từ hệ thống tuyển dụng'}
             </span>
             <h1 className="home-hero-title">
-              Tìm công việc phù hợp với bạn
+              {isEmployer
+                ? 'Tuyển đúng người, quản lý hiệu quả'
+                : 'Tìm công việc phù hợp với bạn'}
             </h1>
             <p className="home-hero-desc">
-              Tìm theo vị trí, kỹ năng, công ty hoặc địa điểm. Mở chi tiết công việc để lưu, đánh giá độ phù hợp và ứng tuyển bằng CV của bạn.
+              {isEmployer
+                ? 'Đăng tin tuyển dụng, theo dõi ứng viên và vận hành quy trình tuyển dụng trong Employer Portal.'
+                : 'Tìm theo vị trí, kỹ năng, công ty hoặc địa điểm. Mở chi tiết công việc để lưu, đánh giá độ phù hợp và ứng tuyển bằng CV của bạn.'}
             </p>
           </motion.div>
 
-          <motion.form
-            className="home-search-bar"
-            onSubmit={submitHomeSearch}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.2 }}
-          >
-            <label className="home-search-field">
-              <span>Từ khóa</span>
-              <input
-                placeholder="Vị trí, kỹ năng hoặc công ty"
-                value={homeSearch}
-                onChange={(event) => setHomeSearch(event.target.value)}
+          {isEmployer ? (
+            <motion.div
+              className="home-search-bar"
+              style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.2 }}
+            >
+              <Link to="/employer/jobs" className="button-link" style={{ minHeight: 44 }}>
+                Quản lý việc làm
+              </Link>
+              <Link to="/employer/applications" className="button-link outline" style={{ minHeight: 44 }}>
+                Quản lý ứng viên
+              </Link>
+              <Link to="/employer" className="button-link outline" style={{ minHeight: 44 }}>
+                Vào Employer Portal
+              </Link>
+            </motion.div>
+          ) : (
+            <motion.form
+              className="home-search-bar"
+              onSubmit={submitHomeSearch}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.2 }}
+            >
+              <label className="home-search-field">
+                <span>Từ khóa</span>
+                <input
+                  placeholder="Vị trí, kỹ năng hoặc công ty"
+                  value={homeSearch}
+                  onChange={(event) => setHomeSearch(event.target.value)}
+                />
+              </label>
+              <ProvinceLocationSelect
+                className="home-search-field"
+                label="Địa điểm"
+                value={homeLocation}
+                onChange={setHomeLocation}
+                allowRemote
+                placeholder="Tất cả địa điểm"
               />
-            </label>
-            <ProvinceLocationSelect
-              className="home-search-field"
-              label="Địa điểm"
-              value={homeLocation}
-              onChange={setHomeLocation}
-              allowRemote
-              placeholder="Tất cả địa điểm"
-            />
-            <button type="submit" className="home-search-btn">
-              Tìm việc
-            </button>
-          </motion.form>
+              <button type="submit" className="home-search-btn">
+                Tìm việc
+              </button>
+            </motion.form>
+          )}
 
-            {(!token || role === 'CANDIDATE') && (
+            {showCandidateHome && (
               <div className="home-ai-search">
                 <button
                   type="button"
@@ -1326,7 +1389,7 @@ function HomePage() {
                   disabled={Boolean(token && aiJobStatus && !aiJobStatus.enabled)}
                   aria-describedby="home-ai-search-help"
                 >
-                  <span className="home-ai-search-icon" aria-hidden="true">✦</span>
+                  <span className="home-ai-search-icon" aria-hidden="true"><IconSpark size={16} /></span>
                   <span>Tìm việc phù hợp bằng AI</span>
                   <span aria-hidden="true">→</span>
                 </button>
@@ -1344,7 +1407,7 @@ function HomePage() {
               </div>
             )}
 
-            {quickCategories.length > 0 && (
+            {showCandidateHome && quickCategories.length > 0 && (
               <div className="home-quick-search" aria-label="Tìm nhanh theo ngành nghề">
                 <span>Gợi ý nhanh:</span>
                 {quickCategories.slice(0, 6).map((category) => (
@@ -1365,7 +1428,7 @@ function HomePage() {
           </section>
         )}
 
-        {recommendationJobs.length > 0 && (
+        {showCandidateHome && recommendationJobs.length > 0 && (
           <section className="home-section compact">
             <div className="home-section-inner">
               <div className="home-section-heading-row">
@@ -1382,40 +1445,42 @@ function HomePage() {
           </section>
         )}
 
-        <section className="home-section compact">
-          <div className="home-section-inner">
-            <div className="home-section-heading-row">
-              <div>
-                <p className="eyebrow">Cơ hội mới</p>
-                <h2 className="home-section-title">Việc làm mới nhất</h2>
+        {showCandidateHome && (
+          <section className="home-section compact">
+            <div className="home-section-inner">
+              <div className="home-section-heading-row">
+                <div>
+                  <p className="eyebrow">Cơ hội mới</p>
+                  <h2 className="home-section-title">Việc làm mới nhất</h2>
+                </div>
+                <Link to="/jobs?sort=newest" className="button-link outline sm">Xem tất cả việc làm</Link>
               </div>
-              <Link to="/jobs?sort=newest" className="button-link outline sm">Xem tất cả việc làm</Link>
+
+              {homeLoading ? (
+                <div className="home-job-grid">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="job-card-skeleton">
+                      <div className="skeleton" style={{ height: 20, width: '70%' }} />
+                      <div className="skeleton" style={{ height: 16, width: '48%' }} />
+                      <div className="skeleton" style={{ height: 28, width: '80%' }} />
+                    </div>
+                  ))}
+                </div>
+              ) : latestJobs.length > 0 ? (
+                <div className="home-job-grid">
+                  {latestJobs.map((job) => <JobCard key={job.id} job={job} />)}
+                </div>
+              ) : (
+                <div className="card home-empty-block">
+                  <h3>Chưa có việc làm đang hiển thị</h3>
+                  <p className="muted">Hãy quay lại sau hoặc thử tìm kiếm với từ khóa khác.</p>
+                </div>
+              )}
             </div>
+          </section>
+        )}
 
-            {homeLoading ? (
-              <div className="home-job-grid">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="job-card-skeleton">
-                    <div className="skeleton" style={{ height: 20, width: '70%' }} />
-                    <div className="skeleton" style={{ height: 16, width: '48%' }} />
-                    <div className="skeleton" style={{ height: 28, width: '80%' }} />
-                  </div>
-                ))}
-              </div>
-            ) : latestJobs.length > 0 ? (
-              <div className="home-job-grid">
-                {latestJobs.map((job) => <JobCard key={job.id} job={job} />)}
-              </div>
-            ) : (
-              <div className="card home-empty-block">
-                <h3>Chưa có việc làm đang hiển thị</h3>
-                <p className="muted">Hãy quay lại sau hoặc thử tìm kiếm với từ khóa khác.</p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {quickCategories.length > 0 && (
+        {showCandidateHome && quickCategories.length > 0 && (
           <section className="home-section compact muted-band">
             <div className="home-section-inner">
               <div className="home-section-heading-row">
@@ -1436,7 +1501,7 @@ function HomePage() {
           </section>
         )}
 
-        {hiringCompanies.length > 0 && (
+        {showCandidateHome && hiringCompanies.length > 0 && (
           <section className="home-section compact">
             <div className="home-section-inner">
               <div className="home-section-heading-row">
@@ -1462,29 +1527,53 @@ function HomePage() {
           </section>
         )}
 
-        <section className="home-section compact muted-band">
-          <div className="home-section-inner">
-            <div className="home-section-heading-row">
-              <div>
-                <p className="eyebrow">Quản lý tìm việc</p>
-                <h2 className="home-section-title">Công cụ cho ứng viên</h2>
+        {showCandidateHome && (
+          <section className="home-section compact muted-band">
+            <div className="home-section-inner">
+              <div className="home-section-heading-row">
+                <div>
+                  <p className="eyebrow">Quản lý tìm việc</p>
+                  <h2 className="home-section-title">Công cụ cho ứng viên</h2>
+                </div>
+              </div>
+              <div className="home-tools-grid">
+                {candidateTools.map((tool) => (
+                  <Link
+                    key={tool.title}
+                    className="home-tool-card"
+                    to={isCandidate ? tool.to : '/login'}
+                  >
+                    <span className="home-tool-icon">{tool.icon}</span>
+                    <strong>{tool.title}</strong>
+                    <small>{tool.desc}</small>
+                  </Link>
+                ))}
               </div>
             </div>
-            <div className="home-tools-grid">
-              {candidateTools.map((tool) => (
-                <Link
-                  key={tool.title}
-                  className="home-tool-card"
-                  to={token && role === 'CANDIDATE' ? tool.to : '/login'}
-                >
-                  <span>{tool.icon}</span>
-                  <strong>{tool.title}</strong>
-                  <small>{tool.desc}</small>
-                </Link>
-              ))}
+          </section>
+        )}
+
+        {isEmployer && (
+          <section className="home-section compact muted-band">
+            <div className="home-section-inner">
+              <div className="home-section-heading-row">
+                <div>
+                  <p className="eyebrow">Quản lý tuyển dụng</p>
+                  <h2 className="home-section-title">Công cụ cho nhà tuyển dụng</h2>
+                </div>
+              </div>
+              <div className="home-tools-grid">
+                {employerTools.map((tool) => (
+                  <Link key={tool.title} className="home-tool-card" to={tool.to}>
+                    <span className="home-tool-icon">{tool.icon}</span>
+                    <strong>{tool.title}</strong>
+                    <small>{tool.desc}</small>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
       </main>
 
       <footer className="home-footer">
@@ -1492,40 +1581,60 @@ function HomePage() {
           <div className="home-footer-grid">
             <div>
               <Link className="brand" to="/" style={{ marginBottom: 12, display: 'inline-flex' }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                  <rect x="2" y="7" width="20" height="14" rx="2" fill="var(--primary)" opacity="0.2"/>
-                  <rect x="8" y="3" width="8" height="6" rx="1.5" stroke="var(--primary)" strokeWidth="2" fill="none"/>
-                  <path d="M12 13v4M10 15h4" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
+                <IconBrandBriefcase size={20} />
                 Smart Recruitment
               </Link>
               <p style={{ color: 'var(--on-muted)', fontSize: '0.875rem', maxWidth: 280, margin: 0 }}>
-                Tìm việc, quản lý CV và theo dõi ứng tuyển trong một trải nghiệm dành cho ứng viên.
+                {isEmployer
+                  ? 'Đăng tin, quản lý ứng viên và vận hành tuyển dụng trong một cổng dành cho nhà tuyển dụng.'
+                  : 'Tìm việc, quản lý CV và theo dõi ứng tuyển trong một trải nghiệm dành cho ứng viên.'}
               </p>
             </div>
-            <div>
-              <strong className="home-footer-heading">Ứng viên</strong>
-              <nav className="home-footer-nav">
-                <Link to="/jobs">Tìm việc làm</Link>
-                <Link to="/candidate/cvs">CV của tôi</Link>
-                <Link to="/candidate/saved-jobs">Việc đã lưu</Link>
-                <Link to="/candidate/applications">Hồ sơ ứng tuyển</Link>
-              </nav>
-            </div>
+            {isEmployer ? (
+              <div>
+                <strong className="home-footer-heading">Nhà tuyển dụng</strong>
+                <nav className="home-footer-nav">
+                  <Link to="/employer">Dashboard</Link>
+                  <Link to="/employer/jobs">Quản lý việc làm</Link>
+                  <Link to="/employer/applications">Quản lý ứng viên</Link>
+                  <Link to="/employer/subscription">Gói dịch vụ</Link>
+                </nav>
+              </div>
+            ) : (
+              <div>
+                <strong className="home-footer-heading">Ứng viên</strong>
+                <nav className="home-footer-nav">
+                  <Link to="/jobs">Tìm việc làm</Link>
+                  <Link to="/candidate/cvs">CV của tôi</Link>
+                  <Link to="/candidate/saved-jobs">Việc đã lưu</Link>
+                  <Link to="/candidate/applications">Hồ sơ ứng tuyển</Link>
+                </nav>
+              </div>
+            )}
             <div>
               <strong className="home-footer-heading">Tài khoản</strong>
               <nav className="home-footer-nav">
-                <Link to="/login">Đăng nhập</Link>
-                <Link to="/register">Đăng ký</Link>
+                {token ? (
+                  <Link to={isEmployer ? '/employer/settings' : isCandidate ? '/candidate/account' : '/login'}>
+                    Cài đặt tài khoản
+                  </Link>
+                ) : (
+                  <>
+                    <Link to="/login">Đăng nhập</Link>
+                    <Link to="/register">Đăng ký</Link>
+                  </>
+                )}
               </nav>
             </div>
-            <div>
-              <strong className="home-footer-heading">Nhà tuyển dụng</strong>
-              <nav className="home-footer-nav">
-                <Link to="/employer">Employer Portal</Link>
-                <Link to="/register">Đăng ký tuyển dụng</Link>
-              </nav>
-            </div>
+            {!isEmployer && (
+              <div>
+                <strong className="home-footer-heading">Nhà tuyển dụng</strong>
+                <nav className="home-footer-nav">
+                  <Link to="/employer">Employer Portal</Link>
+                  <Link to="/register">Đăng ký tuyển dụng</Link>
+                </nav>
+              </div>
+            )}
           </div>
           <div className="home-footer-bottom">
             <p>© {new Date().getFullYear()} Smart Recruitment Portal. All rights reserved.</p>
@@ -1570,12 +1679,16 @@ function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const response = await authService.login({ email, password });
+      const response = await authService.login({ email, password, portal: 'user' });
+      if (response.user.role === 'ADMIN') {
+        clearAuthSession();
+        setError('Tài khoản quản trị vui lòng đăng nhập tại trang Admin.');
+        return;
+      }
       if (response.token) {
         setAuthSession(response.token, response.user);
       }
-      if (response.user.role === 'ADMIN') navigate('/admin');
-      else if (response.user.role === 'EMPLOYER') navigate('/employer');
+      if (response.user.role === 'EMPLOYER') navigate('/employer');
       else if (response.user.role === 'CANDIDATE') navigate(candidateRedirect);
       else navigate('/jobs');
     } catch (err) {
@@ -2766,7 +2879,7 @@ function JobsPage() {
                   ))}
                 {(aiMode ? filteredAiItems.length === 0 : jobs.length === 0) && (
                   <div className="empty-state card" style={{ padding: 48, textAlign: 'center' }}>
-                    <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔍</div>
+                    <div className="empty-state-icon"><IconSearch size={36} /></div>
                     <h3>{aiMode ? 'Chưa có công việc phù hợp' : 'Không tìm thấy việc làm'}</h3>
                     <p className="muted">
                       {aiMode && !aiResult
@@ -2921,69 +3034,51 @@ function AiConsentDialog({
 function JobCard({ job }: { job: Job }) {
   const location = useLocation();
   const initials = job.company.name.slice(0, 2).toUpperCase();
+  const showFooter = Boolean(job.saved || job.applied);
   return (
     <Link
       to={`/jobs/${job.id}`}
       state={{ from: `${location.pathname}${location.search}`, scrollY: window.scrollY } satisfies NavigationState}
-      style={{ display: 'block' }}
+      className="job-card-link"
     >
-      <article className="job-card">
+      <article className={`job-card${job.featured ? ' is-featured' : ''}${showFooter ? ' has-footer' : ''}`}>
         <div className="job-card-header">
           <div className="job-company-logo">{initials}</div>
-          <div className="job-card-info" style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <h3 style={{ margin: 0 }}>{job.title}</h3>
-              {job.featured && (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                    background: '#fef3c7',
-                    color: '#92400e',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Nổi bật
-                </span>
-              )}
+          <div className="job-card-info">
+            <div className="job-card-title-row">
+              <h3>{job.title}</h3>
+              {job.featured && <span className="job-featured-badge">Nổi bật</span>}
             </div>
             <p className="job-card-company">{job.company.name}</p>
             <div className="job-card-meta">
               {job.location && (
-                <span className="job-meta-badge">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                    <circle cx="12" cy="10" r="3"/>
-                  </svg>
-                  {job.location}
+                <span className="job-meta-badge" title={job.location}>
+                  <IconMapPin size={12} />
+                  <span className="job-meta-badge-text">{job.location}</span>
                 </span>
               )}
               {job.experienceLevel && (
                 <span className="job-meta-badge">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="2" y="7" width="20" height="14" rx="2"/>
-                    <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                  </svg>
-                  {job.experienceLevel}
+                  <IconBriefcase size={12} />
+                  <span className="job-meta-badge-text">{job.experienceLevel}</span>
                 </span>
               )}
               {(job.salaryMin || job.salaryMax) && (
                 <span className="job-meta-badge salary">
-                  💰 {formatMoney(job.salaryMin)} – {formatMoney(job.salaryMax)}
+                  <IconWallet size={12} />
+                  <span className="job-meta-badge-text">{formatMoney(job.salaryMin)} – {formatMoney(job.salaryMax)}</span>
                 </span>
               )}
             </div>
           </div>
         </div>
 
-        <div className="job-card-footer">
-          {job.saved && <span className="chip">🔖 Đã lưu</span>}
-          {job.applied && <span className="chip neutral">✓ Đã nộp</span>}
-        </div>
+        {showFooter && (
+          <div className="job-card-footer">
+            {job.saved && <span className="chip"><IconBookmark size={12} /> Đã lưu</span>}
+            {job.applied && <span className="chip neutral"><IconClipboard size={12} /> Đã nộp</span>}
+          </div>
+        )}
       </article>
     </Link>
   );
@@ -3380,7 +3475,7 @@ function JobDetailPage() {
                 disabled={savingJob}
                 style={{ width: '100%' }}
               >
-                {job.saved ? '🔖 Bỏ lưu' : '🔖 Lưu việc làm'}
+                {job.saved ? <><IconBookmark size={14} /> Bỏ lưu</> : <><IconBookmark size={14} /> Lưu việc làm</>}
               </button>
 
               {false && (cvs.length > 0 || versions.length > 0) && (
@@ -3541,6 +3636,10 @@ function CandidateLayout() {
   }, []);
 
   useEffect(() => { loadUnreadCount(); }, [loadUnreadCount]);
+  useEffect(() => {
+    document.body.classList.toggle('candidate-nav-locked', mobileNavOpen);
+    return () => document.body.classList.remove('candidate-nav-locked');
+  }, [mobileNavOpen]);
   useCandidateRealtime((event) => {
     if (event.type === 'NOTIFICATION_UPDATED' || event.type === 'REALTIME_RECONNECTED') {
       loadUnreadCount();
@@ -3550,17 +3649,17 @@ function CandidateLayout() {
   function logout() { void endAuthenticatedSession(() => navigate('/login')); }
 
   const navItems = [
-    { to: '/', end: true, icon: '⌂', label: 'Trang chủ' },
-    { to: '/candidate', end: true, icon: '📊', label: 'Dashboard' },
-    { to: '/candidate/profile', icon: '👤', label: 'Hồ sơ' },
-    { to: '/candidate/account', icon: '🔐', label: 'Tài khoản' },
-    { to: '/candidate/cvs', icon: '📄', label: 'CV của tôi' },
-    { to: '/candidate/saved-jobs', icon: '🔖', label: 'Việc đã lưu' },
-    { to: '/candidate/applications', icon: '📋', label: 'Ứng tuyển' },
-    { to: '/candidate/ai-interviews', icon: '🤖', label: 'AI Interview' },
-    { to: '/candidate/notifications', icon: '🔔', label: 'Thông báo' },
-    { to: '/candidate/job-alerts', icon: '⏰', label: 'Cảnh báo việc làm' },
-    { to: '/candidate/subscription', icon: '💎', label: 'Gói dịch vụ' },
+    { to: '/', end: true, icon: <IconHome />, label: 'Trang chủ' },
+    { to: '/candidate', end: true, icon: <IconDashboard />, label: 'Dashboard' },
+    { to: '/candidate/profile', icon: <IconProfile />, label: 'Hồ sơ' },
+    { to: '/candidate/account', icon: <IconLock />, label: 'Tài khoản' },
+    { to: '/candidate/cvs', icon: <IconDocument />, label: 'CV của tôi' },
+    { to: '/candidate/saved-jobs', icon: <IconBookmark />, label: 'Việc đã lưu' },
+    { to: '/candidate/applications', icon: <IconClipboard />, label: 'Ứng tuyển' },
+    { to: '/candidate/ai-interviews', icon: <IconRobot />, label: 'AI Interview' },
+    { to: '/candidate/notifications', icon: <IconBell />, label: 'Thông báo' },
+    { to: '/candidate/job-alerts', icon: <IconClock />, label: 'Cảnh báo việc làm' },
+    { to: '/candidate/subscription', icon: <IconGem />, label: 'Gói dịch vụ' },
   ];
 
   return (
@@ -3569,61 +3668,51 @@ function CandidateLayout() {
         aria-controls="candidate-navigation" onClick={() => setMobileNavOpen((value) => !value)}>
         {mobileNavOpen ? 'Đóng menu' : 'Menu ứng viên'}
       </button>
-      <aside id="candidate-navigation" className={`candidate-nav ${mobileNavOpen ? 'mobile-open' : ''}`}>
-        <Link className="brand" to="/">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <rect x="2" y="7" width="20" height="14" rx="2" fill="var(--primary)" opacity="0.2"/>
-            <rect x="8" y="3" width="8" height="6" rx="1.5" stroke="var(--primary)" strokeWidth="2" fill="none"/>
-          </svg>
-          SJP Candidate
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="candidate-nav-backdrop"
+          aria-label="Đóng menu"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+      <aside id="candidate-navigation" className={`candidate-nav portal-nav ${mobileNavOpen ? 'mobile-open' : ''}`}>
+        <Link className="brand portal-nav-brand" to="/">
+          <span className="portal-nav-brand-mark"><IconBrandBriefcase /></span>
+          <span className="portal-nav-brand-text">
+            <strong>SJP Candidate</strong>
+            <span>Cổng ứng viên</span>
+          </span>
         </Link>
 
-        <div style={{ borderBottom: '1px solid var(--outline-variant)', marginBottom: 8, paddingBottom: 8 }}>
-          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--outline)',
-            letterSpacing: '0.07em', textTransform: 'uppercase', padding: '0 12px', display: 'block' }}>
-            Cổng ứng viên
-          </span>
-        </div>
+        <nav className="portal-nav-section" aria-label="Menu ứng viên">
+          {navItems.map(({ to, end, icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              onClick={() => setMobileNavOpen(false)}
+              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+            >
+              <span className="sidebar-link-icon">{icon}</span>
+              <span className="sidebar-link-label">{label}</span>
+              {to === '/candidate/notifications' && unreadCount > 0 && (
+                <span className="portal-nav-badge">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
 
-        {navItems.map(({ to, end, icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            onClick={() => setMobileNavOpen(false)}
-            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-          >
-            <span className="sidebar-link-icon">{icon}</span>
-            {label}
-            {to === '/candidate/notifications' && unreadCount > 0 && (
-              <span style={{
-                marginLeft: 'auto',
-                background: '#ef4444',
-                color: 'white',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '999px',
-                lineHeight: 1
-              }}>
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
+        <div className="portal-nav-footer">
+          <NavLink to="/jobs" className="sidebar-link" onClick={() => setMobileNavOpen(false)}>
+            <span className="sidebar-link-icon"><IconSearch /></span>
+            <span className="sidebar-link-label">Tìm việc làm</span>
           </NavLink>
-        ))}
-
-        <div style={{ marginTop: 12, borderTop: '1px solid var(--outline-variant)', paddingTop: 12 }}>
-          <NavLink to="/jobs" className="sidebar-link">
-            <span className="sidebar-link-icon">🔍</span>
-            Tìm việc làm
-          </NavLink>
-          <button
-            className="ghost"
-            onClick={logout}
-            style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--danger)',
-              minHeight: 40, padding: '10px 12px', gap: 10 }}
-          >
-            <span>🚪</span> Đăng xuất
+          <button type="button" className="sidebar-link portal-nav-logout" onClick={logout}>
+            <span className="sidebar-link-icon"><IconLogout /></span>
+            <span className="sidebar-link-label">Đăng xuất</span>
           </button>
         </div>
       </aside>
@@ -3695,10 +3784,10 @@ function CandidateHome() {
 
       <div className="metric-grid" style={{ marginTop: 24 }}>
         {[
-          { label: 'Việc đã lưu', value: metrics.savedJobs, icon: '🔖', to: '/candidate/saved-jobs' },
-          { label: 'Đang ứng tuyển', value: metrics.applications, icon: '📋', to: '/candidate/applications' },
-          { label: 'Phỏng vấn AI', value: metrics.aiSessions, icon: '🤖', to: '/candidate/ai-interviews' },
-          { label: 'Thông báo mới', value: metrics.unreadNotifications, icon: '🔔', to: '/candidate/notifications' },
+          { label: 'Việc đã lưu', value: metrics.savedJobs, icon: <IconBookmark size={22} />, to: '/candidate/saved-jobs' },
+          { label: 'Đang ứng tuyển', value: metrics.applications, icon: <IconClipboard size={22} />, to: '/candidate/applications' },
+          { label: 'Phỏng vấn AI', value: metrics.aiSessions, icon: <IconRobot size={22} />, to: '/candidate/ai-interviews' },
+          { label: 'Thông báo mới', value: metrics.unreadNotifications, icon: <IconBell size={22} />, to: '/candidate/notifications' },
         ].map(({ label, value, icon, to }, i) => (
           <motion.div
             key={label}
@@ -3708,7 +3797,7 @@ function CandidateHome() {
           >
             <Link to={to} style={{ display: 'block', textDecoration: 'none' }}>
               <div className="metric-card metric-card-link">
-                <div style={{ fontSize: '1.6rem', marginBottom: 8 }}>{icon}</div>
+                <div className="metric-card-icon">{icon}</div>
                 <div className="metric-card-label">{label}</div>
                 <div className="metric-card-value">{value}</div>
               </div>
@@ -3752,7 +3841,7 @@ function CandidateHome() {
             ))}
             {recommendations.length === 0 && (
               <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-                <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>💡</div>
+                <div className="empty-state-icon"><IconBriefcase size={36} /></div>
                 <h3>Chưa có gợi ý việc làm</h3>
                 <p className="muted">Hoàn thiện hồ sơ để nhận gợi ý việc làm phù hợp với bạn.</p>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
@@ -3774,10 +3863,10 @@ function CandidateHome() {
         <h2 style={{ marginBottom: 16 }}>Hành động nhanh</h2>
         <div className="quick-actions-grid">
           {[
-            { icon: '👤', title: 'Cập nhật hồ sơ', desc: 'Tăng cơ hội được tuyển dụng', to: '/candidate/profile' },
-            { icon: '📄', title: 'Quản lý CV', desc: 'Tải lên hoặc tạo CV mới', to: '/candidate/cvs' },
-            { icon: '🤖', title: 'Luyện phỏng vấn AI', desc: 'Chuẩn bị cho buổi phỏng vấn thật', to: '/candidate/ai-interviews' },
-            { icon: '💎', title: 'Gói dịch vụ', desc: 'Xem quyền lợi của bạn', to: '/candidate/subscription' },
+            { icon: <IconProfile size={22} />, title: 'Cập nhật hồ sơ', desc: 'Tăng cơ hội được tuyển dụng', to: '/candidate/profile' },
+            { icon: <IconDocument size={22} />, title: 'Quản lý CV', desc: 'Tải lên hoặc tạo CV mới', to: '/candidate/cvs' },
+            { icon: <IconRobot size={22} />, title: 'Luyện phỏng vấn AI', desc: 'Chuẩn bị cho buổi phỏng vấn thật', to: '/candidate/ai-interviews' },
+            { icon: <IconGem size={22} />, title: 'Gói dịch vụ', desc: 'Xem quyền lợi của bạn', to: '/candidate/subscription' },
           ].map(({ icon, title, desc, to }, i) => (
             <motion.div key={to}
               initial={{ opacity: 0, y: 8 }}
@@ -4569,7 +4658,7 @@ function CvPage() {
           background: 'var(--surface-container)',
           transition: 'border-color 150ms var(--ease-out)',
         }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>📁</div>
+          <div className="empty-state-icon"><IconDocument size={36} /></div>
           <p className="muted" style={{ marginBottom: 12 }}>Chọn file PDF để tải lên</p>
           <label style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -4577,7 +4666,7 @@ function CvPage() {
             padding: '8px 18px', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem',
             transition: 'background-color 150ms var(--ease-out), transform 100ms var(--ease-out)',
           }}>
-            {uploading ? 'Đang tải...' : '📎 Chọn file'}
+            {uploading ? 'Đang tải...' : 'Chọn file'}
             <input
               type="file"
               accept="application/pdf"
@@ -4611,10 +4700,8 @@ function CvPage() {
       {cvs.length > 0 && (
         <div className="card" style={{ marginBottom: 20 }}>
           <h2 style={{ marginBottom: 16 }}>CV đã tải lên</h2>
-          <div className="data-table">
-            <div className="data-table-header" style={{
-              gridTemplateColumns: '1fr auto auto auto auto auto'
-            }}>
+          <div className="data-table cv-data-table">
+            <div className="data-table-header">
               <span>Tên file</span>
               <span>Kích thước</span>
               <span>Trạng thái</span>
@@ -4623,9 +4710,10 @@ function CvPage() {
               <span></span>
             </div>
             {cvs.map((cv) => (
-              <div className="data-row" key={cv.id}
-                style={{ gridTemplateColumns: '1fr auto auto auto auto auto' }}>
-                <strong style={{ fontSize: '0.925rem' }}>📄 {cv.originalFileName}</strong>
+              <div className="data-row" key={cv.id}>
+                <strong style={{ fontSize: '0.925rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <IconDocument size={14} /> {cv.originalFileName}
+                </strong>
                 <span className="muted">{Math.round(cv.fileSize / 1024)} KB</span>
                 <span>
                   {cv.defaultCv
@@ -4799,7 +4887,7 @@ function SavedJobsPage() {
         </div>
       ) : jobs.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔖</div>
+          <div className="empty-state-icon"><IconBookmark size={36} /></div>
           <h3>Chưa có việc làm nào được lưu</h3>
           <p className="muted">Tìm kiếm và lưu các vị trí bạn yêu thích!</p>
           <Link to="/jobs" className="button-link" style={{ marginTop: 16, display: 'inline-flex' }}>
@@ -4913,7 +5001,7 @@ function ApplicationsPage() {
         </div>
       ) : applications.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📋</div>
+          <div className="empty-state-icon"><IconClipboard size={36} /></div>
           <h3>Chưa có đơn ứng tuyển nào</h3>
           <p className="muted">Bắt đầu ứng tuyển vào các vị trí phù hợp!</p>
           <Link to="/jobs" className="button-link" style={{ marginTop: 16, display: 'inline-flex' }}>
@@ -4988,14 +5076,14 @@ function ApplicationsPage() {
                       </div>
 
                       <div className="application-history-meta">
-                        <span>📅 Ứng tuyển: {formatDateTime(application.submittedAt)}</span>
-                        <span>📍 {application.preferredLocation || application.job.location || 'Chưa có địa điểm'}</span>
+                        <span className="meta-with-icon"><IconCalendar size={12} /> Ứng tuyển: {formatDateTime(application.submittedAt)}</span>
+                        <span className="meta-with-icon"><IconSearch size={12} /> {application.preferredLocation || application.job.location || 'Chưa có địa điểm'}</span>
                         {(application.submittedResume?.downloadAvailable || application.cv?.id) ? (
-                          <button type="button" className="application-cv-link" onClick={() => void openSubmittedCv(application)}>
-                            📄 CV ứng tuyển
+                          <button type="button" className="application-cv-link meta-with-icon" onClick={() => void openSubmittedCv(application)}>
+                            <IconDocument size={12} /> CV ứng tuyển
                           </button>
                         ) : (
-                          <span>📄 {cvLabel}</span>
+                          <span className="meta-with-icon"><IconDocument size={12} /> {cvLabel}</span>
                         )}
                       </div>
 
@@ -5140,11 +5228,7 @@ function ApplicationDetailPage() {
     setMessage('');
     try {
       await candidateService.respondToInterview(interviewId, responseStatus, note);
-      setMessage(responseStatus === 'confirmed'
-        ? 'Đã xác nhận tham gia phỏng vấn.'
-        : responseStatus === 'declined'
-          ? 'Đã từ chối tham gia phỏng vấn.'
-          : 'Đã gửi yêu cầu đổi lịch phỏng vấn.');
+      setMessage('Đã cập nhật phản hồi phỏng vấn.');
       setRescheduleInterviewId('');
       setDeclineInterviewId('');
       setRescheduleNote('');
@@ -5317,6 +5401,14 @@ function ApplicationDetailPage() {
               {interview.meetingLink && <p style={{ margin: '4px 0' }}><strong>Link họp:</strong> <a href={interview.meetingLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>{interview.meetingLink}</a></p>}
               {interview.note && <p style={{ margin: '4px 0' }}><strong>Ghi chú:</strong> {interview.note}</p>}
 
+              {interview.employerRescheduleResponse === 'reject_reschedule' && interview.status === 'PENDING_RESPONSE' && (
+                <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, marginBottom: 12, marginTop: 12 }}>
+                  <p style={{ margin: '0 0 4px 0', color: '#991b1b', fontWeight: 600 }}>⚠️ Nhà tuyển dụng từ chối yêu cầu đổi lịch</p>
+                  <p style={{ margin: 0, color: '#7f1d1d', fontSize: '0.9rem' }}><strong>Lý do:</strong> {interview.employerRescheduleNote}</p>
+                  <p style={{ margin: '8px 0 0 0', color: '#991b1b', fontSize: '0.85rem' }}>Vui lòng xác nhận bạn có thể tham gia theo lịch cũ hay không.</p>
+                </div>
+              )}
+
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
                 <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
                   <strong>Phản hồi của bạn:</strong>{' '}
@@ -5330,16 +5422,14 @@ function ApplicationDetailPage() {
                    : interview.status}
                 </p>
 
-                {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
+                {['SCHEDULED', 'ACCEPTED', 'PENDING_RESPONSE'].includes(interview.status) && (
                   <div className="button-row" style={{ marginTop: 12 }}>
-                    <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận tham gia</button>
-                    <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
-                    <button className="danger sm" disabled={actionBusy} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
-                  </div>
-                )}
-                {interview.status === 'ACCEPTED' && (
-                  <div className="button-row" style={{ marginTop: 12 }}>
-                    <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
+                    {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
+                      <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận tham gia</button>
+                    )}
+                    {interview.employerRescheduleResponse !== 'reject_reschedule' && (
+                      <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
+                    )}
                     <button className="danger sm" disabled={actionBusy} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
                   </div>
                 )}
@@ -5668,15 +5758,7 @@ function NotificationsPage() {
       setError(readError(err));
     }
   }
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'JOB_UPDATED': return '📝';
-      case 'APPLICATION_STATUS_CHANGED': return '🔄';
-      case 'JOB_OFFER_SENT': return '🎉';
-      case 'INTERVIEW_SCHEDULED': return '📅';
-      default: return '🔔';
-    }
-  };
+  const getIcon = (type: string) => getNotificationTypeIcon(type, 22);
 
   const getNotificationLink = (item: NotificationItem) => {
     if (item.relatedEntityType === 'JOB' && item.relatedEntityId) {
@@ -5712,7 +5794,7 @@ function NotificationsPage() {
         </div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📭</div>
+          <div className="empty-state-icon"><IconInbox size={36} /></div>
           <h3>Không có thông báo mới</h3>
           <p className="muted">Bạn sẽ nhận thông báo khi có cập nhật từ nhà tuyển dụng.</p>
         </div>
@@ -5734,7 +5816,7 @@ function NotificationsPage() {
                   alignItems: 'center',
                   gap: 16
                 }}>
-                <div style={{ fontSize: '1.5rem', minWidth: 40, textAlign: 'center' }}>
+                <div className="notification-type-icon">
                   {getIcon(item.type)}
                 </div>
                 <div style={{ flex: 1 }}>
@@ -5919,15 +6001,15 @@ function SubscriptionPage() {
 
       <div className="metric-grid">
         {[
-          { label: 'CV đã tải', value: subscription.cvCount, icon: '📄' },
-          { label: 'Việc đã lưu', value: subscription.savedJobsCount, icon: '🔖' },
-          { label: 'Thông báo chưa đọc', value: subscription.unreadNotificationsCount, icon: '🔔' },
+          { label: 'CV đã tải', value: subscription.cvCount, icon: <IconDocument size={22} /> },
+          { label: 'Việc đã lưu', value: subscription.savedJobsCount, icon: <IconBookmark size={22} /> },
+          { label: 'Thông báo chưa đọc', value: subscription.unreadNotificationsCount, icon: <IconBell size={22} /> },
         ].map(({ label, value, icon }, i) => (
           <motion.div key={label} className="metric-card"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.06 }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>{icon}</div>
+            <div className="metric-card-icon">{icon}</div>
             <div className="metric-card-label">{label}</div>
             <div className="metric-card-value" style={{ fontSize: '1.4rem' }}>{value}</div>
           </motion.div>
@@ -5954,123 +6036,93 @@ function EmployerLayout() {
   return (
     <div className="employer-shell">
       <DialogContainer />
-      <aside className="employer-nav">
-        <Link className="brand" to="/employer">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="var(--primary)" strokeWidth="2" fill="var(--primary-softer)"/>
-            <polyline points="9 22 9 12 15 12 15 22" stroke="var(--primary)" strokeWidth="2" fill="none"/>
-          </svg>
-          SJP Employer
+      <aside className="employer-nav portal-nav">
+        <Link className="brand portal-nav-brand" to="/employer">
+          <span className="portal-nav-brand-mark"><IconHome /></span>
+          <span className="portal-nav-brand-text">
+            <strong>SJP Employer</strong>
+            <span>Cổng nhà tuyển dụng</span>
+          </span>
         </Link>
 
-        <div style={{ borderBottom: '1px solid var(--outline-variant)', marginBottom: 8, paddingBottom: 8 }}>
-          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--outline)',
-            letterSpacing: '0.07em', textTransform: 'uppercase', padding: '0 12px', display: 'block' }}>
-            Cổng nhà tuyển dụng
-          </span>
-        </div>
+        <nav className="portal-nav-section" aria-label="Menu nhà tuyển dụng">
+          <NavLink to="/employer" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><IconDashboard /></span>
+            <span className="sidebar-link-label">Dashboard</span>
+          </NavLink>
 
-        <NavLink to="/employer" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <span className="sidebar-link-icon">📊</span>
-          Dashboard
-        </NavLink>
+          <NavLink to="/employer/jobs" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><IconBriefcase /></span>
+            <span className="sidebar-link-label">Quản lý Việc làm</span>
+          </NavLink>
 
-        <NavLink to="/employer/jobs" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <span className="sidebar-link-icon">💼</span>
-          Quản lý Việc làm
-        </NavLink>
+          <NavLink to="/employer/applications" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><IconUsers /></span>
+            <span className="sidebar-link-label">Quản lý Ứng viên</span>
+          </NavLink>
 
-        <NavLink to="/employer/applications" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <span className="sidebar-link-icon">👥</span>
-          Quản lý Ứng viên
-        </NavLink>
-
-        <NavLink
-          to="/employer/notifications"
-          className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-          onClick={() => {
-            employerService.markAllNotificationsRead().then(() => setUnreadCount(0));
-          }}
-        >
-          <span className="sidebar-link-icon">🔔</span>
-          Thông báo
-          {unreadCount > 0 && (
-            <span style={{
-              marginLeft: 'auto',
-              background: '#ef4444',
-              color: 'white',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              padding: '2px 8px',
-              borderRadius: '999px',
-              lineHeight: 1
-            }}>
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </span>
-          )}
-        </NavLink>
-
-        <NavLink to="/employer/subscription" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <span className="sidebar-link-icon">💎</span>
-          Gói dịch vụ
-        </NavLink>
-
-        {/* Company dropdown */}
-        <div className="nav-dropdown">
-          <button
-            type="button"
-            className="nav-dropdown-trigger"
-            onClick={() => setCompanyOpen(!companyOpen)}
+          <NavLink
+            to="/employer/notifications"
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={() => {
+              employerService.markAllNotificationsRead().then(() => setUnreadCount(0));
+            }}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span className="sidebar-link-icon">🏢</span>
-              Công ty
-            </span>
-            <span className={`arrow ${companyOpen ? 'open' : ''}`}>▾</span>
-          </button>
-
-          <AnimatePresence>
-            {companyOpen && (
-              <motion.div
-                className="nav-dropdown-items"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: EASE_OUT }}
-              >
-                <NavLink to="/employer/company-profile"
-                  className={({ isActive }) => `sub-nav-item ${isActive ? 'active' : ''}`}>
-                  Hồ sơ Công ty
-                </NavLink>
-                <NavLink to="/employer/locations"
-                  className={({ isActive }) => `sub-nav-item ${isActive ? 'active' : ''}`}>
-                  Địa điểm làm việc
-                </NavLink>
-                <NavLink to="/employer/verification"
-                  className={({ isActive }) => `sub-nav-item ${isActive ? 'active' : ''}`}>
-                  Xác thực pháp lý
-                </NavLink>
-              </motion.div>
+            <span className="sidebar-link-icon"><IconBell /></span>
+            <span className="sidebar-link-label">Thông báo</span>
+            {unreadCount > 0 && (
+              <span className="portal-nav-badge">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
             )}
-          </AnimatePresence>
-        </div>
+          </NavLink>
 
-        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--outline-variant)', paddingTop: 12 }}>
+          <NavLink to="/employer/subscription" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><IconGem /></span>
+            <span className="sidebar-link-label">Gói dịch vụ</span>
+          </NavLink>
+
+          <div className="nav-dropdown">
+            <button
+              type="button"
+              className={`nav-dropdown-trigger${companyOpen ? ' open' : ''}`}
+              onClick={() => setCompanyOpen(!companyOpen)}
+              aria-expanded={companyOpen}
+            >
+              <span className="sidebar-link-icon"><IconBuilding /></span>
+              <span className="sidebar-link-label">Công ty</span>
+              <span className={`arrow ${companyOpen ? 'open' : ''}`}><IconChevron /></span>
+            </button>
+
+            <div className={`nav-dropdown-items${companyOpen ? ' is-open' : ''}`}>
+              <NavLink to="/employer/company-profile"
+                className={({ isActive }) => `sub-nav-item ${isActive ? 'active' : ''}`}>
+                Hồ sơ Công ty
+              </NavLink>
+              <NavLink to="/employer/locations"
+                className={({ isActive }) => `sub-nav-item ${isActive ? 'active' : ''}`}>
+                Địa điểm làm việc
+              </NavLink>
+              <NavLink to="/employer/verification"
+                className={({ isActive }) => `sub-nav-item ${isActive ? 'active' : ''}`}>
+                Xác thực pháp lý
+              </NavLink>
+            </div>
+          </div>
+        </nav>
+
+        <div className="portal-nav-footer">
           <NavLink to="/employer/settings" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">⚙️</span>
-            Cài đặt tài khoản
+            <span className="sidebar-link-icon"><IconSettings /></span>
+            <span className="sidebar-link-label">Cài đặt tài khoản</span>
           </NavLink>
           <NavLink to="/jobs" className="sidebar-link">
-            <span className="sidebar-link-icon">🔍</span>
-            Xem tin tuyển dụng
+            <span className="sidebar-link-icon"><IconSearch /></span>
+            <span className="sidebar-link-label">Xem tin tuyển dụng</span>
           </NavLink>
-          <button
-            className="ghost"
-            onClick={logout}
-            style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--danger)',
-              minHeight: 40, padding: '10px 12px', gap: 10 }}
-          >
-            <span>🚪</span> Đăng xuất
+          <button type="button" className="sidebar-link portal-nav-logout" onClick={logout}>
+            <span className="sidebar-link-icon"><IconLogout /></span>
+            <span className="sidebar-link-label">Đăng xuất</span>
           </button>
         </div>
       </aside>
@@ -6243,7 +6295,7 @@ function AiInterviewPage() {
                 className={activeTab === 'application' ? 'active' : ''}
                 onClick={() => setActiveTab('application')}
               >
-                📋 Theo application
+                <span className="meta-with-icon"><IconClipboard size={14} /> Theo application</span>
               </button>
               <button
                 type="button"

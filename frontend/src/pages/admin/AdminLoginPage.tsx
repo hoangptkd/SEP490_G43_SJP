@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
-import { setAuthSession } from '../../utils/authStorage';
+import { clearAuthSession, setAuthSession } from '../../utils/authStorage';
 import '../../styles/admin.css';
 
 function readError(error: unknown) {
@@ -23,7 +23,7 @@ export default function AdminLoginPage() {
     setError('');
 
     try {
-      const response = await authService.login({ email, password });
+      const response = await authService.login({ email, password, portal: 'admin' });
 
       if (!response.token) {
         setError('Tài khoản chưa được xác minh.');
@@ -31,6 +31,7 @@ export default function AdminLoginPage() {
       }
 
       if (response.user.role !== 'ADMIN') {
+        clearAuthSession();
         setError('Tài khoản này không có quyền quản trị.');
         return;
       }
