@@ -8,8 +8,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.EntityGraph;
 
 @Repository
 public interface ApplicationRepository extends JpaRepository<Application, UUID> {
@@ -17,6 +19,10 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     List<Application> findByNeedRerankTrue();
     Page<Application> findByCandidateUserId(UUID userId, Pageable pageable);
     Page<Application> findByJobId(UUID jobId, Pageable pageable);
+    @EntityGraph(attributePaths = {"job", "job.company", "job.employer", "candidate", "candidate.user"})
+    @Query("SELECT a FROM Application a WHERE a.id = :id")
+    Optional<Application> findByIdWithDetails(@Param("id") UUID id);
+
     List<Application> findAllByJobId(UUID jobId);
     long countByJobId(UUID jobId);
 
@@ -42,6 +48,17 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
 
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId")
     Page<Application> findByEmployerId(UUID employerId, Pageable pageable);
+
+    @Query("SELECT a FROM Application a WHERE a.job.company.id = :companyId " +
+           "AND (:jobId IS NULL OR a.job.id = :jobId) " +
+           "AND (:status = '' OR a.status = :status) " +
+           "AND (:search = '' OR LOWER(a.candidate.user.fullName) LIKE LOWER(CONCAT('%', :search, '%')) " +
+           "OR LOWER(a.job.title) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Application> searchCompanyApplications(@Param("companyId") UUID companyId, 
+                                                @Param("jobId") UUID jobId, 
+                                                @Param("status") String status, 
+                                                @Param("search") String search, 
+                                                Pageable pageable);
 
     @org.springframework.data.jpa.repository.Modifying
     @Query("UPDATE Application a SET a.needRerank = true WHERE a.job.id = :jobId AND a.status IN ('applied', 'reviewed', 'shortlisted')")
