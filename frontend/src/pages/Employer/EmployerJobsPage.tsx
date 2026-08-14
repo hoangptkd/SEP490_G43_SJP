@@ -1484,6 +1484,7 @@ function EmployerJobsPage() {
                         Mở lại tin
                       </button>
                     )}
+
                     <button
                       onClick={() => setViewingJob(job)}
                       className="inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 transition-colors"
