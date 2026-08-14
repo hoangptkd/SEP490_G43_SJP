@@ -215,6 +215,7 @@ function App() {
         <Route path="verification" element={<CompanyVerificationPage />} />
         <Route path="jobs" element={<EmployerJobsPage />} />
         <Route path="applications" element={<EmployerApplicationsPage />} />
+        <Route path="interviews" element={<EmployerApplicationsPage isInterviewOnly={true} />} />
         <Route path="notifications" element={<EmployerNotificationsPage />} />
         <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
         <Route path="subscription" element={<EmployerSubscriptionPage />} />
@@ -6115,6 +6116,11 @@ function EmployerLayout() {
           <NavLink to="/employer/applications" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><IconUsers /></span>
             <span className="sidebar-link-label">Quản lý Ứng viên</span>
+          </NavLink>
+
+          <NavLink to="/employer/interviews" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><IconClipboard /></span>
+            <span className="sidebar-link-label">Lịch phỏng vấn</span>
           </NavLink>
 
           <NavLink

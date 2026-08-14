@@ -18,11 +18,11 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
   WITHDRAWN: { label: 'Ứng viên rút', color: '#475569', bg: '#f1f5f9' },
 };
 
-export default function EmployerApplicationsPage() {
+export default function EmployerApplicationsPage({ isInterviewOnly = false }: { isInterviewOnly?: boolean }) {
   const { jobId: routeJobId } = useParams<{ jobId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryJobId = searchParams.get('jobId') || routeJobId || '';
-  const queryStatus = searchParams.get('status') || '';
+  const queryStatus = isInterviewOnly ? 'INTERVIEW_SCHEDULED' : searchParams.get('status') || '';
 
   const [applications, setApplications] = useState<CandidateApplication[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -33,7 +33,7 @@ export default function EmployerApplicationsPage() {
 
   // Filters
   const [selectedJobId, setSelectedJobId] = useState<string>(queryJobId);
-  const [selectedStatus, setSelectedStatus] = useState<string>(queryStatus);
+  const [selectedStatus, setSelectedStatus] = useState<string>(isInterviewOnly ? 'INTERVIEW_SCHEDULED' : queryStatus);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [appliedSearchKeyword, setAppliedSearchKeyword] = useState<string>('');
 
@@ -385,10 +385,14 @@ export default function EmployerApplicationsPage() {
             </Link>
           </div>
           <h1 style={{ color: '#0f172a', margin: '8px 0 4px 0', fontSize: '1.6rem' }}>
-            {currentJob ? `👥 Ứng viên: ${currentJob.title}` : '👥 Tất cả đơn ứng tuyển'}
+            {isInterviewOnly
+              ? 'Lịch phỏng vấn'
+              : currentJob ? `👥 Ứng viên: ${currentJob.title}` : '👥 Tất cả đơn ứng tuyển'}
           </h1>
           <p style={{ color: '#64748b', margin: 0, fontSize: '0.95rem' }}>
-            Quản lý hồ sơ ứng viên, xem CV và chuyển đổi trạng thái vòng tuyển dụng
+            {isInterviewOnly 
+              ? 'Quản lý lịch hẹn phỏng vấn của các ứng viên'
+              : 'Quản lý hồ sơ ứng viên, xem CV và chuyển đổi trạng thái vòng tuyển dụng'}
           </p>
         </div>
 
@@ -481,7 +485,8 @@ export default function EmployerApplicationsPage() {
         </form>
 
         {/* Status Tabs */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
+        {!isInterviewOnly && (
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
           {[
             { key: '', label: 'Tất cả trạng thái' },
             { key: 'SUBMITTED', label: 'Mới nộp' },
@@ -489,7 +494,6 @@ export default function EmployerApplicationsPage() {
             { key: 'INTERVIEW_SCHEDULED', label: 'Đang chờ xử lý' },
             { key: 'ACCEPTED', label: 'Trúng tuyển' },
             { key: 'REJECTED', label: 'Từ chối' },
-            { key: 'WITHDRAWN', label: 'Ứng viên rút' },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -520,7 +524,8 @@ export default function EmployerApplicationsPage() {
               {tab.label}
             </button>
           ))}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Applications Table / Cards */}
@@ -538,7 +543,11 @@ export default function EmployerApplicationsPage() {
           {(() => {
             return (
               <>
-          {[...applications]
+          {(isInterviewOnly ? applications.filter(app => {
+            if (!app.interviews || app.interviews.length === 0) return false;
+            const ivStatus = app.interviews[app.interviews.length - 1].status;
+            return ivStatus !== 'ACCEPTED' && ivStatus !== 'COMPLETED';
+          }) : applications)
             .map((app) => {
             const st = getDetailedStatus(app);
             const candidateName = app.candidate?.fullName || 'Ứng viên ẩn danh';
@@ -737,7 +746,7 @@ export default function EmployerApplicationsPage() {
                   </button>
 
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                    {(app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW' || app.status === 'INTERVIEW_SCHEDULED') && !app.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && (
+                    {(app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW' || app.status === 'INTERVIEW_SCHEDULED') && !app.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && !isInterviewOnly && (
                       <button
                         onClick={() => openUpdateModal(app, 'INTERVIEW_SCHEDULED')}
                         style={{ flex: 1, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -754,7 +763,7 @@ export default function EmployerApplicationsPage() {
                       </button>
                     )}
 
-                    {app.status === 'INTERVIEW_SCHEDULED' && app.interviews?.some((iv: any) => iv.status === 'COMPLETED') && (
+                    {app.status === 'INTERVIEW_SCHEDULED' && app.interviews?.some((iv: any) => iv.status === 'COMPLETED') && !isInterviewOnly && (
                       <button
                         onClick={() => openUpdateModal(app, 'ACCEPTED')}
                         style={{ flex: 1, background: '#d1fae5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -763,7 +772,7 @@ export default function EmployerApplicationsPage() {
                       </button>
                     )}
 
-                    {app.status === 'ACCEPTED' && app.jobOffer && (
+                    {app.status === 'ACCEPTED' && app.jobOffer && !isInterviewOnly && (
                       <button
                         onClick={() => setManageOfferApp(app)}
                         style={{ flex: 1, background: '#10b981', color: '#fff', border: '1px solid #059669', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -771,7 +780,7 @@ export default function EmployerApplicationsPage() {
                         💼 Quản lý Offer
                       </button>
                     )}
-                    {app.status !== 'REJECTED' && app.status !== 'ACCEPTED' && (
+                    {app.status !== 'REJECTED' && app.status !== 'ACCEPTED' && !isInterviewOnly && (
                       <button
                         onClick={() => openUpdateModal(app, 'REJECTED')}
                         style={{ flex: 1, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -1608,7 +1617,7 @@ export default function EmployerApplicationsPage() {
               }}
             >
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {(selectedAppDetail.status === 'SUBMITTED' || selectedAppDetail.status === 'UNDER_REVIEW' || selectedAppDetail.status === 'INTERVIEW_SCHEDULED') && !selectedAppDetail.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && (
+                {(selectedAppDetail.status === 'SUBMITTED' || selectedAppDetail.status === 'UNDER_REVIEW' || selectedAppDetail.status === 'INTERVIEW_SCHEDULED') && !selectedAppDetail.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && !isInterviewOnly && (
                   <button
                     type="button"
                     onClick={() => openUpdateModal(selectedAppDetail, 'INTERVIEW_SCHEDULED')}
@@ -1896,14 +1905,14 @@ export default function EmployerApplicationsPage() {
                               <div style={{ color: '#b45309', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center' }}>
                                 ⏳ Ứng viên chưa xác nhận lịch phỏng vấn...
                               </div>
-                            ) : (
+                            ) : !isInterviewOnly ? (
                               <button
                                 onClick={() => { setEvaluatingInterviewId(iv.id); setManageInterviewApp(null); openUpdateModal(manageInterviewApp, 'EVALUATE_INTERVIEW'); }}
                                 style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', width: '100%' }}
                               >
                                 📋 Đánh giá kết quả phỏng vấn
                               </button>
-                            )}
+                            ) : null}
                           </div>
                         )}
 
