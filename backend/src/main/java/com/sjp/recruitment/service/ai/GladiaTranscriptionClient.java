@@ -44,7 +44,7 @@ public class GladiaTranscriptionClient {
             String transcriptionId = startTranscription(client, audioUrl, GladiaTranscriptionContext.empty());
             return pollTranscript(client, transcriptionId);
         } catch (IOException | RuntimeException exception) {
-            throw new AiProviderException("STT_PROVIDER_FAILED", "He thong chua xu ly duoc cau tra loi nay, vui long thu lai.");
+            throw new AiProviderException("STT_PROVIDER_FAILED", "Hệ thống chưa xử lý được câu trả lời này, vui lòng thử lại.");
         }
     }
 
@@ -57,7 +57,7 @@ public class GladiaTranscriptionClient {
             return pollTranscript(client, transcriptionId);
         } catch (IOException | RuntimeException exception) {
             if (exception instanceof AiProviderException providerException) throw providerException;
-            throw new AiProviderException("STT_PROVIDER_FAILED", "He thong chua xu ly duoc cau tra loi nay, vui long thu lai.");
+            throw new AiProviderException("STT_PROVIDER_FAILED", "Hệ thống chưa xử lý được câu trả lời này, vui lòng thử lại.");
         }
     }
 
@@ -77,7 +77,7 @@ public class GladiaTranscriptionClient {
 
         Object audioUrl = response == null ? null : response.get("audio_url");
         if (!(audioUrl instanceof String value) || value.isBlank()) {
-            throw new AiProviderException("STT_UPLOAD_FAILED", "Khong nhan duoc audio_url tu Gladia");
+            throw new AiProviderException("STT_UPLOAD_FAILED", "Không nhận được audio_url từ Gladia");
         }
         return value;
     }
@@ -103,7 +103,7 @@ public class GladiaTranscriptionClient {
 
         Object id = response == null ? null : response.get("id");
         if (!(id instanceof String value) || value.isBlank()) {
-            throw new AiProviderException("STT_START_FAILED", "Khong nhan duoc transcription id tu Gladia");
+            throw new AiProviderException("STT_START_FAILED", "Không nhận được transcription id từ Gladia");
         }
         return value;
     }
@@ -152,14 +152,14 @@ public class GladiaTranscriptionClient {
                 if (transcript instanceof String value && !value.isBlank()) {
                     return value;
                 }
-                throw new AiProviderException("STT_EMPTY_TRANSCRIPT", "Gladia khong tra transcript");
+                throw new AiProviderException("STT_EMPTY_TRANSCRIPT", "Gladia không trả transcript");
             }
             if ("error".equalsIgnoreCase(status) || "failed".equalsIgnoreCase(status)) {
-                throw new AiProviderException("STT_FAILED", "Gladia xu ly that bai");
+                throw new AiProviderException("STT_FAILED", "Gladia xử lý thất bại");
             }
             sleep();
         }
-        throw new AiProviderException("STT_TIMEOUT", "Gladia xu ly qua lau");
+        throw new AiProviderException("STT_TIMEOUT", "Gladia xử lý quá lâu");
     }
 
     private void sleep() {
@@ -167,7 +167,7 @@ public class GladiaTranscriptionClient {
             Thread.sleep(POLL_DELAY.toMillis());
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new AiProviderException("STT_INTERRUPTED", "Qua trinh xu ly bi gian doan");
+            throw new AiProviderException("STT_INTERRUPTED", "Quá trình xử lý bị gián đoạn");
         }
     }
 

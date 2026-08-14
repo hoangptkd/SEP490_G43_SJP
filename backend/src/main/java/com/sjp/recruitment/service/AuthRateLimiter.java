@@ -63,7 +63,7 @@ public class AuthRateLimiter {
                 throw new ApiException(
                         HttpStatus.TOO_MANY_REQUESTS,
                         "AUTH_RATE_LIMITED",
-                        "Qua nhieu yeu cau. Vui long thu lai sau.",
+                        "Quá nhiều yêu cầu. Vui lòng thử lại sau.",
                         retryAfter
                 );
             }

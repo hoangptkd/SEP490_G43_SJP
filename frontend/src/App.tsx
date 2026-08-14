@@ -356,7 +356,9 @@ function isSuccessMessage(message: string) {
     || message.includes('thành công')
     || message.includes('thanh cong')
     || message.startsWith('Neu email')
+    || message.startsWith('Nếu email')
     || message.startsWith('Mat khau')
+    || message.startsWith('Mật khẩu')
     || message.includes('Upload CV');
 }
 
@@ -1741,7 +1743,7 @@ function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="ten@congty.com"
+                placeholder="tên@côngty.com"
                 required
                 autoComplete="email"
               />
@@ -1954,7 +1956,7 @@ function RegisterPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="ten@congty.com"
+              placeholder="tên@côngty.com"
               required
             />
           </div>
@@ -1980,7 +1982,7 @@ function RegisterPage() {
         </label>
 
         <label>
-          Nhap lai mat khau
+          Nhập lại mật khẩu
           <div className="input-icon-wrap">
             <span className="input-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1992,7 +1994,7 @@ function RegisterPage() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Nhap lai mat khau"
+              placeholder="Nhập lại mật khẩu"
               required
               autoComplete="new-password"
             />
@@ -2182,7 +2184,7 @@ function ForgotPasswordPage() {
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="ten@congty.com"
+                placeholder="tên@côngty.com"
                 required
                 autoComplete="email"
               />
@@ -3567,13 +3569,13 @@ function JobDetailPage() {
 
   const initials = job.company.name.slice(0, 2).toUpperCase();
   const jobFacts = [
-    job.jobType && ['Loai hinh', formatJobMetaValue(job.jobType)],
-    job.workMode && ['Hinh thuc lam viec', formatJobMetaValue(job.workMode)],
-    job.salaryType && ['Kieu luong', formatJobMetaValue(job.salaryType)],
-    job.deadline && ['Han ung tuyen', formatDate(job.deadline)],
-    job.workingTime && ['Thoi gian lam viec', job.workingTime],
-    job.vacancies !== undefined && job.vacancies !== null && ['So luong tuyen', String(job.vacancies)],
-    job.companyLocation && ['Dia diem cong ty', [job.companyLocation.branchName, job.companyLocation.address, job.companyLocation.city].filter(Boolean).join(' - ')],
+    job.jobType && ['Loại hình', formatJobMetaValue(job.jobType)],
+    job.workMode && ['Hình thức làm việc', formatJobMetaValue(job.workMode)],
+    job.salaryType && ['Kiểu lương', formatJobMetaValue(job.salaryType)],
+    job.deadline && ['Hạn ứng tuyển', formatDate(job.deadline)],
+    job.workingTime && ['Thời gian làm việc', job.workingTime],
+    job.vacancies !== undefined && job.vacancies !== null && ['Số lượng tuyển', String(job.vacancies)],
+    job.companyLocation && ['Địa điểm công ty', [job.companyLocation.branchName, job.companyLocation.address, job.companyLocation.city].filter(Boolean).join(' - ')],
   ].filter(Boolean) as [string, string][];
 
   return (
@@ -3674,7 +3676,7 @@ function JobDetailPage() {
           {job.skills?.length > 0 && (
             <motion.div className="job-detail-section" variants={fadeUp} initial="initial" animate="animate"
               transition={{ duration: 0.28, ease: EASE_OUT, delay: 0.12 }}>
-              <h2>Ky nang</h2>
+              <h2>Kỹ năng</h2>
               <div className="chip-row">
                 {job.skills.map((skill) => (
                   <span key={skill} className="chip match">{skill}</span>
@@ -3686,7 +3688,7 @@ function JobDetailPage() {
           {jobFacts.length > 0 && (
             <motion.div className="job-detail-section" variants={fadeUp} initial="initial" animate="animate"
               transition={{ duration: 0.28, ease: EASE_OUT, delay: 0.14 }}>
-              <h2>Thong tin cong viec</h2>
+              <h2>Thông tin công việc</h2>
               <div className="data-table" style={{ gap: 0 }}>
                 {jobFacts.map(([label, value]) => (
                   <div key={label} className="data-row" style={{ gridTemplateColumns: '180px 1fr' }}>
@@ -3701,7 +3703,7 @@ function JobDetailPage() {
           {job.benefits && (
             <motion.div className="job-detail-section" variants={fadeUp} initial="initial" animate="animate"
               transition={{ duration: 0.28, ease: EASE_OUT, delay: 0.16 }}>
-              <h2>Phuc loi</h2>
+              <h2>Phúc lợi</h2>
               <p style={{ color: 'var(--on-muted)', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{job.benefits}</p>
             </motion.div>
           )}
@@ -5440,12 +5442,12 @@ function ApplicationDetailPage() {
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginBottom: 12 }}>CV da nop</h2>
+        <h2 style={{ marginBottom: 12 }}>CV đã nộp</h2>
         {application.submittedResume?.sourceType === 'builder' ? (
           <div>
             <strong>{application.submittedResume.title || 'CV Builder'}</strong>
             <p className="muted" style={{ margin: '4px 0 16px' }}>
-              Snapshot tại thời điểm ứng tuyển
+              Bản sao tại thời điểm ứng tuyển
               {application.submittedResume.sourceUpdatedAt ? ` · Cập nhật ${formatDate(application.submittedResume.sourceUpdatedAt)}` : ''}
             </p>
             <SubmittedResumeSnapshotView resume={application.submittedResume} />
@@ -5454,7 +5456,7 @@ function ApplicationDetailPage() {
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
             <div>
               <strong>{application.submittedResume.originalFileName || application.submittedResume.title || 'cv.pdf'}</strong>
-              <p className="muted" style={{ margin: '4px 0 0' }}>File snapshot tại thời điểm ứng tuyển</p>
+              <p className="muted" style={{ margin: '4px 0 0' }}>File bản sao tại thời điểm ứng tuyển</p>
             </div>
             {application.submittedResume.downloadAvailable && (
               <button type="button" className="outline sm" onClick={() => openSubmittedResume(application.id)}>
@@ -5465,7 +5467,7 @@ function ApplicationDetailPage() {
         ) : application.cvVersion ? (
           <div>
             <strong>{application.cvVersion.title}</strong>
-            <p className="muted" style={{ margin: '4px 0 0' }}>CV Builder - cap nhat {formatDate(application.cvVersion.updatedAt)}</p>
+            <p className="muted" style={{ margin: '4px 0 0' }}>CV Builder - cập nhật {formatDate(application.cvVersion.updatedAt)}</p>
           </div>
         ) : application.cv ? (
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -5474,11 +5476,11 @@ function ApplicationDetailPage() {
               <p className="muted" style={{ margin: '4px 0 0' }}>{formatDate(application.cv.createdAt)}</p>
             </div>
             <button type="button" className="outline sm" onClick={() => openSubmittedResume(application.id)}>
-              Mo CV
+              Mở CV
             </button>
           </div>
         ) : (
-          <p className="muted" style={{ margin: 0 }}>Khong co thong tin CV da nop.</p>
+          <p className="muted" style={{ margin: 0 }}>Không có thông tin CV đã nộp.</p>
         )}
       </div>
 
@@ -6262,7 +6264,7 @@ function AiInterviewPage() {
     try {
       const skillList = skills.split(',').map((item) => item.trim()).filter(Boolean);
       if (questionMode === 'fixed' && !selectedQuestionSetId) {
-        setMessage('Hay chon mot bo cau hoi co san truoc khi tao practice session.');
+        setMessage('Hãy chọn một bộ câu hỏi có sẵn trước khi tạo phiên luyện tập.');
         setLoading(false);
         return;
       }
@@ -6317,11 +6319,11 @@ function AiInterviewPage() {
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div className="ai-heading">
         <div>
-          <p className="eyebrow">Candidate Practice</p>
+          <p className="eyebrow">Luyện tập</p>
           <h1>AI Interview</h1>
-          <p className="muted">AI feedback chỉ dùng để luyện tập, không phải quyết định tuyển dụng.</p>
+          <p className="muted">Nhận xét AI chỉ dùng để luyện tập, không phải quyết định tuyển dụng.</p>
         </div>
-        <span className="chip">{config.questionCount} câu / session</span>
+        <span className="chip">{config.questionCount} câu / phiên</span>
       </div>
 
       {!config.enabled && (
@@ -6349,14 +6351,14 @@ function AiInterviewPage() {
                 className={activeTab === 'application' ? 'active' : ''}
                 onClick={() => setActiveTab('application')}
               >
-                <span className="meta-with-icon"><IconClipboard size={14} /> Theo application</span>
+                <span className="meta-with-icon"><IconClipboard size={14} /> Theo hồ sơ ứng tuyển</span>
               </button>
               <button
                 type="button"
                 className={activeTab === 'practice' ? 'active' : ''}
                 onClick={() => setActiveTab('practice')}
               >
-                🎯 Practice tự do
+                🎯 Luyện tập tự do
               </button>
             </div>
 
@@ -6366,7 +6368,7 @@ function AiInterviewPage() {
                   variants={fadeUp} initial="initial" animate="animate" exit="exit"
                   transition={{ duration: 0.18, ease: EASE_OUT }}>
                   {applications.length === 0 && (
-                    <div className="empty-state">Chưa có application hợp lệ để luyện phỏng vấn.</div>
+                    <div className="empty-state">Chưa có hồ sơ ứng tuyển hợp lệ để luyện phỏng vấn.</div>
                   )}
                   {applications.map((application) => (
                     <div className="table-row" key={application.id}
@@ -6386,59 +6388,59 @@ function AiInterviewPage() {
                 <motion.form key="practice" className="form-grid" onSubmit={createPractice}
                   variants={fadeUp} initial="initial" animate="animate" exit="exit"
                   transition={{ duration: 0.18, ease: EASE_OUT }}>
-                  <div className="segmented" role="tablist" aria-label="Che do cau hoi practice">
+                  <div className="segmented" role="tablist" aria-label="Chế độ câu hỏi luyện tập">
                     <button
                       type="button"
                       className={questionMode === 'ai_generated' ? 'active' : ''}
                       onClick={() => setQuestionMode('ai_generated')}
                     >
-                      AI tu tao cau hoi
+                      AI tự tạo câu hỏi
                     </button>
                     <button
                       type="button"
                       className={questionMode === 'fixed' ? 'active' : ''}
                       onClick={() => setQuestionMode('fixed')}
                     >
-                      Bo cau hoi co san
+                      Bộ câu hỏi có sẵn
                     </button>
                   </div>
                   {questionMode === 'fixed' ? (
                     <label>
-                      Bo cau hoi test
+                      Chọn bộ câu hỏi
                       <select
                         required
                         value={selectedQuestionSetId}
                         onChange={(event) => setSelectedQuestionSetId(event.target.value)}
                       >
                         {questionSets.length === 0 ? (
-                          <option value="">Chua co bo cau hoi active</option>
+                          <option value="">Chưa có bộ câu hỏi đang dùng</option>
                         ) : null}
                         {questionSets.map((questionSet) => (
                           <option value={questionSet.id} key={questionSet.id}>
-                            {questionSet.title} ({questionSet.questionCount} cau)
+                            {questionSet.title} ({questionSet.questionCount} câu)
                           </option>
                         ))}
                       </select>
                     </label>
                   ) : null}
                   <label>
-                    Target role
+                    Vị trí mục tiêu
                     <input required value={targetRole} onChange={(event) => setTargetRole(event.target.value)} />
                   </label>
                   <label>
-                    Skills
+                    Kỹ năng
                     <input required value={skills} onChange={(event) => setSkills(event.target.value)}
                       placeholder="Spring Boot, PostgreSQL" />
                   </label>
                   <label>
-                    Chọn job (tùy chọn)
+                    Chọn việc làm (tùy chọn)
                     <select value={jobId} onChange={(event) => setJobId(event.target.value)}>
-                      <option value="">Không chọn job</option>
+                      <option value="">Không chọn việc làm</option>
                       {jobs.map((job) => <option value={job.id} key={job.id}>{job.title}</option>)}
                     </select>
                   </label>
                   <button type="submit" disabled={loading}>
-                    {loading ? 'Đang tạo...' : '🚀 Tạo practice session'}
+                    {loading ? 'Đang tạo...' : '🚀 Tạo phiên luyện tập'}
                   </button>
                 </motion.form>
               )}
@@ -6472,13 +6474,13 @@ function AiInterviewPage() {
                   <div>
                     <strong>{session.title}</strong>
                     <p>
-                      {session.contextType === 'application' ? 'Theo application' : 'Practice tự do'}
+                      {session.contextType === 'application' ? 'Theo hồ sơ ứng tuyển' : 'Luyện tập tự do'}
                       {' - '}{session.status}
                     </p>
                   </div>
                   <div className="button-row">
                     <button type="button" className="outline" onClick={() => openSession(session.id)}>
-                      {session.status === 'completed' ? 'Xem lại' : 'Resume'}
+                      {session.status === 'completed' ? 'Xem lại' : 'Tiếp tục'}
                     </button>
                     <button type="button" className="danger" onClick={() => setPendingDeleteSession(session)}>Ẩn</button>
                   </div>
@@ -6579,7 +6581,7 @@ function AiInterviewRoom({
 
   async function transcribe() {
     if (!audioFile || !currentQuestion) return;
-    setBusy('Đang chuyển giọng nói thành transcript...');
+    setBusy('Đang chuyển giọng nói thành bản ghi...');
     setError('');
     try {
       const result = await aiInterviewService.uploadAudio(session.id, audioFile, audioDurationSeconds);
@@ -6656,7 +6658,7 @@ function AiInterviewRoom({
   }
 
   async function retryFeedback(question: AiInterviewQuestion) {
-    setBusy('Đang thử lại feedback...');
+    setBusy('Đang thử lại nhận xét...');
     setError('');
     try {
       onSessionChange(await aiInterviewService.retryFeedback(session.id, question.id));
@@ -6746,7 +6748,7 @@ function AiInterviewRoom({
           <FeedbackList title="Điểm cần cải thiện" items={session.summary?.weaknesses || []} />
           <FeedbackList title="Kế hoạch cải thiện" items={session.summary?.improvementPlan || []} />
           <p className="muted" style={{ marginTop: 16, fontSize: '0.8rem' }}>
-            AI feedback chỉ phục vụ luyện tập, không phải quyết định tuyển dụng.
+            Nhận xét AI chỉ phục vụ luyện tập, không phải quyết định tuyển dụng.
           </p>
         </div>
         <QuestionHistory questions={session.questions} onRetryFeedback={retryFeedback} />
@@ -6763,7 +6765,7 @@ function AiInterviewRoom({
           <span className="chip">{session.title}</span>
         </div>
         <p className="muted" style={{ fontSize: '0.8rem' }}>
-          AI feedback chỉ phục vụ luyện tập, không phải quyết định tuyển dụng.
+          Nhận xét AI chỉ phục vụ luyện tập, không phải quyết định tuyển dụng.
         </p>
         {currentQuestion ? (
           <>
@@ -6839,24 +6841,24 @@ function AiInterviewRoom({
                   </button>
                   <button type="button" className="outline" disabled={!audioFile || isRecording || !!busy}
                     onClick={transcribe}>
-                    📝 Tạo transcript
+                    📝 Tạo bản ghi lời nói
                   </button>
                   <button type="button" className="outline" disabled={!!busy} onClick={skipQuestion}>
-                    ⏭ Skip câu này
+                    ⏭ Bỏ qua câu này
                   </button>
                   {audioFile && <span className="muted">{Math.round(audioFile.size / 1024)} KB đã ghi</span>}
                 </div>
                 <label className="transcript-editor">
-                  Transcript có thể sửa
+                  Bản ghi lời nói có thể sửa
                   <textarea
                     value={transcript}
                     onChange={(event) => setTranscript(event.target.value)}
-                    placeholder="Transcript sẽ hiện trực tiếp khi bạn nói hoặc sau khi xử lý audio..."
+                    placeholder="Bản ghi sẽ hiện trực tiếp khi bạn nói hoặc sau khi xử lý audio..."
                     aria-describedby="transcript-help"
                   />
                 </label>
                 <p id="transcript-help" className="muted">
-                  Kiểm tra transcript trước khi lưu câu trả lời.
+                  Kiểm tra bản ghi lời nói trước khi lưu câu trả lời.
                 </p>
                 <div className="voice-controls">
                   <button
@@ -6907,7 +6909,7 @@ function voicePhaseLabel(phase: VoicePhase) {
     LISTENING: 'Đang nghe...',
     FINALIZING_AUDIO: 'Đang hoàn tất bản ghi âm',
     TRANSCRIBING: 'Đang chuẩn hóa câu trả lời...',
-    TRANSCRIPT_READY: 'Đã chuẩn hóa transcript',
+    TRANSCRIPT_READY: 'Đã chuẩn hóa bản ghi lời nói',
     CONFIRMING: 'Đang chờ bạn nói đã xong hoặc chưa xong',
     CONTINUING: 'Đang chuẩn bị để bạn nói tiếp',
     SUBMITTING: 'Đang lưu câu trả lời và chuẩn bị câu tiếp theo',
@@ -6937,7 +6939,7 @@ function QuestionHistory({
             {question.answer?.answeredAt && (
               <>
                 <p style={{ color: 'var(--on-muted)', marginTop: 8, fontSize: '0.875rem' }}>
-                  {question.answer.skipped ? 'Đã skip câu này.' : question.answer.transcript}
+                  {question.answer.skipped ? 'Đã bỏ qua câu này.' : question.answer.transcript}
                 </p>
                 {question.answer.feedback && (
                   <div className="feedback-box">

@@ -223,7 +223,7 @@ export default function EmployerApplicationsPage() {
       openBlobInNewTab(await employerService.downloadApplicationCv(id));
     } catch (err) {
       console.error('Failed to open CV', err);
-      setError('Khong the mo CV ung tuyen');
+      setError('Không thể mở CV ứng tuyển');
     }
   }
 
@@ -1498,7 +1498,7 @@ export default function EmployerApplicationsPage() {
                             </div>
                           )}
                           <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '8px', fontStyle: 'italic' }}>
-                            {iv.viewedAt ? `UV đã xem lúc: ${new Date(iv.viewedAt).toLocaleString('vi-VN')}` : 'Not viewed (UV chưa xem lời mời)'}
+                            {iv.viewedAt ? `UV đã xem lúc: ${new Date(iv.viewedAt).toLocaleString('vi-VN')}` : 'Ứng viên chưa xem lời mời'}
                           </div>
                         </div>
                       );
@@ -1773,7 +1773,7 @@ export default function EmployerApplicationsPage() {
                           {iv.meetingLink && <div style={{ fontSize: '0.9rem', color: '#431407', gridColumn: '1 / -1' }}><strong>🔗 Link họp:</strong> <a href={iv.meetingLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Tham gia ngay</a></div>}
                         </div>
                         <div style={{ fontSize: '0.85rem', color: '#b45309', marginBottom: '16px', fontStyle: 'italic' }}>
-                          {iv.viewedAt ? `UV đã xem lúc: ${new Date(iv.viewedAt).toLocaleString('vi-VN')}` : 'Not viewed (UV chưa xem lời mời)'}
+                          {iv.viewedAt ? `UV đã xem lúc: ${new Date(iv.viewedAt).toLocaleString('vi-VN')}` : 'Ứng viên chưa xem lời mời'}
                         </div>
 
                         {iv.status === 'RESCHEDULE_REQUESTED' && (

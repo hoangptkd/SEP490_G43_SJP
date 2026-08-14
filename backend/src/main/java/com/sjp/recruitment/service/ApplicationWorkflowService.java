@@ -111,7 +111,7 @@ public class ApplicationWorkflowService {
     @Transactional
     public InterviewScheduleResponse candidateViewInterview(UUID scheduleId, UUID candidateId) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndCandidateId(scheduleId, candidateId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Khong tim thay lich phong van"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Không tìm thấy lịch phỏng vấn"));
 
         if (schedule.getViewedAt() == null) {
             schedule.setViewedAt(LocalDateTime.now());
@@ -124,7 +124,7 @@ public class ApplicationWorkflowService {
     @Transactional
     public InterviewScheduleResponse candidateRespondToInterview(UUID scheduleId, UUID candidateId, InterviewCandidateResponseRequest request) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndCandidateId(scheduleId, candidateId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Khong tim thay lich phong van"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Không tìm thấy lịch phỏng vấn"));
 
         schedule.setRespondedAt(LocalDateTime.now());
         schedule.setCandidateRescheduleNote(request.rescheduleNote());
@@ -165,7 +165,7 @@ public class ApplicationWorkflowService {
     @Transactional
     public InterviewScheduleResponse employerUpdateInterviewResult(UUID scheduleId, UUID employerId, InterviewResultRequest request) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndEmployerId(scheduleId, employerId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Khong tim thay lich phong van"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Không tìm thấy lịch phỏng vấn"));
 
         schedule.setStatus("COMPLETED".equalsIgnoreCase(request.result()) ? "COMPLETED" : "NO_SHOW".equalsIgnoreCase(request.result()) ? "NO_SHOW" : request.result());
         schedule.setNote(request.note());
@@ -198,10 +198,10 @@ public class ApplicationWorkflowService {
     @Transactional
     public InterviewScheduleResponse employerRespondToReschedule(UUID scheduleId, UUID employerId, com.sjp.recruitment.model.dto.request.EmployerRescheduleResponseRequest request) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndEmployerId(scheduleId, employerId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Khong tim thay lich phong van"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Không tìm thấy lịch phỏng vấn"));
 
         if (!"RESCHEDULE_REQUESTED".equals(schedule.getStatus())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Ung vien chua yeu cau doi lich");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Ứng viên chưa yêu cầu đổi lịch");
         }
 
         schedule.setEmployerRescheduleResponse(request.response());
@@ -267,7 +267,7 @@ public class ApplicationWorkflowService {
         Application application = getApplicationAndVerifyEmployer(applicationId, employerId);
 
         if (jobOfferRepository.existsByApplicationId(applicationId)) {
-            throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXISTS", "Ung vien nay da co Job Offer");
+            throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXISTS", "Ứng viên này đã có Job Offer");
         }
 
         JobOffer offer = new JobOffer();
@@ -309,16 +309,16 @@ public class ApplicationWorkflowService {
     @Transactional
     public JobOfferResponse candidateRespondToOffer(UUID offerId, UUID candidateId, CandidateOfferResponseRequest request) {
         JobOffer offer = jobOfferRepository.findById(offerId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OFFER_NOT_FOUND", "Khong tim thay Job Offer"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OFFER_NOT_FOUND", "Không tìm thấy Job Offer"));
 
         if (!offer.getApplication().getCandidate().getId().equals(candidateId)) {
-             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen truy cap");
+             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền truy cập");
         }
         if (!"sent".equalsIgnoreCase(offer.getStatus())) {
-            throw new ApiException(HttpStatus.CONFLICT, "OFFER_ALREADY_RESPONDED", "Job Offer khong con cho phan hoi");
+            throw new ApiException(HttpStatus.CONFLICT, "OFFER_ALREADY_RESPONDED", "Job Offer không còn chờ phản hồi");
         }
         if (offer.getExpiresAt() != null && offer.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXPIRED", "Job Offer da het han");
+            throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXPIRED", "Job Offer đã hết hạn");
         }
 
         boolean accepted = request.accepted();
@@ -351,13 +351,13 @@ public class ApplicationWorkflowService {
 
     private Application getApplicationAndVerifyEmployer(UUID applicationId, UUID employerId) {
         Application application = applicationRepository.findById(applicationId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy hồ sơ ứng tuyển"));
 
         if (!application.getJob().getEmployer().getId().equals(employerId)) {
             // Note: In real app, we should check if employer belongs to the same company as the job creator
             // Simple check for now based on exact employer id or employer's company matching job's company
             if (!application.getJob().getCompany().getId().equals(application.getJob().getEmployer().getCompany().getId())) {
-                throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen xu ly ho so nay");
+                throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền xử lý hồ sơ này");
             }
         }
         return application;
@@ -366,12 +366,12 @@ public class ApplicationWorkflowService {
     @Transactional
     public JobOfferResponse employerRespondToOfferRejection(UUID offerId, UUID employerId, boolean isUpdating, JobOfferRequest updateRequest) {
         JobOffer offer = jobOfferRepository.findById(offerId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OFFER_NOT_FOUND", "Khong tim thay Job Offer"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OFFER_NOT_FOUND", "Không tìm thấy Job Offer"));
 
         getApplicationAndVerifyEmployer(offer.getApplication().getId(), employerId);
 
         if (!"rejected".equals(offer.getStatus())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer chua bi tu choi, khong the phan hoi");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer chưa bị từ chối, không thể phản hồi");
         }
 
         if (isUpdating && updateRequest != null) {
@@ -428,14 +428,14 @@ public class ApplicationWorkflowService {
     @Transactional
     public JobOfferResponse candidateFinalRespondToOffer(UUID offerId, UUID candidateId, CandidateOfferResponseRequest request) {
         JobOffer offer = jobOfferRepository.findById(offerId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OFFER_NOT_FOUND", "Khong tim thay Job Offer"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OFFER_NOT_FOUND", "Không tìm thấy Job Offer"));
 
         if (!offer.getApplication().getCandidate().getId().equals(candidateId)) {
-             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen truy cap");
+             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền truy cập");
         }
 
         if (!"employer_declined_negotiation".equals(offer.getStatus())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer khong o trang thai tu choi thuong luong");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer không ở trạng thái từ chối thương lượng");
         }
 
         boolean accepted = request.accepted();

@@ -86,7 +86,7 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "Email da ton tai");
+            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "Email đã tồn tại");
         }
         validatePassword(request.getPassword());
 
@@ -155,12 +155,12 @@ public class AuthService {
     public UserResponse verifyEmail(String tokenValue) {
         EmailVerificationToken token = emailVerificationTokenRepository.findByToken(hashToken(tokenValue))
                 .or(() -> emailVerificationTokenRepository.findByToken(tokenValue))
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_VERIFICATION_TOKEN", "Link xac minh khong hop le"));
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_VERIFICATION_TOKEN", "Link xác minh không hợp lệ"));
         if (token.getUsedAt() != null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_TOKEN_USED", "Link xac minh da duoc su dung");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_TOKEN_USED", "Link xác minh đã được sử dụng");
         }
         if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_TOKEN_EXPIRED", "Link xac minh da het han");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_TOKEN_EXPIRED", "Link xác minh đã hết hạn");
         }
 
         User user = token.getUser();
@@ -173,13 +173,13 @@ public class AuthService {
     @Transactional
     public AuthResponse login(LoginRequest request) {
         RemoteUser user = findRemoteUserByEmail(request.getEmail())
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email hoac mat khau khong dung"));
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng"));
 
         if (user.passwordHash() == null || !passwordMatches(request.getPassword(), user.passwordHash())) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email hoac mat khau khong dung");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng");
         }
         if (!user.emailVerified() || !"ACTIVE".equals(user.status())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", "Email chua duoc xac minh");
+            throw new ApiException(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", "Email chưa được xác minh");
         }
 
         boolean adminPortal = request.getPortal() != null
@@ -206,7 +206,7 @@ public class AuthService {
         );
 
         User entity = userRepository.findByEmail(user.email())
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Khong tim thay nguoi dung"));
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Không tìm thấy người dùng"));
         UserResponse response = dtoMapper.toUserResponse(entity);
         return new AuthResponse(response, jwtUtil.generateToken(entity));
     }
@@ -230,12 +230,12 @@ public class AuthService {
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         PasswordResetToken token = passwordResetTokenRepository.findByTokenHash(hashToken(request.token()))
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_RESET_TOKEN", "Link dat lai mat khau khong hop le"));
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_RESET_TOKEN", "Link đặt lại mật khẩu không hợp lệ"));
         if (token.getUsedAt() != null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "RESET_TOKEN_USED", "Link dat lai mat khau da duoc su dung");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RESET_TOKEN_USED", "Link đặt lại mật khẩu đã được sử dụng");
         }
         if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "RESET_TOKEN_EXPIRED", "Link dat lai mat khau da het han");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RESET_TOKEN_EXPIRED", "Link đặt lại mật khẩu đã hết hạn");
         }
         validatePassword(request.password());
         User user = token.getUser();
@@ -248,12 +248,12 @@ public class AuthService {
     @Transactional
     public AuthResponse completeOauthRole(CompleteOauthRoleRequest request) {
         OauthRoleSelectionToken token = Optional.ofNullable(oauthRoleSelectionTokens.get(request.token()))
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_OAUTH_TOKEN", "Phien chon vai tro khong hop le"));
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_OAUTH_TOKEN", "Phiên chọn vai trò không hợp lệ"));
         if (token.getUsedAt() != null || token.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "OAUTH_TOKEN_EXPIRED", "Phien chon vai tro da het han");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "OAUTH_TOKEN_EXPIRED", "Phiên chọn vai trò đã hết hạn");
         }
         if (userRepository.existsByEmail(token.getEmail())) {
-            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "Email da ton tai");
+            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "Email đã tồn tại");
         }
 
         User user = new User();
@@ -339,17 +339,17 @@ public class AuthService {
         }
         if (principal instanceof UserResponse user) {
             return userRepository.findByEmail(user.email())
-                    .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Khong tim thay nguoi dung"));
+                    .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Không tìm thấy người dùng"));
         }
 
         return userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Khong tim thay nguoi dung"));
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Không tìm thấy người dùng"));
     }
 
     public UserResponse getCurrentUserResponse() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Chua dang nhap");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Chưa đăng nhập");
         }
 
         Object principal = authentication.getPrincipal();
@@ -362,7 +362,7 @@ public class AuthService {
 
         return findRemoteUserByEmail(authentication.getName())
                 .map(RemoteUser::toUserResponse)
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Khong tim thay nguoi dung"));
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Không tìm thấy người dùng"));
     }
 
     @Transactional(readOnly = true)
@@ -392,7 +392,7 @@ public class AuthService {
         requirePasswordLogin(user);
         requireCurrentPassword(user, request.currentPassword());
         if (passwordMatches(request.newPassword(), user.getPasswordHash())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_UNCHANGED", "Mat khau moi phai khac mat khau hien tai");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_UNCHANGED", "Mật khẩu mới phải khác mật khẩu hiện tại");
         }
         validatePassword(request.newPassword());
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
@@ -409,7 +409,7 @@ public class AuthService {
             user.setAvatarUrl(stored.storageKey());
             return toAccountResponse(userRepository.save(user));
         } catch (IOException exception) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "AVATAR_STORAGE_FAILED", "Khong the luu anh dai dien");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "AVATAR_STORAGE_FAILED", "Không thể lưu ảnh đại diện");
         }
     }
 
@@ -487,28 +487,28 @@ public class AuthService {
                 || password.chars().noneMatch(Character::isUpperCase)
                 || password.chars().noneMatch(Character::isLowerCase)
                 || password.chars().noneMatch(Character::isDigit)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "WEAK_PASSWORD", "Mat khau phai co it nhat 8 ky tu, gom chu hoa, chu thuong va so");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "WEAK_PASSWORD", "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số");
         }
     }
 
     private void requirePasswordLogin(User user) {
         if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_LOGIN_NOT_ENABLED", "Tai khoan nay chua co mat khau noi bo");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_LOGIN_NOT_ENABLED", "Tài khoản này chưa có mật khẩu nội bộ");
         }
     }
 
     private void requireCurrentPassword(User user, String currentPassword) {
         if (!passwordMatches(currentPassword, user.getPasswordHash())) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "CURRENT_PASSWORD_INVALID", "Mat khau hien tai khong dung");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "CURRENT_PASSWORD_INVALID", "Mật khẩu hiện tại không đúng");
         }
     }
 
     private void validateAvatarFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_FILE_REQUIRED", "Vui long chon anh dai dien");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_FILE_REQUIRED", "Vui lòng chọn ảnh đại diện");
         }
         if (file.getSize() > 2L * 1024 * 1024) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_FILE_TOO_LARGE", "Anh dai dien khong duoc vuot qua 2MB");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_FILE_TOO_LARGE", "Ảnh đại diện không được vượt quá 2MB");
         }
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
         if (!List.of("image/jpeg", "image/png").contains(contentType)) {
@@ -551,7 +551,7 @@ public class AuthService {
 
     private void activateGoogleVerifiedUser(User user) {
         if (user.getStatusEnum() == User.UserStatus.SUSPENDED) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_SUSPENDED", "Tai khoan da bi khoa");
+            throw new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_SUSPENDED", "Tài khoản đã bị khóa");
         }
         user.setEmailVerified(true);
         user.setStatus(User.UserStatus.ACTIVE);

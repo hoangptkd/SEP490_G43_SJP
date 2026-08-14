@@ -1141,20 +1141,20 @@ public class EmployerService {
     public CandidateService.CvDownload downloadApplicationCv(String applicationId) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         if (employer.getCompany() == null || employer.getCompany().getId() == null) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Cong ty chua duoc thiet lap");
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Công ty chưa được thiết lập");
         }
         UUID appId;
         try {
             appId = UUID.fromString(applicationId);
         } catch (IllegalArgumentException e) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "APPLICATION_ID_INVALID", "Ma don ung tuyen khong hop le");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "APPLICATION_ID_INVALID", "Mã đơn ứng tuyển không hợp lệ");
         }
         Application application = applicationRepository.findById(appId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay don ung tuyen"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy đơn ứng tuyển"));
         if (application.getJob() == null
                 || application.getJob().getCompany() == null
                 || !application.getJob().getCompany().getId().equals(employer.getCompany().getId())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen truy cap CV cua don ung tuyen nay");
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền truy cập CV của đơn ứng tuyển này");
         }
         return applicationService.toSubmittedCvDownload(application);
     }

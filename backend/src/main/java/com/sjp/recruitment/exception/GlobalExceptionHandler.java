@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class, HttpMessageNotReadableException.class})
     public ResponseEntity<ApiError> handleValidation(Exception exception) {
         return ResponseEntity.badRequest()
-                .body(new ApiError("Du lieu khong hop le", "VALIDATION_ERROR", Instant.now().toString(), null, null));
+                .body(new ApiError("Dữ liệu không hợp lệ", "VALIDATION_ERROR", Instant.now().toString(), null, null));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

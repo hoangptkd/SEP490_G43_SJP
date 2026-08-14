@@ -4268,14 +4268,21 @@ textarea {
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-lg);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  max-height: min(70vh, 520px);
   padding: 14px;
   position: absolute;
   right: 0;
   top: calc(100% + 12px);
   width: min(380px, calc(100vw - 24px));
   z-index: 85;
+}
+
+.candidate-notification-menu .notification-menu-item:hover,
+.candidate-notification-menu .notification-menu-item:active {
+  transform: none;
 }
 
 .notification-menu-header {
@@ -4286,23 +4293,33 @@ textarea {
 }
 
 .notification-menu-list {
-  display: grid;
+  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  max-height: 340px;
+  max-height: 360px;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
 .notification-menu-item {
-  align-items: start;
+  align-items: stretch;
   background: var(--surface-container);
   border: 1px solid transparent;
   border-radius: var(--radius-card);
   color: var(--on-surface);
-  display: grid;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
   gap: 4px;
-  min-height: 0;
+  height: auto;
+  justify-content: flex-start;
+  min-height: unset;
+  overflow: hidden;
   padding: 10px 12px;
   text-align: left;
+  white-space: normal;
   width: 100%;
 }
 
@@ -4312,15 +4329,28 @@ textarea {
 }
 
 .notification-menu-item span {
+  display: block;
   font-size: 0.9rem;
   font-weight: 700;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .notification-menu-item small,
 .notification-menu-empty {
   color: var(--on-muted);
+  display: -webkit-box;
   font-size: 0.8rem;
   line-height: 1.45;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.notification-menu-empty {
+  padding: 8px 4px;
 }
 
 .notification-menu-all {

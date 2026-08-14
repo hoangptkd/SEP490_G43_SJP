@@ -4,8 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 public record InterviewCandidateResponseRequest(
-        @NotBlank(message = "Phan hoi khong duoc de trong")
-        @Pattern(regexp = "^(confirmed|request_reschedule|declined)$", message = "Phan hoi khong hop le")
+        @NotBlank(message = "Phản hồi không được để trống")
+        @Pattern(regexp = "^(confirmed|request_reschedule|declined)$", message = "Phản hồi không hợp lệ")
         String response,
 
         String rescheduleNote

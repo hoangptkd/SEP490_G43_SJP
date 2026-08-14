@@ -170,7 +170,7 @@ public class JobService {
         try {
             UUID.fromString(id);
         } catch (IllegalArgumentException exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_ID_INVALID", "Ma viec lam khong hop le");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_ID_INVALID", "Mã việc làm không hợp lệ");
         }
 
         if (incrementView) {
@@ -235,19 +235,19 @@ public class JobService {
         );
         return jobs.stream()
                 .findFirst()
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Khong tim thay viec lam"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Không tìm thấy việc làm"));
     }
 
     @Transactional(readOnly = true)
     public Job findById(String id) {
         return jobRepository.findById(parseUuid(id, "JOB_ID_INVALID"))
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Khong tim thay viec lam"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Không tìm thấy việc làm"));
     }
 
     @Transactional(readOnly = true)
     public List<RecommendationResponse> recommendations() {
         CandidateProfile candidate = currentCandidate()
-                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "CANDIDATE_REQUIRED", "Chi ung vien moi co goi y viec lam"));
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "CANDIDATE_REQUIRED", "Chỉ ứng viên mới có gợi ý việc làm"));
         Set<String> candidateSkills = normalized(candidate.getSkills());
         boolean lowConfidence = candidateSkills.isEmpty();
         List<UUID> jobIds = jobRepository.findRecommendationJobIds(PageRequest.of(0, 20));
@@ -295,7 +295,7 @@ public class JobService {
     @Transactional
     public Job create(JobRequest request, Employer employer) {
         if (employer == null) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "EMPLOYER_REQUIRED", "Khong tim thay tai khoan nha tuyen dung");
+            throw new ApiException(HttpStatus.FORBIDDEN, "EMPLOYER_REQUIRED", "Không tìm thấy tài khoản nhà tuyển dụng");
         }
         Company company = employer.getCompany();
         if (company == null) {
@@ -322,7 +322,7 @@ public class JobService {
     @Transactional
     public Job update(String id, JobRequest request, Employer employer) {
         Job job = findById(id);
-        checkEmployerPermission(job, employer, "Ban khong co quyen cap nhat viec lam nay");
+        checkEmployerPermission(job, employer, "Bạn không có quyền cập nhật việc làm này");
         if (systemSettingsService.isCompanyReviewRequired()
                 && job.getCompany() != null
                 && (!job.getCompany().isVerified() && !"verified".equalsIgnoreCase(job.getCompany().getVerificationStatus()))) {
@@ -761,7 +761,7 @@ public class JobService {
             CompanyLocation loc = companyLocationRepository.findById(parseUuid(request.getCompanyLocationId(), "LOCATION_ID_INVALID"))
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "LOCATION_NOT_FOUND", "Không tìm thấy địa điểm làm việc"));
             if (loc.getCompany() == null || company == null || !loc.getCompany().getId().equals(company.getId())) {
-                throw new ApiException(HttpStatus.FORBIDDEN, "LOCATION_FORBIDDEN", "Dia diem lam viec khong thuoc cong ty cua ban");
+                throw new ApiException(HttpStatus.FORBIDDEN, "LOCATION_FORBIDDEN", "Địa điểm làm việc không thuộc công ty của bạn");
             }
             job.setCompanyLocation(loc);
             job.setLocation(loc.getBranchName());
@@ -926,8 +926,8 @@ public class JobService {
                 .toList();
         int score = calculateMatchScore(candidate, candidateSkills, job);
         String reason = matched.isEmpty()
-                ? "Hoan thien ho so ky nang de nhan goi y chinh xac hon."
-                : "Phu hop vi ban co " + String.join(", ", matched) + ".";
+                ? "Hoàn thiện hồ sơ kỹ năng để nhận gợi ý chính xác hơn."
+                : "Phù hợp vì bạn có " + String.join(", ", matched) + ".";
         JobResponse jobResponse = dtoMapper.toJobResponse(
                 job, saved, applied, null, applicationCount, listingPriority
         );
@@ -1275,7 +1275,7 @@ public class JobService {
         try {
             return UUID.fromString(value);
         } catch (IllegalArgumentException exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Ma dinh danh khong hop le");
+            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Mã định danh không hợp lệ");
         }
     }
 }
