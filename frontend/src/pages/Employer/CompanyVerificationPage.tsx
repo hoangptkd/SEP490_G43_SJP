@@ -23,6 +23,7 @@ function CompanyVerificationPage() {
   
   const [isIndustryDropdownOpen, setIsIndustryDropdownOpen] = useState(false);
   const [industrySearchTerm, setIndustrySearchTerm] = useState('');
+  const [noWebsite, setNoWebsite] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -61,6 +62,7 @@ function CompanyVerificationPage() {
       setCompany({ ...compData, industries: inds });
       setDocuments(docsData);
       setCategories(categoriesData);
+      setNoWebsite(!compData.website);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Không thể tải thông tin xác thực pháp lý');
     } finally {
@@ -76,12 +78,40 @@ function CompanyVerificationPage() {
       errors.name = 'Tên công ty không được vượt quá 100 ký tự.';
     }
 
-    if (company?.website && !/^https?:\/\//i.test(company.website)) {
-      errors.website = 'Website phải bắt đầu bằng http:// hoặc https://';
+    if (!noWebsite) {
+      const trimmedWebsite = company?.website?.trim() || '';
+      if (!trimmedWebsite) {
+        errors.website = 'Vui lòng nhập địa chỉ website.';
+      } else if (trimmedWebsite.length > 255) {
+        errors.website = 'Website không được vượt quá 255 ký tự.';
+      } else if (!/^https?:\/\//i.test(trimmedWebsite)) {
+        errors.website = 'Website phải bắt đầu bằng http:// hoặc https://';
+      } else {
+        try {
+          new URL(trimmedWebsite);
+        } catch (e) {
+          errors.website = 'Định dạng URL không hợp lệ.';
+        }
+      }
     }
 
-    if (company?.companySize !== undefined && company.companySize !== null && company.companySize <= 0) {
-      errors.companySize = 'Quy mô nhân sự phải lớn hơn 0.';
+    if (company?.companySize !== undefined && company.companySize !== null) {
+      if (!Number.isInteger(company.companySize)) {
+        errors.companySize = 'Quy mô nhân sự phải là số nguyên.';
+      } else if (company.companySize <= 0) {
+        errors.companySize = 'Quy mô nhân sự phải lớn hơn 0.';
+      } else if (company.companySize > 1000000) {
+        errors.companySize = 'Quy mô nhân sự không vượt quá 1.000.000.';
+      }
+    }
+
+    const trimmedDescription = company?.description?.trim() || '';
+    if (!trimmedDescription) {
+      errors.description = 'Vui lòng nhập mô tả / giới thiệu công ty.';
+    } else if (trimmedDescription.length < 500) {
+      errors.description = 'Mô tả / Giới thiệu công ty không được ít hơn 500 ký tự.';
+    } else if (trimmedDescription.length > 5000) {
+      errors.description = 'Mô tả / Giới thiệu công ty không được vượt quá 5000 ký tự.';
     }
 
     if (!company?.industries || company.industries.length === 0) {
@@ -113,7 +143,13 @@ function CompanyVerificationPage() {
     setSuccess('');
     setError('');
     try {
-      const updated = await employerService.updateCompanyProfile({ ...company, submitForReview });
+      const payload = { ...company, submitForReview };
+      if (noWebsite) {
+        payload.website = '';
+      } else if (payload.website) {
+        payload.website = payload.website.trim();
+      }
+      const updated = await employerService.updateCompanyProfile(payload);
       setCompany(updated);
       setSuccess(submitForReview ? 'Hồ sơ đã được gửi và đang chờ admin duyệt.' : 'Lưu thông tin công ty thành công.');
       await loadData();
@@ -331,13 +367,28 @@ function CompanyVerificationPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Website</label>
+                <label className="block text-sm font-medium text-gray-700">Website {!noWebsite && <span className="text-red-500">*</span>}</label>
                 <input
-                  value={company.website || ''}
+                  disabled={noWebsite}
+                  value={noWebsite ? '' : (company.website || '')}
                   onChange={(e) => setCompany({ ...company, website: e.target.value })}
                   placeholder="https://example.com"
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.website ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noWebsite}
+                    onChange={(e) => {
+                      setNoWebsite(e.target.checked);
+                      if (e.target.checked) {
+                        setFieldErrors(prev => ({ ...prev, website: '' }));
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300"
+                  />
+                  <span className="text-sm text-gray-600">Tôi không có website</span>
+                </label>
                 {fieldErrors.website && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.website}</p>}
               </div>
 
@@ -347,7 +398,15 @@ function CompanyVerificationPage() {
                   type="number"
                   min="1"
                   value={company.companySize === undefined || company.companySize === null ? '' : company.companySize}
-                  onChange={(e) => setCompany({ ...company, companySize: e.target.value ? parseInt(e.target.value) : undefined })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCompany({ ...company, companySize: val ? Number(val) : undefined });
+                  }}
+                  onKeyDown={(e) => {
+                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
                   placeholder="Số lượng nhân viên"
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.companySize ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
@@ -535,14 +594,15 @@ function CompanyVerificationPage() {
             />
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty</label>
+              <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty <span className="text-red-500">*</span></label>
               <textarea
                 value={company.description || ''}
                 onChange={(e) => setCompany({ ...company, description: e.target.value })}
                 placeholder="Giới thiệu về lịch sử, sứ mệnh, môi trường làm việc..."
                 rows={5}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all resize-y"
+                className={`w-full px-4 py-3 rounded-xl border focus:ring-2 outline-none transition-all resize-y ${fieldErrors.description ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
               />
+              {fieldErrors.description && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.description}</p>}
             </div>
           </div>
 

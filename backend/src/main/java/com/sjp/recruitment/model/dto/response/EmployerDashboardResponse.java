@@ -59,7 +59,14 @@ public record EmployerDashboardResponse(
             long hiredCount,
             long newlyAppliedCount,
             long shortlistedCount,
-            long interviewScheduledCount
+            long interviewScheduledCount,
+            long interviewPendingResponseCount,
+            long interviewAcceptedCount,
+            long interviewRescheduleCount,
+            long interviewCompletedCount,
+            long offerPendingResponseCount,
+            long offerAcceptedCount,
+            long offerRejectedCount
     ) {}
 
     public record ActiveJobSummary(

@@ -3218,23 +3218,28 @@ function JobDetailPage() {
   const [reportDescription, setReportDescription] = useState('');
   const [reporting, setReporting] = useState(false);
   const [reporterProfile, setReporterProfile] = useState<CandidateProfile | null>(null);
+  const [jobError, setJobError] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
-    const jobData = await jobService.getById(id);
-    setJob(jobData);
-    if (isCandidate) {
-      Promise.all([
-        candidateService.getCvs(0, 100).then((result) => result.items).catch(() => []),
-        candidateService.getCvVersions(0, 100).then((result) => result.items).catch(() => []),
-        candidateService.getProfile().catch(() => null),
-      ]).then(([uploadedCvs, builderVersions, profile]) => {
-        setCvs(uploadedCvs);
-        setVersions(builderVersions);
-        setReporterProfile(profile);
-        const defaultCv = uploadedCvs.find((item) => item.defaultCv) || uploadedCvs[0];
-        setSelectedResume(defaultCv ? `uploaded:${defaultCv.id}` : builderVersions[0] ? `builder:${builderVersions[0].id}` : '');
-      });
+    try {
+      const jobData = await jobService.getById(id);
+      setJob(jobData);
+      if (isCandidate) {
+        Promise.all([
+          candidateService.getCvs(0, 100).then((result) => result.items).catch(() => []),
+          candidateService.getCvVersions(0, 100).then((result) => result.items).catch(() => []),
+          candidateService.getProfile().catch(() => null),
+        ]).then(([uploadedCvs, builderVersions, profile]) => {
+          setCvs(uploadedCvs);
+          setVersions(builderVersions);
+          setReporterProfile(profile);
+          const defaultCv = uploadedCvs.find((item) => item.defaultCv) || uploadedCvs[0];
+          setSelectedResume(defaultCv ? `uploaded:${defaultCv.id}` : builderVersions[0] ? `builder:${builderVersions[0].id}` : '');
+        });
+      }
+    } catch (err) {
+      setJobError(true);
     }
   }, [id, isCandidate]);
 
@@ -3339,6 +3344,33 @@ function JobDetailPage() {
     } finally {
       setReporting(false);
     }
+  }
+
+  if (jobError) {
+    return (
+      <Shell>
+        <div style={{ maxWidth: 1180, margin: '20px auto 0', padding: '0 24px' }}>
+          <Link
+            to={backTo}
+            state={{ restoreScrollY: navigationState?.scrollY } satisfies NavigationState}
+            style={{ color: 'var(--primary)', fontWeight: 600 }}
+          >
+            ← Quay lại
+          </Link>
+        </div>
+        <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ background: '#fee2e2', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h2 style={{ marginTop: 0, color: '#0f172a' }}>Tin này đã không còn hoạt động</h2>
+          <p className="muted" style={{ marginBottom: 24 }}>Việc làm bạn đang tìm kiếm đã bị xóa hoặc không còn tồn tại.</p>
+        </div>
+      </Shell>
+    );
   }
 
   if (!job) {
@@ -5117,6 +5149,11 @@ function ApplicationsPage() {
                           {statusLabels[application.status] || application.status}
                         </span>
                       </div>
+                      {['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '') && (
+                        <div style={{ marginTop: '8px', color: '#b91c1c', fontSize: '0.85rem', fontWeight: 600 }}>
+                          ⚠️ Tin không còn hoạt động
+                        </div>
+                      )}
 
                       <div className="application-history-meta">
                         <span className="meta-with-icon"><IconCalendar size={12} /> Ứng tuyển: {formatDateTime(application.submittedAt)}</span>
@@ -5353,6 +5390,11 @@ function ApplicationDetailPage() {
               || 'Không có'}
           </span>
         </div>
+        {['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '') && (
+          <div style={{ marginTop: '16px', padding: '12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', fontSize: '0.9rem', fontWeight: 600 }}>
+            ⚠️ Tin tuyển dụng này đã không còn hoạt động. Bạn không thể thực hiện thêm thao tác.
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
@@ -5465,15 +5507,15 @@ function ApplicationDetailPage() {
                    : interview.status}
                 </p>
 
-                {['SCHEDULED', 'ACCEPTED', 'PENDING_RESPONSE'].includes(interview.status) && (
+                {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
                   <div className="button-row" style={{ marginTop: 12 }}>
                     {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
-                      <button className="success sm" disabled={actionBusy} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận tham gia</button>
+                      <button className="success sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận tham gia</button>
                     )}
                     {interview.employerRescheduleResponse !== 'reject_reschedule' && (
-                      <button className="outline sm" disabled={actionBusy} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
+                      <button className="outline sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
                     )}
-                    <button className="danger sm" disabled={actionBusy} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
+                    <button className="danger sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
                   </div>
                 )}
               </div>
@@ -5506,14 +5548,14 @@ function ApplicationDetailPage() {
               </p>
               {application.jobOffer.status === 'sent' && (
                 <div className="button-row" style={{ marginTop: 12 }}>
-                  <button className="success sm" disabled={actionBusy} onClick={() => respondToOffer(application.jobOffer!.id, true)}>Chấp nhận Offer</button>
-                  <button className="danger sm" disabled={actionBusy} onClick={() => setRejectOfferId(application.jobOffer!.id)}>Từ chối / Đề xuất sửa đổi</button>
+                  <button className="success sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => respondToOffer(application.jobOffer!.id, true)}>Chấp nhận Offer</button>
+                  <button className="danger sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setRejectOfferId(application.jobOffer!.id)}>Từ chối / Đề xuất sửa đổi</button>
                 </div>
               )}
               {application.jobOffer.status === 'employer_declined_negotiation' && (
                 <div className="button-row" style={{ marginTop: 12 }}>
-                  <button className="success sm" disabled={actionBusy} onClick={() => finalRespondToOffer(application.jobOffer!.id, true)}>Chấp nhận Offer cũ</button>
-                  <button className="danger sm" disabled={actionBusy} onClick={() => setWithdrawOfferId(application.jobOffer!.id)}>Hủy bỏ hoàn toàn</button>
+                  <button className="success sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => finalRespondToOffer(application.jobOffer!.id, true)}>Chấp nhận Offer cũ</button>
+                  <button className="danger sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setWithdrawOfferId(application.jobOffer!.id)}>Hủy bỏ hoàn toàn</button>
                 </div>
               )}
             </div>

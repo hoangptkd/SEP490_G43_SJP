@@ -117,11 +117,8 @@ export default function EmployerDashboardPage() {
           <IconBriefcase size={24} /> Xin chào, Nhà tuyển dụng
         </h1>
         <div style={{ display: 'flex', gap: 12 }}>
-          <Link to="/employer/jobs/new" className="button primary" style={{ borderRadius: 6 }}>
+          <Link to="/employer/jobs?action=new" className="button primary" style={{ borderRadius: 6 }}>
             + Đăng tin mới
-          </Link>
-          <Link to="/employer/candidates" className="button outline" style={{ borderRadius: 6 }}>
-            Tìm CV ứng viên
           </Link>
         </div>
       </div>
@@ -135,8 +132,8 @@ export default function EmployerDashboardPage() {
             <h2 className="section-title">Cần xử lý hôm nay <span style={{ color: 'var(--outline)', fontSize: '0.9rem', fontWeight: 400 }}>ⓘ</span></h2>
             <div className="top-actions-grid">
               <TopActionCard 
-                title="Ứng viên chờ duyệt" count={actionSummary.pendingApplicationsCount} 
-                icon={<IconProfile size={22} />} buttonText="Xem ngay" buttonLink="/employer/applications?status=SUBMITTED" 
+                title="Ứng viên cần xử lý" count={actionSummary.pendingApplicationsCount} 
+                icon={<IconProfile size={22} />} buttonText="Xem ngay" buttonLink="/employer/applications?status=INTERVIEW_SCHEDULED" 
                 colorClass="tac-red" 
               />
               <TopActionCard 
@@ -186,8 +183,11 @@ export default function EmployerDashboardPage() {
                 <div className="fs-icon mono-icon"><IconUsers size={22} /></div>
                 <div className="fs-title">Phỏng vấn</div>
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.interviewCount}</div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
-                  (Chờ lịch: {pipeline.shortlistedCount} | Đã xếp lịch: {pipeline.interviewScheduledCount})
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span>(Chờ xếp lịch: {pipeline.shortlistedCount} | Đã xếp lịch: {pipeline.interviewScheduledCount})</span>
+                  {pipeline.interviewPendingResponseCount !== undefined && (
+                    <span>(Chờ UV phản hồi: {pipeline.interviewPendingResponseCount} | Đã chốt: {pipeline.interviewAcceptedCount} | Đã PV: {pipeline.interviewCompletedCount})</span>
+                  )}
                 </div>
               </div>
               <div className="funnel-arrow">→</div>
@@ -195,7 +195,12 @@ export default function EmployerDashboardPage() {
                 <div className="fs-icon mono-icon"><IconBriefcase size={22} /></div>
                 <div className="fs-title">Offer</div>
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.offerCount}</div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>(Đã gửi Offer)</div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span>(Đã gửi Offer)</span>
+                  {pipeline.offerPendingResponseCount !== undefined && (
+                    <span>(Chờ UV phản hồi: {pipeline.offerPendingResponseCount} | Đã chốt: {pipeline.offerAcceptedCount} | Từ chối: {pipeline.offerRejectedCount})</span>
+                  )}
+                </div>
               </div>
               <div className="funnel-arrow">→</div>
               <div className="funnel-step">

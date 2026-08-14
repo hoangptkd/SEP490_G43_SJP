@@ -33,6 +33,7 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
                                 Pageable pageable);
 
     long countByEmployerId(UUID employerId);
+    long countByEmployerIdAndStatusNot(UUID employerId, String status);
     long countByEmployerIdAndStatus(UUID employerId, String status);
     List<Job> findByEmployerIdAndStatus(UUID employerId, String status);
 
