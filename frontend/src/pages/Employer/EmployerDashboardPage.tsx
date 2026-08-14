@@ -157,7 +157,7 @@ export default function EmployerDashboardPage() {
               />
               <TopActionCard 
                 title="Lịch phỏng vấn hôm nay" count={actionSummary.todayInterviewsCount} 
-                icon={<IconCalendar size={22} />} buttonText="Xem lịch" buttonLink="/employer/applications?status=INTERVIEW_SCHEDULED" 
+                icon={<IconCalendar size={22} />} buttonText="Xem lịch" buttonLink="/employer/interviews" 
                 colorClass="tac-orange" 
               />
               <TopActionCard 
@@ -330,7 +330,7 @@ export default function EmployerDashboardPage() {
               <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <IconCalendar size={18} /> Lịch phỏng vấn sắp tới
               </h3>
-              <Link to="/employer/applications?status=INTERVIEW_SCHEDULED" style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'none' }}>Xem lịch ↗</Link>
+              <Link to="/employer/interviews" style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'none' }}>Xem lịch ↗</Link>
             </div>
             <div className="sb-content">
               {upcomingInterviews.length > 0 ? (
