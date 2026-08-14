@@ -5542,7 +5542,7 @@ function ApplicationDetailPage() {
                 <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
                   <strong>Phản hồi của bạn:</strong>{' '}
                   {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status)
-                    ? <span style={{ color: '#b45309' }}>Đang chờ bạn xác nhận lịch phỏng vấn</span>
+                    ? <span style={{ color: '#9a3412', fontWeight: 700 }}>Đang chờ bạn xác nhận lịch phỏng vấn</span>
                    : interview.status === 'ACCEPTED' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
                    : interview.status === 'RESCHEDULE_REQUESTED' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
                    : interview.status === 'DECLINED' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
@@ -5554,7 +5554,7 @@ function ApplicationDetailPage() {
                 {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
                   <div className="button-row" style={{ marginTop: 12 }}>
                     {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
-                      <button className="success sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận tham gia</button>
+                      <button type="button" className="success sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận</button>
                     )}
                     {interview.employerRescheduleResponse !== 'reject_reschedule' && (
                       <button className="outline sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>

@@ -216,7 +216,7 @@ function CompanyProfilePage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Banner */}
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden">
+      <div className="company-profile-banner bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 shadow-lg relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500 opacity-10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl"></div>
         
@@ -244,11 +244,11 @@ function CompanyProfilePage() {
               )}
             </div>
             
-            <div>
-              <h1 className="text-2xl font-bold mb-2">{company.name || 'Tên công ty'}</h1>
-              <p className="text-slate-300 text-sm flex items-center justify-center md:justify-start gap-2">
+            <div className="company-profile-banner-copy">
+              <h1>{company.name || 'Tên công ty'}</h1>
+              <p>
                 <span>{company.industry || 'Chưa cập nhật ngành nghề'}</span>
-                <span>•</span>
+                <span aria-hidden="true"> • </span>
                 <span>{company.location || 'Chưa cập nhật địa điểm'}</span>
               </p>
             </div>

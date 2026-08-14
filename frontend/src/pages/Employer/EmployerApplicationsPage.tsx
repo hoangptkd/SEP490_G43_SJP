@@ -6,6 +6,7 @@ import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
 import type { CandidateApplication } from '../../types/candidateDomain';
 import type { Job, Company } from '../../types/job';
 import VietnamAddressPicker from '../../components/location/VietnamAddressPicker';
+import { IconLock } from '../../components/icons/PortalNavIcons';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   SUBMITTED: { label: 'Mới nộp', color: '#1d4ed8', bg: '#dbeafe' },
@@ -354,15 +355,20 @@ export default function EmployerApplicationsPage() {
 
   if (company && company.verificationStatus !== 'verified') {
     return (
-      <section className="content-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-        <div style={{ background: '#fef2f2', border: '1px solid #f87171', borderRadius: '8px', padding: '32px', maxWidth: '600px', margin: '0 auto' }}>
-          <h2 style={{ fontSize: '1.5rem', color: '#b91c1c', margin: '0 0 16px 0' }}>Công ty chưa được xác thực</h2>
-          <p style={{ color: '#7f1d1d', margin: '0 0 24px 0', fontSize: '1.05rem', lineHeight: '1.5' }}>
-            Bạn cần hoàn tất quá trình xác thực doanh nghiệp để có thể xem và quản lý hồ sơ ứng viên. Vui lòng cập nhật giấy phép kinh doanh để đội ngũ admin phê duyệt.
+      <section className="employer-verify-gate">
+        <div className="employer-verify-card">
+          <div className="employer-verify-icon" aria-hidden="true">
+            <IconLock size={28} />
+          </div>
+          <h2>Công ty chưa được xác thực</h2>
+          <p className="employer-verify-copy">
+            Để đăng tin tuyển dụng, bạn cần xác thực doanh nghiệp trước. Vui lòng hoàn tất hồ sơ pháp lý để Admin phê duyệt.
           </p>
-          <Link to="/employer/verification" style={{ display: 'inline-block', background: '#dc2626', color: '#fff', padding: '10px 24px', borderRadius: '6px', textDecoration: 'none', fontWeight: 600 }}>
-            Đi tới trang Xác thực
-          </Link>
+          <div className="employer-verify-actions">
+            <Link to="/employer/verification" className="employer-verify-btn primary">
+              Đi tới trang Xác thực
+            </Link>
+          </div>
         </div>
       </section>
     );

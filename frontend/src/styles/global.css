@@ -294,6 +294,15 @@ button.danger {
 button.success {
   background: var(--secondary);
   border-color: var(--secondary);
+  color: #fff;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.success:hover {
+    background: #005827;
+    border-color: #005827;
+    box-shadow: 0 2px 8px rgb(0 109 48 / 0.28);
+  }
 }
 
 /* Small */
@@ -2535,6 +2544,104 @@ textarea {
   width: 100%;
 }
 
+.employer-verify-gate {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: calc(100vh - 80px);
+  padding: 8px 0 32px;
+}
+
+.company-profile-banner-copy h1 {
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  margin: 0 0 8px;
+}
+
+.company-profile-banner-copy p {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.employer-verify-card {
+  animation: fadeSlideUp 320ms var(--ease-out) both;
+  background:
+    radial-gradient(1200px 280px at 50% -40%, rgb(0 80 125 / 0.08), transparent 70%),
+    var(--surface-lowest);
+  border: 1px solid rgb(192 199 209 / 0.55);
+  border-radius: 20px;
+  box-shadow: var(--shadow-md);
+  max-width: 640px;
+  padding: 40px 36px 32px;
+  text-align: center;
+  width: 100%;
+}
+
+.employer-verify-icon {
+  align-items: center;
+  background: var(--primary-softer);
+  border: 1px solid var(--primary-soft);
+  border-radius: 18px;
+  color: var(--primary);
+  display: inline-flex;
+  height: 64px;
+  justify-content: center;
+  margin-bottom: 18px;
+  width: 64px;
+}
+
+.employer-verify-card h2 {
+  color: var(--on-surface);
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  margin: 0 0 10px;
+}
+
+.employer-verify-copy {
+  color: var(--on-muted);
+  font-size: 0.98rem;
+  line-height: 1.65;
+  margin: 0 auto 28px;
+  max-width: 46ch;
+}
+
+.employer-verify-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.employer-verify-btn {
+  align-items: center;
+  border-radius: 10px;
+  display: inline-flex;
+  font-size: 0.92rem;
+  font-weight: 600;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  text-decoration: none;
+  transition: transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out), background 180ms var(--ease-out);
+}
+
+.employer-verify-btn.primary {
+  background: var(--primary);
+  box-shadow: 0 6px 16px rgb(0 80 125 / 0.22);
+  color: #fff;
+}
+
+.employer-verify-btn.primary:hover {
+  background: var(--primary-strong);
+  box-shadow: 0 8px 20px rgb(0 80 125 / 0.28);
+  transform: translateY(-1px);
+}
+
 .arrow {
   display: inline-block;
   font-size: 0.75rem;
@@ -4689,6 +4796,23 @@ textarea {
   .candidate-main,
   .employer-main {
     padding: 20px 16px;
+  }
+
+  .employer-verify-gate {
+    min-height: calc(100vh - 120px);
+  }
+
+  .employer-verify-card {
+    padding: 28px 18px 24px;
+  }
+
+  .employer-verify-card h2 {
+    font-size: 1.25rem;
+  }
+
+  .employer-verify-btn {
+    justify-content: center;
+    width: 100%;
   }
 
   .candidate-main {
