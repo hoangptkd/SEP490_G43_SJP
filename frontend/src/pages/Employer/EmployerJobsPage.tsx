@@ -575,7 +575,7 @@ function EmployerJobsPage() {
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-              Tên vị trí tuyển dụng <span className="text-red-500">*</span>
+              <span>Tên vị trí tuyển dụng <span className="text-red-500">*</span></span>
               <input
                 required
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
@@ -677,7 +677,7 @@ function EmployerJobsPage() {
             {formData.salaryType === 'range' ? (
               <>
                 <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-                  Mức lương tối thiểu (VNĐ/tháng) <span className="text-red-500">*</span>
+                  <span>Mức lương tối thiểu (VNĐ/tháng) <span className="text-red-500">*</span></span>
                   <input
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     type="number"
@@ -695,7 +695,7 @@ function EmployerJobsPage() {
                   {fieldErrors.salaryMin && <span className="text-red-600 text-sm mt-1">{fieldErrors.salaryMin}</span>}
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-                  Mức lương tối đa (VNĐ/tháng) <span className="text-red-500">*</span>
+                  <span>Mức lương tối đa (VNĐ/tháng) <span className="text-red-500">*</span></span>
                   <input
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     type="number"
@@ -715,7 +715,7 @@ function EmployerJobsPage() {
               </>
             ) : formData.salaryType === 'fixed' ? (
               <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-                Mức lương cố định (VNĐ/tháng) <span className="text-red-500">*</span>
+                <span>Mức lương cố định (VNĐ/tháng) <span className="text-red-500">*</span></span>
                 <input
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   type="number"
@@ -792,7 +792,7 @@ function EmployerJobsPage() {
             </div>
 
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-              Hạn nộp hồ sơ (Deadline) <span className="text-red-500">*</span>
+              <span>Hạn nộp hồ sơ (Deadline) <span className="text-red-500">*</span></span>
               <input
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 type="date"
@@ -836,7 +836,7 @@ function EmployerJobsPage() {
             </label>
 
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-              Kỹ năng yêu cầu (Nhập các từ khóa ngăn cách bằng dấu phẩy) <span className="text-red-500">*</span>
+              <span>Kỹ năng yêu cầu (Nhập các từ khóa ngăn cách bằng dấu phẩy) <span className="text-red-500">*</span></span>
               <input
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 required
@@ -848,7 +848,7 @@ function EmployerJobsPage() {
             </label>
 
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-              Mô tả công việc (Description) <span className="text-red-500">*</span>
+              <span>Mô tả công việc (Description) <span className="text-red-500">*</span></span>
               <textarea
                 className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal resize-y min-h-[120px] text-gray-900"
                 required
