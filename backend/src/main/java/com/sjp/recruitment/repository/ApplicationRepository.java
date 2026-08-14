@@ -31,11 +31,15 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     long countByJobIdAndStatus(UUID jobId, String status);
 
     long countByJobEmployerId(UUID employerId);
+    long countByJobEmployerIdAndJobStatus(UUID employerId, String jobStatus);
+    
     long countByJobEmployerIdAndStatus(UUID employerId, String status);
+    long countByJobEmployerIdAndStatusAndJobStatus(UUID employerId, String status, String jobStatus);
     
     List<Application> findByJobEmployerIdAndStatus(UUID employerId, String status);
     
     Page<Application> findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(UUID employerId, String status, Pageable pageable);
+    Page<Application> findByJobEmployerIdAndStatusAndJobStatusOrderBySubmittedAtDesc(UUID employerId, String status, String jobStatus, Pageable pageable);
     
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.submittedAt >= :startDate")
     List<Application> findApplicationsByEmployerSince(@Param("employerId") UUID employerId, @Param("startDate") java.time.LocalDateTime startDate);
@@ -43,11 +47,20 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     @Query("SELECT a.id, a.submittedAt FROM Application a WHERE a.job.employer.id = :employerId AND a.submittedAt >= :startDate")
     List<Object[]> findApplicationDatesByEmployerSince(@Param("employerId") UUID employerId, @Param("startDate") java.time.LocalDateTime startDate);
 
+    @Query("SELECT a.id, a.submittedAt FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus AND a.submittedAt >= :startDate")
+    List<Object[]> findApplicationDatesByEmployerSinceAndJobStatus(@Param("employerId") UUID employerId, @Param("startDate") java.time.LocalDateTime startDate, @Param("jobStatus") String jobStatus);
+
     @Query("SELECT a.status, COUNT(a) FROM Application a WHERE a.job.employer.id = :employerId GROUP BY a.status")
     List<Object[]> countApplicationsByStatusForEmployer(@Param("employerId") UUID employerId);
 
+    @Query("SELECT a.status, COUNT(a) FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus GROUP BY a.status")
+    List<Object[]> countApplicationsByStatusForEmployerAndJobStatus(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus);
+
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId")
     Page<Application> findByEmployerId(UUID employerId, Pageable pageable);
+
+    @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus")
+    Page<Application> findByEmployerIdAndJobStatus(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, Pageable pageable);
 
     @Query("SELECT a FROM Application a WHERE a.job.company.id = :companyId " +
            "AND (:jobId IS NULL OR a.job.id = :jobId) " +

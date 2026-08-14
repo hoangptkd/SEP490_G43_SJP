@@ -29,8 +29,14 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     Page<InterviewSchedule> findByEmployerIdAndStatusOrderByScheduledAtDesc(UUID employerId, String status, Pageable pageable);
 
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = :status AND i.application.job.status = :jobStatus ORDER BY i.scheduledAt DESC")
+    Page<InterviewSchedule> findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(@Param("employerId") UUID employerId, @Param("status") String status, @Param("jobStatus") String jobStatus, Pageable pageable);
+
     @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = 'COMPLETED' AND NOT EXISTS (SELECT o FROM JobOffer o WHERE o.application = i.application) ORDER BY i.scheduledAt DESC")
     Page<InterviewSchedule> findCompletedInterviewsWithoutOffer(@Param("employerId") UUID employerId, Pageable pageable);
+
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = 'COMPLETED' AND NOT EXISTS (SELECT o FROM JobOffer o WHERE o.application = i.application) AND i.application.job.status = :jobStatus ORDER BY i.scheduledAt DESC")
+    Page<InterviewSchedule> findCompletedInterviewsWithoutOfferAndJobStatus(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, Pageable pageable);
 
     Page<InterviewSchedule> findByCandidateId(UUID candidateId, Pageable pageable);
 
@@ -38,8 +44,22 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     List<InterviewSchedule> findByEmployerIdAndScheduledAtAfterOrderByScheduledAtAsc(UUID employerId, java.time.LocalDateTime start);
 
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.scheduledAt > :start AND i.application.job.status = :jobStatus ORDER BY i.scheduledAt ASC")
+    List<InterviewSchedule> findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(@Param("employerId") UUID employerId, @Param("start") java.time.LocalDateTime start, @Param("jobStatus") String jobStatus);
+
     @Query("SELECT COUNT(s) > 0 FROM InterviewSchedule s " +
            "WHERE s.application.id IN :applicationIds " +
            "AND s.status IN ('scheduled', 'rescheduled')")
     boolean existsActiveByApplicationIds(@Param("applicationIds") List<UUID> applicationIds);
+
+    long countByEmployerIdAndStatus(UUID employerId, String status);
+
+    @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = :status AND i.application.job.status = :jobStatus")
+    long countByEmployerIdAndStatusAndJobStatus(@Param("employerId") UUID employerId, @Param("status") String status, @Param("jobStatus") String jobStatus);
+
+    @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status IN :statuses AND i.application.status = 'interview_scheduled'")
+    long countActiveInterviewsByStatuses(@Param("employerId") UUID employerId, @Param("statuses") List<String> statuses);
+
+    @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status IN :statuses AND i.application.status = 'interview_scheduled' AND i.application.job.status = :jobStatus")
+    long countActiveInterviewsByStatusesAndJobStatus(@Param("employerId") UUID employerId, @Param("statuses") List<String> statuses, @Param("jobStatus") String jobStatus);
 }

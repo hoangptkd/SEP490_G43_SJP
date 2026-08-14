@@ -188,16 +188,6 @@ public class ApplicationWorkflowService {
             );
         } else if ("COMPLETED".equalsIgnoreCase(request.result())) {
             Application application = schedule.getApplication();
-            CandidateProfile candidate = application.getCandidate();
-            Job job = application.getJob();
-            Company company = job.getCompany();
-
-            emailService.sendInterviewResultPassedEmail(
-                    candidate.getUser().getEmail(),
-                    candidate.getFullName(),
-                    job.getTitle(),
-                    company.getName()
-            );
             
             applicationService.seedStatus(application, application.getStatusEnum(), "Đánh giá phỏng vấn: Đạt");
         }

@@ -71,12 +71,12 @@ public class EmployerService {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         UUID employerId = employer.getId();
         
-        long totalJobs = jobRepository.countByEmployerId(employerId);
+        long totalJobs = jobRepository.countByEmployerIdAndStatusNot(employerId, "archived");
         long activeJobs = jobRepository.countByEmployerIdAndStatus(employerId, "published");
-        long totalApplications = applicationRepository.countByJobEmployerId(employerId);
-        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatus(employerId, "applied");
+        long totalApplications = applicationRepository.countByJobEmployerIdAndJobStatus(employerId, "published");
+        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "applied", "published");
         
-        List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployer(employerId);
+        List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatus(employerId, "published");
         Map<String, Long> applicationsByStatus = statusCounts.stream()
                 .collect(Collectors.toMap(
                         row -> (String) row[0],
@@ -84,7 +84,7 @@ public class EmployerService {
                 ));
                 
         List<ApplicationResponse> recentApplications = applicationRepository
-                .findByEmployerId(employerId, PageRequest.of(0, 5, Sort.by("submittedAt").descending()))
+                .findByEmployerIdAndJobStatus(employerId, "published", PageRequest.of(0, 5, Sort.by("submittedAt").descending()))
                 .getContent().stream()
                 .map(applicationService::toResponse)
                 .collect(Collectors.toList());
@@ -93,7 +93,7 @@ public class EmployerService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime fourteenDaysAgo = now.minusDays(14);
         
-        List<Object[]> dateRows = applicationRepository.findApplicationDatesByEmployerSince(employerId, fourteenDaysAgo);
+        List<Object[]> dateRows = applicationRepository.findApplicationDatesByEmployerSinceAndJobStatus(employerId, fourteenDaysAgo, "published");
         
         Map<String, Long> trendMap = dateRows.stream()
                 .collect(Collectors.groupingBy(
@@ -129,7 +129,7 @@ public class EmployerService {
 
         // 1. New Applications (Top 5)
         List<Application> appliedApps = applicationRepository
-            .findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(employerId, "applied", PageRequest.of(0, 5))
+            .findByJobEmployerIdAndStatusAndJobStatusOrderBySubmittedAtDesc(employerId, "applied", "published", PageRequest.of(0, 5))
             .getContent();
             
         for (Application a : appliedApps) {
@@ -146,7 +146,7 @@ public class EmployerService {
 
         // 2. Pending Interview Scheduling (Top 5 shortlisted)
         List<Application> shortlistedApps = applicationRepository
-            .findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(employerId, "shortlisted", PageRequest.of(0, 5))
+            .findByJobEmployerIdAndStatusAndJobStatusOrderBySubmittedAtDesc(employerId, "shortlisted", "published", PageRequest.of(0, 5))
             .getContent();
             
         for (Application a : shortlistedApps) {
@@ -163,7 +163,7 @@ public class EmployerService {
 
         // 3. Pending Evaluations (ACCEPTED interviews that have passed - limit 5)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> acceptedInterviews = interviewScheduleRepository
-                .findByEmployerIdAndStatusOrderByScheduledAtDesc(employerId, "ACCEPTED", PageRequest.of(0, 5))
+                .findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(employerId, "ACCEPTED", "published", PageRequest.of(0, 5))
                 .getContent();
         for (var iv : acceptedInterviews) {
             if (iv.getScheduledAt().isBefore(startOfDay)) {
@@ -181,7 +181,7 @@ public class EmployerService {
 
         // 4. Pending Offers (COMPLETED interviews but no offer sent - limit 5)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> interviewApps = interviewScheduleRepository
-                .findCompletedInterviewsWithoutOffer(employerId, PageRequest.of(0, 5))
+                .findCompletedInterviewsWithoutOfferAndJobStatus(employerId, "published", PageRequest.of(0, 5))
                 .getContent();
         
         for (var iv : interviewApps) {
@@ -199,7 +199,7 @@ public class EmployerService {
 
         // 5. Employer Response Needed (Reschedule requests & Rejected offers)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> rescheduleRequests = interviewScheduleRepository
-                .findByEmployerIdAndStatusOrderByScheduledAtDesc(employerId, "RESCHEDULE_REQUESTED", PageRequest.of(0, 5))
+                .findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(employerId, "RESCHEDULE_REQUESTED", "published", PageRequest.of(0, 5))
                 .getContent();
         for (var iv : rescheduleRequests) {
             String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null ? iv.getCandidate().getFullName() : "Ứng viên";
@@ -214,7 +214,7 @@ public class EmployerService {
         }
 
         List<com.sjp.recruitment.model.entity.JobOffer> rejectedOffers = jobOfferRepository
-                .findByApplicationJobEmployerIdAndStatusOrderByCreatedAtDesc(employerId, "rejected", PageRequest.of(0, 5))
+                .findByApplicationJobEmployerIdAndStatusAndJobStatusOrderByCreatedAtDesc(employerId, "rejected", "published", PageRequest.of(0, 5))
                 .getContent();
         for (var offer : rejectedOffers) {
             String candidateName = offer.getApplication().getCandidate() != null && offer.getApplication().getCandidate().getFullName() != null ? offer.getApplication().getCandidate().getFullName() : "Ứng viên";
@@ -230,7 +230,7 @@ public class EmployerService {
 
         // 6. Today's Interviews & Upcoming Timeline
         List<com.sjp.recruitment.model.entity.InterviewSchedule> futureInterviews = interviewScheduleRepository
-                .findByEmployerIdAndScheduledAtAfterOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1));
+                .findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1), "published");
 
         for (var interview : futureInterviews) {
             if ("COMPLETED".equals(interview.getStatus()) || "NO_SHOW".equals(interview.getStatus()) || "CANCELLED".equals(interview.getStatus())) {
@@ -273,10 +273,17 @@ public class EmployerService {
                 .count();
 
         long todayInterviewsCount = futureInterviews.stream()
-                .filter(iv -> iv.getScheduledAt().isBefore(endOfDay) && "ACCEPTED".equals(iv.getStatus()))
+                .filter(iv -> iv.getScheduledAt().isBefore(endOfDay) && 
+                              !"COMPLETED".equals(iv.getStatus()) && 
+                              !"NO_SHOW".equals(iv.getStatus()) && 
+                              !"CANCELLED".equals(iv.getStatus()))
                 .count();
         
-        long pendingAppsCount = appliedApps.size();
+        long countNewlyApplied = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "applied", "published");
+        long countShortlisted = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "shortlisted", "published");
+        long countInterviewScheduled = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "interview_scheduled", "published");
+
+        long pendingAppsCount = countInterviewScheduled;
 
         EmployerDashboardResponse.ActionSummary actionSummary = new EmployerDashboardResponse.ActionSummary(
                 pendingAppsCount,
@@ -286,15 +293,19 @@ public class EmployerService {
         );
 
         // 8. TopCV Pipeline Stats
-        long countReviewed = applicationRepository.countByJobEmployerIdAndStatus(employerId, "reviewed");
-        long countInterview = applicationRepository.countByJobEmployerIdAndStatus(employerId, "shortlisted") + applicationRepository.countByJobEmployerIdAndStatus(employerId, "interview_scheduled");
-        long countOffer = applicationRepository.countByJobEmployerIdAndStatus(employerId, "accepted");
-        long countHired = applicationRepository.countByJobEmployerIdAndStatus(employerId, "hired");
+        long countReviewed = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "reviewed", "published");
+        long countInterview = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "shortlisted", "published") + countInterviewScheduled;
+        long countOffer = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "accepted", "published");
+        long countHired = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "hired", "published");
 
-        long countNewlyApplied = applicationRepository.countByJobEmployerIdAndStatus(employerId, "applied");
-        long countShortlisted = applicationRepository.countByJobEmployerIdAndStatus(employerId, "shortlisted");
-        long countInterviewScheduled = applicationRepository.countByJobEmployerIdAndStatus(employerId, "interview_scheduled");
-        
+        long interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published");
+        long interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("ACCEPTED"), "published");
+        long interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("COMPLETED"), "published");
+
+        long offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("sent", "pending_response", "negotiation_requested"), "published");
+        long offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("accepted"), "published");
+        long offerRejectedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("rejected", "declined"), "published");
+
         EmployerDashboardResponse.PipelineStats pipelineStats = new EmployerDashboardResponse.PipelineStats(
                 totalApplications,
                 countReviewed,
@@ -303,7 +314,14 @@ public class EmployerService {
                 countHired,
                 countNewlyApplied,
                 countShortlisted,
-                countInterviewScheduled
+                countInterviewScheduled,
+                interviewPendingResponseCount,
+                interviewAcceptedCount,
+                interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(employerId, "RESCHEDULE_REQUESTED", "published"),
+                interviewCompletedCount,
+                offerPendingResponseCount,
+                offerAcceptedCount,
+                offerRejectedCount
         );
 
         // 9. TopCV Active Jobs List
