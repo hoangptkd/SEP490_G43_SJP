@@ -1154,6 +1154,37 @@ textarea {
   gap: 12px;
 }
 
+.job-split-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+
+.job-split-pane {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  max-height: min(72vh, 820px);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 860px) {
+  .job-split-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .job-split-pane {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+}
+
 /* Job Card */
 .job-card-link {
   color: inherit;
@@ -2445,9 +2476,13 @@ textarea {
   border: none;
   cursor: pointer;
   font: inherit;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-height: auto;
   width: 100%;
+}
+
+.nav-dropdown-trigger .sidebar-link-label {
+  flex: 0 1 auto;
 }
 
 .nav-dropdown-trigger .arrow {
@@ -3254,6 +3289,181 @@ textarea {
   flex-shrink: 0;
   height: 40px;
   min-width: 40px;
+}
+
+.notif-inbox {
+  display: grid;
+  gap: 18px;
+}
+
+.notif-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.notif-filters {
+  background: #f1f5f9;
+  border-radius: 999px;
+  display: inline-flex;
+  padding: 4px;
+}
+
+.notif-filters button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 4px 14px;
+}
+
+.notif-filters button.is-active {
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+  color: var(--primary);
+}
+
+.notif-group {
+  display: grid;
+  gap: 10px;
+}
+
+.notif-group-label {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.notif-card {
+  align-items: start;
+  background: #fff;
+  border: 1px solid rgb(192 199 209 / 0.55);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 16px;
+  transition:
+    border-color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out),
+    background 160ms var(--ease-out);
+}
+
+.notif-card.is-unread {
+  background: linear-gradient(180deg, #f5faff 0%, #ffffff 100%);
+  border-color: rgb(0 80 125 / 0.2);
+  box-shadow: 0 8px 20px rgb(0 80 125 / 0.06);
+}
+
+.notif-card.is-skeleton {
+  align-items: center;
+}
+
+.notif-icon {
+  align-items: center;
+  border-radius: 12px;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.notif-icon svg {
+  color: inherit;
+}
+
+.notif-icon.tone-blue { background: #dbeafe; color: #1d4ed8; }
+.notif-icon.tone-amber { background: #fef3c7; color: #b45309; }
+.notif-icon.tone-green { background: #dcfce7; color: #15803d; }
+.notif-icon.tone-indigo { background: #e0e7ff; color: #4338ca; }
+.notif-icon.tone-slate { background: #e2e8f0; color: #334155; }
+.notif-icon.tone-teal { background: #ccfbf1; color: #0f766e; }
+
+.notif-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.notif-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notif-title-row strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.notif-dot {
+  background: var(--primary);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgb(0 80 125 / 0.12);
+  height: 8px;
+  width: 8px;
+}
+
+.notif-badge {
+  background: #dbeafe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+
+.notif-body p {
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.notif-body time {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.notif-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notif-empty {
+  background: #fff;
+  border: 1px dashed rgb(192 199 209 / 0.8);
+  border-radius: 16px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .notif-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .notif-actions {
+    flex-direction: row;
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
 }
 
 .meta-with-icon {
@@ -4124,6 +4334,14 @@ textarea {
 
 .saved-job-button {
   font-size: 0;
+  overflow: visible;
+  position: relative;
+  transition:
+    background-color 180ms var(--ease-out),
+    border-color 180ms var(--ease-out),
+    color 180ms var(--ease-out),
+    transform 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
 }
 
 .saved-job-button::after {
@@ -4131,12 +4349,78 @@ textarea {
   font-size: 0.9rem;
 }
 
+.saved-job-button.is-saved {
+  background: #ecfdf3;
+  border-color: #86efac;
+  color: #15803d;
+}
+
 .saved-job-button.is-saved::after {
   content: "✅ Đã lưu";
 }
 
+.saved-job-button.just-saved {
+  animation: actionBurst 720ms var(--ease-out);
+}
+
 .saved-job-button:disabled::after {
   content: "Đang cập nhật...";
+}
+
+.apply-now-button.is-applied {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+.apply-now-button.just-applied {
+  animation: actionBurst 720ms var(--ease-out);
+}
+
+.success-panel.just-saved,
+.success-panel.just-applied {
+  animation: successPop 560ms var(--ease-out), successGlow 1100ms var(--ease-out);
+}
+
+@keyframes actionBurst {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(22 163 74 / 0.4);
+  }
+  40% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgb(22 163 74 / 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(22 163 74 / 0);
+  }
+}
+
+@keyframes successPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(6px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.04) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes successGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgb(34 197 94 / 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgb(34 197 94 / 0);
+  }
+  100% {
+    box-shadow: none;
+  }
 }
 
 .candidate-menu-profile {

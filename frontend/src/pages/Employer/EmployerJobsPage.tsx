@@ -502,7 +502,7 @@ function EmployerJobsPage() {
                   {company.verificationStatus || 'Chưa gửi duyệt'}
                 </span>
                 .<br />
-                Theo quy định của hệ thống SJP, <strong>chỉ các doanh nghiệp đã được Admin xác thực pháp lý thành công</strong> mới được phép sử dụng tính năng tạo và đăng tin tuyển dụng.
+                Theo quy định của hệ thống SRP, <strong>chỉ các doanh nghiệp đã được Admin xác thực pháp lý thành công</strong> mới được phép sử dụng tính năng tạo và đăng tin tuyển dụng.
               </p>
             </div>
           </div>

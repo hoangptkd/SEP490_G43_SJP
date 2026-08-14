@@ -16,7 +16,7 @@ function item(overrides: Partial<AiJobSearchItem['job']> = {}): AiJobSearchItem 
       location: 'Hà Nội',
       requirements: [],
       skills: ['Java'],
-      company: { id: 'company-1', name: 'SJP' },
+      company: { id: 'company-1', name: 'SRP' },
       status: 'PUBLISHED',
       saved: false,
       applied: false,

@@ -12,6 +12,7 @@ import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './uti
 import { parseApiError } from './utils/planLimits';
 import { filterAiJobSearchItems } from './utils/aiJobSearch';
 import PlanLimitAlert from './components/PlanLimitAlert';
+import { NotificationInbox } from './components/NotificationInbox';
 import { DialogContainer } from './components/common/DialogContainer';
 import ProvinceLocationSelect from './components/location/ProvinceLocationSelect';
 import {
@@ -28,7 +29,6 @@ import {
   IconDocument,
   IconGem,
   IconHome,
-  IconInbox,
   IconLock,
   IconLogout,
   IconMapPin,
@@ -40,7 +40,6 @@ import {
   IconSpark,
   IconUsers,
   IconWallet,
-  getNotificationTypeIcon,
 } from './components/icons/PortalNavIcons';
 import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
@@ -56,7 +55,6 @@ import type {
   CandidateApplication,
   CandidateProfile,
   CvFile,
-  CvVersion,
   NotificationItem,
   JobAlert,
   JobAlertInput,
@@ -359,8 +357,7 @@ function isSuccessMessage(message: string) {
     || message.includes('thanh cong')
     || message.startsWith('Neu email')
     || message.startsWith('Mat khau')
-    || message.includes('Upload CV')
-    || message.includes('CV Builder');
+    || message.includes('Upload CV');
 }
 
 function openBlobInNewTab(blob: Blob) {
@@ -452,7 +449,6 @@ type ApplyJobPayload = {
 function ApplyJobModal({
   job,
   cvs,
-  versions,
   defaultResume,
   busy,
   error,
@@ -463,7 +459,6 @@ function ApplyJobModal({
 }: {
   job: Job;
   cvs: CvFile[];
-  versions: CvVersion[];
   defaultResume: string;
   busy?: boolean;
   error?: string;
@@ -553,7 +548,6 @@ function ApplyJobModal({
   }
 
   const latestCvId = cvs[0]?.id;
-  const latestVersionId = versions[0]?.id;
   const canSubmit = (Boolean(selectedResume) || Boolean(file))
     && Boolean(preferredLocation.trim())
     && !busy;
@@ -615,31 +609,6 @@ function ApplyJobModal({
                     <button type="button" className="ghost sm" onClick={(event) => { event.preventDefault(); onOpenCv(cv.id); }}>
                       Xem
                     </button>
-                  </label>
-                );
-              })}
-
-              {versions.map((version) => {
-                const value = `builder:${version.id}`;
-                const checked = selectedResume === value;
-                return (
-                  <label key={version.id} className={`resume-choice ${checked ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name="resume"
-                      value={value}
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedResume(value);
-                        setFile(undefined);
-                        setFileError('');
-                      }}
-                    />
-                    <span className="resume-choice-main">
-                      <strong>{version.title}</strong>
-                      <span>CV Builder</span>
-                    </span>
-                    {version.id === latestVersionId && <span className="resume-choice-badge">Bản gần nhất</span>}
                   </label>
                 );
               })}
@@ -958,23 +927,6 @@ function getItemText(item: Record<string, unknown>, key: string) {
   return typeof value === 'string' ? value : '';
 }
 
-function buildProfileSnapshot(profile: CandidateProfile | null, skillsText?: string): Record<string, unknown> {
-  if (!profile) return {};
-  return {
-    fullName: profile.fullName || '',
-    phone: profile.phone || '',
-    location: profile.location || '',
-    bio: profile.bio || '',
-    skills: skillsText
-      ? skillsText.split(',').map((skill) => skill.trim()).filter(Boolean)
-      : profile.skills,
-    education: profile.education || [],
-    workExperience: profile.workExperience || [],
-    projects: profile.projects || [],
-    certifications: profile.certifications || [],
-  };
-}
-
 function numberParam(params: URLSearchParams, key: string) {
   const raw = params.get(key);
   if (!raw) return undefined;
@@ -1129,7 +1081,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <NavLink to="/jobs" className={({ isActive }) => `topbar-nav-item ${isActive ? 'active' : ''}`}>
             Việc làm
           </NavLink>
-          {false && token && role === 'CANDIDATE' && (
+          {token && role === 'CANDIDATE' && (
             <NavLink to="/candidate" className={({ isActive }) => `topbar-nav-item ${isActive ? 'active' : ''}`}>
               Dashboard
             </NavLink>
@@ -1264,7 +1216,7 @@ function HomePage() {
   const isCandidate = Boolean(token && role === 'CANDIDATE');
   const showCandidateHome = !isEmployer;
   const candidateTools: Array<{ title: string; desc: string; to: string; icon: ReactNode }> = [
-    { title: 'Quản lý CV', desc: 'Cập nhật CV đã upload và CV Builder trước khi ứng tuyển.', to: '/candidate/cvs', icon: <IconDocument size={22} /> },
+    { title: 'Quản lý CV', desc: 'Cập nhật CV đã upload trước khi ứng tuyển.', to: '/candidate/cvs', icon: <IconDocument size={22} /> },
     { title: 'Việc đã lưu', desc: 'Quay lại nhanh các công việc bạn đang cân nhắc.', to: '/candidate/saved-jobs', icon: <IconBookmark size={22} /> },
     { title: 'Theo dõi ứng tuyển', desc: 'Xem trạng thái hồ sơ, lịch phỏng vấn và job offer.', to: '/candidate/applications', icon: <IconClipboard size={22} /> },
     { title: 'Luyện phỏng vấn', desc: 'Chuẩn bị câu trả lời cho các vị trí đang ứng tuyển.', to: '/candidate/ai-interviews', icon: <IconMic size={22} /> },
@@ -1288,6 +1240,7 @@ function HomePage() {
           {!isEmployer && <Link to="/jobs" className="home-nav-link">Việc làm</Link>}
           {isCandidate && (
             <>
+              <Link to="/candidate" className="home-nav-link">Dashboard</Link>
               <Link to="/candidate/saved-jobs" className="home-nav-link">Việc đã lưu</Link>
               <Link to="/candidate/applications" className="home-nav-link">Đã ứng tuyển</Link>
               <Link to="/candidate/cvs" className="home-nav-link">CV</Link>
@@ -2619,6 +2572,48 @@ function JobsPage() {
   const filteredAiItems = useMemo(() => {
     return filterAiJobSearchItems(aiResult?.items || [], filters);
   }, [aiResult, filters]);
+  const isEmployer = localStorage.getItem('role') === 'EMPLOYER';
+  const jobCards = aiMode
+    ? filteredAiItems.map((item) => (
+      <AiRecommendationCard key={item.job.id} item={item} />
+    ))
+    : jobs.map((job, i) => (
+      <motion.div
+        key={job.id}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: EASE_OUT, delay: Math.min(i * 0.04, 0.3) }}
+      >
+        <JobCard job={job} />
+      </motion.div>
+    ));
+  const jobSkeletons = Array.from({ length: isEmployer ? 8 : 6 }).map((_, i) => (
+    <div key={i} className="job-card-skeleton">
+      <div style={{ display: 'flex', gap: 14 }}>
+        <div className="skeleton" style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }} />
+        <div style={{ flex: 1, display: 'grid', gap: 8 }}>
+          <div className="skeleton" style={{ height: 18, width: '70%' }} />
+          <div className="skeleton" style={{ height: 14, width: '50%' }} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div className="skeleton" style={{ height: 24, width: 80 }} />
+        <div className="skeleton" style={{ height: 24, width: 100 }} />
+      </div>
+    </div>
+  ));
+  const jobsEmpty = (
+    <div className="empty-state card" style={{ padding: 48, textAlign: 'center' }}>
+      <div className="empty-state-icon"><IconSearch size={36} /></div>
+      <h3>{aiMode ? 'Chưa có công việc phù hợp' : 'Không tìm thấy việc làm'}</h3>
+      <p className="muted">
+        {aiMode && !aiResult
+          ? 'Hãy thử lại hoặc cập nhật Profile và CV mặc định.'
+          : 'Thử thay đổi bộ lọc để xem thêm kết quả.'}
+      </p>
+      {aiMode && !aiResult && <Link className="button-link outline" to="/candidate/profile">Cập nhật Profile</Link>}
+    </div>
+  );
 
   return (
     <Shell>
@@ -2876,52 +2871,15 @@ function JobsPage() {
             )}
 
             {(aiMode ? aiLoading : loading) ? (
-              <div className="job-grid">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="job-card-skeleton">
-                    <div style={{ display: 'flex', gap: 14 }}>
-                      <div className="skeleton" style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }} />
-                      <div style={{ flex: 1, display: 'grid', gap: 8 }}>
-                        <div className="skeleton" style={{ height: 18, width: '70%' }} />
-                        <div className="skeleton" style={{ height: 14, width: '50%' }} />
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <div className="skeleton" style={{ height: 24, width: 80 }} />
-                      <div className="skeleton" style={{ height: 24, width: 100 }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              isEmployer
+                ? <SyncedJobSplitGrid items={jobSkeletons} />
+                : <div className="job-grid">{jobSkeletons}</div>
+            ) : (aiMode ? filteredAiItems.length === 0 : jobs.length === 0) ? (
+              jobsEmpty
+            ) : isEmployer ? (
+              <SyncedJobSplitGrid items={jobCards} />
             ) : (
-              <div className="job-grid">
-                {aiMode
-                  ? filteredAiItems.map((item) => (
-                    <AiRecommendationCard key={item.job.id} item={item} />
-                  ))
-                  : jobs.map((job, i) => (
-                    <motion.div
-                      key={job.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.28, ease: EASE_OUT, delay: Math.min(i * 0.04, 0.3) }}
-                    >
-                      <JobCard job={job} />
-                    </motion.div>
-                  ))}
-                {(aiMode ? filteredAiItems.length === 0 : jobs.length === 0) && (
-                  <div className="empty-state card" style={{ padding: 48, textAlign: 'center' }}>
-                    <div className="empty-state-icon"><IconSearch size={36} /></div>
-                    <h3>{aiMode ? 'Chưa có công việc phù hợp' : 'Không tìm thấy việc làm'}</h3>
-                    <p className="muted">
-                      {aiMode && !aiResult
-                        ? 'Hãy thử lại hoặc cập nhật Profile và CV mặc định.'
-                        : 'Thử thay đổi bộ lọc để xem thêm kết quả.'}
-                    </p>
-                    {aiMode && !aiResult && <Link className="button-link outline" to="/candidate/profile">Cập nhật Profile</Link>}
-                  </div>
-                )}
-              </div>
+              <div className="job-grid">{jobCards}</div>
             )}
             {!aiMode && !loading && totalPages > 1 && (
               <nav className="pagination-bar" aria-label="Phân trang việc làm">
@@ -3063,6 +3021,66 @@ function AiConsentDialog({
 }
 
 // ─── JOB CARD ───────────────────────────────────────────────────────────────
+function SyncedJobSplitGrid({ items }: { items: ReactNode[] }) {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const leftRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const syncing = useRef(false);
+  const leftItems = items.filter((_, index) => index % 2 === 0);
+  const rightItems = items.filter((_, index) => index % 2 === 1);
+
+  function syncFrom(source: HTMLDivElement, target: HTMLDivElement) {
+    if (syncing.current) return;
+    syncing.current = true;
+    const sourceMax = source.scrollHeight - source.clientHeight;
+    const targetMax = target.scrollHeight - target.clientHeight;
+    target.scrollTop = sourceMax > 0 ? (source.scrollTop / sourceMax) * Math.max(targetMax, 0) : 0;
+    requestAnimationFrame(() => {
+      syncing.current = false;
+    });
+  }
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    const left = leftRef.current;
+    const right = rightRef.current;
+    if (!grid || !left || !right) return;
+
+    function onWheel(event: WheelEvent) {
+      if (window.matchMedia('(max-width: 860px)').matches) return;
+      event.preventDefault();
+      syncing.current = true;
+      left.scrollTop += event.deltaY;
+      right.scrollTop += event.deltaY;
+      requestAnimationFrame(() => {
+        syncing.current = false;
+      });
+    }
+
+    grid.addEventListener('wheel', onWheel, { passive: false });
+    return () => grid.removeEventListener('wheel', onWheel);
+  }, [items.length]);
+
+  return (
+    <div ref={gridRef} className="job-split-grid">
+      <div
+        ref={leftRef}
+        className="job-split-pane"
+        onScroll={(event) => rightRef.current && syncFrom(event.currentTarget, rightRef.current)}
+      >
+        {leftItems}
+      </div>
+      <div
+        ref={rightRef}
+        className="job-split-pane"
+        onScroll={(event) => leftRef.current && syncFrom(event.currentTarget, leftRef.current)}
+      >
+        {rightItems}
+      </div>
+    </div>
+  );
+}
+
 function JobCard({ job }: { job: Job }) {
   const location = useLocation();
   const initials = job.company.name.slice(0, 2).toUpperCase();
@@ -3201,7 +3219,6 @@ function JobDetailPage() {
   const backTo = internalOrigin(navigationState, '/jobs');
   const [job, setJob] = useState<Job | null>(null);
   const [cvs, setCvs] = useState<CvFile[]>([]);
-  const [versions, setVersions] = useState<CvVersion[]>([]);
   const [selectedResume, setSelectedResume] = useState('');
   const [message, setMessage] = useState('');
   const [applying, setApplying] = useState(false);
@@ -3219,6 +3236,8 @@ function JobDetailPage() {
   const [reporting, setReporting] = useState(false);
   const [reporterProfile, setReporterProfile] = useState<CandidateProfile | null>(null);
   const [jobError, setJobError] = useState(false);
+  const [saveBurst, setSaveBurst] = useState(false);
+  const [applyBurst, setApplyBurst] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -3228,14 +3247,12 @@ function JobDetailPage() {
       if (isCandidate) {
         Promise.all([
           candidateService.getCvs(0, 100).then((result) => result.items).catch(() => []),
-          candidateService.getCvVersions(0, 100).then((result) => result.items).catch(() => []),
           candidateService.getProfile().catch(() => null),
-        ]).then(([uploadedCvs, builderVersions, profile]) => {
+        ]).then(([uploadedCvs, profile]) => {
           setCvs(uploadedCvs);
-          setVersions(builderVersions);
           setReporterProfile(profile);
           const defaultCv = uploadedCvs.find((item) => item.defaultCv) || uploadedCvs[0];
-          setSelectedResume(defaultCv ? `uploaded:${defaultCv.id}` : builderVersions[0] ? `builder:${builderVersions[0].id}` : '');
+          setSelectedResume(defaultCv ? `uploaded:${defaultCv.id}` : '');
         });
       }
     } catch (err) {
@@ -3256,6 +3273,10 @@ function JobDetailPage() {
       if (previousJob.saved) await candidateService.unsaveJob(previousJob.id);
       else await candidateService.saveJob(previousJob.id);
       setMessage(nextSaved ? 'Đã lưu việc làm.' : 'Đã bỏ lưu việc làm.');
+      if (nextSaved) {
+        setSaveBurst(true);
+        window.setTimeout(() => setSaveBurst(false), 900);
+      }
     } catch (err) {
       setJob(previousJob);
       setMessage(readError(err));
@@ -3289,6 +3310,8 @@ function JobDetailPage() {
         );
         setMessage('✅ Đã nộp hồ sơ ứng tuyển thành công!');
         setShowApplyModal(false);
+        setApplyBurst(true);
+        window.setTimeout(() => setApplyBurst(false), 1400);
         await load();
       } catch (err) {
         setApplyError(readError(err));
@@ -3308,6 +3331,8 @@ function JobDetailPage() {
         resumeType === 'builder' ? resumeId : undefined,
       );
       setMessage('✅ Đã nộp hồ sơ ứng tuyển thành công!');
+      setApplyBurst(true);
+      window.setTimeout(() => setApplyBurst(false), 1400);
       await load();
     } catch (err) {
       setMessage(readError(err));
@@ -3534,7 +3559,7 @@ function JobDetailPage() {
           {isCandidate ? (
             <>
               <button
-                className={`outline saved-job-button ${job.saved ? 'is-saved' : ''}`}
+                className={`outline saved-job-button ${job.saved ? 'is-saved' : ''}${saveBurst ? ' just-saved' : ''}`}
                 onClick={toggleSave}
                 disabled={savingJob}
                 style={{ width: '100%' }}
@@ -3542,7 +3567,7 @@ function JobDetailPage() {
                 {job.saved ? <><IconBookmark size={14} /> Bỏ lưu</> : <><IconBookmark size={14} /> Lưu việc làm</>}
               </button>
 
-              {false && (cvs.length > 0 || versions.length > 0) && (
+              {false && cvs.length > 0 && (
                 <div>
                   <label className="filter-label" style={{ marginBottom: 8 }}>Chọn CV</label>
                   <select value={selectedResume} onChange={(e) => setSelectedResume(e.target.value)}>
@@ -3550,14 +3575,12 @@ function JobDetailPage() {
                     {cvs.map((cv) => (
                       <option key={cv.id} value={`uploaded:${cv.id}`}>{cv.originalFileName}</option>
                     ))}
-                    {versions.map((version) => (
-                      <option key={version.id} value={`builder:${version.id}`}>{version.title} (CV Builder)</option>
-                    ))}
                   </select>
                 </div>
               )}
 
               <button
+                className={`apply-now-button${job.applied || applyBurst ? ' is-applied' : ''}${applyBurst ? ' just-applied' : ''}`}
                 onClick={() => {
                   setApplyError('');
                   setApplyPlanLimit(false);
@@ -3575,9 +3598,9 @@ function JobDetailPage() {
                     <PlanLimitAlert message={message} />
                   ) : (
                   <motion.div
-                    className={isSuccessMessage(message) ? 'success-panel' : 'error-panel'}
+                    className={`${isSuccessMessage(message) ? 'success-panel' : 'error-panel'}${applyBurst && isSuccessMessage(message) ? ' just-applied' : ''}${saveBurst && isSuccessMessage(message) ? ' just-saved' : ''}`}
                     variants={scaleIn} initial="initial" animate="animate" exit="exit"
-                    transition={{ duration: 0.18, ease: EASE_OUT }}
+                    transition={{ duration: 0.22, ease: EASE_OUT }}
                   >
                     {message}
                   </motion.div>
@@ -3671,7 +3694,6 @@ function JobDetailPage() {
           <ApplyJobModal
             job={job}
             cvs={cvs}
-            versions={versions}
             defaultResume={selectedResume}
             busy={applying}
             error={applyError}
@@ -3744,7 +3766,7 @@ function CandidateLayout() {
         <Link className="brand portal-nav-brand" to="/">
           <span className="portal-nav-brand-mark"><IconBrandBriefcase /></span>
           <span className="portal-nav-brand-text">
-            <strong>SJP Candidate</strong>
+            <strong>SRP Candidate</strong>
             <span>Cổng ứng viên</span>
           </span>
         </Link>
@@ -4578,30 +4600,19 @@ function AccountPage() {
 // ─── CV PAGE ────────────────────────────────────────────────────────────────
 function CvPage() {
   const [cvs, setCvs] = useState<CvFile[]>([]);
-  const [versions, setVersions] = useState<CvVersion[]>([]);
   const [cvPage, setCvPage] = useState(0);
   const [cvTotalPages, setCvTotalPages] = useState(0);
-  const [versionPage, setVersionPage] = useState(0);
-  const [versionTotalPages, setVersionTotalPages] = useState(0);
   const [message, setMessage] = useState('');
   const [planLimitReached, setPlanLimitReached] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [editingVersionId, setEditingVersionId] = useState('');
-  const [draftVersionTitle, setDraftVersionTitle] = useState('');
   const [pendingDeleteCv, setPendingDeleteCv] = useState<CvFile | null>(null);
-  const [pendingDeleteVersion, setPendingDeleteVersion] = useState<CvVersion | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [cvResult, versionResult] = await Promise.all([
-      candidateService.getCvs(cvPage, 10),
-      candidateService.getCvVersions(versionPage, 10),
-    ]);
+    const cvResult = await candidateService.getCvs(cvPage, 10);
     setCvs(cvResult.items);
     setCvTotalPages(cvResult.totalPages);
-    setVersions(versionResult.items);
-    setVersionTotalPages(versionResult.totalPages);
-  }, [cvPage, versionPage]);
+  }, [cvPage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -4618,64 +4629,6 @@ function CvPage() {
       setPlanLimitReached(isPlanLimitError(err));
     } finally {
       setUploading(false);
-    }
-  }
-
-  async function createVersion() {
-    try {
-      const profile = await candidateService.getProfile();
-      await candidateService.createCvVersion(`CV Builder ${versions.length + 1}`, buildProfileSnapshot(profile));
-      setMessage('Đã tạo CV Builder từ hồ sơ hiện tại.');
-      await load();
-    } catch (err) {
-      setMessage(readError(err));
-    }
-  }
-
-  function startEditVersion(version: CvVersion) {
-    setEditingVersionId(version.id);
-    setDraftVersionTitle(version.title);
-  }
-
-  async function saveVersionTitle(version: CvVersion) {
-    const title = draftVersionTitle.trim();
-    if (!title) {
-      setMessage('Tên CV Builder không được để trống.');
-      return;
-    }
-    try {
-      await candidateService.updateCvVersion(version.id, title, version.snapshot, version.templateKey);
-      setEditingVersionId('');
-      setDraftVersionTitle('');
-      setMessage('Đã cập nhật CV Builder.');
-      await load();
-    } catch (err) {
-      setMessage(readError(err));
-    }
-  }
-
-  async function refreshVersionSnapshot(version: CvVersion) {
-    try {
-      const profile = await candidateService.getProfile();
-      await candidateService.updateCvVersion(version.id, version.title, buildProfileSnapshot(profile), version.templateKey);
-      setMessage('Đã cập nhật nội dung CV Builder từ hồ sơ.');
-      await load();
-    } catch (err) {
-      setMessage(readError(err));
-    }
-  }
-
-  async function deleteVersion(id: string) {
-    setActionBusy(true);
-    try {
-      await candidateService.deleteCvVersion(id);
-      setMessage('Đã xóa CV Builder.');
-      setPendingDeleteVersion(null);
-      await load();
-    } catch (err) {
-      setMessage(readError(err));
-    } finally {
-      setActionBusy(false);
     }
   }
 
@@ -4820,59 +4773,6 @@ function CvPage() {
           />
         </div>
       )}
-
-      {/* CV Builder */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h2 style={{ margin: 0 }}>CV Builder</h2>
-          <button className="outline" onClick={createVersion}>+ Tạo CV mới</button>
-        </div>
-        {versions.length === 0 ? (
-          <div className="empty-state">Chưa có CV Builder nào. Tạo CV từ hồ sơ của bạn!</div>
-        ) : (
-          <div className="data-table">
-            {versions.map((version) => (
-              <div className="data-row" key={version.id}
-                style={{ gridTemplateColumns: 'minmax(180px, 1fr) auto auto auto auto' }}>
-                {editingVersionId === version.id ? (
-                  <input
-                    value={draftVersionTitle}
-                    onChange={(e) => setDraftVersionTitle(e.target.value)}
-                    aria-label="Ten CV Builder"
-                  />
-                ) : (
-                  <strong>CV {version.title}</strong>
-                )}
-                <span className="chip neutral">{version.templateKey}</span>
-                <span className="muted">{formatDate(version.updatedAt)}</span>
-                {editingVersionId === version.id ? (
-                  <button className="outline sm" onClick={() => saveVersionTitle(version)}>
-                    Luu
-                  </button>
-                ) : (
-                  <button className="outline sm" onClick={() => startEditVersion(version)}>
-                    Doi ten
-                  </button>
-                )}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="outline sm" onClick={() => refreshVersionSnapshot(version)}>
-                    Cap nhat
-                  </button>
-                  <button className="danger sm" disabled={actionBusy} onClick={() => setPendingDeleteVersion(version)}>
-                    Xoa
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <PaginationControls
-          page={versionPage}
-          totalPages={versionTotalPages}
-          label="Phân trang CV Builder"
-          onPageChange={setVersionPage}
-        />
-      </div>
       <AnimatePresence>
         {pendingDeleteCv && (
           <ActionModal
@@ -4883,17 +4783,6 @@ function CvPage() {
             busy={actionBusy}
             onClose={() => setPendingDeleteCv(null)}
             onConfirm={() => deleteUploadedCv(pendingDeleteCv.id)}
-          />
-        )}
-        {pendingDeleteVersion && (
-          <ActionModal
-            title="Xóa CV Builder?"
-            description={`Bản "${pendingDeleteVersion.title}" sẽ được ẩn khỏi danh sách CV Builder.`}
-            confirmLabel="Xóa bản CV"
-            danger
-            busy={actionBusy}
-            onClose={() => setPendingDeleteVersion(null)}
-            onConfirm={() => deleteVersion(pendingDeleteVersion.id)}
           />
         )}
       </AnimatePresence>
@@ -5843,7 +5732,6 @@ function NotificationsPage() {
       setError(readError(err));
     }
   }
-  const getIcon = (type: string) => getNotificationTypeIcon(type, 22);
 
   const getNotificationLink = (item: NotificationItem) => {
     if (item.relatedEntityType === 'JOB' && item.relatedEntityId) {
@@ -5860,86 +5748,32 @@ function NotificationsPage() {
       transition={{ duration: 0.25, ease: EASE_OUT }}>
       <div className="page-header">
         <h1>Thông báo</h1>
-        <p>Cập nhật từ nhà tuyển dụng và hệ thống</p>
-        {unreadCount > 0 && (
-          <button className="outline" onClick={markAllRead} style={{ marginTop: 12 }}>
-            Đánh dấu tất cả đã đọc
-          </button>
-        )}
+        <p>
+          Cập nhật từ nhà tuyển dụng và hệ thống
+          {unreadCount > 0 ? ` · ${unreadCount} chưa đọc` : ''}
+        </p>
       </div>
 
       {error && <div className="error-panel" role="alert" style={{ marginBottom: 16 }}>{error} <button className="outline sm" onClick={() => void load()}>Thử lại</button></div>}
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2.5"
-            style={{ animation: 'spin 0.8s linear infinite', margin: '0 auto' }}>
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-          </svg>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-          <div className="empty-state-icon"><IconInbox size={36} /></div>
-          <h3>Không có thông báo mới</h3>
-          <p className="muted">Bạn sẽ nhận thông báo khi có cập nhật từ nhà tuyển dụng.</p>
-        </div>
-      ) : (
-        <>
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {items.map((item, i) => {
-            const link = getNotificationLink(item);
-            return (
-              <motion.div key={item.id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.2, ease: EASE_OUT, delay: i * 0.04 }}
-                style={{
-                  display: 'flex',
-                  padding: '16px 20px',
-                  borderBottom: i < items.length - 1 ? '1px solid var(--outline-variant)' : 'none',
-                  background: item.read ? 'transparent' : 'var(--primary-softer)',
-                  alignItems: 'center',
-                  gap: 16
-                }}>
-                <div className="notification-type-icon">
-                  {getIcon(item.type)}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <strong style={{ display: 'block', color: 'var(--on-surface)' }}>{item.title}</strong>
-                    {!item.read && <span className="chip primary sm">Mới</span>}
-                  </div>
-                  <p style={{ margin: 0, color: 'var(--on-muted)', fontSize: '0.9rem', lineHeight: 1.4 }}>
-                    {item.message}
-                  </p>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--outline)', marginTop: 8, display: 'block' }}>
-                    {formatDateTime(item.createdAt)}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexDirection: 'column', alignItems: 'flex-end' }}>
-                  {!item.read && (
-                    <button className="outline sm"
-                      onClick={() => candidateService.markNotificationRead(item.id).then(load).catch((err) => setError(readError(err)))}>
-                      Đánh dấu đọc
-                    </button>
-                  )}
-                  {link && (
-                    <Link to={link} className="button-link sm">
-                      Xem chi tiết
-                    </Link>
-                  )}
-                </div>
-              </motion.div>
-            );
-            })}
-          </div>
-          <PaginationControls
-            page={page}
-            totalPages={totalPages}
-            label="Phân trang thông báo"
-            onPageChange={(nextPage) => setParams(nextPage > 0 ? { page: String(nextPage) } : {})}
-          />
-        </>
+      <NotificationInbox
+        items={items}
+        loading={loading}
+        emptyTitle="Không có thông báo mới"
+        emptyHint="Bạn sẽ nhận thông báo khi có cập nhật từ nhà tuyển dụng."
+        getLink={getNotificationLink}
+        onMarkRead={(id) => {
+          candidateService.markNotificationRead(id).then(load).catch((err) => setError(readError(err)));
+        }}
+        onMarkAllRead={() => { void markAllRead(); }}
+      />
+      {!loading && items.length > 0 && (
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          label="Phân trang thông báo"
+          onPageChange={(nextPage) => setParams(nextPage > 0 ? { page: String(nextPage) } : {})}
+        />
       )}
     </motion.div>
   );
@@ -6125,7 +5959,7 @@ function EmployerLayout() {
         <Link className="brand portal-nav-brand" to="/employer">
           <span className="portal-nav-brand-mark"><IconHome /></span>
           <span className="portal-nav-brand-text">
-            <strong>SJP Employer</strong>
+            <strong>SRP Employer</strong>
             <span>Cổng nhà tuyển dụng</span>
           </span>
         </Link>
