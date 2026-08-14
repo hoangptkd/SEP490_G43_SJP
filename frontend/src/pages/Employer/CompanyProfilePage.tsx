@@ -365,11 +365,12 @@ function CompanyProfilePage() {
           </fieldset>
 
           <div className="bg-emerald-50/50 p-6 rounded-xl border border-emerald-100 space-y-6">
-            <h3 className="text-sm font-semibold text-emerald-800 uppercase tracking-wider">Thông tin liên hệ (Có thể cập nhật bất kỳ lúc nào)</h3>
+            <h3 className="text-sm font-semibold text-emerald-800 uppercase tracking-wider">Thông tin liên hệ</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Số điện thoại liên hệ</label>
                 <input
+                  disabled={isVerified}
                   type="text"
                   value={company.contactPhone || ''}
                   onChange={(e) => {
@@ -377,7 +378,7 @@ function CompanyProfilePage() {
                     setFieldErrors(prev => ({ ...prev, contactPhone: '' }));
                   }}
                   placeholder="0912345678"
-                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all ${fieldErrors.contactPhone ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200 ${fieldErrors.contactPhone ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
                 />
                 {fieldErrors.contactPhone && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.contactPhone}</p>}
               </div>
@@ -385,6 +386,7 @@ function CompanyProfilePage() {
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Email liên hệ</label>
                 <input
+                  disabled={isVerified}
                   type="email"
                   value={company.contactEmail || ''}
                   onChange={(e) => {
@@ -392,7 +394,7 @@ function CompanyProfilePage() {
                     setFieldErrors(prev => ({ ...prev, contactEmail: '' }));
                   }}
                   placeholder="contact@company.com"
-                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all ${fieldErrors.contactEmail ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200 ${fieldErrors.contactEmail ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
                 />
                 {fieldErrors.contactEmail && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.contactEmail}</p>}
               </div>
@@ -598,8 +600,9 @@ function CompanyProfilePage() {
           <div className="flex w-full md:w-auto gap-3">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || isVerified}
                 className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${
+                  isVerified ? 'bg-gray-400 cursor-not-allowed opacity-70' :
                   saving ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
                 }`}
               >
