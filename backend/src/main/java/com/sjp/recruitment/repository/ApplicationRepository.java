@@ -62,15 +62,31 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus")
     Page<Application> findByEmployerIdAndJobStatus(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, Pageable pageable);
 
-    @Query("SELECT a FROM Application a WHERE a.job.company.id = :companyId " +
-           "AND (:jobId IS NULL OR a.job.id = :jobId) " +
-           "AND (:status = '' OR a.status = :status) " +
-           "AND (:search = '' OR LOWER(a.candidate.user.fullName) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "OR LOWER(a.job.title) LIKE LOWER(CONCAT('%', :search, '%')))")
-    Page<Application> searchCompanyApplications(@Param("companyId") UUID companyId, 
-                                                @Param("jobId") UUID jobId, 
-                                                @Param("status") String status, 
-                                                @Param("search") String search, 
+    @Query(
+            value = "SELECT a FROM Application a WHERE a.job.company.id = :companyId " +
+                    "AND (:jobId IS NULL OR a.job.id = :jobId) " +
+                    "AND a.status IN (:statuses) " +
+                    "AND (:search = '' OR LOWER(a.candidate.user.fullName) LIKE LOWER(CONCAT('%', :search, '%')) " +
+                    "OR LOWER(a.job.title) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+                    "ORDER BY CASE a.status " +
+                    "WHEN 'applied' THEN 1 " +
+                    "WHEN 'reviewed' THEN 2 " +
+                    "WHEN 'shortlisted' THEN 3 " +
+                    "WHEN 'interview_scheduled' THEN 4 " +
+                    "WHEN 'accepted' THEN 5 " +
+                    "WHEN 'rejected' THEN 6 " +
+                    "WHEN 'withdrawn' THEN 7 " +
+                    "ELSE 8 END ASC, a.submittedAt DESC",
+            countQuery = "SELECT COUNT(a) FROM Application a WHERE a.job.company.id = :companyId " +
+                    "AND (:jobId IS NULL OR a.job.id = :jobId) " +
+                    "AND a.status IN (:statuses) " +
+                    "AND (:search = '' OR LOWER(a.candidate.user.fullName) LIKE LOWER(CONCAT('%', :search, '%')) " +
+                    "OR LOWER(a.job.title) LIKE LOWER(CONCAT('%', :search, '%')))"
+    )
+    Page<Application> searchCompanyApplications(@Param("companyId") UUID companyId,
+                                                @Param("jobId") UUID jobId,
+                                                @Param("statuses") List<String> statuses,
+                                                @Param("search") String search,
                                                 Pageable pageable);
 
     @org.springframework.data.jpa.repository.Modifying

@@ -184,21 +184,21 @@ public class EmployerController {
     @GetMapping("/applications")
     public ResponseEntity<com.sjp.recruitment.model.dto.response.PageResponse<ApplicationResponse>> getCompanyApplications(
             @RequestParam(required = false) String jobId,
-            @RequestParam(required = false) String status,
+            @RequestParam(required = false) List<String> status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, status, search, page, size));
+        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, joinStatusFilters(status), search, page, size));
     }
 
     @GetMapping("/jobs/{jobId}/applications")
     public ResponseEntity<com.sjp.recruitment.model.dto.response.PageResponse<ApplicationResponse>> getJobApplications(
             @PathVariable String jobId,
-            @RequestParam(required = false) String status,
+            @RequestParam(required = false) List<String> status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, status, search, page, size));
+        return ResponseEntity.ok(employerService.getCompanyApplications(jobId, joinStatusFilters(status), search, page, size));
     }
 
     @GetMapping("/applications/{id}")
@@ -244,5 +244,12 @@ public class EmployerController {
     public ResponseEntity<Void> markAllNotificationsRead() {
         employerService.markAllNotificationsRead();
         return ResponseEntity.noContent().build();
+    }
+
+    private String joinStatusFilters(List<String> status) {
+        if (status == null || status.isEmpty()) {
+            return "";
+        }
+        return String.join(",", status);
     }
 }

@@ -56,6 +56,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Locale;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -1065,21 +1066,18 @@ public class EmployerService {
             }
         }
 
-        Application.ApplicationStatus filterStatus = null;
-        if (status != null && !status.trim().isEmpty()) {
-            try {
-                filterStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                filterStatus = Application.ApplicationStatus.fromDatabaseValue(status);
-            }
+        List<String> dbStatuses = parseApplicationStatusFilters(status);
+        if (dbStatuses.isEmpty()) {
+            dbStatuses = java.util.Arrays.stream(Application.ApplicationStatus.values())
+                    .map(Application.ApplicationStatus::databaseValue)
+                    .toList();
         }
 
         String filterSearch = (search != null && !search.trim().isEmpty()) ? search.trim() : "";
-        String dbStatus = filterStatus != null ? filterStatus.databaseValue() : "";
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "submittedAt"));
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1, size);
 
         org.springframework.data.domain.Page<Application> appPage = applicationRepository.searchCompanyApplications(
-                employer.getCompany().getId(), parsedJobId, dbStatus, filterSearch, pageable);
+                employer.getCompany().getId(), parsedJobId, dbStatuses, filterSearch, pageable);
 
         if (appPage.isEmpty()) {
             return new PageResponse<>(List.of(), page, size, 0, 0, true, true);
@@ -1087,6 +1085,25 @@ public class EmployerService {
 
         List<ApplicationResponse> responses = applicationService.toResponseBulk(appPage.getContent());
         return new PageResponse<>(responses, page, size, appPage.getTotalElements(), appPage.getTotalPages(), appPage.isFirst(), appPage.isLast());
+    }
+
+    private List<String> parseApplicationStatusFilters(String status) {
+        if (status == null || status.isBlank()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (String part : status.split(",")) {
+            String token = part.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            try {
+                values.add(Application.ApplicationStatus.valueOf(token.toUpperCase(Locale.ROOT)).databaseValue());
+            } catch (IllegalArgumentException ignored) {
+                // Skip unknown tokens so a bad filter does not collapse to SUBMITTED.
+            }
+        }
+        return values;
     }
 
     @Transactional(readOnly = true)
