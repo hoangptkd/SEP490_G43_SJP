@@ -1,5 +1,7 @@
 package com.sjp.recruitment.config;
 
+import com.sjp.recruitment.model.dto.request.CompleteOauthRoleRequest;
+import com.sjp.recruitment.model.dto.response.AuthResponse;
 import com.sjp.recruitment.model.entity.OauthRoleSelectionToken;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.service.AuthService;
@@ -71,7 +73,29 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
 
     private void redirectRoleSelection(HttpServletRequest request, HttpServletResponse response, String email, String providerId, String fullName) {
         try {
+            String preferredRole = null;
+            if (request.getCookies() != null) {
+                for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                    if ("oauth_preferred_role".equals(cookie.getName())) {
+                        preferredRole = cookie.getValue();
+                        jakarta.servlet.http.Cookie clearCookie = new jakarta.servlet.http.Cookie("oauth_preferred_role", null);
+                        clearCookie.setPath("/");
+                        clearCookie.setMaxAge(0);
+                        response.addCookie(clearCookie);
+                        break;
+                    }
+                }
+            }
+
             OauthRoleSelectionToken token = authService.createOauthRoleSelectionToken(email, "GOOGLE", providerId, fullName, roleTokenTtlMinutes);
+
+            if (preferredRole != null && (preferredRole.equals("EMPLOYER") || preferredRole.equals("CANDIDATE"))) {
+                AuthResponse authResp = authService.completeOauthRole(new CompleteOauthRoleRequest(token.getToken(), User.UserRole.valueOf(preferredRole)));
+                String encodedToken = URLEncoder.encode(authResp.token(), StandardCharsets.UTF_8);
+                getRedirectStrategy().sendRedirect(request, response, frontendBaseUrl + "/oauth/callback?token=" + encodedToken);
+                return;
+            }
+
             String encoded = URLEncoder.encode(token.getToken(), StandardCharsets.UTF_8);
             getRedirectStrategy().sendRedirect(request, response, frontendBaseUrl + "/select-role?token=" + encoded);
         } catch (IOException exception) {

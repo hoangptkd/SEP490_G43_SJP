@@ -53,6 +53,8 @@ public class PublicCompanyService {
                 company.getCompanySize(),
                 company.getLogoUrl(),
                 company.isVerified(),
+                company.getContactPhone(),
+                company.getContactEmail(),
                 companyLocationRepository.findByCompanyIdOrderByHeadquarterDescCreatedAtDesc(companyId)
                         .stream().map(dtoMapper::toCompanyLocationResponse).toList(),
                 PageResponse.from(jobs, job -> dtoMapper.toJobResponse(job, false, false, null))

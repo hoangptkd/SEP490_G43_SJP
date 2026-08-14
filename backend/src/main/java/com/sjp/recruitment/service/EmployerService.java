@@ -494,6 +494,8 @@ public class EmployerService {
 
         company.setName(newName);
         company.setWebsite(request.website());
+        company.setContactPhone(request.contactPhone());
+        company.setContactEmail(request.contactEmail());
 
         if (request.industries() != null) {
             List<CompanyIndustry> existingInds = companyIndustryRepository.findByCompanyId(company.getId());
@@ -738,6 +740,8 @@ public class EmployerService {
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),
+                company.getContactPhone(),
+                company.getContactEmail(),
                 locResponses,
                 indResponses
         );

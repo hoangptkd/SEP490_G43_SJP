@@ -978,6 +978,8 @@ public class AdminService {
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),
+                company.getContactPhone(),
+                company.getContactEmail(),
                 locations,
                 industries
         );

@@ -15,6 +15,7 @@ import {
   IconProfile,
   IconUsers,
 } from '../../components/icons/PortalNavIcons';
+import type { Company } from '../../types/job';
 import '../../styles/admin.css';
 
 function readError(error: unknown) {
@@ -73,13 +74,20 @@ function KpiCard({ title, value, subtext }: { title: string, value: number, subt
 
 export default function EmployerDashboardPage() {
   const [stats, setStats] = useState<any>(null);
+  const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [visibleTasksCount, setVisibleTasksCount] = useState(5);
 
   useEffect(() => {
-    employerService.getDashboardStats()
-      .then(setStats)
+    Promise.all([
+      employerService.getDashboardStats(),
+      employerService.getCompanyProfile().catch(() => null)
+    ])
+      .then(([statsData, compData]) => {
+        setStats(statsData);
+        setCompany(compData);
+      })
       .catch(err => setError(readError(err)))
       .finally(() => setLoading(false));
   }, []);
@@ -115,6 +123,17 @@ export default function EmployerDashboardPage() {
       <div className="topcv-header">
         <h1 style={{ fontSize: '1.5rem', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <IconBriefcase size={24} /> Xin chào, Nhà tuyển dụng
+          {company && (
+            company.verificationStatus === 'verified' ? (
+              <span style={{ fontSize: '0.85rem', padding: '4px 10px', borderRadius: '20px', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                ✅ Đã xác thực
+              </span>
+            ) : (
+              <span style={{ fontSize: '0.85rem', padding: '4px 10px', borderRadius: '20px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                ⚠️ Chưa xác thực
+              </span>
+            )
+          )}
         </h1>
         <div style={{ display: 'flex', gap: 12 }}>
           <Link to="/employer/jobs?action=new" className="button primary" style={{ borderRadius: 6 }}>
@@ -197,9 +216,6 @@ export default function EmployerDashboardPage() {
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.offerCount}</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span>(Đã gửi Offer)</span>
-                  {pipeline.offerPendingResponseCount !== undefined && (
-                    <span>(Chờ UV phản hồi: {pipeline.offerPendingResponseCount} | Đã chốt: {pipeline.offerAcceptedCount} | Từ chối: {pipeline.offerRejectedCount})</span>
-                  )}
                 </div>
               </div>
               <div className="funnel-arrow">→</div>

@@ -246,7 +246,7 @@ public class EmailService {
         }
     }
 
-    public void sendJobOfferEmail(String email, String candidateName, String jobTitle, String companyName, JobOfferRequest request) {
+    public void sendJobOfferEmail(String email, String candidateName, String jobTitle, String companyName, String companyPhone, String companyEmail, JobOfferRequest request) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
         message.setTo(email);
@@ -285,7 +285,10 @@ public class EmailService {
             sb.append(String.format("Bạn có thể xem chi tiết thư mời làm việc tại đây: %s\n\n", request.offerLetterUrl()));
         }
 
-        sb.append("Vui lòng đăng nhập vào hệ thống Smart Recruitment Portal để xem chi tiết và xác nhận phản hồi của bạn.\n\n");
+        sb.append("Nếu có bất kỳ thắc mắc hoặc cần trao đổi thêm, vui lòng liên hệ với công ty qua:\n");
+        sb.append(String.format("- SĐT: %s\n", companyPhone != null && !companyPhone.isBlank() ? companyPhone : "Chưa cập nhật"));
+        sb.append(String.format("- Email: %s\n\n", companyEmail != null && !companyEmail.isBlank() ? companyEmail : "Chưa cập nhật"));
+        
         sb.append("Mong sớm được chào đón bạn gia nhập vào đội ngũ chúng tôi.\n\n");
         sb.append("Trân trọng,\n");
         sb.append(String.format("Đội ngũ Tuyển dụng %s", companyName));

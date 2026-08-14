@@ -298,6 +298,8 @@ public class ApplicationWorkflowService {
                 candidate.getFullName(),
                 request.positionTitle(),
                 company.getName(),
+                company.getContactPhone(),
+                company.getContactEmail(),
                 request
         );
 
@@ -399,6 +401,8 @@ public class ApplicationWorkflowService {
                     candidate.getFullName(),
                     updateRequest.positionTitle(),
                     company.getName(),
+                    company.getContactPhone(),
+                    company.getContactEmail(),
                     updateRequest
             );
         } else {

@@ -59,6 +59,9 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final CandidateProfileRepository candidateProfileRepository;
+    private final com.sjp.recruitment.repository.CompanyRepository companyRepository;
+    private final com.sjp.recruitment.repository.EmployerRepository employerRepository;
+    private final com.sjp.recruitment.repository.CompanyIndustryRepository companyIndustryRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final OauthAccountRepository oauthAccountRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
@@ -87,16 +90,60 @@ public class AuthService {
         }
         validatePassword(request.getPassword());
 
+        if (request.getRole() == User.UserRole.EMPLOYER) {
+            if (request.getFullName() == null || request.getFullName().trim().isEmpty()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Vui lòng nhập họ và tên");
+            }
+            if (request.getPhone() == null || request.getPhone().trim().isEmpty()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Vui lòng nhập số điện thoại");
+            }
+            // Removed industry validation based on user request
+        }
+
         User user = new User();
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole());
+        user.setFullName(request.getFullName());
+        user.setPhone(request.getPhone());
+        user.setGender(request.getGender());
         user.setStatus(User.UserStatus.PENDING_VERIFICATION);
         user.setEmailVerified(false);
 
         User savedUser = userRepository.save(user);
         if (savedUser.getRoleEnum() == User.UserRole.CANDIDATE) {
             ensureCandidateProfile(savedUser);
+        } else if (savedUser.getRoleEnum() == User.UserRole.EMPLOYER) {
+            com.sjp.recruitment.model.entity.Company company = new com.sjp.recruitment.model.entity.Company();
+            company.setName(request.getFullName() + " - Company");
+            company.setDescription("Chưa có mô tả");
+            company.setStatus("pending");
+            company.setVerificationStatus("unverified");
+            if (request.getIndustries() != null && !request.getIndustries().isEmpty()) {
+                company.setIndustry(request.getIndustries().get(0).getCategoryName());
+            }
+            company = companyRepository.save(company);
+
+            if (request.getIndustries() != null && !request.getIndustries().isEmpty()) {
+                for (int i = 0; i < request.getIndustries().size(); i++) {
+                    RegisterRequest.IndustryDto ind = request.getIndustries().get(i);
+                    com.sjp.recruitment.model.entity.CompanyIndustry ci = new com.sjp.recruitment.model.entity.CompanyIndustry();
+                    ci.setCompany(company);
+                    com.sjp.recruitment.model.entity.Category category = new com.sjp.recruitment.model.entity.Category();
+                    category.setId(java.util.UUID.fromString(ind.getCategoryId()));
+                    ci.setCategory(category);
+                    ci.setPrimary(i == 0);
+                    companyIndustryRepository.save(ci);
+                }
+            }
+
+            com.sjp.recruitment.model.entity.Employer employer = new com.sjp.recruitment.model.entity.Employer();
+            employer.setUser(savedUser);
+            employer.setCompany(company);
+            employer.setOwner(true);
+            employer.setVerificationStatus("pending");
+            employer.setPosition("Quản trị viên");
+            employerRepository.save(employer);
         }
 
         sendVerificationEmail(savedUser);
@@ -220,6 +267,21 @@ public class AuthService {
         if (saved.getRoleEnum() == User.UserRole.CANDIDATE) {
             CandidateProfile profile = ensureCandidateProfile(saved);
             profile.setFullName(token.getFullName());
+        } else if (saved.getRoleEnum() == User.UserRole.EMPLOYER) {
+            com.sjp.recruitment.model.entity.Company company = new com.sjp.recruitment.model.entity.Company();
+            company.setName(token.getFullName() + " - Company");
+            company.setDescription("Chưa có mô tả");
+            company.setStatus("pending");
+            company.setVerificationStatus("unverified");
+            company = companyRepository.save(company);
+
+            com.sjp.recruitment.model.entity.Employer employer = new com.sjp.recruitment.model.entity.Employer();
+            employer.setUser(saved);
+            employer.setCompany(company);
+            employer.setOwner(true);
+            employer.setVerificationStatus("pending");
+            employer.setPosition("Quản trị viên");
+            employerRepository.save(employer);
         }
         token.setUsedAt(LocalDateTime.now());
         oauthRoleSelectionTokens.remove(request.token());

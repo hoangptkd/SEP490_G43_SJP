@@ -40,6 +40,12 @@ public class Company {
     // Cột location giữ nguyên với ý nghĩa là Head Office
     private String location;
 
+    @Column(name = "contact_phone")
+    private String contactPhone;
+
+    @Column(name = "contact_email")
+    private String contactEmail;
+
     @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CompanyLocation> locations = new ArrayList<>();
 

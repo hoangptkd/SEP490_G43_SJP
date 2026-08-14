@@ -15,6 +15,8 @@ public record CompanyProfileResponse(
         boolean verified,
         String verificationStatus,
         String status,
+        String contactPhone,
+        String contactEmail,
         List<CompanyLocationResponse> locations,
         List<CompanyIndustryResponse> industries
 ) {
