@@ -20,6 +20,7 @@ function CompanyProfilePage() {
   const [isIndustryDropdownOpen, setIsIndustryDropdownOpen] = useState(false);
   const [industrySearchTerm, setIndustrySearchTerm] = useState('');
   const [noWebsite, setNoWebsite] = useState(false);
+  const [suggestedName, setSuggestedName] = useState('');
   const industryDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,6 +132,18 @@ function CompanyProfilePage() {
 
     if (company?.taxCode && !isVietnamTaxCodeFormat(company.taxCode)) {
       errors.taxCode = 'Mã số thuế phải gồm 10 chữ số hoặc 13 chữ số đối với đơn vị phụ thuộc.';
+    }
+
+    if (company?.contactPhone) {
+      if (!/^(0|\+84)[3|5|7|8|9][0-9]{8}$/.test(company.contactPhone.replace(/\s+/g, ''))) {
+        errors.contactPhone = 'Số điện thoại không hợp lệ.';
+      }
+    }
+
+    if (company?.contactEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(company.contactEmail)) {
+        errors.contactEmail = 'Email không hợp lệ.';
+      }
     }
 
     setFieldErrors(errors);
@@ -271,17 +284,35 @@ function CompanyProfilePage() {
         <div className="p-6 md:p-8 space-y-8">
           <fieldset disabled={isVerified} className="space-y-6 disabled:opacity-80">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2 md:col-span-1 relative">
                 <label className="block text-sm font-medium text-gray-700">Tên công ty <span className="text-red-500">*</span></label>
                 <input
                   required
                   value={company.name}
                   onChange={(e) => setCompany({ ...company, name: e.target.value })}
-                  placeholder="Tên chính thức của doanh nghiệp"
+                  placeholder={suggestedName || "Tên chính thức của doanh nghiệp"}
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.name ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
+                {suggestedName && company.name !== suggestedName && (
+                  <p className="text-xs text-emerald-600 mt-1">
+                    Gợi ý: <button type="button" className="font-semibold hover:underline" onClick={() => setCompany({ ...company, name: suggestedName })}>{suggestedName}</button>
+                  </p>
+                )}
                 {fieldErrors.name && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.name}</p>}
               </div>
+
+              <TaxCodeLookupField
+                value={company.taxCode || ''}
+                onChange={(taxCode) => {
+                  setCompany({ ...company, taxCode });
+                  setFieldErrors((current) => ({ ...current, taxCode: '' }));
+                }}
+                onLookupSuccess={(companyName) => {
+                  setSuggestedName(companyName);
+                }}
+                error={fieldErrors.taxCode}
+                disabled={isVerified}
+              />
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Website {!noWebsite && <span className="text-red-500">*</span>}</label>
@@ -331,7 +362,44 @@ function CompanyProfilePage() {
                 {fieldErrors.companySize && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.companySize}</p>}
               </div>
             </div>
+          </fieldset>
 
+          <div className="bg-emerald-50/50 p-6 rounded-xl border border-emerald-100 space-y-6">
+            <h3 className="text-sm font-semibold text-emerald-800 uppercase tracking-wider">Thông tin liên hệ (Có thể cập nhật bất kỳ lúc nào)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Số điện thoại liên hệ</label>
+                <input
+                  type="text"
+                  value={company.contactPhone || ''}
+                  onChange={(e) => {
+                    setCompany({ ...company, contactPhone: e.target.value });
+                    setFieldErrors(prev => ({ ...prev, contactPhone: '' }));
+                  }}
+                  placeholder="0912345678"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all ${fieldErrors.contactPhone ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
+                />
+                {fieldErrors.contactPhone && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.contactPhone}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Email liên hệ</label>
+                <input
+                  type="email"
+                  value={company.contactEmail || ''}
+                  onChange={(e) => {
+                    setCompany({ ...company, contactEmail: e.target.value });
+                    setFieldErrors(prev => ({ ...prev, contactEmail: '' }));
+                  }}
+                  placeholder="contact@company.com"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all ${fieldErrors.contactEmail ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
+                />
+                {fieldErrors.contactEmail && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.contactEmail}</p>}
+              </div>
+            </div>
+          </div>
+
+          <fieldset disabled={isVerified} className="space-y-6 disabled:opacity-80">
             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
               <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Lĩnh vực hoạt động</h3>
               
@@ -505,15 +573,7 @@ function CompanyProfilePage() {
               </div>
             </div>
 
-            <TaxCodeLookupField
-              value={company.taxCode || ''}
-              onChange={(taxCode) => {
-                setCompany({ ...company, taxCode });
-                setFieldErrors((current) => ({ ...current, taxCode: '' }));
-              }}
-              error={fieldErrors.taxCode}
-              disabled={isVerified}
-            />
+
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty <span className="text-red-500">*</span></label>
@@ -536,7 +596,6 @@ function CompanyProfilePage() {
           </div>
           
           <div className="flex w-full md:w-auto gap-3">
-            {!isVerified && (
               <button
                 type="submit"
                 disabled={saving}
@@ -546,7 +605,6 @@ function CompanyProfilePage() {
               >
                 {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
-            )}
             <button 
               type="button" 
               onClick={() => navigate('/employer/locations')}

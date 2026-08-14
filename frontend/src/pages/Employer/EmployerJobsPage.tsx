@@ -28,6 +28,7 @@ function EmployerJobsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [allJobsForCount, setAllJobsForCount] = useState<Job[]>([]);
   const [locations, setLocations] = useState<CompanyLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,7 +107,7 @@ function EmployerJobsPage() {
     setLoading(true);
     setError('');
     try {
-      const [compData, jobsData, locsData, subData] = await Promise.all([
+      const [compData, jobsData, locsData, subData, allJobsData] = await Promise.all([
         employerService.getCompanyProfile(),
         employerService.getJobs({
           page: currentPage,
@@ -116,9 +117,15 @@ function EmployerJobsPage() {
         }).catch(() => ({ items: [], totalPages: 1 }) as import('../../types/candidateDomain').PageResult<Job>),
         employerService.getLocations().catch(() => []),
         billingService.getMySubscription().catch(() => null),
+        employerService.getJobs({
+          page: 1,
+          size: 1000,
+          search: searchTerm || undefined
+        }).catch(() => ({ items: [] }) as any)
       ]);
       setCompany(compData);
       setJobs(jobsData.items || []);
+      setAllJobsForCount(allJobsData.items || []);
       setTotalPages(jobsData.totalPages || 1);
       setLocations(locsData);
       setSubscription(subData);
@@ -1259,13 +1266,13 @@ function EmployerJobsPage() {
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[
-              { key: 'ALL', label: 'Tất cả', count: jobs.length },
-              { key: 'AWAITING_COMPANY', label: 'Tin vi phạm cần sửa', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'AWAITING_COMPANY').length },
-              { key: 'PENDING_REVIEW', label: 'Chờ duyệt', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'PENDING_REVIEW').length },
-              { key: 'PUBLISHED', label: 'Đang tuyển', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'PUBLISHED' || (j.status?.toUpperCase() || '') === 'ACTIVE').length },
-              { key: 'CLOSED', label: 'Đã đóng', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'CLOSED').length },
-              { key: 'EXPIRED', label: 'Hết hạn', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'EXPIRED').length },
-              { key: 'DRAFT', label: 'Bản nháp / Yêu cầu sửa', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'DRAFT' || (j.status?.toUpperCase() || '') === 'REJECTED').length },
+              { key: 'ALL', label: 'Tất cả', count: allJobsForCount.length },
+              { key: 'AWAITING_COMPANY', label: 'Tin vi phạm cần sửa', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'AWAITING_COMPANY').length },
+              { key: 'PENDING_REVIEW', label: 'Chờ duyệt', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'PENDING_REVIEW').length },
+              { key: 'PUBLISHED', label: 'Đang tuyển', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'PUBLISHED' || (j.status?.toUpperCase() || '') === 'ACTIVE').length },
+              { key: 'CLOSED', label: 'Đã đóng', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'CLOSED').length },
+              { key: 'EXPIRED', label: 'Hết hạn', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'EXPIRED').length },
+              { key: 'DRAFT', label: 'Bản nháp / Yêu cầu sửa', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'DRAFT' || (j.status?.toUpperCase() || '') === 'REJECTED').length },
             ].map((tab) => {
               const active = statusFilter === tab.key;
               return (

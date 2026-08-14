@@ -4,7 +4,7 @@ import { employerService } from '../../services/employerService';
 import { billingService, UserSubscription } from '../../services/billingService';
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
 import type { CandidateApplication } from '../../types/candidateDomain';
-import type { Job } from '../../types/job';
+import type { Job, Company } from '../../types/job';
 import VietnamAddressPicker from '../../components/location/VietnamAddressPicker';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -28,6 +28,7 @@ export default function EmployerApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
 
   // Filters
   const [selectedJobId, setSelectedJobId] = useState<string>(queryJobId);
@@ -99,12 +100,14 @@ export default function EmployerApplicationsPage() {
 
   async function loadJobs() {
     try {
-      const [jobList, subData] = await Promise.all([
+      const [jobList, subData, compData] = await Promise.all([
         employerService.getJobs(),
-        billingService.getMySubscription().catch(() => null)
+        billingService.getMySubscription().catch(() => null),
+        employerService.getCompanyProfile().catch(() => null)
       ]);
       setJobs(jobList.items || []);
       setSubscription(subData);
+      setCompany(compData);
     } catch (err) {
       console.error('Failed to load jobs', err);
     }
@@ -256,14 +259,14 @@ export default function EmployerApplicationsPage() {
     setScheduledAt('');
     setLocation('');
     setMeetingLink('');
-    setPositionTitle(defaultStatus === 'UPDATE_OFFER' && app.jobOffer ? app.jobOffer.positionTitle : app.job.title || '');
-    setSalary(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salary ? app.jobOffer.salary : '');
-    setSalaryCurrency(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salaryCurrency ? app.jobOffer.salaryCurrency : 'VND');
-    setSalaryType(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salaryType ? app.jobOffer.salaryType : 'monthly');
-    setStartDate(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.startDate ? app.jobOffer.startDate : '');
-    setBenefits(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.benefits ? app.jobOffer.benefits : '');
-    setWorkingLocation(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.workingLocation ? app.jobOffer.workingLocation : '');
-    setOfferLetterUrl(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.offerLetterUrl ? app.jobOffer.offerLetterUrl : '');
+    setPositionTitle(app.job.title || '');
+    setSalary('');
+    setSalaryCurrency('VND');
+    setSalaryType('monthly');
+    setStartDate('');
+    setBenefits('');
+    setWorkingLocation('');
+    setOfferLetterUrl('');
   }
 
   async function handleConfirmUpdate() {
@@ -290,7 +293,7 @@ export default function EmployerApplicationsPage() {
         if (new Date(startDate).getTime() < new Date().setHours(0,0,0,0)) throw new Error('Ngày bắt đầu làm việc không được ở trong quá khứ');
         if (offerLetterUrl && !/^https?:\/\/.+/.test(offerLetterUrl)) throw new Error('Link Offer Letter phải bắt đầu bằng http:// hoặc https://');
 
-        const offerData = {
+        await employerService.createJobOffer(updatingApp.id, {
           positionTitle,
           salary: salary ? Number(salary) : undefined,
           salaryCurrency,
@@ -300,17 +303,7 @@ export default function EmployerApplicationsPage() {
           workingLocation,
           offerLetterUrl,
           employerNote: note
-        };
-
-        if (targetStatus === 'UPDATE_OFFER') {
-           if (!updatingApp.jobOffer) throw new Error('Không tìm thấy Job Offer để sửa');
-           await employerService.employerRespondToOfferRejection(updatingApp.jobOffer.id, true, offerData);
-        } else {
-           await employerService.createJobOffer(updatingApp.id, offerData);
-        }
-      } else if (targetStatus === 'DECLINE_OFFER_NEGOTIATION') {
-         if (!updatingApp.jobOffer) throw new Error('Không tìm thấy Job Offer để thao tác');
-         await employerService.employerRespondToOfferRejection(updatingApp.jobOffer.id, false, { employerNote: note } as any);
+        });
       } else if (targetStatus === 'REJECTED') {
         await employerService.rejectApplication(updatingApp.id, note);
       } else if (targetStatus === 'EVALUATE_INTERVIEW') {
@@ -358,6 +351,22 @@ export default function EmployerApplicationsPage() {
   }
 
   const currentJob = jobs.find((j) => j.id === selectedJobId);
+
+  if (company && company.verificationStatus !== 'verified') {
+    return (
+      <section className="content-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
+        <div style={{ background: '#fef2f2', border: '1px solid #f87171', borderRadius: '8px', padding: '32px', maxWidth: '600px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '1.5rem', color: '#b91c1c', margin: '0 0 16px 0' }}>Công ty chưa được xác thực</h2>
+          <p style={{ color: '#7f1d1d', margin: '0 0 24px 0', fontSize: '1.05rem', lineHeight: '1.5' }}>
+            Bạn cần hoàn tất quá trình xác thực doanh nghiệp để có thể xem và quản lý hồ sơ ứng viên. Vui lòng cập nhật giấy phép kinh doanh để đội ngũ admin phê duyệt.
+          </p>
+          <Link to="/employer/verification" style={{ display: 'inline-block', background: '#dc2626', color: '#fff', padding: '10px 24px', borderRadius: '6px', textDecoration: 'none', fontWeight: 600 }}>
+            Đi tới trang Xác thực
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="content-card" style={{ padding: '24px' }}>
@@ -855,16 +864,14 @@ export default function EmployerApplicationsPage() {
             padding: '20px',
           }}
         >
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ margin: '0 0 16px 0', color: '#0f172a', fontSize: '1.25rem' }}>
               {targetStatus === 'UNDER_REVIEW' && 'Duyệt hồ sơ (Đưa vào vòng xem xét)'}
               {targetStatus === 'INTERVIEW_SCHEDULED' && 'Lên lịch phỏng vấn'}
               {targetStatus === 'ACCEPTED' && 'Gửi Lời mời làm việc (Job Offer)'}
-              {targetStatus === 'UPDATE_OFFER' && 'Cập nhật Lời mời làm việc (Sửa Offer)'}
-              {targetStatus === 'DECLINE_OFFER_NEGOTIATION' && 'Từ chối thay đổi Offer'}
               {targetStatus === 'REJECTED' && 'Từ chối ứng viên'}
               {targetStatus === 'EVALUATE_INTERVIEW' && 'Đánh giá kết quả phỏng vấn'}
-              {targetStatus !== 'UNDER_REVIEW' && targetStatus !== 'INTERVIEW_SCHEDULED' && targetStatus !== 'ACCEPTED' && targetStatus !== 'UPDATE_OFFER' && targetStatus !== 'DECLINE_OFFER_NEGOTIATION' && targetStatus !== 'REJECTED' && targetStatus !== 'EVALUATE_INTERVIEW' && 'Thao tác hồ sơ'}
+              {targetStatus !== 'UNDER_REVIEW' && targetStatus !== 'INTERVIEW_SCHEDULED' && targetStatus !== 'ACCEPTED' && targetStatus !== 'REJECTED' && targetStatus !== 'EVALUATE_INTERVIEW' && 'Thao tác hồ sơ'}
             </h3>
 
             <div style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '16px' }}>
@@ -929,9 +936,9 @@ export default function EmployerApplicationsPage() {
               })()
             )}
 
-            {(targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') && (
+            {targetStatus === 'ACCEPTED' && (
               <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px', maxHeight: '300px', overflowY: 'auto' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>{targetStatus === 'UPDATE_OFFER' ? 'Cập nhật Job Offer' : 'Thông tin Job Offer'}</h4>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>Thông tin Job Offer</h4>
 
                 <div style={{ marginBottom: '12px' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Chức danh (*)</label>
@@ -1010,7 +1017,7 @@ export default function EmployerApplicationsPage() {
               >
                 Hủy
               </button>
-              {(targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') && (
+              {targetStatus === 'ACCEPTED' && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1028,7 +1035,7 @@ export default function EmployerApplicationsPage() {
                 onClick={handleConfirmUpdate}
                 style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: updating ? 'wait' : 'pointer' }}
               >
-                {updating ? 'Đang lưu...' : (targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER' ? 'Gửi Job Offer' : 'Xác nhận & Gửi thông báo')}
+                {updating ? 'Đang lưu...' : (targetStatus === 'ACCEPTED' ? 'Gửi Job Offer' : 'Xác nhận & Gửi thông báo')}
               </button>
             </div>
           </div>

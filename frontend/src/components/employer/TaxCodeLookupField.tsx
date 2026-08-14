@@ -8,6 +8,7 @@ interface TaxCodeLookupFieldProps {
   onChange: (value: string) => void;
   error?: string;
   disabled?: boolean;
+  onLookupSuccess?: (companyName: string) => void;
 }
 
 type LookupState =
@@ -16,7 +17,7 @@ type LookupState =
   | { status: 'found'; result: TaxCodeLookupResult }
   | { status: 'unavailable' };
 
-export function TaxCodeLookupField({ value, onChange, error, disabled = false }: TaxCodeLookupFieldProps) {
+export function TaxCodeLookupField({ value, onChange, error, disabled = false, onLookupSuccess }: TaxCodeLookupFieldProps) {
   const [lookup, setLookup] = useState<LookupState>({ status: 'idle' });
 
   useEffect(() => {
@@ -31,6 +32,9 @@ export function TaxCodeLookupField({ value, onChange, error, disabled = false }:
       try {
         const result = await employerService.lookupTaxCode(normalizeVietnamTaxCode(value), controller.signal);
         setLookup({ status: 'found', result });
+        if (onLookupSuccess) {
+          onLookupSuccess(result.companyName);
+        }
       } catch (requestError: any) {
         if (controller.signal.aborted) return;
         if (requestError?.response?.data?.code === 'TAX_LOOKUP_UNAVAILABLE') {

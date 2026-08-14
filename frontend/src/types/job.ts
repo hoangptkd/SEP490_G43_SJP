@@ -74,6 +74,8 @@ export interface Company {
   verified?: boolean;
   verificationStatus?: string;
   status?: string;
+  contactPhone?: string;
+  contactEmail?: string;
   locations?: CompanyLocation[];
   industries?: CompanyIndustry[];
   submitForReview?: boolean;

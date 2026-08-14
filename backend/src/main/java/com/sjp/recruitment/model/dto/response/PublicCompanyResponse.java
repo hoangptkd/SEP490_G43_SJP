@@ -12,6 +12,8 @@ public record PublicCompanyResponse(
         Integer companySize,
         String logoUrl,
         boolean verified,
+        String contactPhone,
+        String contactEmail,
         List<CompanyLocationResponse> locations,
         PageResponse<JobResponse> openJobs
 ) {
