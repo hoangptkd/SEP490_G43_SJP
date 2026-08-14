@@ -30,6 +30,9 @@ function CompanyVerificationPage() {
   const replaceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const industryDropdownRef = useRef<HTMLDivElement>(null);
 
+  const verificationStatus = company?.verificationStatus?.toLowerCase() || 'unverified';
+  const isVerified = verificationStatus === 'verified' || verificationStatus === 'approved';
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (industryDropdownRef.current && !industryDropdownRef.current.contains(event.target as Node)) {
@@ -164,7 +167,13 @@ function CompanyVerificationPage() {
       }
       const updated = await employerService.updateCompanyProfile(payload);
       setCompany(updated);
-      setSuccess(submitForReview ? 'Hồ sơ đã được gửi và đang chờ admin duyệt.' : 'Lưu thông tin công ty thành công.');
+      
+      const newStatus = updated.verificationStatus?.toLowerCase() || 'unverified';
+      if (submitForReview || (isVerified && newStatus === 'pending')) {
+        setSuccess('Hồ sơ đã được gửi và đang chờ admin duyệt lại do có thay đổi pháp lý.');
+      } else {
+        setSuccess('Lưu thông tin công ty thành công.');
+      }
       await loadData();
     } catch (err: any) {
       if (err.response?.data?.message) {
@@ -668,20 +677,26 @@ function CompanyVerificationPage() {
             <button 
               type="submit" 
               disabled={saving} 
-              className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
-            >
-              {saving ? 'Đang xử lý...' : 'Lưu (Không gửi duyệt)'}
-            </button>
-            <button 
-              type="button" 
-              disabled={saving} 
-              onClick={(e) => handleSubmit(e, true)} 
-              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${
-                saving ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
+              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm ${
+                isVerified 
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             >
-              {saving ? 'Đang xử lý...' : 'Lưu & Gửi duyệt'}
+              {saving ? 'Đang xử lý...' : (isVerified ? 'Lưu thay đổi' : 'Lưu (Không gửi duyệt)')}
             </button>
+            {!isVerified && (
+              <button 
+                type="button" 
+                disabled={saving} 
+                onClick={(e) => handleSubmit(e, true)} 
+                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${
+                  saving ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
+                }`}
+              >
+                {saving ? 'Đang xử lý...' : 'Lưu & Gửi duyệt'}
+              </button>
+            )}
           </div>
         </form>
       )}

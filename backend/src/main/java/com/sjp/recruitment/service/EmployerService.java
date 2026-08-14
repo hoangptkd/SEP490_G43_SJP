@@ -474,7 +474,8 @@ public class EmployerService {
 
         String oldName = company.getName() == null ? "" : company.getName().trim();
         String newName = request.name() == null ? "" : request.name().trim();
-        String oldTax = company.getTaxCode() == null ? "" : company.getTaxCode().trim();
+        String oldTaxRaw = company.getTaxCode() == null ? "" : company.getTaxCode().trim();
+        String oldTax = taxCodeLookupService.normalize(oldTaxRaw);
         String newTax = taxCodeLookupService.normalize(request.taxCode());
         if (!newTax.isBlank()) {
             newTax = taxCodeLookupService.lookup(newTax).taxCode();
@@ -493,6 +494,7 @@ public class EmployerService {
         }
 
         company.setName(newName);
+        company.setDescription(request.description());
         company.setWebsite(request.website());
         company.setContactPhone(request.contactPhone());
         company.setContactEmail(request.contactEmail());
@@ -542,14 +544,11 @@ public class EmployerService {
                 }
             }
             if (primaryIndustryName != null) {
-                if (!primaryIndustryName.equals(company.getIndustry())) industryChanged = true;
                 company.setIndustry(primaryIndustryName);
             } else if (request.industry() != null) {
-                if (!request.industry().equals(company.getIndustry())) industryChanged = true;
                 company.setIndustry(request.industry());
             }
         } else {
-            if (request.industry() != null && !request.industry().equals(company.getIndustry())) industryChanged = true;
             company.setIndustry(request.industry());
         }
 
@@ -578,6 +577,13 @@ public class EmployerService {
         }
 
         boolean legalInfoChanged = nameOrTaxChanged || industryChanged;
+        
+        System.out.println("DEBUG UPDATE COMPANY: nameOrTaxChanged=" + nameOrTaxChanged + " (oldName='" + oldName + "', newName='" + newName + "', oldTax='" + oldTax + "', newTax='" + newTax + "')");
+        System.out.println("DEBUG UPDATE COMPANY: industryChanged=" + industryChanged);
+        if (industryChanged) {
+            System.out.println("DEBUG UPDATE COMPANY: request.industries=" + request.industries());
+            System.out.println("DEBUG UPDATE COMPANY: company.industry=" + company.getIndustry());
+        }
 
         if (Boolean.TRUE.equals(request.submitForReview())) {
             forceCompanyAndOwnerPending(company);
