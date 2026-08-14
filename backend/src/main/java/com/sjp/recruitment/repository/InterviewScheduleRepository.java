@@ -49,7 +49,7 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     @Query("SELECT COUNT(s) > 0 FROM InterviewSchedule s " +
            "WHERE s.application.id IN :applicationIds " +
-           "AND s.status IN ('scheduled', 'rescheduled')")
+           "AND UPPER(s.status) IN ('PENDING_RESPONSE', 'ACCEPTED', 'RESCHEDULE_REQUESTED', 'SCHEDULED', 'RESCHEDULED')")
     boolean existsActiveByApplicationIds(@Param("applicationIds") List<UUID> applicationIds);
 
     long countByEmployerIdAndStatus(UUID employerId, String status);
