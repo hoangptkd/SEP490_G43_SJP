@@ -548,30 +548,30 @@ function EmployerJobsPage() {
           </div>
           
           <div className="p-6 lg:p-8 flex-1">
-            {editingId && (() => {
-              const editingJob = jobs.find((j) => j.id === editingId);
-              const st = editingJob?.status?.toLowerCase();
-              if (st !== 'rejected' && st !== 'awaiting_company') return null;
-              const isReportFix = st === 'awaiting_company';
-              return (
+          {editingId && (() => {
+            const editingJob = jobs.find((j) => j.id === editingId);
+            const st = editingJob?.status?.toLowerCase();
+            if (st !== 'rejected' && st !== 'awaiting_company') return null;
+            const isReportFix = st === 'awaiting_company';
+            return (
               <div className={`mb-6 p-5 rounded-xl border-l-4 ${isReportFix ? 'bg-orange-50 border-orange-200 border-l-orange-600' : 'bg-red-50 border-red-200 border-l-red-600'}`}>
                 <div className={`font-semibold mb-2 ${isReportFix ? 'text-orange-800' : 'text-red-800'}`}>
-                  {isReportFix ? 'Yêu cầu chỉnh sửa từ Admin (tin bị báo cáo)' : 'Phản hồi từ Bộ phận kiểm duyệt'}
-                </div>
+                {isReportFix ? 'Yêu cầu chỉnh sửa từ Admin (tin bị báo cáo)' : 'Phản hồi từ Bộ phận kiểm duyệt'}
+              </div>
                 <div className={`bg-white p-3 rounded-lg border mb-3 text-sm leading-relaxed ${isReportFix ? 'border-orange-100 text-orange-900' : 'border-red-100 text-red-900'}`}>
-                  {editingJob?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
-                </div>
+                {editingJob?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
+              </div>
                 {isReportFix && editingJob?.reportFixDeadline && (
                   <div className="text-sm font-semibold text-orange-800 mb-2">
                     Hạn chỉnh sửa: {new Date(editingJob.reportFixDeadline).toLocaleString('vi-VN')}. Quá hạn tin sẽ bị gỡ tự động.
                   </div>
                 )}
                 <div className={`text-sm opacity-90 ${isReportFix ? 'text-orange-800' : 'text-red-800'}`}>
-                  Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để gửi lại cho Admin duyệt.
-                </div>
+                Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để gửi lại cho Admin duyệt.
               </div>
-              );
-            })()}
+            </div>
+            );
+          })()}
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
@@ -781,9 +781,9 @@ function EmployerJobsPage() {
                 ) : (
                   <VietnamAddressPicker
                     label="Địa điểm hiển thị trên tin tuyển dụng"
-                    required
+                  required
                     allowRemote
-                    value={formData.location || ''}
+                  value={formData.location || ''}
                     onChange={(value) => setFormData({ ...formData, location: value })}
                   />
                 )}
@@ -1138,57 +1138,57 @@ function EmployerJobsPage() {
                 
                 return (
                   <>
-                    {editingId ? (
-                      <button
-                        type="submit"
+              {editingId ? (
+                <button
+                  type="submit"
                         disabled={saving || isInvalidConfig}
-                        onClick={() => {
-                          const editingStatus = jobs.find((j) => j.id === editingId)?.status?.toLowerCase();
-                          if (editingStatus === 'awaiting_company' || editingStatus === 'rejected') {
-                            submitTargetRef.current = 'pending_review';
-                            setFormData((prev) => ({ ...prev, status: 'pending_review' }));
-                          } else {
-                            submitTargetRef.current = formData.status;
-                          }
-                        }}
+                  onClick={() => {
+                    const editingStatus = jobs.find((j) => j.id === editingId)?.status?.toLowerCase();
+                    if (editingStatus === 'awaiting_company' || editingStatus === 'rejected') {
+                      submitTargetRef.current = 'pending_review';
+                      setFormData((prev) => ({ ...prev, status: 'pending_review' }));
+                    } else {
+                      submitTargetRef.current = formData.status;
+                    }
+                  }}
                         className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
                           (saving || isInvalidConfig) 
                             ? 'bg-gray-400 text-white cursor-not-allowed' 
                             : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                         }`}
-                      >
-                        {saving
-                          ? 'Đang xử lý...'
-                          : (jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'awaiting_company'
-                            || jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected')
-                            ? 'Lưu & Nộp kiểm duyệt'
-                            : 'Lưu lại'}
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="submit"
+                >
+                  {saving
+                    ? 'Đang xử lý...'
+                    : (jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'awaiting_company'
+                      || jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected')
+                      ? 'Lưu & Nộp kiểm duyệt'
+                      : 'Lưu lại'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="submit"
                           disabled={saving || isInvalidConfig}
-                          onClick={() => {
-                            submitTargetRef.current = 'draft';
-                            setFormData((prev) => ({ ...prev, status: 'draft' }));
-                          }}
+                    onClick={() => {
+                      submitTargetRef.current = 'draft';
+                      setFormData((prev) => ({ ...prev, status: 'draft' }));
+                    }}
                           className={`px-5 py-2.5 rounded-lg font-semibold text-[15px] border transition-colors ${
                             (saving || isInvalidConfig)
                               ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                               : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300 shadow-sm'
                           }`}
-                        >
-                          {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
-                        </button>
-                        {hasApprovedJob ? (
-                          <button
-                            type="submit"
+                  >
+                    {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
+                  </button>
+                  {hasApprovedJob ? (
+                    <button
+                      type="submit"
                             disabled={saving || isInvalidConfig}
-                            onClick={() => {
-                              submitTargetRef.current = 'published';
-                              setFormData((prev) => ({ ...prev, status: 'published' }));
-                            }}
+                      onClick={() => {
+                        submitTargetRef.current = 'published';
+                        setFormData((prev) => ({ ...prev, status: 'published' }));
+                      }}
                             className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
                               (saving || isInvalidConfig)
                                 ? 'bg-gray-400 text-white cursor-not-allowed'
@@ -1196,39 +1196,39 @@ function EmployerJobsPage() {
                             }`}
                           >
                             {saving ? 'Đang xử lý...' : 'Đăng tin ngay (Miễn duyệt)'}
-                          </button>
-                        ) : (
-                          <button
-                            type="submit"
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
                             disabled={saving || isInvalidConfig}
-                            onClick={() => {
-                              submitTargetRef.current = 'pending_review';
-                              setFormData((prev) => ({ ...prev, status: 'pending_review' }));
-                            }}
+                      onClick={() => {
+                        submitTargetRef.current = 'pending_review';
+                        setFormData((prev) => ({ ...prev, status: 'pending_review' }));
+                      }}
                             className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
                               (saving || isInvalidConfig)
                                 ? 'bg-gray-400 text-white cursor-not-allowed'
                                 : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                             }`}
-                          >
-                            {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
-                          </button>
-                        )}
-                      </>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setShowForm(false)}
-                      className="px-5 py-2.5 rounded-lg font-semibold text-[15px] text-gray-600 hover:bg-gray-100 transition-colors bg-transparent"
                     >
-                      Hủy
+                      {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
                     </button>
+                  )}
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                      className="px-5 py-2.5 rounded-lg font-semibold text-[15px] text-gray-600 hover:bg-gray-100 transition-colors bg-transparent"
+              >
+                Hủy
+              </button>
                   </>
                 );
               })()}
             </div>
           </form>
-          </div>
+        </div>
         </div>
       </div>
       )}
@@ -1351,14 +1351,14 @@ function EmployerJobsPage() {
                               {job.title}
                             </h3>
                             <div className="flex">
-                              <span style={{
-                                background: statusBg,
-                                color: statusColor,
-                                border: `1px solid ${statusBorder}`,
+                            <span style={{
+                              background: statusBg,
+                              color: statusColor,
+                              border: `1px solid ${statusBorder}`,
                               }} className="px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-2">
                                 <span style={{ background: statusDot }} className="w-1.5 h-1.5 rounded-full"></span>
-                                {statusLabel}
-                              </span>
+                              {statusLabel}
+                            </span>
                             </div>
                           </div>
 
@@ -1580,40 +1580,40 @@ function EmployerJobsPage() {
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Mô tả công việc</h4>
                 <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
-                  {viewingJob.description}
-                </div>
+                {viewingJob.description}
+              </div>
               </section>
 
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Yêu cầu công việc</h4>
                 <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
-                  {viewingJob.requirements?.join('\n') || viewingJob.skills?.join(', ')}
-                </div>
+                {viewingJob.requirements?.join('\n') || viewingJob.skills?.join(', ')}
+              </div>
               </section>
 
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Quyền lợi</h4>
                 <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
-                  {viewingJob.benefits || 'Theo quy định của công ty'}
-                </div>
+                {viewingJob.benefits || 'Theo quy định của công ty'}
+              </div>
               </section>
 
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Kỹ năng chuyên môn</h4>
                 <div className="flex gap-2 flex-wrap mt-2">
-                  {viewingJob.skills?.map((s, idx) => (
+                {viewingJob.skills?.map((s, idx) => (
                     <span key={idx} className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200">
-                      {s}
-                    </span>
-                  ))}
-                </div>
+                    {s}
+                  </span>
+                ))}
+              </div>
               </section>
 
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Thời gian làm việc</h4>
                 <div className="text-gray-600 text-[15px]">
-                  {viewingJob.workingTime || 'Giờ hành chính'}
-                </div>
+                {viewingJob.workingTime || 'Giờ hành chính'}
+              </div>
               </section>
             </div>
 
