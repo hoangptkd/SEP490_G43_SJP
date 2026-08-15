@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AiInterviewService {
 
-    private static final String PROVIDER_RETRY_MESSAGE = "He thong chua xu ly duoc cau tra loi nay, vui long thu lai.";
+    private static final String PROVIDER_RETRY_MESSAGE = "Hệ thống chưa xử lý được câu trả lời này, vui lòng thử lại.";
     private static final String AI_QUESTION_SOURCE = "AI_GENERATED";
     private static final String QUESTION_BANK_SOURCE = "QUESTION_BANK";
     private static final String INITIAL_QUESTION_PROMPT_VERSION = "ai-question-initial-v2";
@@ -151,9 +151,9 @@ public class AiInterviewService {
         requireAiSession(candidate.getUser());
         Application application = applicationRepository.findById(parseUuid(applicationId, "APPLICATION_ID_INVALID"))
                 .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy hồ sơ ứng tuyển"));
         if (!isEligibleApplication(application)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "APPLICATION_NOT_ELIGIBLE", "Ho so ung tuyen nay khong con du dieu kien luyen phong van AI");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "APPLICATION_NOT_ELIGIBLE", "Hồ sơ ứng tuyển này không còn đủ điều kiện luyện phỏng vấn AI");
         }
 
         InterviewSession session = new InterviewSession();
@@ -162,7 +162,7 @@ public class AiInterviewService {
         session.setJob(application.getJob());
         session.setContextType("application");
         session.setSessionType("job_based");
-        session.setTitle("Luyen phong van: " + application.getJob().getTitle());
+        session.setTitle("Luyện phỏng vấn: " + application.getJob().getTitle());
         session.setStatus("created");
         session.setStartedAt(LocalDateTime.now());
         session = sessionRepository.save(session);
@@ -208,7 +208,7 @@ public class AiInterviewService {
         session.setContextType("practice");
         session.setSessionType("practice");
         session.setPracticeContext(practiceContext);
-        session.setTitle("Practice: " + request.targetRole().trim());
+        session.setTitle("Luyện tập: " + request.targetRole().trim());
         session.setStatus("created");
         session.setStartedAt(LocalDateTime.now());
         session = sessionRepository.save(session);
@@ -256,7 +256,7 @@ public class AiInterviewService {
         InterviewAnswer answer = answerRepository.findBySessionIdAndQuestionId(session.getId(), question.getId())
                 .orElseGet(() -> draftAnswer(session, question));
         if (answer.getAnsweredAt() != null) {
-            throw new ApiException(HttpStatus.CONFLICT, "QUESTION_ALREADY_ANSWERED", "Cau hoi nay da duoc chot cau tra loi");
+            throw new ApiException(HttpStatus.CONFLICT, "QUESTION_ALREADY_ANSWERED", "Câu hỏi này đã được chốt câu trả lời");
         }
         answer.setTranscriptStatus("processing");
         answer.setErrorMessage(null);
@@ -599,9 +599,9 @@ public class AiInterviewService {
         InterviewQuestion question = requireQuestion(session, questionId);
         InterviewAnswer answer = answerRepository.findBySessionIdAndQuestionId(session.getId(), question.getId())
                 .filter(item -> item.getAnsweredAt() != null)
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "ANSWER_NOT_READY", "Chua co cau tra loi de cham lai"));
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "ANSWER_NOT_READY", "Chưa có câu trả lời để chấm lại"));
         if (answer.isSkipped()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "SKIPPED_ANSWER", "Cau hoi da bo qua khong can cham lai");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "SKIPPED_ANSWER", "Câu hỏi đã bỏ qua không cần chấm lại");
         }
         evaluateWholeInterview(session.getId());
         return responseAssembler.assemble(requireSession(sessionId));
@@ -1296,7 +1296,7 @@ public class AiInterviewService {
                         .map(answer -> answer.getAnsweredAt() == null)
                         .orElse(true))
                 .findFirst()
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "NO_OPEN_QUESTION", "Khong co cau hoi dang mo"));
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "NO_OPEN_QUESTION", "Không có câu hỏi đang mở"));
     }
 
     private List<InterviewAnswer> evaluableAnswers(InterviewSession session) {
@@ -1338,28 +1338,28 @@ public class AiInterviewService {
 
     private void validateAudio(MultipartFile file, Integer durationSeconds) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_REQUIRED", "Vui long ghi am cau tra loi");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_REQUIRED", "Vui lòng ghi âm câu trả lời");
         }
         if (file.getSize() > properties.audioMaxBytes()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_TOO_LARGE", "File ghi am vuot qua dung luong cho phep");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_TOO_LARGE", "File ghi âm vượt quá dung lượng cho phép");
         }
         if (durationSeconds == null || durationSeconds <= 0) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_DURATION_REQUIRED", "Khong xac dinh duoc thoi luong ghi am");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_DURATION_REQUIRED", "Không xác định được thời lượng ghi âm");
         }
         if (durationSeconds > properties.getAudioMaxSeconds()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_TOO_LONG", "Ban ghi am vuot qua thoi luong cho phep");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_TOO_LONG", "Bạn ghi âm vượt quá thời lượng cho phép");
         }
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
         if (!contentType.startsWith("audio/") && !contentType.contains("webm") && !contentType.contains("ogg")) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_INVALID_TYPE", "Chi ho tro file audio");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_INVALID_TYPE", "Chỉ hỗ trợ file audio");
         }
         try {
             byte[] header = file.getInputStream().readNBytes(12);
             if (!hasSupportedAudioHeader(header)) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_INVALID_CONTENT", "Noi dung file khong phai dinh dang audio duoc ho tro");
+                throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_INVALID_CONTENT", "Nội dung file không phải định dạng audio được hỗ trợ");
             }
         } catch (IOException exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_UNREADABLE", "Khong the doc file ghi am");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_UNREADABLE", "Không thể đọc file ghi âm");
         }
     }
 
@@ -1379,13 +1379,13 @@ public class AiInterviewService {
     private InterviewSession requireSession(String sessionId) {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         return sessionRepository.findByIdAndCandidateIdAndDeletedAtIsNull(parseUuid(sessionId, "SESSION_ID_INVALID"), candidate.getId())
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "Khong tim thay phien phong van"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "Không tìm thấy phiên phỏng vấn"));
     }
 
     private InterviewSession requireMutableSession(String sessionId) {
         InterviewSession session = requireSession(sessionId);
         if (session.isCompleted()) {
-            throw new ApiException(HttpStatus.CONFLICT, "SESSION_COMPLETED", "Phien phong van da hoan thanh");
+            throw new ApiException(HttpStatus.CONFLICT, "SESSION_COMPLETED", "Phiên phỏng vấn đã hoàn thành");
         }
         return session;
     }
@@ -1401,18 +1401,18 @@ public class AiInterviewService {
         try {
             answerRepository.saveAndFlush(answer);
         } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException exception) {
-            throw new ApiException(HttpStatus.CONFLICT, "ANSWER_OPERATION_IN_PROGRESS", "Cau tra loi dang duoc xu ly boi mot yeu cau khac");
+            throw new ApiException(HttpStatus.CONFLICT, "ANSWER_OPERATION_IN_PROGRESS", "Câu trả lời đang được xử lý bởi một yêu cầu khác");
         }
     }
 
     private InterviewQuestion requireQuestion(InterviewSession session, String questionId) {
         return questionRepository.findByIdAndSessionId(parseUuid(questionId, "QUESTION_ID_INVALID"), session.getId())
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "QUESTION_NOT_FOUND", "Khong tim thay cau hoi"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "QUESTION_NOT_FOUND", "Không tìm thấy câu hỏi"));
     }
 
     private void ensureEnabled() {
         if (!properties.isEnabled()) {
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI_INTERVIEW_NOT_CONFIGURED", "AI Interview chua duoc cau hinh.");
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI_INTERVIEW_NOT_CONFIGURED", "AI Interview chưa được cấu hình.");
         }
         if (!isEnabledByAdmin()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI_INTERVIEW_DISABLED", "Phỏng vấn AI đang bị tắt bởi quản trị viên.");
@@ -1480,7 +1480,7 @@ public class AiInterviewService {
         try {
             return UUID.fromString(value);
         } catch (IllegalArgumentException exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Ma dinh danh khong hop le");
+            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Mã định danh không hợp lệ");
         }
     }
 }

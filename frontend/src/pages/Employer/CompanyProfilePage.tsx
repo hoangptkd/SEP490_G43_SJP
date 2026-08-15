@@ -19,6 +19,8 @@ function CompanyProfilePage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isIndustryDropdownOpen, setIsIndustryDropdownOpen] = useState(false);
   const [industrySearchTerm, setIndustrySearchTerm] = useState('');
+  const [noWebsite, setNoWebsite] = useState(false);
+  const [suggestedName, setSuggestedName] = useState('');
   const industryDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,8 +46,12 @@ function CompanyProfilePage() {
             inds = [{ categoryId: matchedCat.id, categoryName: matchedCat.name, primary: true }];
           }
         }
+        if (companyData.name && companyData.name.startsWith('Công ty chưa cập nhật - ')) {
+          companyData.name = '';
+        }
         setCompany({ ...companyData, industries: inds });
         setCategories(categoriesData);
+        setNoWebsite(!companyData.website);
         setLoading(false);
       })
       .catch(() => {
@@ -83,12 +89,40 @@ function CompanyProfilePage() {
       errors.name = 'Tên công ty không được vượt quá 100 ký tự.';
     }
 
-    if (company?.website && !/^https?:\/\//i.test(company.website)) {
-      errors.website = 'Website phải bắt đầu bằng http:// hoặc https://';
+    if (!noWebsite) {
+      const trimmedWebsite = company?.website?.trim() || '';
+      if (!trimmedWebsite) {
+        errors.website = 'Vui lòng nhập địa chỉ website.';
+      } else if (trimmedWebsite.length > 255) {
+        errors.website = 'Website không được vượt quá 255 ký tự.';
+      } else if (!/^https?:\/\//i.test(trimmedWebsite)) {
+        errors.website = 'Website phải bắt đầu bằng http:// hoặc https://';
+      } else {
+        try {
+          new URL(trimmedWebsite);
+        } catch (e) {
+          errors.website = 'Định dạng URL không hợp lệ.';
+        }
+      }
     }
 
-    if (company?.companySize !== undefined && company.companySize !== null && company.companySize <= 0) {
-      errors.companySize = 'Quy mô nhân sự phải lớn hơn 0.';
+    if (company?.companySize !== undefined && company.companySize !== null) {
+      if (!Number.isInteger(company.companySize)) {
+        errors.companySize = 'Quy mô nhân sự phải là số nguyên.';
+      } else if (company.companySize <= 0) {
+        errors.companySize = 'Quy mô nhân sự phải lớn hơn 0.';
+      } else if (company.companySize > 1000000) {
+        errors.companySize = 'Quy mô nhân sự không vượt quá 1.000.000.';
+      }
+    }
+
+    const trimmedDescription = company?.description?.trim() || '';
+    if (!trimmedDescription) {
+      errors.description = 'Vui lòng nhập mô tả / giới thiệu công ty.';
+    } else if (trimmedDescription.length < 500) {
+      errors.description = 'Mô tả / Giới thiệu công ty không được ít hơn 500 ký tự.';
+    } else if (trimmedDescription.length > 5000) {
+      errors.description = 'Mô tả / Giới thiệu công ty không được vượt quá 5000 ký tự.';
     }
 
     if (!company?.industries || company.industries.length === 0) {
@@ -101,6 +135,18 @@ function CompanyProfilePage() {
 
     if (company?.taxCode && !isVietnamTaxCodeFormat(company.taxCode)) {
       errors.taxCode = 'Mã số thuế phải gồm 10 chữ số hoặc 13 chữ số đối với đơn vị phụ thuộc.';
+    }
+
+    if (company?.contactPhone) {
+      if (!/^(0|\+84)[3|5|7|8|9][0-9]{8}$/.test(company.contactPhone.replace(/\s+/g, ''))) {
+        errors.contactPhone = 'Số điện thoại không hợp lệ.';
+      }
+    }
+
+    if (company?.contactEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(company.contactEmail)) {
+        errors.contactEmail = 'Email không hợp lệ.';
+      }
     }
 
     setFieldErrors(errors);
@@ -120,7 +166,13 @@ function CompanyProfilePage() {
     setMessage('');
     setError('');
     try {
-      const updated = await employerService.updateCompanyProfile({ ...company, submitForReview: false });
+      const payload = { ...company, submitForReview: false };
+      if (noWebsite) {
+        payload.website = '';
+      } else if (payload.website) {
+        payload.website = payload.website.trim();
+      }
+      const updated = await employerService.updateCompanyProfile(payload);
       setCompany(updated);
       if (updated.verificationStatus?.toLowerCase() === 'pending') {
         setMessage('Lưu hồ sơ thành công. Hồ sơ đã được gửi và đang chờ admin duyệt.');
@@ -167,7 +219,7 @@ function CompanyProfilePage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Banner */}
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden">
+      <div className="company-profile-banner bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 shadow-lg relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500 opacity-10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl"></div>
         
@@ -195,11 +247,11 @@ function CompanyProfilePage() {
               )}
             </div>
             
-            <div>
-              <h1 className="text-2xl font-bold mb-2">{company.name || 'Tên công ty'}</h1>
-              <p className="text-slate-300 text-sm flex items-center justify-center md:justify-start gap-2">
+            <div className="company-profile-banner-copy">
+              <h1>{company.name || 'Tên công ty'}</h1>
+              <p>
                 <span>{company.industry || 'Chưa cập nhật ngành nghề'}</span>
-                <span>•</span>
+                <span aria-hidden="true"> • </span>
                 <span>{company.location || 'Chưa cập nhật địa điểm'}</span>
               </p>
             </div>
@@ -235,26 +287,60 @@ function CompanyProfilePage() {
         <div className="p-6 md:p-8 space-y-8">
           <fieldset disabled={isVerified} className="space-y-6 disabled:opacity-80">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2 md:col-span-1 relative">
                 <label className="block text-sm font-medium text-gray-700">Tên công ty <span className="text-red-500">*</span></label>
                 <input
                   required
                   value={company.name}
                   onChange={(e) => setCompany({ ...company, name: e.target.value })}
-                  placeholder="Tên chính thức của doanh nghiệp"
+                  placeholder={suggestedName || "Tên chính thức của doanh nghiệp"}
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.name ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
+                {suggestedName && company.name !== suggestedName && (
+                  <p className="text-xs text-emerald-600 mt-1">
+                    Gợi ý: <button type="button" className="font-semibold hover:underline" onClick={() => setCompany({ ...company, name: suggestedName })}>{suggestedName}</button>
+                  </p>
+                )}
                 {fieldErrors.name && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.name}</p>}
               </div>
 
+              <TaxCodeLookupField
+                value={company.taxCode || ''}
+                onChange={(taxCode) => {
+                  setCompany({ ...company, taxCode });
+                  setFieldErrors((current) => ({ ...current, taxCode: '' }));
+                }}
+                onLookupSuccess={(companyName) => {
+                  setSuggestedName(companyName);
+                }}
+                error={fieldErrors.taxCode}
+                disabled={isVerified}
+              />
+
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Website</label>
+                <label className="block text-sm font-medium text-gray-700">Website {!noWebsite && <span className="text-red-500">*</span>}</label>
                 <input
-                  value={company.website || ''}
+                  disabled={isVerified || noWebsite}
+                  value={noWebsite ? '' : (company.website || '')}
                   onChange={(e) => setCompany({ ...company, website: e.target.value })}
                   placeholder="https://example.com"
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.website ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noWebsite}
+                    onChange={(e) => {
+                      setNoWebsite(e.target.checked);
+                      if (e.target.checked) {
+                        setFieldErrors(prev => ({ ...prev, website: '' }));
+                      }
+                    }}
+                    disabled={isVerified}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300 disabled:opacity-50"
+                  />
+                  <span className="text-sm text-gray-600">Tôi không có website</span>
+                </label>
                 {fieldErrors.website && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.website}</p>}
               </div>
 
@@ -264,14 +350,61 @@ function CompanyProfilePage() {
                   type="number"
                   min="1"
                   value={company.companySize === undefined || company.companySize === null ? '' : company.companySize}
-                  onChange={(e) => setCompany({ ...company, companySize: e.target.value ? parseInt(e.target.value) : undefined })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCompany({ ...company, companySize: val ? Number(val) : undefined });
+                  }}
+                  onKeyDown={(e) => {
+                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
                   placeholder="Số lượng nhân viên"
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.companySize ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
                 {fieldErrors.companySize && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.companySize}</p>}
               </div>
             </div>
+          </fieldset>
 
+          <div className="bg-emerald-50/50 p-6 rounded-xl border border-emerald-100 space-y-6">
+            <h3 className="text-sm font-semibold text-emerald-800 uppercase tracking-wider">Thông tin liên hệ</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Số điện thoại liên hệ</label>
+                <input
+                  disabled={isVerified}
+                  type="text"
+                  value={company.contactPhone || ''}
+                  onChange={(e) => {
+                    setCompany({ ...company, contactPhone: e.target.value });
+                    setFieldErrors(prev => ({ ...prev, contactPhone: '' }));
+                  }}
+                  placeholder="0912345678"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200 ${fieldErrors.contactPhone ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
+                />
+                {fieldErrors.contactPhone && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.contactPhone}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Email liên hệ</label>
+                <input
+                  disabled={isVerified}
+                  type="email"
+                  value={company.contactEmail || ''}
+                  onChange={(e) => {
+                    setCompany({ ...company, contactEmail: e.target.value });
+                    setFieldErrors(prev => ({ ...prev, contactEmail: '' }));
+                  }}
+                  placeholder="contact@company.com"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200 ${fieldErrors.contactEmail ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
+                />
+                {fieldErrors.contactEmail && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.contactEmail}</p>}
+              </div>
+            </div>
+          </div>
+
+          <fieldset disabled={isVerified} className="space-y-6 disabled:opacity-80">
             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
               <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Lĩnh vực hoạt động</h3>
               
@@ -445,25 +578,18 @@ function CompanyProfilePage() {
               </div>
             </div>
 
-            <TaxCodeLookupField
-              value={company.taxCode || ''}
-              onChange={(taxCode) => {
-                setCompany({ ...company, taxCode });
-                setFieldErrors((current) => ({ ...current, taxCode: '' }));
-              }}
-              error={fieldErrors.taxCode}
-              disabled={isVerified}
-            />
+
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty</label>
+              <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty <span className="text-red-500">*</span></label>
               <textarea
                 value={company.description || ''}
                 onChange={(e) => setCompany({ ...company, description: e.target.value })}
                 placeholder="Giới thiệu về lịch sử, sứ mệnh, môi trường làm việc..."
                 rows={5}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all resize-y disabled:bg-gray-50 disabled:text-gray-500"
+                className={`w-full px-4 py-3 rounded-xl border focus:ring-2 outline-none transition-all resize-y disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.description ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
               />
+              {fieldErrors.description && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.description}</p>}
             </div>
           </fieldset>
         </div>
@@ -475,17 +601,16 @@ function CompanyProfilePage() {
           </div>
           
           <div className="flex w-full md:w-auto gap-3">
-            {!isVerified && (
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || isVerified}
                 className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${
+                  isVerified ? 'bg-gray-400 cursor-not-allowed opacity-70' :
                   saving ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
                 }`}
               >
                 {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
-            )}
             <button 
               type="button" 
               onClick={() => navigate('/employer/locations')}

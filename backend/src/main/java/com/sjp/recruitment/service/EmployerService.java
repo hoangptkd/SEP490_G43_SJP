@@ -56,6 +56,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Locale;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -71,12 +72,12 @@ public class EmployerService {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         UUID employerId = employer.getId();
         
-        long totalJobs = jobRepository.countByEmployerId(employerId);
+        long totalJobs = jobRepository.countByEmployerIdAndStatusNot(employerId, "archived");
         long activeJobs = jobRepository.countByEmployerIdAndStatus(employerId, "published");
-        long totalApplications = applicationRepository.countByJobEmployerId(employerId);
-        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatus(employerId, "applied");
+        long totalApplications = applicationRepository.countByJobEmployerIdAndJobStatus(employerId, "published");
+        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "applied", "published");
         
-        List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployer(employerId);
+        List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatus(employerId, "published");
         Map<String, Long> applicationsByStatus = statusCounts.stream()
                 .collect(Collectors.toMap(
                         row -> (String) row[0],
@@ -84,7 +85,7 @@ public class EmployerService {
                 ));
                 
         List<ApplicationResponse> recentApplications = applicationRepository
-                .findByEmployerId(employerId, PageRequest.of(0, 5, Sort.by("submittedAt").descending()))
+                .findByEmployerIdAndJobStatus(employerId, "published", PageRequest.of(0, 5, Sort.by("submittedAt").descending()))
                 .getContent().stream()
                 .map(applicationService::toResponse)
                 .collect(Collectors.toList());
@@ -93,7 +94,7 @@ public class EmployerService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime fourteenDaysAgo = now.minusDays(14);
         
-        List<Object[]> dateRows = applicationRepository.findApplicationDatesByEmployerSince(employerId, fourteenDaysAgo);
+        List<Object[]> dateRows = applicationRepository.findApplicationDatesByEmployerSinceAndJobStatus(employerId, fourteenDaysAgo, "published");
         
         Map<String, Long> trendMap = dateRows.stream()
                 .collect(Collectors.groupingBy(
@@ -129,7 +130,7 @@ public class EmployerService {
 
         // 1. New Applications (Top 5)
         List<Application> appliedApps = applicationRepository
-            .findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(employerId, "applied", PageRequest.of(0, 5))
+            .findByJobEmployerIdAndStatusAndJobStatusOrderBySubmittedAtDesc(employerId, "applied", "published", PageRequest.of(0, 5))
             .getContent();
             
         for (Application a : appliedApps) {
@@ -146,7 +147,7 @@ public class EmployerService {
 
         // 2. Pending Interview Scheduling (Top 5 shortlisted)
         List<Application> shortlistedApps = applicationRepository
-            .findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(employerId, "shortlisted", PageRequest.of(0, 5))
+            .findByJobEmployerIdAndStatusAndJobStatusOrderBySubmittedAtDesc(employerId, "shortlisted", "published", PageRequest.of(0, 5))
             .getContent();
             
         for (Application a : shortlistedApps) {
@@ -163,7 +164,7 @@ public class EmployerService {
 
         // 3. Pending Evaluations (ACCEPTED interviews that have passed - limit 5)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> acceptedInterviews = interviewScheduleRepository
-                .findByEmployerIdAndStatusOrderByScheduledAtDesc(employerId, "ACCEPTED", PageRequest.of(0, 5))
+                .findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(employerId, "ACCEPTED", "published", PageRequest.of(0, 5))
                 .getContent();
         for (var iv : acceptedInterviews) {
             if (iv.getScheduledAt().isBefore(startOfDay)) {
@@ -181,7 +182,7 @@ public class EmployerService {
 
         // 4. Pending Offers (COMPLETED interviews but no offer sent - limit 5)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> interviewApps = interviewScheduleRepository
-                .findCompletedInterviewsWithoutOffer(employerId, PageRequest.of(0, 5))
+                .findCompletedInterviewsWithoutOfferAndJobStatus(employerId, "published", PageRequest.of(0, 5))
                 .getContent();
         
         for (var iv : interviewApps) {
@@ -199,7 +200,7 @@ public class EmployerService {
 
         // 5. Employer Response Needed (Reschedule requests & Rejected offers)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> rescheduleRequests = interviewScheduleRepository
-                .findByEmployerIdAndStatusOrderByScheduledAtDesc(employerId, "RESCHEDULE_REQUESTED", PageRequest.of(0, 5))
+                .findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(employerId, "RESCHEDULE_REQUESTED", "published", PageRequest.of(0, 5))
                 .getContent();
         for (var iv : rescheduleRequests) {
             String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null ? iv.getCandidate().getFullName() : "Ứng viên";
@@ -214,7 +215,7 @@ public class EmployerService {
         }
 
         List<com.sjp.recruitment.model.entity.JobOffer> rejectedOffers = jobOfferRepository
-                .findByApplicationJobEmployerIdAndStatusOrderByCreatedAtDesc(employerId, "rejected", PageRequest.of(0, 5))
+                .findByApplicationJobEmployerIdAndStatusAndJobStatusOrderByCreatedAtDesc(employerId, "rejected", "published", PageRequest.of(0, 5))
                 .getContent();
         for (var offer : rejectedOffers) {
             String candidateName = offer.getApplication().getCandidate() != null && offer.getApplication().getCandidate().getFullName() != null ? offer.getApplication().getCandidate().getFullName() : "Ứng viên";
@@ -230,7 +231,7 @@ public class EmployerService {
 
         // 6. Today's Interviews & Upcoming Timeline
         List<com.sjp.recruitment.model.entity.InterviewSchedule> futureInterviews = interviewScheduleRepository
-                .findByEmployerIdAndScheduledAtAfterOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1));
+                .findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1), "published");
 
         for (var interview : futureInterviews) {
             if ("COMPLETED".equals(interview.getStatus()) || "NO_SHOW".equals(interview.getStatus()) || "CANCELLED".equals(interview.getStatus())) {
@@ -273,10 +274,17 @@ public class EmployerService {
                 .count();
 
         long todayInterviewsCount = futureInterviews.stream()
-                .filter(iv -> iv.getScheduledAt().isBefore(endOfDay) && "ACCEPTED".equals(iv.getStatus()))
+                .filter(iv -> iv.getScheduledAt().isBefore(endOfDay) && 
+                              !"COMPLETED".equals(iv.getStatus()) && 
+                              !"NO_SHOW".equals(iv.getStatus()) && 
+                              !"CANCELLED".equals(iv.getStatus()))
                 .count();
         
-        long pendingAppsCount = appliedApps.size();
+        long countNewlyApplied = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "applied", "published");
+        long countShortlisted = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "shortlisted", "published");
+        long countInterviewScheduled = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "interview_scheduled", "published");
+
+        long pendingAppsCount = countInterviewScheduled;
 
         EmployerDashboardResponse.ActionSummary actionSummary = new EmployerDashboardResponse.ActionSummary(
                 pendingAppsCount,
@@ -286,15 +294,19 @@ public class EmployerService {
         );
 
         // 8. TopCV Pipeline Stats
-        long countReviewed = applicationRepository.countByJobEmployerIdAndStatus(employerId, "reviewed");
-        long countInterview = applicationRepository.countByJobEmployerIdAndStatus(employerId, "shortlisted") + applicationRepository.countByJobEmployerIdAndStatus(employerId, "interview_scheduled");
-        long countOffer = applicationRepository.countByJobEmployerIdAndStatus(employerId, "accepted");
-        long countHired = applicationRepository.countByJobEmployerIdAndStatus(employerId, "hired");
+        long countReviewed = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "reviewed", "published");
+        long countInterview = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "shortlisted", "published") + countInterviewScheduled;
+        long countOffer = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "accepted", "published");
+        long countHired = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "hired", "published");
 
-        long countNewlyApplied = applicationRepository.countByJobEmployerIdAndStatus(employerId, "applied");
-        long countShortlisted = applicationRepository.countByJobEmployerIdAndStatus(employerId, "shortlisted");
-        long countInterviewScheduled = applicationRepository.countByJobEmployerIdAndStatus(employerId, "interview_scheduled");
-        
+        long interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published");
+        long interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("ACCEPTED"), "published");
+        long interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("COMPLETED"), "published");
+
+        long offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("sent", "pending_response", "negotiation_requested"), "published");
+        long offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("accepted"), "published");
+        long offerRejectedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("rejected", "declined"), "published");
+
         EmployerDashboardResponse.PipelineStats pipelineStats = new EmployerDashboardResponse.PipelineStats(
                 totalApplications,
                 countReviewed,
@@ -303,7 +315,14 @@ public class EmployerService {
                 countHired,
                 countNewlyApplied,
                 countShortlisted,
-                countInterviewScheduled
+                countInterviewScheduled,
+                interviewPendingResponseCount,
+                interviewAcceptedCount,
+                interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(employerId, "RESCHEDULE_REQUESTED", "published"),
+                interviewCompletedCount,
+                offerPendingResponseCount,
+                offerAcceptedCount,
+                offerRejectedCount
         );
 
         // 9. TopCV Active Jobs List
@@ -456,7 +475,8 @@ public class EmployerService {
 
         String oldName = company.getName() == null ? "" : company.getName().trim();
         String newName = request.name() == null ? "" : request.name().trim();
-        String oldTax = company.getTaxCode() == null ? "" : company.getTaxCode().trim();
+        String oldTaxRaw = company.getTaxCode() == null ? "" : company.getTaxCode().trim();
+        String oldTax = taxCodeLookupService.normalize(oldTaxRaw);
         String newTax = taxCodeLookupService.normalize(request.taxCode());
         if (!newTax.isBlank()) {
             newTax = taxCodeLookupService.lookup(newTax).taxCode();
@@ -475,7 +495,10 @@ public class EmployerService {
         }
 
         company.setName(newName);
+        company.setDescription(request.description());
         company.setWebsite(request.website());
+        company.setContactPhone(request.contactPhone());
+        company.setContactEmail(request.contactEmail());
 
         if (request.industries() != null) {
             List<CompanyIndustry> existingInds = companyIndustryRepository.findByCompanyId(company.getId());
@@ -522,14 +545,11 @@ public class EmployerService {
                 }
             }
             if (primaryIndustryName != null) {
-                if (!primaryIndustryName.equals(company.getIndustry())) industryChanged = true;
                 company.setIndustry(primaryIndustryName);
             } else if (request.industry() != null) {
-                if (!request.industry().equals(company.getIndustry())) industryChanged = true;
                 company.setIndustry(request.industry());
             }
         } else {
-            if (request.industry() != null && !request.industry().equals(company.getIndustry())) industryChanged = true;
             company.setIndustry(request.industry());
         }
 
@@ -558,6 +578,13 @@ public class EmployerService {
         }
 
         boolean legalInfoChanged = nameOrTaxChanged || industryChanged;
+        
+        System.out.println("DEBUG UPDATE COMPANY: nameOrTaxChanged=" + nameOrTaxChanged + " (oldName='" + oldName + "', newName='" + newName + "', oldTax='" + oldTax + "', newTax='" + newTax + "')");
+        System.out.println("DEBUG UPDATE COMPANY: industryChanged=" + industryChanged);
+        if (industryChanged) {
+            System.out.println("DEBUG UPDATE COMPANY: request.industries=" + request.industries());
+            System.out.println("DEBUG UPDATE COMPANY: company.industry=" + company.getIndustry());
+        }
 
         if (Boolean.TRUE.equals(request.submitForReview())) {
             forceCompanyAndOwnerPending(company);
@@ -720,6 +747,8 @@ public class EmployerService {
                 company.isVerified(),
                 company.getVerificationStatus(),
                 company.getStatus(),
+                company.getContactPhone(),
+                company.getContactEmail(),
                 locResponses,
                 indResponses
         );
@@ -1037,21 +1066,18 @@ public class EmployerService {
             }
         }
 
-        Application.ApplicationStatus filterStatus = null;
-        if (status != null && !status.trim().isEmpty()) {
-            try {
-                filterStatus = Application.ApplicationStatus.valueOf(status.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                filterStatus = Application.ApplicationStatus.fromDatabaseValue(status);
-            }
+        List<String> dbStatuses = parseApplicationStatusFilters(status);
+        if (dbStatuses.isEmpty()) {
+            dbStatuses = java.util.Arrays.stream(Application.ApplicationStatus.values())
+                    .map(Application.ApplicationStatus::databaseValue)
+                    .toList();
         }
 
         String filterSearch = (search != null && !search.trim().isEmpty()) ? search.trim() : "";
-        String dbStatus = filterStatus != null ? filterStatus.databaseValue() : "";
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "submittedAt"));
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1, size);
 
         org.springframework.data.domain.Page<Application> appPage = applicationRepository.searchCompanyApplications(
-                employer.getCompany().getId(), parsedJobId, dbStatus, filterSearch, pageable);
+                employer.getCompany().getId(), parsedJobId, dbStatuses, filterSearch, pageable);
 
         if (appPage.isEmpty()) {
             return new PageResponse<>(List.of(), page, size, 0, 0, true, true);
@@ -1059,6 +1085,25 @@ public class EmployerService {
 
         List<ApplicationResponse> responses = applicationService.toResponseBulk(appPage.getContent());
         return new PageResponse<>(responses, page, size, appPage.getTotalElements(), appPage.getTotalPages(), appPage.isFirst(), appPage.isLast());
+    }
+
+    private List<String> parseApplicationStatusFilters(String status) {
+        if (status == null || status.isBlank()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (String part : status.split(",")) {
+            String token = part.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            try {
+                values.add(Application.ApplicationStatus.valueOf(token.toUpperCase(Locale.ROOT)).databaseValue());
+            } catch (IllegalArgumentException ignored) {
+                // Skip unknown tokens so a bad filter does not collapse to SUBMITTED.
+            }
+        }
+        return values;
     }
 
     @Transactional(readOnly = true)
@@ -1119,20 +1164,20 @@ public class EmployerService {
     public CandidateService.CvDownload downloadApplicationCv(String applicationId) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         if (employer.getCompany() == null || employer.getCompany().getId() == null) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Cong ty chua duoc thiet lap");
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Công ty chưa được thiết lập");
         }
         UUID appId;
         try {
             appId = UUID.fromString(applicationId);
         } catch (IllegalArgumentException e) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "APPLICATION_ID_INVALID", "Ma don ung tuyen khong hop le");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "APPLICATION_ID_INVALID", "Mã đơn ứng tuyển không hợp lệ");
         }
         Application application = applicationRepository.findById(appId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay don ung tuyen"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy đơn ứng tuyển"));
         if (application.getJob() == null
                 || application.getJob().getCompany() == null
                 || !application.getJob().getCompany().getId().equals(employer.getCompany().getId())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Khong co quyen truy cap CV cua don ung tuyen nay");
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền truy cập CV của đơn ứng tuyển này");
         }
         return applicationService.toSubmittedCvDownload(application);
     }

@@ -18,15 +18,20 @@ function CompanyVerificationPage() {
   const [replacingId, setReplacingId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState('');
+  const [suggestedName, setSuggestedName] = useState('');
   const [success, setSuccess] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   
   const [isIndustryDropdownOpen, setIsIndustryDropdownOpen] = useState(false);
   const [industrySearchTerm, setIndustrySearchTerm] = useState('');
+  const [noWebsite, setNoWebsite] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const industryDropdownRef = useRef<HTMLDivElement>(null);
+
+  const verificationStatus = company?.verificationStatus?.toLowerCase() || 'unverified';
+  const isVerified = verificationStatus === 'verified' || verificationStatus === 'approved';
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -61,6 +66,7 @@ function CompanyVerificationPage() {
       setCompany({ ...compData, industries: inds });
       setDocuments(docsData);
       setCategories(categoriesData);
+      setNoWebsite(!compData.website);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Không thể tải thông tin xác thực pháp lý');
     } finally {
@@ -76,12 +82,40 @@ function CompanyVerificationPage() {
       errors.name = 'Tên công ty không được vượt quá 100 ký tự.';
     }
 
-    if (company?.website && !/^https?:\/\//i.test(company.website)) {
-      errors.website = 'Website phải bắt đầu bằng http:// hoặc https://';
+    if (!noWebsite) {
+      const trimmedWebsite = company?.website?.trim() || '';
+      if (!trimmedWebsite) {
+        errors.website = 'Vui lòng nhập địa chỉ website.';
+      } else if (trimmedWebsite.length > 255) {
+        errors.website = 'Website không được vượt quá 255 ký tự.';
+      } else if (!/^https?:\/\//i.test(trimmedWebsite)) {
+        errors.website = 'Website phải bắt đầu bằng http:// hoặc https://';
+      } else {
+        try {
+          new URL(trimmedWebsite);
+        } catch (e) {
+          errors.website = 'Định dạng URL không hợp lệ.';
+        }
+      }
     }
 
-    if (company?.companySize !== undefined && company.companySize !== null && company.companySize <= 0) {
-      errors.companySize = 'Quy mô nhân sự phải lớn hơn 0.';
+    if (company?.companySize !== undefined && company.companySize !== null) {
+      if (!Number.isInteger(company.companySize)) {
+        errors.companySize = 'Quy mô nhân sự phải là số nguyên.';
+      } else if (company.companySize <= 0) {
+        errors.companySize = 'Quy mô nhân sự phải lớn hơn 0.';
+      } else if (company.companySize > 1000000) {
+        errors.companySize = 'Quy mô nhân sự không vượt quá 1.000.000.';
+      }
+    }
+
+    const trimmedDescription = company?.description?.trim() || '';
+    if (!trimmedDescription) {
+      errors.description = 'Vui lòng nhập mô tả / giới thiệu công ty.';
+    } else if (trimmedDescription.length < 500) {
+      errors.description = 'Mô tả / Giới thiệu công ty không được ít hơn 500 ký tự.';
+    } else if (trimmedDescription.length > 5000) {
+      errors.description = 'Mô tả / Giới thiệu công ty không được vượt quá 5000 ký tự.';
     }
 
     if (!company?.industries || company.industries.length === 0) {
@@ -94,6 +128,18 @@ function CompanyVerificationPage() {
 
     if (company?.taxCode && !isVietnamTaxCodeFormat(company.taxCode)) {
       errors.taxCode = 'Mã số thuế phải gồm 10 chữ số hoặc 13 chữ số đối với đơn vị phụ thuộc.';
+    }
+
+    if (company?.contactPhone) {
+      if (!/^(0|\+84)[3|5|7|8|9][0-9]{8}$/.test(company.contactPhone.replace(/\s+/g, ''))) {
+        errors.contactPhone = 'Số điện thoại không hợp lệ.';
+      }
+    }
+
+    if (company?.contactEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(company.contactEmail)) {
+        errors.contactEmail = 'Email không hợp lệ.';
+      }
     }
 
     setFieldErrors(errors);
@@ -113,9 +159,21 @@ function CompanyVerificationPage() {
     setSuccess('');
     setError('');
     try {
-      const updated = await employerService.updateCompanyProfile({ ...company, submitForReview });
+      const payload = { ...company, submitForReview };
+      if (noWebsite) {
+        payload.website = '';
+      } else if (payload.website) {
+        payload.website = payload.website.trim();
+      }
+      const updated = await employerService.updateCompanyProfile(payload);
       setCompany(updated);
-      setSuccess(submitForReview ? 'Hồ sơ đã được gửi và đang chờ admin duyệt.' : 'Lưu thông tin công ty thành công.');
+      
+      const newStatus = updated.verificationStatus?.toLowerCase() || 'unverified';
+      if (submitForReview || (isVerified && newStatus === 'pending')) {
+        setSuccess('Hồ sơ đã được gửi và đang chờ admin duyệt lại do có thay đổi pháp lý.');
+      } else {
+        setSuccess('Lưu thông tin công ty thành công.');
+      }
       await loadData();
     } catch (err: any) {
       if (err.response?.data?.message) {
@@ -318,26 +376,58 @@ function CompanyVerificationPage() {
         <form onSubmit={(e) => handleSubmit(e, false)} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-6 md:p-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2 md:col-span-1 relative">
                 <label className="block text-sm font-medium text-gray-700">Tên công ty <span className="text-red-500">*</span></label>
                 <input
                   required
                   value={company.name}
                   onChange={(e) => setCompany({ ...company, name: e.target.value })}
-                  placeholder="Tên chính thức của doanh nghiệp"
+                  placeholder={suggestedName || "Tên chính thức của doanh nghiệp"}
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.name ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
+                {suggestedName && company.name !== suggestedName && (
+                  <p className="text-xs text-emerald-600 mt-1">
+                    Gợi ý: <button type="button" className="font-semibold hover:underline" onClick={() => setCompany({ ...company, name: suggestedName })}>{suggestedName}</button>
+                  </p>
+                )}
                 {fieldErrors.name && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.name}</p>}
               </div>
 
+              <TaxCodeLookupField
+                value={company.taxCode || ''}
+                onChange={(taxCode) => {
+                  setCompany({ ...company, taxCode });
+                  setFieldErrors((current) => ({ ...current, taxCode: '' }));
+                }}
+                onLookupSuccess={(companyName) => {
+                  setSuggestedName(companyName);
+                }}
+                error={fieldErrors.taxCode}
+              />
+
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Website</label>
+                <label className="block text-sm font-medium text-gray-700">Website {!noWebsite && <span className="text-red-500">*</span>}</label>
                 <input
-                  value={company.website || ''}
+                  disabled={noWebsite}
+                  value={noWebsite ? '' : (company.website || '')}
                   onChange={(e) => setCompany({ ...company, website: e.target.value })}
                   placeholder="https://example.com"
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.website ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noWebsite}
+                    onChange={(e) => {
+                      setNoWebsite(e.target.checked);
+                      if (e.target.checked) {
+                        setFieldErrors(prev => ({ ...prev, website: '' }));
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300"
+                  />
+                  <span className="text-sm text-gray-600">Tôi không có website</span>
+                </label>
                 {fieldErrors.website && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.website}</p>}
               </div>
 
@@ -347,11 +437,54 @@ function CompanyVerificationPage() {
                   type="number"
                   min="1"
                   value={company.companySize === undefined || company.companySize === null ? '' : company.companySize}
-                  onChange={(e) => setCompany({ ...company, companySize: e.target.value ? parseInt(e.target.value) : undefined })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCompany({ ...company, companySize: val ? Number(val) : undefined });
+                  }}
+                  onKeyDown={(e) => {
+                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
                   placeholder="Số lượng nhân viên"
                   className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500 ${fieldErrors.companySize ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
                 />
                 {fieldErrors.companySize && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.companySize}</p>}
+              </div>
+            </div>
+
+            <div className="bg-emerald-50/50 p-6 rounded-xl border border-emerald-100 space-y-6">
+              <h3 className="text-sm font-semibold text-emerald-800 uppercase tracking-wider">Thông tin liên hệ (Có thể cập nhật bất kỳ lúc nào)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Số điện thoại liên hệ</label>
+                  <input
+                    type="text"
+                    value={company.contactPhone || ''}
+                    onChange={(e) => {
+                      setCompany({ ...company, contactPhone: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, contactPhone: '' }));
+                    }}
+                    placeholder="0912345678"
+                    className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all ${fieldErrors.contactPhone ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
+                  />
+                  {fieldErrors.contactPhone && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.contactPhone}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Email liên hệ</label>
+                  <input
+                    type="email"
+                    value={company.contactEmail || ''}
+                    onChange={(e) => {
+                      setCompany({ ...company, contactEmail: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, contactEmail: '' }));
+                    }}
+                    placeholder="contact@company.com"
+                    className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all ${fieldErrors.contactEmail ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200 bg-white'}`}
+                  />
+                  {fieldErrors.contactEmail && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.contactEmail}</p>}
+                </div>
               </div>
             </div>
 
@@ -525,24 +658,18 @@ function CompanyVerificationPage() {
               </div>
             </div>
 
-            <TaxCodeLookupField
-              value={company.taxCode || ''}
-              onChange={(taxCode) => {
-                setCompany({ ...company, taxCode });
-                setFieldErrors((current) => ({ ...current, taxCode: '' }));
-              }}
-              error={fieldErrors.taxCode}
-            />
+
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty</label>
+              <label className="block text-sm font-medium text-gray-700">Mô tả / Giới thiệu công ty <span className="text-red-500">*</span></label>
               <textarea
                 value={company.description || ''}
                 onChange={(e) => setCompany({ ...company, description: e.target.value })}
                 placeholder="Giới thiệu về lịch sử, sứ mệnh, môi trường làm việc..."
                 rows={5}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all resize-y"
+                className={`w-full px-4 py-3 rounded-xl border focus:ring-2 outline-none transition-all resize-y ${fieldErrors.description ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-emerald-500 focus:ring-emerald-200'}`}
               />
+              {fieldErrors.description && <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors.description}</p>}
             </div>
           </div>
 
@@ -550,20 +677,26 @@ function CompanyVerificationPage() {
             <button 
               type="submit" 
               disabled={saving} 
-              className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
-            >
-              {saving ? 'Đang xử lý...' : 'Lưu (Không gửi duyệt)'}
-            </button>
-            <button 
-              type="button" 
-              disabled={saving} 
-              onClick={(e) => handleSubmit(e, true)} 
-              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${
-                saving ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
+              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm ${
+                isVerified 
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             >
-              {saving ? 'Đang xử lý...' : 'Lưu & Gửi duyệt'}
+              {saving ? 'Đang xử lý...' : (isVerified ? 'Lưu thay đổi' : 'Lưu (Không gửi duyệt)')}
             </button>
+            {!isVerified && (
+              <button 
+                type="button" 
+                disabled={saving} 
+                onClick={(e) => handleSubmit(e, true)} 
+                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${
+                  saving ? 'bg-emerald-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
+                }`}
+              >
+                {saving ? 'Đang xử lý...' : 'Lưu & Gửi duyệt'}
+              </button>
+            )}
           </div>
         </form>
       )}

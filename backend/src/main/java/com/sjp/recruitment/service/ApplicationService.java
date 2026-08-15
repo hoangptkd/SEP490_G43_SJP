@@ -78,36 +78,36 @@ public class ApplicationService {
         candidateService.requireCandidate(user);
         featureLimitService.requireApplication(user);
         if (!candidateService.isApplyReady(candidate)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "PROFILE_INCOMPLETE", "Can hoan thien ho so va co it nhat 1 CV truoc khi ung tuyen");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PROFILE_INCOMPLETE", "Cần hoàn thiện hồ sơ và có ít nhất 1 CV trước khi ứng tuyển");
         }
 
         UUID jobId = parseUuid(request.jobId(), "JOB_ID_INVALID");
         Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Khong tim thay viec lam"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Không tìm thấy việc làm"));
         if (!"published".equals(job.getStatus()) || (job.getDeadline() != null && job.getDeadline().isBefore(LocalDate.now()))) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_NOT_OPEN", "Viec lam da dong hoac het han");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "JOB_NOT_OPEN", "Việc làm đã đóng hoặc hết hạn");
         }
         if (applicationRepository.existsByCandidateIdAndJobId(candidate.getId(), job.getId())) {
-            throw new ApiException(HttpStatus.CONFLICT, "APPLICATION_DUPLICATED", "Ban da ung tuyen viec lam nay");
+            throw new ApiException(HttpStatus.CONFLICT, "APPLICATION_DUPLICATED", "Bạn đã ứng tuyển việc làm này");
         }
 
         boolean hasUploadedCv = hasText(request.cvId());
         boolean hasBuilderCv = hasText(request.cvVersionId());
         if (hasUploadedCv == hasBuilderCv) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_REFERENCE_INVALID", "Vui long chon chinh xac mot CV de ung tuyen");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_REFERENCE_INVALID", "Vui lòng chọn chính xác một CV để ứng tuyển");
         }
 
         CandidateCv cv;
         CvVersion cvVersion = null;
         if (hasUploadedCv) {
             cv = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(request.cvId().trim(), "CV_ID_INVALID"), candidate.getId(), SOURCE_UPLOADED)
-                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Không tìm thấy CV"));
         } else {
             UUID cvVersionId = parseUuid(request.cvVersionId().trim(), "CV_VERSION_ID_INVALID");
             cvVersion = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(cvVersionId, candidate.getId(), SOURCE_BUILDER)
-                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Không tìm thấy bản CV"));
             cv = candidateCvRepository.findByIdAndCandidateId(cvVersion.getId(), candidate.getId())
-                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Không tìm thấy bản CV"));
         }
 
         Application application = new Application();
@@ -125,9 +125,9 @@ public class ApplicationService {
         application.setJobSnapshotJson(JobSnapshot.fromJob(job));
         Application saved = applicationRepository.save(application);
 
-        addHistory(saved, null, Application.ApplicationStatus.SUBMITTED, "Ho so ung tuyen da duoc gui thanh cong.");
-        createNotification(user, "APPLICATION_SUBMITTED", "Da gui ho so ung tuyen",
-                "Ban da ung tuyen thanh cong vao vi tri " + job.getTitle() + ".", saved.getId());
+        addHistory(saved, null, Application.ApplicationStatus.SUBMITTED, "Hồ sơ ứng tuyển đã được gửi thành công.");
+        createNotification(user, "APPLICATION_SUBMITTED", "Đã gửi hồ sơ ứng tuyển",
+                "Bạn đã ứng tuyển thành công vào vị trí " + job.getTitle() + ".", saved.getId());
         realtimeEventPublisher.publishAfterCommit(user, "APPLICATION_UPDATED", saved.getId());
         featureLimitService.consumeApplication(user);
 
@@ -161,7 +161,7 @@ public class ApplicationService {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         Application application = applicationRepository.findById(parseUuid(id, "APPLICATION_ID_INVALID"))
                 .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy hồ sơ ứng tuyển"));
         return toResponse(application);
     }
 
@@ -170,14 +170,14 @@ public class ApplicationService {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         Application application = applicationRepository.findById(parseUuid(id, "APPLICATION_ID_INVALID"))
                 .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy hồ sơ ứng tuyển"));
         return toSubmittedCvDownload(application);
     }
 
     public CandidateService.CvDownload toSubmittedCvDownload(Application application) {
         SubmittedResumeSnapshot snapshot = application.getResumeSnapshot();
         if (snapshot != null && "builder".equalsIgnoreCase(snapshot.sourceType())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_DOWNLOAD_NOT_AVAILABLE", "CV Builder duoc hien thi truc tiep, khong co file de tai");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_DOWNLOAD_NOT_AVAILABLE", "CV Builder được hiển thị trực tiếp, không có file để tải");
         }
         String storageKey = application.getResumeFileStorageKeySnapshot();
         String fileName = snapshot != null ? snapshot.originalFileName() : null;
@@ -197,13 +197,15 @@ public class ApplicationService {
         applicationRepository.save(application);
         addHistory(application, from, toStatus, note);
         createNotification(application.getCandidate().getUser(), "APPLICATION_STATUS_CHANGED",
-                "Trang thai ung tuyen da cap nhat", note, application.getId());
+                "Trạng thái ứng tuyển đã cập nhật", note, application.getId());
         realtimeEventPublisher.publishAfterCommit(
                 application.getCandidate().getUser(), "APPLICATION_UPDATED", application.getId());
-        if (toStatus == Application.ApplicationStatus.HIRED && application.getJob() != null) {
+        if ((toStatus == Application.ApplicationStatus.HIRED || toStatus == Application.ApplicationStatus.ACCEPTED) && application.getJob() != null) {
             Job job = application.getJob();
             long hiredCount = applicationRepository.countByJobIdAndStatus(job.getId(), "hired");
-            if (job.getVacancies() != null && hiredCount >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
+            long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
+            long total = hiredCount + acceptedCount;
+            if (job.getVacancies() != null && total >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
                 job.setStatus("closed");
                 job.setClosedAt(LocalDateTime.now());
                 jobRepository.save(job);
@@ -215,8 +217,8 @@ public class ApplicationService {
     @Transactional
     public ApplicationResponse updateStatus(UUID applicationId, Application.ApplicationStatus toStatus, String note) {
         Application application = applicationRepository.findById(applicationId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Khong tim thay ho so ung tuyen"));
-        seedStatus(application, toStatus, note != null ? note : "Cap nhat trang thai ung tuyen");
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy hồ sơ ứng tuyển"));
+        seedStatus(application, toStatus, note != null ? note : "Cập nhật trạng thái ứng tuyển");
         return toResponse(application);
     }
 
@@ -409,7 +411,7 @@ public class ApplicationService {
     private String cleanCoverLetter(String value) {
         String trimmed = trimToNull(value);
         if (trimmed != null && trimmed.length() > COVER_LETTER_MAX_LENGTH) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "COVER_LETTER_TOO_LONG", "Thu gioi thieu khong duoc vuot qua 2000 ky tu");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "COVER_LETTER_TOO_LONG", "Thư giới thiệu không được vượt quá 2000 ký tự");
         }
         return trimmed;
     }
@@ -418,7 +420,7 @@ public class ApplicationService {
         try {
             return UUID.fromString(value);
         } catch (IllegalArgumentException exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Ma dinh danh khong hop le");
+            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Mã định danh không hợp lệ");
         }
     }
 }

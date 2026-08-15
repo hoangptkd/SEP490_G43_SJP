@@ -18,6 +18,8 @@ interface SearchableComboboxProps {
   inputClassName?: string;
   inputId?: string;
   clearAfterSelect?: boolean;
+  clearValueOnType?: boolean;
+  emptyText?: string;
 }
 
 export function normalizeVietnameseSearch(value: string) {
@@ -43,6 +45,8 @@ export default function SearchableCombobox({
   inputClassName = '',
   inputId,
   clearAfterSelect = false,
+  clearValueOnType = true,
+  emptyText = 'Không tìm thấy địa điểm phù hợp.',
 }: SearchableComboboxProps) {
   const id = useId().replace(/:/g, '');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -105,9 +109,11 @@ export default function SearchableCombobox({
         disabled={disabled || loading}
         required={required && !value}
         onFocus={() => setOpen(true)}
+        onMouseDown={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onChange={(event) => {
           setQuery(event.target.value);
-          if (value) onChange('');
+          if (clearValueOnType && value) onChange('');
           setOpen(true);
         }}
         onKeyDown={(event) => {
@@ -127,7 +133,11 @@ export default function SearchableCombobox({
           }
         }}
       />
-      <span className="searchable-combobox__icon" aria-hidden="true">⌄</span>
+      <span className="searchable-combobox__icon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </span>
       {open && !disabled && !loading && (
         <div className="searchable-combobox__menu" id={`${id}-listbox`} role="listbox">
           {filtered.length ? filtered.map((option, index) => (
@@ -143,9 +153,9 @@ export default function SearchableCombobox({
               onClick={() => choose(option)}
             >
               <span>{option.label}</span>
-              {option.value === value && <span aria-hidden="true">✓</span>}
+              {option.value === value && <span className="searchable-combobox__check" aria-hidden="true">✓</span>}
             </button>
-          )) : <p className="searchable-combobox__empty">Không tìm thấy địa điểm phù hợp.</p>}
+          )) : <p className="searchable-combobox__empty">{emptyText}</p>}
         </div>
       )}
     </div>

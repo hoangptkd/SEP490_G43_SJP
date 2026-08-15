@@ -40,6 +40,8 @@ public class User {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    private String gender;
+
     @Column(nullable = false)
     private String role;
 

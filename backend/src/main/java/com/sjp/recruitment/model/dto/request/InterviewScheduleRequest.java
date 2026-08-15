@@ -6,8 +6,8 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 public record InterviewScheduleRequest(
-        @NotNull(message = "Thoi gian phong van khong duoc de trong")
-        @Future(message = "Thoi gian phong van phai o tuong lai")
+        @NotNull(message = "Thời gian phỏng vấn không được để trống")
+        @Future(message = "Thời gian phỏng vấn phải ở tương lai")
         LocalDateTime scheduledAt,
 
         String meetingLink,

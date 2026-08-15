@@ -1,38 +1,88 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { employerService } from '../../services/employerService';
 import { billingService, UserSubscription } from '../../services/billingService';
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
 import type { CandidateApplication } from '../../types/candidateDomain';
-import type { Job } from '../../types/job';
+import type { Job, Company } from '../../types/job';
 import VietnamAddressPicker from '../../components/location/VietnamAddressPicker';
+import SearchableCombobox from '../../components/location/SearchableCombobox';
+import { IconLock } from '../../components/icons/PortalNavIcons';
+import { FiDownload } from '../../components/Icons';
+import { buildExcelXml, downloadExcelFile, sanitizeFileName } from '../../utils/exportCsv';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   SUBMITTED: { label: 'Mới nộp', color: '#1d4ed8', bg: '#dbeafe' },
   UNDER_REVIEW: { label: 'Đang xem xét', color: '#4338ca', bg: '#e0e7ff' },
   SHORTLISTED: { label: 'Đã rút gọn', color: '#6d28d9', bg: '#ede9fe' },
-  INTERVIEW_SCHEDULED: { label: 'Hẹn phỏng vấn', color: '#b45309', bg: '#fef3c7' },
+  INTERVIEW_SCHEDULED: { label: 'Đang chờ xử lý', color: '#b45309', bg: '#fef3c7' },
   ACCEPTED: { label: 'Trúng tuyển', color: '#047857', bg: '#d1fae5' },
   REJECTED: { label: 'Từ chối', color: '#b91c1c', bg: '#fee2e2' },
   WITHDRAWN: { label: 'Ứng viên rút', color: '#475569', bg: '#f1f5f9' },
 };
 
-export default function EmployerApplicationsPage() {
+const STATUS_FILTER_TABS = [
+  { key: 'SUBMITTED', label: 'Mới nộp' },
+  { key: 'SHORTLISTED', label: 'Đã rút gọn' },
+  { key: 'INTERVIEW_SCHEDULED', label: 'Đang chờ xử lý' },
+  { key: 'ACCEPTED', label: 'Trúng tuyển' },
+  { key: 'REJECTED', label: 'Từ chối' },
+] as const;
+
+const STATUS_FILTER_KEYS = new Set<string>(STATUS_FILTER_TABS.map((tab) => tab.key));
+
+function parseStatusQuery(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((part) => part.trim().toUpperCase())
+    .filter((part) => STATUS_FILTER_KEYS.has(part));
+}
+
+const STATUS_SORT_ORDER = ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'ACCEPTED', 'HIRED', 'REJECTED', 'WITHDRAWN'];
+
+function sortApplicationsByStatus(items: CandidateApplication[]): CandidateApplication[] {
+  return [...items].sort((a, b) => {
+    const orderA = STATUS_SORT_ORDER.indexOf(a.status);
+    const orderB = STATUS_SORT_ORDER.indexOf(b.status);
+    const rankA = orderA === -1 ? 99 : orderA;
+    const rankB = orderB === -1 ? 99 : orderB;
+    if (rankA !== rankB) return rankA - rankB;
+    return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+  });
+}
+
+function getSelectedStatusLabels(selectedStatuses: string[]): string {
+  if (selectedStatuses.length === 0) return 'Tất cả trạng thái';
+  return selectedStatuses
+    .map((key) => STATUS_FILTER_TABS.find((tab) => tab.key === key)?.label || key)
+    .join(', ');
+}
+
+export default function EmployerApplicationsPage({ isInterviewOnly = false }: { isInterviewOnly?: boolean }) {
   const { jobId: routeJobId } = useParams<{ jobId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryJobId = searchParams.get('jobId') || routeJobId || '';
+  const queryStatuses = isInterviewOnly
+    ? ['INTERVIEW_SCHEDULED']
+    : parseStatusQuery(searchParams.get('status') || '');
 
   const [applications, setApplications] = useState<CandidateApplication[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
 
   // Filters
   const [selectedJobId, setSelectedJobId] = useState<string>(queryJobId);
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(queryStatuses);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [appliedSearchKeyword, setAppliedSearchKeyword] = useState<string>('');
+  const statusFilterParam = isInterviewOnly
+    ? ['INTERVIEW_SCHEDULED']
+    : selectedStatuses.length > 0
+      ? selectedStatuses
+      : undefined;
 
   // Status update modal
   const [updatingApp, setUpdatingApp] = useState<CandidateApplication | null>(null);
@@ -74,9 +124,10 @@ export default function EmployerApplicationsPage() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 5;
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
   // Custom UI Notifications
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
@@ -94,16 +145,25 @@ export default function EmployerApplicationsPage() {
   useEffect(() => {
     setCurrentPage(1);
     loadApplications();
-  }, [selectedJobId, selectedStatus]);
+  }, [selectedJobId, selectedStatuses]);
 
   async function loadJobs() {
     try {
-      const [jobList, subData] = await Promise.all([
-        employerService.getJobs(),
-        billingService.getMySubscription().catch(() => null)
+      const pageSize = 100;
+      const [firstPage, subData, compData] = await Promise.all([
+        employerService.getJobs({ page: 1, size: pageSize }),
+        billingService.getMySubscription().catch(() => null),
+        employerService.getCompanyProfile().catch(() => null)
       ]);
-      setJobs(jobList.items || []);
+      const allJobs: Job[] = [...(firstPage.items || [])];
+      const totalPages = Math.min(firstPage.totalPages || 1, 50);
+      for (let page = 2; page <= totalPages; page += 1) {
+        const nextPage = await employerService.getJobs({ page, size: pageSize });
+        allJobs.push(...(nextPage.items || []));
+      }
+      setJobs(allJobs);
       setSubscription(subData);
+      setCompany(compData);
     } catch (err) {
       console.error('Failed to load jobs', err);
     }
@@ -115,12 +175,12 @@ export default function EmployerApplicationsPage() {
     try {
       const data = await employerService.getApplications({
         jobId: selectedJobId || undefined,
-        status: selectedStatus || undefined,
+        status: statusFilterParam,
         search: appliedSearchKeyword || undefined,
         page: currentPage,
         size: itemsPerPage,
       });
-      setApplications(data.items || []);
+      setApplications(sortApplicationsByStatus(data.items || []));
       setTotalPages(data.totalPages || 1);
       setTotalItems(data.totalItems || 0);
     } catch (err: any) {
@@ -130,7 +190,7 @@ export default function EmployerApplicationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [appliedSearchKeyword, selectedJobId, selectedStatus, currentPage]);
+  }, [appliedSearchKeyword, selectedJobId, statusFilterParam, currentPage]);
 
   useEffect(() => {
     void loadApplications();
@@ -171,13 +231,13 @@ export default function EmployerApplicationsPage() {
     const interval = setInterval(() => {
       employerService.getApplications({
         jobId: selectedJobId || undefined,
-        status: selectedStatus || undefined,
+        status: statusFilterParam,
         search: appliedSearchKeyword || undefined,
-      }).then(data => setApplications(data.items || [])).catch(() => {});
+      }).then(data => setApplications(sortApplicationsByStatus(data.items || []))).catch(() => {});
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [applications, appliedSearchKeyword, selectedJobId, selectedStatus]);
+  }, [applications, appliedSearchKeyword, selectedJobId, statusFilterParam]);
 
   const [bulkRanking, setBulkRanking] = useState(false);
   async function handleBulkAiRanking() {
@@ -219,7 +279,7 @@ export default function EmployerApplicationsPage() {
       openBlobInNewTab(await employerService.downloadApplicationCv(id));
     } catch (err) {
       console.error('Failed to open CV', err);
-      setError('Khong the mo CV ung tuyen');
+      setError('Không thể mở CV ứng tuyển');
     }
   }
 
@@ -247,6 +307,103 @@ export default function EmployerApplicationsPage() {
     return statusConfig[app.status] || { label: app.status, color: '#475569', bg: '#f1f5f9' };
   }
 
+  function getCvFileName(app: CandidateApplication): string {
+    return app.submittedResume?.originalFileName
+      || app.cv?.originalFileName
+      || (app.cvVersion ? 'CV Builder' : '');
+  }
+
+  async function handleExportExcel() {
+    const EXPORT_PAGE_SIZE = 200;
+    setExporting(true);
+    try {
+      const firstPage = await employerService.getApplications({
+        jobId: selectedJobId || undefined,
+        status: statusFilterParam,
+        search: appliedSearchKeyword || undefined,
+        page: 1,
+        size: EXPORT_PAGE_SIZE,
+      });
+
+      const allApps: CandidateApplication[] = [...(firstPage.items || [])];
+      const pages = Math.min(firstPage.totalPages || 1, 50);
+      for (let page = 2; page <= pages; page += 1) {
+        const nextPage = await employerService.getApplications({
+          jobId: selectedJobId || undefined,
+          status: statusFilterParam,
+          search: appliedSearchKeyword || undefined,
+          page,
+          size: EXPORT_PAGE_SIZE,
+        });
+        allApps.push(...(nextPage.items || []));
+      }
+
+      if (allApps.length === 0) {
+        showToast('Không có ứng viên nào phù hợp bộ lọc để xuất.');
+        return;
+      }
+
+      const sortedApps = sortApplicationsByStatus(allApps);
+      const statusLabels = getSelectedStatusLabels(selectedStatuses);
+      const positionName = jobs.find((j) => j.id === selectedJobId)?.title || '';
+      const fileBaseName = selectedJobId
+        ? `${positionName || 'Vi tri tuyen dung'} ${statusLabels}`
+        : `Tất cả các ứng viên ${statusLabels}`;
+      const today = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
+      const headers = ['STT', 'Họ tên', 'Số điện thoại', 'Địa điểm', 'Kỹ năng', 'Vị trí', 'Ngày nộp', 'Trạng thái', 'CV', 'Điểm AI'];
+      const rows = sortedApps.map((app, index) => [
+        index + 1,
+        app.candidate?.fullName || 'Ứng viên ẩn danh',
+        app.candidate?.phone || '',
+        app.candidate?.location || app.preferredLocation || '',
+        (app.candidate?.skills || []).join(', '),
+        app.job?.title || positionName,
+        app.submittedAt ? new Date(app.submittedAt).toLocaleDateString('vi-VN') : '',
+        getDetailedStatus(app).label,
+        getCvFileName(app),
+        app.aiMatchScore != null ? app.aiMatchScore : '',
+      ]);
+
+      const xml = buildExcelXml({
+        sheetName: selectedJobId ? (positionName || 'Ung vien') : 'Tất cả ứng viên',
+        title: `${fileBaseName} (${sortedApps.length} hồ sơ, xuất ngày ${today})`,
+        headers,
+        rows,
+      });
+      downloadExcelFile(xml, `${sanitizeFileName(fileBaseName)}.xls`);
+      showToast(`Đã xuất ${sortedApps.length} ứng viên. Mở file bằng Microsoft Excel.`, 'success');
+    } catch (err: any) {
+      const backendMsg = err.response?.data?.message || err.message || 'Không thể xuất danh sách ứng viên. Vui lòng thử lại.';
+      showToast(backendMsg);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function applyStatusFilters(next: string[]) {
+    setSelectedStatuses(next);
+    setSearchParams((prev) => {
+      if (next.length === 0) {
+        prev.delete('status');
+      } else {
+        prev.set('status', next.join(','));
+      }
+      return prev;
+    }, { replace: true });
+  }
+
+  function toggleStatusFilter(key: string) {
+    if (!key) {
+      applyStatusFilters([]);
+      return;
+    }
+    const exists = selectedStatuses.includes(key);
+    const next = exists
+      ? selectedStatuses.filter((status) => status !== key)
+      : [...selectedStatuses, key];
+    applyStatusFilters(next);
+  }
+
   function openUpdateModal(app: CandidateApplication, defaultStatus?: string) {
     setUpdatingApp(app);
     setTargetStatus(defaultStatus || app.status || 'UNDER_REVIEW');
@@ -255,14 +412,14 @@ export default function EmployerApplicationsPage() {
     setScheduledAt('');
     setLocation('');
     setMeetingLink('');
-    setPositionTitle(defaultStatus === 'UPDATE_OFFER' && app.jobOffer ? app.jobOffer.positionTitle : app.job.title || '');
-    setSalary(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salary ? app.jobOffer.salary : '');
-    setSalaryCurrency(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salaryCurrency ? app.jobOffer.salaryCurrency : 'VND');
-    setSalaryType(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.salaryType ? app.jobOffer.salaryType : 'monthly');
-    setStartDate(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.startDate ? app.jobOffer.startDate : '');
-    setBenefits(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.benefits ? app.jobOffer.benefits : '');
-    setWorkingLocation(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.workingLocation ? app.jobOffer.workingLocation : '');
-    setOfferLetterUrl(defaultStatus === 'UPDATE_OFFER' && app.jobOffer?.offerLetterUrl ? app.jobOffer.offerLetterUrl : '');
+    setPositionTitle(app.job.title || '');
+    setSalary('');
+    setSalaryCurrency('VND');
+    setSalaryType('monthly');
+    setStartDate('');
+    setBenefits('');
+    setWorkingLocation('');
+    setOfferLetterUrl('');
   }
 
   async function handleConfirmUpdate() {
@@ -283,12 +440,13 @@ export default function EmployerApplicationsPage() {
           note
         });
       } else if (targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') {
-        if (!positionTitle) throw new Error('Vui lòng nhập chức danh');
-        if (salary && Number(salary) <= 0) throw new Error('Mức lương phải lớn hơn 0');
-        if (startDate && new Date(startDate).getTime() < new Date().setHours(0,0,0,0)) throw new Error('Ngày bắt đầu không được ở trong quá khứ');
+        if (!positionTitle || !positionTitle.trim()) throw new Error('Vui lòng nhập chức danh');
+        if (!salary || isNaN(Number(salary)) || Number(salary) <= 0) throw new Error('Vui lòng nhập mức lương hợp lệ (phải lớn hơn 0)');
+        if (!startDate) throw new Error('Vui lòng chọn ngày bắt đầu làm việc');
+        if (new Date(startDate).getTime() < new Date().setHours(0,0,0,0)) throw new Error('Ngày bắt đầu làm việc không được ở trong quá khứ');
         if (offerLetterUrl && !/^https?:\/\/.+/.test(offerLetterUrl)) throw new Error('Link Offer Letter phải bắt đầu bằng http:// hoặc https://');
 
-        const offerData = {
+        await employerService.createJobOffer(updatingApp.id, {
           positionTitle,
           salary: salary ? Number(salary) : undefined,
           salaryCurrency,
@@ -298,17 +456,7 @@ export default function EmployerApplicationsPage() {
           workingLocation,
           offerLetterUrl,
           employerNote: note
-        };
-
-        if (targetStatus === 'UPDATE_OFFER') {
-           if (!updatingApp.jobOffer) throw new Error('Không tìm thấy Job Offer để sửa');
-           await employerService.employerRespondToOfferRejection(updatingApp.jobOffer.id, true, offerData);
-        } else {
-           await employerService.createJobOffer(updatingApp.id, offerData);
-        }
-      } else if (targetStatus === 'DECLINE_OFFER_NEGOTIATION') {
-         if (!updatingApp.jobOffer) throw new Error('Không tìm thấy Job Offer để thao tác');
-         await employerService.employerRespondToOfferRejection(updatingApp.jobOffer.id, false, { employerNote: note } as any);
+        });
       } else if (targetStatus === 'REJECTED') {
         await employerService.rejectApplication(updatingApp.id, note);
       } else if (targetStatus === 'EVALUATE_INTERVIEW') {
@@ -356,6 +504,38 @@ export default function EmployerApplicationsPage() {
   }
 
   const currentJob = jobs.find((j) => j.id === selectedJobId);
+  const jobOptions = useMemo(
+    () => [
+      { value: '', label: '-- Tất cả việc làm --', keywords: 'tat ca viec lam all' },
+      ...jobs.map((job) => ({
+        value: job.id,
+        label: `${job.title} (${job.status})`,
+        keywords: `${job.title} ${job.status}`,
+      })),
+    ],
+    [jobs],
+  );
+
+  if (company && company.verificationStatus !== 'verified') {
+    return (
+      <section className="employer-verify-gate">
+        <div className="employer-verify-card">
+          <div className="employer-verify-icon" aria-hidden="true">
+            <IconLock size={28} />
+          </div>
+          <h2>Công ty chưa được xác thực</h2>
+          <p className="employer-verify-copy">
+            Để đăng tin tuyển dụng, bạn cần xác thực doanh nghiệp trước. Vui lòng hoàn tất hồ sơ pháp lý để Admin phê duyệt.
+          </p>
+          <div className="employer-verify-actions">
+            <Link to="/employer/verification" className="employer-verify-btn primary">
+              Đi tới trang Xác thực
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="content-card" style={{ padding: '24px' }}>
@@ -368,10 +548,14 @@ export default function EmployerApplicationsPage() {
             </Link>
           </div>
           <h1 style={{ color: '#0f172a', margin: '8px 0 4px 0', fontSize: '1.6rem' }}>
-            {currentJob ? `👥 Ứng viên: ${currentJob.title}` : '👥 Tất cả đơn ứng tuyển'}
+            {isInterviewOnly
+              ? 'Lịch phỏng vấn'
+              : currentJob ? `👥 Ứng viên: ${currentJob.title}` : '👥 Tất cả đơn ứng tuyển'}
           </h1>
           <p style={{ color: '#64748b', margin: 0, fontSize: '0.95rem' }}>
-            Quản lý hồ sơ ứng viên, xem CV và chuyển đổi trạng thái vòng tuyển dụng
+            {isInterviewOnly 
+              ? 'Quản lý lịch hẹn phỏng vấn của các ứng viên'
+              : 'Quản lý hồ sơ ứng viên, xem CV và chuyển đổi trạng thái vòng tuyển dụng'}
           </p>
         </div>
 
@@ -420,26 +604,27 @@ export default function EmployerApplicationsPage() {
       {/* Filter and Search Bar */}
       <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '20px' }}>
         <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ flex: '1 1 220px' }}>
-            <select
+          <div style={{ flex: '1 1 260px', minWidth: '220px' }}>
+            <SearchableCombobox
               value={selectedJobId}
-              onChange={(e) => {
-                setSelectedJobId(e.target.value);
-                if (e.target.value) {
-                  setSearchParams({ jobId: e.target.value });
-                } else {
-                  setSearchParams({});
-                }
+              options={jobOptions}
+              placeholder="Tìm vị trí tuyển dụng..."
+              ariaLabel="Chọn vị trí tuyển dụng"
+              emptyText="Không tìm thấy vị trí tuyển dụng."
+              clearValueOnType={false}
+              inputClassName="employer-job-filter-input"
+              onChange={(jobId) => {
+                setSelectedJobId(jobId);
+                setSearchParams((prev) => {
+                  if (jobId) {
+                    prev.set('jobId', jobId);
+                  } else {
+                    prev.delete('jobId');
+                  }
+                  return prev;
+                }, { replace: true });
               }}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
-            >
-              <option value="">-- Tất cả việc làm --</option>
-              {jobs.map((job) => (
-                <option key={job.id} value={job.id}>
-                  {job.title} ({job.status})
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div style={{ flex: '1 1 200px' }}>
@@ -458,37 +643,61 @@ export default function EmployerApplicationsPage() {
           >
             Tìm kiếm
           </button>
+          {!isInterviewOnly && (
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={exporting}
+              title="Xuất danh sách ứng viên theo trạng thái đang chọn"
+              style={{
+                background: '#fff',
+                color: '#047857',
+                border: '1px solid #047857',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                cursor: exporting ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                opacity: exporting ? 0.7 : 1,
+              }}
+            >
+              <FiDownload width={16} height={16} />
+              {exporting ? 'Đang xuất...' : 'Xuất Excel'}
+            </button>
+          )}
         </form>
 
         {/* Status Tabs */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
-          {[
-            { key: '', label: 'Tất cả trạng thái' },
-            { key: 'SUBMITTED', label: 'Mới nộp' },
-            { key: 'INTERVIEW_SCHEDULED', label: 'Hẹn phỏng vấn' },
-            { key: 'ACCEPTED', label: 'Trúng tuyển' },
-            { key: 'REJECTED', label: 'Từ chối' },
-          ].map((tab) => (
+        {!isInterviewOnly && (
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
+          {[{ key: '', label: 'Tất cả trạng thái' }, ...STATUS_FILTER_TABS].map((tab) => {
+            const isAllTab = tab.key === '';
+            const isActive = isAllTab ? selectedStatuses.length === 0 : selectedStatuses.includes(tab.key);
+            return (
             <button
-              key={tab.key}
+              key={tab.key || 'ALL'}
               type="button"
-              onClick={() => setSelectedStatus(tab.key)}
+              onClick={() => toggleStatusFilter(tab.key)}
               style={{
-                background: selectedStatus === tab.key ? '#2563eb' : '#fff',
-                color: selectedStatus === tab.key ? '#fff' : '#475569',
-                border: '1px solid #cbd5e1',
+                background: isActive ? '#2563eb' : '#fff',
+                color: isActive ? '#fff' : '#475569',
+                border: isActive ? '1px solid #2563eb' : '1px solid #cbd5e1',
                 padding: '6px 14px',
                 borderRadius: '20px',
                 fontSize: '0.85rem',
-                fontWeight: selectedStatus === tab.key ? 600 : 500,
+                fontWeight: isActive ? 600 : 500,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
               }}
             >
               {tab.label}
             </button>
-          ))}
-        </div>
+            );
+          })}
+          </div>
+        )}
       </div>
 
       {/* Applications Table / Cards */}
@@ -506,7 +715,11 @@ export default function EmployerApplicationsPage() {
           {(() => {
             return (
               <>
-          {[...applications]
+          {(isInterviewOnly ? applications.filter(app => {
+            if (!app.interviews || app.interviews.length === 0) return false;
+            const ivStatus = app.interviews[app.interviews.length - 1].status;
+            return ivStatus !== 'ACCEPTED' && ivStatus !== 'COMPLETED';
+          }) : applications)
             .map((app) => {
             const st = getDetailedStatus(app);
             const candidateName = app.candidate?.fullName || 'Ứng viên ẩn danh';
@@ -705,7 +918,7 @@ export default function EmployerApplicationsPage() {
                   </button>
 
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                    {(app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW' || app.status === 'INTERVIEW_SCHEDULED') && !app.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && (
+                    {(app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW' || app.status === 'INTERVIEW_SCHEDULED') && !app.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && !isInterviewOnly && (
                       <button
                         onClick={() => openUpdateModal(app, 'INTERVIEW_SCHEDULED')}
                         style={{ flex: 1, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -722,7 +935,7 @@ export default function EmployerApplicationsPage() {
                       </button>
                     )}
 
-                    {app.status === 'INTERVIEW_SCHEDULED' && app.interviews?.some((iv: any) => iv.status === 'COMPLETED') && (
+                    {app.status === 'INTERVIEW_SCHEDULED' && app.interviews?.some((iv: any) => iv.status === 'COMPLETED') && !isInterviewOnly && (
                       <button
                         onClick={() => openUpdateModal(app, 'ACCEPTED')}
                         style={{ flex: 1, background: '#d1fae5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -731,7 +944,7 @@ export default function EmployerApplicationsPage() {
                       </button>
                     )}
 
-                    {app.status === 'ACCEPTED' && app.jobOffer && (
+                    {app.status === 'ACCEPTED' && app.jobOffer && !isInterviewOnly && (
                       <button
                         onClick={() => setManageOfferApp(app)}
                         style={{ flex: 1, background: '#10b981', color: '#fff', border: '1px solid #059669', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -739,7 +952,7 @@ export default function EmployerApplicationsPage() {
                         💼 Quản lý Offer
                       </button>
                     )}
-                    {app.status !== 'REJECTED' && app.status !== 'ACCEPTED' && (
+                    {app.status !== 'REJECTED' && app.status !== 'ACCEPTED' && !isInterviewOnly && (
                       <button
                         onClick={() => openUpdateModal(app, 'REJECTED')}
                         style={{ flex: 1, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -838,16 +1051,14 @@ export default function EmployerApplicationsPage() {
             padding: '20px',
           }}
         >
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ margin: '0 0 16px 0', color: '#0f172a', fontSize: '1.25rem' }}>
               {targetStatus === 'UNDER_REVIEW' && 'Duyệt hồ sơ (Đưa vào vòng xem xét)'}
               {targetStatus === 'INTERVIEW_SCHEDULED' && 'Lên lịch phỏng vấn'}
               {targetStatus === 'ACCEPTED' && 'Gửi Lời mời làm việc (Job Offer)'}
-              {targetStatus === 'UPDATE_OFFER' && 'Cập nhật Lời mời làm việc (Sửa Offer)'}
-              {targetStatus === 'DECLINE_OFFER_NEGOTIATION' && 'Từ chối thay đổi Offer'}
               {targetStatus === 'REJECTED' && 'Từ chối ứng viên'}
               {targetStatus === 'EVALUATE_INTERVIEW' && 'Đánh giá kết quả phỏng vấn'}
-              {targetStatus !== 'UNDER_REVIEW' && targetStatus !== 'INTERVIEW_SCHEDULED' && targetStatus !== 'ACCEPTED' && targetStatus !== 'UPDATE_OFFER' && targetStatus !== 'DECLINE_OFFER_NEGOTIATION' && targetStatus !== 'REJECTED' && targetStatus !== 'EVALUATE_INTERVIEW' && 'Thao tác hồ sơ'}
+              {targetStatus !== 'UNDER_REVIEW' && targetStatus !== 'INTERVIEW_SCHEDULED' && targetStatus !== 'ACCEPTED' && targetStatus !== 'REJECTED' && targetStatus !== 'EVALUATE_INTERVIEW' && 'Thao tác hồ sơ'}
             </h3>
 
             <div style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '16px' }}>
@@ -912,13 +1123,13 @@ export default function EmployerApplicationsPage() {
               })()
             )}
 
-            {(targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') && (
+            {targetStatus === 'ACCEPTED' && (
               <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px', maxHeight: '300px', overflowY: 'auto' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>{targetStatus === 'UPDATE_OFFER' ? 'Cập nhật Job Offer' : 'Thông tin Job Offer'}</h4>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>Thông tin Job Offer</h4>
 
                 <div style={{ marginBottom: '12px' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Chức danh (*)</label>
-                  <input type="text" value={positionTitle} onChange={e => setPositionTitle(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                  <input type="text" value={positionTitle} disabled style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#64748b' }} />
                 </div>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
                   <div style={{ flex: 2 }}>
@@ -993,7 +1204,7 @@ export default function EmployerApplicationsPage() {
               >
                 Hủy
               </button>
-              {(targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') && (
+              {targetStatus === 'ACCEPTED' && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1011,7 +1222,7 @@ export default function EmployerApplicationsPage() {
                 onClick={handleConfirmUpdate}
                 style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: updating ? 'wait' : 'pointer' }}
               >
-                {updating ? 'Đang lưu...' : (targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER' ? 'Gửi Job Offer' : 'Xác nhận & Gửi thông báo')}
+                {updating ? 'Đang lưu...' : (targetStatus === 'ACCEPTED' ? 'Gửi Job Offer' : 'Xác nhận & Gửi thông báo')}
               </button>
             </div>
           </div>
@@ -1474,7 +1685,7 @@ export default function EmployerApplicationsPage() {
                             </div>
                           )}
                           <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '8px', fontStyle: 'italic' }}>
-                            {iv.viewedAt ? `UV đã xem lúc: ${new Date(iv.viewedAt).toLocaleString('vi-VN')}` : 'Not viewed (UV chưa xem lời mời)'}
+                            {iv.viewedAt ? `UV đã xem lúc: ${new Date(iv.viewedAt).toLocaleString('vi-VN')}` : 'Ứng viên chưa xem lời mời'}
                           </div>
                         </div>
                       );
@@ -1578,7 +1789,7 @@ export default function EmployerApplicationsPage() {
               }}
             >
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {(selectedAppDetail.status === 'SUBMITTED' || selectedAppDetail.status === 'UNDER_REVIEW' || selectedAppDetail.status === 'INTERVIEW_SCHEDULED') && !selectedAppDetail.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && (
+                {(selectedAppDetail.status === 'SUBMITTED' || selectedAppDetail.status === 'UNDER_REVIEW' || selectedAppDetail.status === 'INTERVIEW_SCHEDULED') && !selectedAppDetail.interviews?.some((iv: any) => iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED' || iv.status === 'COMPLETED') && !isInterviewOnly && (
                   <button
                     type="button"
                     onClick={() => openUpdateModal(selectedAppDetail, 'INTERVIEW_SCHEDULED')}
@@ -1749,7 +1960,7 @@ export default function EmployerApplicationsPage() {
                           {iv.meetingLink && <div style={{ fontSize: '0.9rem', color: '#431407', gridColumn: '1 / -1' }}><strong>🔗 Link họp:</strong> <a href={iv.meetingLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Tham gia ngay</a></div>}
                         </div>
                         <div style={{ fontSize: '0.85rem', color: '#b45309', marginBottom: '16px', fontStyle: 'italic' }}>
-                          {iv.viewedAt ? `UV đã xem lúc: ${new Date(iv.viewedAt).toLocaleString('vi-VN')}` : 'Not viewed (UV chưa xem lời mời)'}
+                          {iv.viewedAt ? `UV đã xem lúc: ${new Date(iv.viewedAt).toLocaleString('vi-VN')}` : 'Ứng viên chưa xem lời mời'}
                         </div>
 
                         {iv.status === 'RESCHEDULE_REQUESTED' && (
@@ -1866,14 +2077,14 @@ export default function EmployerApplicationsPage() {
                               <div style={{ color: '#b45309', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center' }}>
                                 ⏳ Ứng viên chưa xác nhận lịch phỏng vấn...
                               </div>
-                            ) : (
+                            ) : !isInterviewOnly ? (
                               <button
                                 onClick={() => { setEvaluatingInterviewId(iv.id); setManageInterviewApp(null); openUpdateModal(manageInterviewApp, 'EVALUATE_INTERVIEW'); }}
                                 style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', width: '100%' }}
                               >
                                 📋 Đánh giá kết quả phỏng vấn
                               </button>
-                            )}
+                            ) : null}
                           </div>
                         )}
 
@@ -1899,6 +2110,28 @@ export default function EmployerApplicationsPage() {
               <button onClick={() => setManageInterviewApp(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Đóng</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toastMsg && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 9999,
+            background: toastMsg.type === 'success' ? '#047857' : '#b91c1c',
+            color: '#fff',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.18)',
+            maxWidth: '360px',
+            fontWeight: 600,
+            fontSize: '0.9rem',
+          }}
+        >
+          {toastMsg.text}
         </div>
       )}
     </section>

@@ -4,8 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 public record InterviewResultRequest(
-        @NotBlank(message = "Ket qua khong duoc de trong")
-        @Pattern(regexp = "^(COMPLETED|pass|fail|no_show)$", message = "Du lieu khong hop le")
+        @NotBlank(message = "Kết quả không được để trống")
+        @Pattern(regexp = "^(COMPLETED|pass|fail|no_show)$", message = "Dữ liệu không hợp lệ")
         String result,
 
         String note

@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record JobOfferRequest(
-        @NotBlank(message = "Chuc danh khong duoc de trong")
+        @NotBlank(message = "Chức danh không được để trống")
         String positionTitle,
 
         BigDecimal salary,

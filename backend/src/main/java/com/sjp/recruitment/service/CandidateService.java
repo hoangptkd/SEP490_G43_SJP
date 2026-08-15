@@ -61,7 +61,7 @@ public class CandidateService {
         User user = authService.getCurrentUser();
         requireCandidate(user);
         return candidateProfileRepository.findWithSkillsByUserId(user.getId())
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CANDIDATE_PROFILE_NOT_FOUND", "Chua co ho so ung vien"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CANDIDATE_PROFILE_NOT_FOUND", "Chưa có hồ sơ ứng viên"));
     }
 
     @Transactional(readOnly = true)
@@ -175,7 +175,7 @@ public class CandidateService {
             StorageService.StoredFile stored = storageService.storeCandidateCv(profile.getId(), file);
             CandidateCv cv = new CandidateCv();
             cv.setCandidate(profile);
-            cv.setTitle(file.getOriginalFilename() == null ? "CV ung vien" : file.getOriginalFilename());
+            cv.setTitle(file.getOriginalFilename() == null ? "CV ứng viên" : file.getOriginalFilename());
             cv.setOriginalFileName(file.getOriginalFilename() == null ? "cv.pdf" : file.getOriginalFilename());
             cv.setStorageKey(stored.storageKey());
             cv.setContentType(stored.contentType() == null ? "application/pdf" : stored.contentType());
@@ -204,7 +204,7 @@ public class CandidateService {
             featureLimitService.consumeCvUpload(profile.getUser());
             return response;
         } catch (IOException exception) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "CV_STORAGE_FAILED", "Khong the luu file CV");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "CV_STORAGE_FAILED", "Không thể lưu file CV");
         }
     }
 
@@ -212,7 +212,7 @@ public class CandidateService {
     public CvResponse setDefaultCv(String cvId) {
         CandidateProfile profile = getCurrentCandidateProfile();
         CandidateCv target = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(cvId, "CV_ID_INVALID"), profile.getId(), SOURCE_UPLOADED)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Không tìm thấy CV"));
         if (target.isDefaultCv()) {
             return dtoMapper.toCvResponse(target);
         }
@@ -227,7 +227,7 @@ public class CandidateService {
     public void deleteCv(String cvId) {
         CandidateProfile profile = getCurrentCandidateProfile();
         CandidateCv cv = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(cvId, "CV_ID_INVALID"), profile.getId(), SOURCE_UPLOADED)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Không tìm thấy CV"));
         if (applicationRepository.existsByCvId(cv.getId())) {
             cv.setDeletedAt(java.time.LocalDateTime.now());
             cv.setDefaultCv(false);
@@ -247,7 +247,7 @@ public class CandidateService {
         CandidateProfile profile = getCurrentCandidateProfile();
         CandidateCv cv = candidateCvRepository.findByIdAndCandidateId(parseUuid(cvId, "CV_ID_INVALID"), profile.getId())
                 .filter(this::isUploadedCv)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Khong tim thay CV"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Không tìm thấy CV"));
         return toCvDownload(cv);
     }
 
@@ -275,7 +275,7 @@ public class CandidateService {
     public CvVersionResponse updateCvVersion(String id, CvVersionRequest request) {
         CandidateProfile profile = getCurrentCandidateProfile();
         CvVersion version = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(id, "CV_VERSION_ID_INVALID"), profile.getId(), SOURCE_BUILDER)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Không tìm thấy bản CV"));
         version.setTitle(request.title());
         version.setTemplateKey(request.templateKey() == null || request.templateKey().isBlank() ? "classic" : request.templateKey());
         version.setSnapshot(request.snapshot() == null ? defaultSnapshot(profile) : request.snapshot());
@@ -286,7 +286,7 @@ public class CandidateService {
     public void deleteCvVersion(String id) {
         CandidateProfile profile = getCurrentCandidateProfile();
         CvVersion version = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(id, "CV_VERSION_ID_INVALID"), profile.getId(), SOURCE_BUILDER)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Khong tim thay ban CV"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Không tìm thấy bản CV"));
         version.setDeletedAt(java.time.LocalDateTime.now());
     }
 
@@ -310,7 +310,7 @@ public class CandidateService {
             return;
         }
         Job job = jobRepository.findById(parsedJobId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Khong tim thay viec lam"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Không tìm thấy việc làm"));
         SavedJob saved = new SavedJob();
         saved.setCandidate(profile);
         saved.setJob(job);
@@ -336,7 +336,7 @@ public class CandidateService {
     public void markNotificationRead(String notificationId) {
         User user = authService.getCurrentUser();
         Notification notification = notificationRepository.findByIdAndRecipientUserId(parseUuid(notificationId, "NOTIFICATION_ID_INVALID"), user.getId())
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "Khong tim thay thong bao"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "Không tìm thấy thông báo"));
         notification.setRead(true);
         realtimeEventPublisher.publishAfterCommit(user, "NOTIFICATION_UPDATED", notification.getId());
     }
@@ -362,7 +362,7 @@ public class CandidateService {
                 plan == null ? "Free" : plan.getName(),
                 subscription == null ? "ACTIVE" : subscription.getStatusEnum().name(),
                 plan == null ? java.math.BigDecimal.ZERO : plan.getPrice(),
-                plan == null ? List.of("Ho so ung vien", "Tim kiem viec lam", "Ung tuyen viec lam") : plan.getBenefits(),
+                plan == null ? List.of("Hồ sơ ứng viên", "Tìm kiếm việc làm", "Ứng tuyển việc làm") : plan.getBenefits(),
                 subscription == null ? null : subscription.getStartedAt(),
                 subscription == null ? null : subscription.getExpiresAt(),
                 getCurrentProfileIdIfCandidate(user) == null ? 0 : savedJobRepository.countByCandidateId(getCurrentProfileIdIfCandidate(user)),
@@ -391,14 +391,14 @@ public class CandidateService {
 
     public CvDownload toCvDownload(CandidateCv cv) {
         if (cv == null || !isUploadedCv(cv) || cv.getStorageKey() == null || cv.getStorageKey().isBlank()) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Không tìm thấy file CV");
         }
         return toCvDownload(cv.getStorageKey(), cv.getOriginalFileName(), cv.getContentType());
     }
 
     public CvDownload toCvDownload(String storageKey, String originalFileName, String contentType) {
         if (storageKey == null || storageKey.isBlank()) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Không tìm thấy file CV");
         }
         try {
             org.springframework.core.io.Resource resource = storageService.loadCandidateCv(storageKey);
@@ -408,7 +408,7 @@ public class CandidateService {
                     resource
             );
         } catch (IOException exception) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Khong tim thay file CV");
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Không tìm thấy file CV");
         }
     }
 
@@ -418,21 +418,21 @@ public class CandidateService {
 
     public void requireCandidate(User user) {
         if (user.getRoleEnum() != User.UserRole.CANDIDATE) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "CANDIDATE_REQUIRED", "Chi ung vien moi co the thuc hien thao tac nay");
+            throw new ApiException(HttpStatus.FORBIDDEN, "CANDIDATE_REQUIRED", "Chỉ ứng viên mới có thể thực hiện thao tác này");
         }
         if (!user.isEmailVerified() || user.getStatusEnum() != User.UserStatus.ACTIVE) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", "Email chua duoc xac minh");
+            throw new ApiException(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", "Email chưa được xác minh");
         }
     }
 
     private void validateCvFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_FILE_REQUIRED", "Vui long chon file CV");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_FILE_REQUIRED", "Vui lòng chọn file CV");
         }
         String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
         if (!name.endsWith(".pdf")) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_TYPE", "Chi ho tro file CV dinh dang PDF");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_TYPE", "Chỉ hỗ trợ file CV định dạng PDF");
         }
         if (file.getSize() > MAX_CV_SIZE) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CV_FILE_TOO_LARGE", "File CV vuot qua dung luong 5MB");
@@ -525,7 +525,7 @@ public class CandidateService {
         try {
             return UUID.fromString(value);
         } catch (IllegalArgumentException exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Ma dinh danh khong hop le");
+            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Mã định danh không hợp lệ");
         }
     }
 

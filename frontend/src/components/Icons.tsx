@@ -146,3 +146,19 @@ export const FiExternalLink = (props: any) => (
     <line x1="10" y1="14" x2="21" y2="3"></line>
   </IconBase>
 );
+
+export const FiTrendingUp = (props: any) => (
+  <IconBase {...props}>
+    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+    <polyline points="17 6 23 6 23 12"></polyline>
+  </IconBase>
+);
+
+export const FiUsers = (props: any) => (
+  <IconBase {...props}>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+    <circle cx="9" cy="7" r="4"></circle>
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+  </IconBase>
+);

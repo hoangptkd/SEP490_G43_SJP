@@ -15,6 +15,7 @@ import {
   IconProfile,
   IconUsers,
 } from '../../components/icons/PortalNavIcons';
+import type { Company } from '../../types/job';
 import '../../styles/admin.css';
 
 function readError(error: unknown) {
@@ -73,13 +74,20 @@ function KpiCard({ title, value, subtext }: { title: string, value: number, subt
 
 export default function EmployerDashboardPage() {
   const [stats, setStats] = useState<any>(null);
+  const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [visibleTasksCount, setVisibleTasksCount] = useState(5);
 
   useEffect(() => {
-    employerService.getDashboardStats()
-      .then(setStats)
+    Promise.all([
+      employerService.getDashboardStats(),
+      employerService.getCompanyProfile().catch(() => null)
+    ])
+      .then(([statsData, compData]) => {
+        setStats(statsData);
+        setCompany(compData);
+      })
       .catch(err => setError(readError(err)))
       .finally(() => setLoading(false));
   }, []);
@@ -115,13 +123,21 @@ export default function EmployerDashboardPage() {
       <div className="topcv-header">
         <h1 style={{ fontSize: '1.5rem', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <IconBriefcase size={24} /> Xin chào, Nhà tuyển dụng
+          {company && (
+            company.verificationStatus === 'verified' ? (
+              <span style={{ fontSize: '0.85rem', padding: '4px 10px', borderRadius: '20px', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                ✅ Đã xác thực
+              </span>
+            ) : (
+              <span style={{ fontSize: '0.85rem', padding: '4px 10px', borderRadius: '20px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                ⚠️ Chưa xác thực
+              </span>
+            )
+          )}
         </h1>
         <div style={{ display: 'flex', gap: 12 }}>
-          <Link to="/employer/jobs/new" className="button primary" style={{ borderRadius: 6 }}>
+          <Link to="/employer/jobs?action=new" className="button primary" style={{ borderRadius: 6 }}>
             + Đăng tin mới
-          </Link>
-          <Link to="/employer/candidates" className="button outline" style={{ borderRadius: 6 }}>
-            Tìm CV ứng viên
           </Link>
         </div>
       </div>
@@ -135,13 +151,13 @@ export default function EmployerDashboardPage() {
             <h2 className="section-title">Cần xử lý hôm nay <span style={{ color: 'var(--outline)', fontSize: '0.9rem', fontWeight: 400 }}>ⓘ</span></h2>
             <div className="top-actions-grid">
               <TopActionCard 
-                title="Ứng viên chờ duyệt" count={actionSummary.pendingApplicationsCount} 
-                icon={<IconProfile size={22} />} buttonText="Xem ngay" buttonLink="/employer/applications?status=SUBMITTED" 
+                title="Ứng viên cần xử lý" count={actionSummary.pendingApplicationsCount} 
+                icon={<IconProfile size={22} />} buttonText="Xem ngay" buttonLink="/employer/applications?status=INTERVIEW_SCHEDULED" 
                 colorClass="tac-red" 
               />
               <TopActionCard 
                 title="Lịch phỏng vấn hôm nay" count={actionSummary.todayInterviewsCount} 
-                icon={<IconCalendar size={22} />} buttonText="Xem lịch" buttonLink="/employer/applications?status=INTERVIEW_SCHEDULED" 
+                icon={<IconCalendar size={22} />} buttonText="Xem lịch" buttonLink="/employer/interviews" 
                 colorClass="tac-orange" 
               />
               <TopActionCard 
@@ -186,8 +202,11 @@ export default function EmployerDashboardPage() {
                 <div className="fs-icon mono-icon"><IconUsers size={22} /></div>
                 <div className="fs-title">Phỏng vấn</div>
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.interviewCount}</div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
-                  (Chờ lịch: {pipeline.shortlistedCount} | Đã xếp lịch: {pipeline.interviewScheduledCount})
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span>(Chờ xếp lịch: {pipeline.shortlistedCount} | Đã xếp lịch: {pipeline.interviewScheduledCount})</span>
+                  {pipeline.interviewPendingResponseCount !== undefined && (
+                    <span>(Chờ UV phản hồi: {pipeline.interviewPendingResponseCount} | Đã chốt: {pipeline.interviewAcceptedCount} | Đã PV: {pipeline.interviewCompletedCount})</span>
+                  )}
                 </div>
               </div>
               <div className="funnel-arrow">→</div>
@@ -195,7 +214,9 @@ export default function EmployerDashboardPage() {
                 <div className="fs-icon mono-icon"><IconBriefcase size={22} /></div>
                 <div className="fs-title">Offer</div>
                 <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.offerCount}</div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>(Đã gửi Offer)</div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span>(Đã gửi Offer)</span>
+                </div>
               </div>
               <div className="funnel-arrow">→</div>
               <div className="funnel-step">
@@ -309,7 +330,7 @@ export default function EmployerDashboardPage() {
               <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <IconCalendar size={18} /> Lịch phỏng vấn sắp tới
               </h3>
-              <Link to="/employer/applications?status=INTERVIEW_SCHEDULED" style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'none' }}>Xem lịch ↗</Link>
+              <Link to="/employer/interviews" style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'none' }}>Xem lịch ↗</Link>
             </div>
             <div className="sb-content">
               {upcomingInterviews.length > 0 ? (

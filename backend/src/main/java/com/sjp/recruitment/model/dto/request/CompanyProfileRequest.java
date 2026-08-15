@@ -13,6 +13,8 @@ public record CompanyProfileRequest(
         Integer companySize,
         String taxCode,
         String logoUrl,
+        String contactPhone,
+        String contactEmail,
         List<CompanyIndustryRequest> industries,
         Boolean submitForReview
 ) {

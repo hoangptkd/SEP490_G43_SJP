@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState, useRef } from 'react';
 import { employerService } from '../../services/employerService';
 import type { Company, CompanyLocation, Job } from '../../types/job';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { billingService, UserSubscription } from '../../services/billingService';
 import PlanLimitAlert from '../../components/PlanLimitAlert';
 import { parseApiError } from '../../utils/planLimits';
@@ -25,7 +25,10 @@ const PRESET_WORKING_TIMES = [
 
 function EmployerJobsPage() {
   const [company, setCompany] = useState<Company | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [allJobsForCount, setAllJobsForCount] = useState<Job[]>([]);
   const [locations, setLocations] = useState<CompanyLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,11 +43,19 @@ function EmployerJobsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const jobsPerPage = 10;
   const [totalPages, setTotalPages] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT' | 'AWAITING_COMPANY'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT' | 'AWAITING_COMPANY' | 'ARCHIVED'>('ALL');
   const [viewingJob, setViewingJob] = useState<Job | null>(null);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchTerm(searchInput);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -53,6 +64,7 @@ function EmployerJobsPage() {
   const [reqsInput, setReqsInput] = useState('');
   const [hasApplications, setHasApplications] = useState(false);
   const [showAiConfig, setShowAiConfig] = useState(false);
+  const [formOpenedFromParams, setFormOpenedFromParams] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -82,11 +94,20 @@ function EmployerJobsPage() {
     loadData();
   }, [currentPage, statusFilter, searchTerm]);
 
+  useEffect(() => {
+    if (locations.length > 0 && searchParams.get('action') === 'new' && !formOpenedFromParams) {
+      setFormOpenedFromParams(true);
+      handleOpenAdd();
+      searchParams.delete('action');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, locations, formOpenedFromParams]);
+
   async function loadData() {
     setLoading(true);
     setError('');
     try {
-      const [compData, jobsData, locsData, subData] = await Promise.all([
+      const [compData, jobsData, locsData, subData, allJobsData] = await Promise.all([
         employerService.getCompanyProfile(),
         employerService.getJobs({
           page: currentPage,
@@ -96,9 +117,15 @@ function EmployerJobsPage() {
         }).catch(() => ({ items: [], totalPages: 1 }) as import('../../types/candidateDomain').PageResult<Job>),
         employerService.getLocations().catch(() => []),
         billingService.getMySubscription().catch(() => null),
+        employerService.getJobs({
+          page: 1,
+          size: 1000,
+          search: searchTerm || undefined
+        }).catch(() => ({ items: [] }) as any)
       ]);
       setCompany(compData);
       setJobs(jobsData.items || []);
+      setAllJobsForCount(allJobsData.items || []);
       setTotalPages(jobsData.totalPages || 1);
       setLocations(locsData);
       setSubscription(subData);
@@ -269,22 +296,41 @@ function EmployerJobsPage() {
 
     // Validation
     const errors: Record<string, string> = {};
-    if (!formData.title || formData.title.trim().length < 5) {
-      errors.title = 'Tên vị trí tuyển dụng phải có ít nhất 5 ký tự.';
+    const titleTrimmed = formData.title?.trim() || '';
+    if (!titleTrimmed || titleTrimmed.length < 6 || titleTrimmed.length > 50) {
+      errors.title = 'Tên vị trí tuyển dụng phải có từ 6 đến 50 ký tự.';
+    } else if (titleTrimmed.charAt(0) !== titleTrimmed.charAt(0).toUpperCase()) {
+      errors.title = 'Chữ cái đầu tiên của vị trí tuyển dụng phải được viết hoa.';
     }
-    if (Number(formData.vacancies) < 1) {
+    const vacanciesNum = Number(formData.vacancies);
+    if (!formData.vacancies || isNaN(vacanciesNum)) {
+      errors.vacancies = 'Vui lòng nhập số lượng tuyển hợp lệ.';
+    } else if (!Number.isInteger(vacanciesNum)) {
+      errors.vacancies = 'Số lượng tuyển phải là số nguyên.';
+    } else if (vacanciesNum < 1) {
       errors.vacancies = 'Số lượng tuyển phải lớn hơn hoặc bằng 1.';
     }
     if (formData.salaryType === 'range') {
-      if (Number(formData.salaryMax) <= Number(formData.salaryMin)) {
+      const sMin = Number(formData.salaryMin);
+      const sMax = Number(formData.salaryMax);
+      if (!formData.salaryMin || isNaN(sMin) || !Number.isInteger(sMin) || sMin <= 0) {
+        errors.salaryMin = 'Mức lương tối thiểu phải là số nguyên lớn hơn 0.';
+      } else if (sMin > 10000000000) {
+        errors.salaryMin = 'Mức lương quá lớn, vui lòng kiểm tra lại.';
+      }
+      if (!formData.salaryMax || isNaN(sMax) || !Number.isInteger(sMax) || sMax <= 0) {
+        errors.salaryMax = 'Mức lương tối đa phải là số nguyên lớn hơn 0.';
+      } else if (sMax > 10000000000) {
+        errors.salaryMax = 'Mức lương quá lớn, vui lòng kiểm tra lại.';
+      } else if (!errors.salaryMin && sMax <= sMin) {
         errors.salaryMax = 'Mức lương tối đa phải lớn hơn mức lương tối thiểu.';
       }
-      if (Number(formData.salaryMin) < 0) {
-        errors.salaryMin = 'Mức lương tối thiểu không được âm.';
-      }
     } else if (formData.salaryType === 'fixed') {
-      if (Number(formData.salaryMax) < 0) {
-        errors.salaryMax = 'Mức lương cố định không được âm.';
+      const sMax = Number(formData.salaryMax);
+      if (!formData.salaryMax || isNaN(sMax) || !Number.isInteger(sMax) || sMax <= 0) {
+        errors.salaryMax = 'Mức lương cố định phải là số nguyên lớn hơn 0.';
+      } else if (sMax > 10000000000) {
+        errors.salaryMax = 'Mức lương quá lớn, vui lòng kiểm tra lại.';
       }
     }
     
@@ -320,6 +366,18 @@ function EmployerJobsPage() {
       errors.requirements = 'Yêu cầu công việc không được để trống.';
     }
 
+    const trimmedDesc = formData.description?.trim() || '';
+    if (!trimmedDesc) {
+      errors.description = 'Mô tả công việc không được để trống hoặc chỉ chứa khoảng trắng.';
+    } else if (trimmedDesc.length > 2000) {
+      errors.description = 'Mô tả công việc không được vượt quá 2000 ký tự.';
+    }
+
+    const trimmedBenefits = formData.benefits?.trim() || '';
+    if (trimmedBenefits.length > 2000) {
+      errors.benefits = 'Quyền lợi & Phúc lợi không được vượt quá 2000 ký tự.';
+    }
+
     if (formData.rankingConfig?.weights) {
       const totalWeights = Object.values(formData.rankingConfig.weights).reduce((sum, w) => sum + (w as number), 0);
       if (totalWeights !== 100) {
@@ -334,12 +392,12 @@ function EmployerJobsPage() {
     }
     setFieldErrors({});
 
-
-
-
     const statusToUse = submitTargetRef.current || formData.status || 'draft';
     const payload: any = {
       ...formData,
+      title: formData.title?.trim(),
+      description: trimmedDesc,
+      benefits: trimmedBenefits || undefined,
       status: statusToUse,
       skills: skillsArray,
       requirements: reqsArray.length > 0 ? reqsArray : skillsArray,
@@ -384,7 +442,7 @@ function EmployerJobsPage() {
     }
   }
 
-  if (loading) return <p className="loading">Đang tải dữ liệu tuyển dụng...</p>;
+  if (loading && !company) return <p className="loading">Đang tải dữ liệu tuyển dụng...</p>;
   if (!company) return <div className="content-card"><p className="error">{error || 'Không tìm thấy thông tin công ty.'}</p></div>;
 
   const isVerified = company.verified || company.verificationStatus?.toLowerCase() === 'verified';
@@ -451,7 +509,7 @@ function EmployerJobsPage() {
                   {company.verificationStatus || 'Chưa gửi duyệt'}
                 </span>
                 .<br />
-                Theo quy định của hệ thống SJP, <strong>chỉ các doanh nghiệp đã được Admin xác thực pháp lý thành công</strong> mới được phép sử dụng tính năng tạo và đăng tin tuyển dụng.
+                Theo quy định của hệ thống SRP, <strong>chỉ các doanh nghiệp đã được Admin xác thực pháp lý thành công</strong> mới được phép sử dụng tính năng tạo và đăng tin tuyển dụng.
               </p>
             </div>
           </div>
@@ -517,14 +575,21 @@ function EmployerJobsPage() {
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-              Tên vị trí tuyển dụng <span className="text-red-500">*</span>
+              <span>Tên vị trí tuyển dụng <span className="text-red-500">*</span></span>
               <input
                 required
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="Ví dụ: Senior Java Spring Boot Developer, Chuyên viên Marketing..."
+                onChange={(e) => {
+                  let val = e.target.value;
+                  if (val.length > 0) {
+                    val = val.charAt(0).toUpperCase() + val.slice(1);
+                  }
+                  setFormData({ ...formData, title: val });
+                }}
+                placeholder="Ví dụ: Vị trí + Ngành nghề / Chuyên môn + (Dự án nếu có)"
               />
+              <span className="text-xs text-gray-500 font-normal">Gợi ý cách điền: Vị trí + Ngành nghề / Chuyên môn + (Dự án nếu có). (6 - 50 ký tự, viết hoa chữ cái đầu)</span>
               {fieldErrors.title && <span className="text-red-600 text-sm mt-1">{fieldErrors.title}</span>}
             </label>
 
@@ -575,12 +640,23 @@ function EmployerJobsPage() {
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Số lượng tuyển
               <input
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 type="number"
                 min="1"
                 required
-                value={formData.vacancies}
-                onChange={(e) => setFormData({ ...formData, vacancies: parseInt(e.target.value) || 1 })}
+                value={formData.vacancies === undefined ? '' : formData.vacancies}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData({ ...formData, vacancies: val ? Number(val) : ('' as any) });
+                }}
+                onKeyDown={(e) => {
+                  if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                  if (e.key === '0' && (e.target as HTMLInputElement).value === '') {
+                    e.preventDefault();
+                  }
+                }}
               />
               {fieldErrors.vacancies && <span className="text-red-600 text-sm mt-1">{fieldErrors.vacancies}</span>}
             </label>
@@ -598,33 +674,64 @@ function EmployerJobsPage() {
               </select>
             </label>
 
-            {formData.salaryType !== 'negotiable' ? (
+            {formData.salaryType === 'range' ? (
               <>
                 <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-                  Mức lương tối thiểu (VNĐ/tháng)
+                  <span>Mức lương tối thiểu (VNĐ/tháng) <span className="text-red-500">*</span></span>
                   <input
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     type="number"
-                    min="0"
-                    step="500000"
-                    value={formData.salaryMin}
-                    onChange={(e) => setFormData({ ...formData, salaryMin: parseInt(e.target.value) || 0 })}
+                    min="1"
+                    value={formData.salaryMin === undefined || formData.salaryMin === null || formData.salaryMin === 0 ? '' : formData.salaryMin}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData({ ...formData, salaryMin: val ? Number(val) : ('' as any) });
+                    }}
+                    onKeyDown={(e) => {
+                      if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault();
+                      if (e.key === '0' && (e.target as HTMLInputElement).value === '') e.preventDefault();
+                    }}
                   />
                   {fieldErrors.salaryMin && <span className="text-red-600 text-sm mt-1">{fieldErrors.salaryMin}</span>}
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-                  {formData.salaryType === 'range' ? 'Mức lương tối đa (VNĐ/tháng)' : 'Mức lương cố định (VNĐ/tháng)'}
+                  <span>Mức lương tối đa (VNĐ/tháng) <span className="text-red-500">*</span></span>
                   <input
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     type="number"
-                    min="0"
-                    step="500000"
-                    value={formData.salaryMax}
-                    onChange={(e) => setFormData({ ...formData, salaryMax: parseInt(e.target.value) || 0 })}
+                    min="1"
+                    value={formData.salaryMax === undefined || formData.salaryMax === null || formData.salaryMax === 0 ? '' : formData.salaryMax}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData({ ...formData, salaryMax: val ? Number(val) : ('' as any) });
+                    }}
+                    onKeyDown={(e) => {
+                      if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault();
+                      if (e.key === '0' && (e.target as HTMLInputElement).value === '') e.preventDefault();
+                    }}
                   />
                   {fieldErrors.salaryMax && <span className="text-red-600 text-sm mt-1">{fieldErrors.salaryMax}</span>}
                 </label>
               </>
+            ) : formData.salaryType === 'fixed' ? (
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
+                <span>Mức lương cố định (VNĐ/tháng) <span className="text-red-500">*</span></span>
+                <input
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  type="number"
+                  min="1"
+                  value={formData.salaryMax === undefined || formData.salaryMax === null || formData.salaryMax === 0 ? '' : formData.salaryMax}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({ ...formData, salaryMax: val ? Number(val) : ('' as any) });
+                  }}
+                  onKeyDown={(e) => {
+                    if (['-', '+', 'e', 'E', '.'].includes(e.key)) e.preventDefault();
+                    if (e.key === '0' && (e.target as HTMLInputElement).value === '') e.preventDefault();
+                  }}
+                />
+                {fieldErrors.salaryMax && <span className="text-red-600 text-sm mt-1">{fieldErrors.salaryMax}</span>}
+              </label>
             ) : (
               <div className="md:col-span-2 flex items-center justify-center p-4 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
                 Mức lương sẽ được hiển thị là "Thỏa thuận" đối với ứng viên.
@@ -685,11 +792,12 @@ function EmployerJobsPage() {
             </div>
 
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-              Hạn nộp hồ sơ (Deadline) <span className="text-red-500">*</span>
+              <span>Hạn nộp hồ sơ (Deadline) <span className="text-red-500">*</span></span>
               <input
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 type="date"
                 required
+                min={new Date().toISOString().split('T')[0]}
                 value={formData.deadline}
                 onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
               />
@@ -728,7 +836,7 @@ function EmployerJobsPage() {
             </label>
 
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-              Kỹ năng yêu cầu (Nhập các từ khóa ngăn cách bằng dấu phẩy) <span className="text-red-500">*</span>
+              <span>Kỹ năng yêu cầu (Nhập các từ khóa ngăn cách bằng dấu phẩy) <span className="text-red-500">*</span></span>
               <input
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal text-gray-900"
                 required
@@ -740,15 +848,17 @@ function EmployerJobsPage() {
             </label>
 
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
-              Mô tả công việc (Description) <span className="text-red-500">*</span>
+              <span>Mô tả công việc (Description) <span className="text-red-500">*</span></span>
               <textarea
                 className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal resize-y min-h-[120px] text-gray-900"
                 required
                 rows={5}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onBlur={(e) => setFormData({ ...formData, description: e.target.value.trim() })}
                 placeholder="Mô tả chi tiết các trách nhiệm, công việc hàng ngày của ứng viên..."
               />
+              {fieldErrors.description && <span className="text-red-600 text-sm mt-1">{fieldErrors.description}</span>}
             </label>
 
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
@@ -766,12 +876,14 @@ function EmployerJobsPage() {
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
               Quyền lợi & Phúc lợi (Benefits)
               <textarea
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-normal resize-y min-h-[120px] text-gray-900"
+                className={`w-full px-4 py-3 rounded-lg border focus:ring-1 outline-none transition-all font-normal resize-y min-h-[120px] text-gray-900 ${fieldErrors.benefits ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
                 rows={4}
-                value={formData.benefits}
+                value={formData.benefits || ''}
                 onChange={(e) => setFormData({ ...formData, benefits: e.target.value })}
+                onBlur={(e) => setFormData({ ...formData, benefits: e.target.value.trim() })}
                 placeholder="Mức lương cạnh tranh, review lương 2 lần/năm&#10;Bảo hiểm chăm sóc sức khỏe toàn diện&#10;Môi trường trẻ trung, năng động"
               />
+              {fieldErrors.benefits && <span className="text-red-600 text-sm mt-1">{fieldErrors.benefits}</span>}
             </label>
 
             {/* AI Ranking Configuration Section */}
@@ -1128,8 +1240,8 @@ function EmployerJobsPage() {
               <input
                 type="text"
                 placeholder="Tìm kiếm theo tiêu đề vị trí, địa điểm, kỹ năng..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
@@ -1141,10 +1253,10 @@ function EmployerJobsPage() {
                 }}
               />
             </div>
-            {searchTerm && (
+            {searchInput && (
               <button
                 type="button"
-                onClick={() => setSearchTerm('')}
+                onClick={() => setSearchInput('')}
                 style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.875rem' }}
               >
                 ✕ Xóa tìm kiếm
@@ -1154,13 +1266,14 @@ function EmployerJobsPage() {
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[
-              { key: 'ALL', label: 'Tất cả', count: jobs.length },
-              { key: 'AWAITING_COMPANY', label: 'Tin vi phạm cần sửa', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'AWAITING_COMPANY').length },
-              { key: 'PENDING_REVIEW', label: 'Chờ duyệt', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'PENDING_REVIEW').length },
-              { key: 'PUBLISHED', label: 'Đang tuyển', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'PUBLISHED' || (j.status?.toUpperCase() || '') === 'ACTIVE').length },
-              { key: 'CLOSED', label: 'Đã đóng', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'CLOSED').length },
-              { key: 'EXPIRED', label: 'Hết hạn', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'EXPIRED').length },
-              { key: 'DRAFT', label: 'Bản nháp / Yêu cầu sửa', count: jobs.filter(j => (j.status?.toUpperCase() || '') === 'DRAFT' || (j.status?.toUpperCase() || '') === 'REJECTED').length },
+              { key: 'ALL', label: 'Tất cả', count: allJobsForCount.length },
+              { key: 'AWAITING_COMPANY', label: 'Tin vi phạm cần sửa', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'AWAITING_COMPANY').length },
+              { key: 'PENDING_REVIEW', label: 'Chờ duyệt', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'PENDING_REVIEW').length },
+              { key: 'PUBLISHED', label: 'Đang tuyển', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'PUBLISHED' || (j.status?.toUpperCase() || '') === 'ACTIVE').length },
+              { key: 'CLOSED', label: 'Đã đóng', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'CLOSED').length },
+              { key: 'EXPIRED', label: 'Hết hạn', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'EXPIRED').length },
+              { key: 'DRAFT', label: 'Bản nháp / Yêu cầu sửa', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'DRAFT' || (j.status?.toUpperCase() || '') === 'REJECTED').length },
+              { key: 'ARCHIVED', label: 'Đã lưu trữ', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'ARCHIVED').length },
             ].map((tab) => {
               const active = statusFilter === tab.key;
               return (
@@ -1209,9 +1322,9 @@ function EmployerJobsPage() {
               {jobs.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                   <p style={{ color: '#64748b', fontSize: '1.05rem', margin: '0 0 16px 0' }}>
-                    {jobs.length === 0 ? 'Công ty chưa có tin tuyển dụng nào được đăng trên hệ thống.' : 'Không tìm thấy tin tuyển dụng nào phù hợp với điều kiện lọc.'}
+                    {allJobsForCount.length === 0 ? 'Công ty chưa có tin tuyển dụng nào được đăng trên hệ thống.' : 'Không tìm thấy tin tuyển dụng nào phù hợp với điều kiện lọc.'}
                   </p>
-                  {jobs.length === 0 && isVerified && (
+                  {allJobsForCount.length === 0 && isVerified && (
                     <button
                       onClick={handleOpenAdd}
                       style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)' }}
@@ -1225,27 +1338,29 @@ function EmployerJobsPage() {
                   <div style={{ display: 'grid', gap: '12px' }}>
                     {jobs.map((job) => {
                     const st = job.status?.toLowerCase() || 'draft';
-                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
-                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : '#64748b';
-                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : '#e2e8f0';
-                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : '#64748b';
-                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : 'Đã đóng';
+                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : st === 'archived' ? '#f3f4f6' : '#f1f5f9';
+                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : st === 'archived' ? '#374151' : '#64748b';
+                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : st === 'archived' ? '#d1d5db' : '#e2e8f0';
+                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : st === 'archived' ? '#6b7280' : '#64748b';
+                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : st === 'archived' ? 'Đã lưu trữ' : 'Đã đóng';
 
                     return (
                       <div key={job.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col lg:flex-row justify-between items-start gap-5">
                         <div className="flex-1 w-full lg:w-auto">
-                          <div className="flex items-center gap-3 mb-3 flex-wrap">
-                            <h3 className="m-0 text-lg text-gray-900 font-bold">
+                          <div className="flex flex-col gap-2 mb-3">
+                            <h3 className="m-0 text-lg text-gray-900 font-bold break-words line-clamp-2" title={job.title}>
                               {job.title}
                             </h3>
-                            <span style={{
-                              background: statusBg,
-                              color: statusColor,
-                              border: `1px solid ${statusBorder}`,
-                            }} className="px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-2">
-                              <span style={{ background: statusDot }} className="w-1.5 h-1.5 rounded-full"></span>
-                              {statusLabel}
-                            </span>
+                            <div className="flex">
+                              <span style={{
+                                background: statusBg,
+                                color: statusColor,
+                                border: `1px solid ${statusBorder}`,
+                              }} className="px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-2">
+                                <span style={{ background: statusDot }} className="w-1.5 h-1.5 rounded-full"></span>
+                                {statusLabel}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-gray-500 text-sm mb-4">
@@ -1369,18 +1484,14 @@ function EmployerJobsPage() {
                         Mở lại tin
                       </button>
                     )}
+
                     <button
                       onClick={() => setViewingJob(job)}
                       className="inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 transition-colors"
                     >
                       Xem chi tiết
                     </button>
-                    <button
-                      onClick={() => handleDelete(job.id, job.title)}
-                      className="inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm bg-white hover:bg-red-50 border border-red-200 text-red-600 transition-colors"
-                    >
-                      Xóa
-                    </button>
+
                   </div>
                 </div>
               );

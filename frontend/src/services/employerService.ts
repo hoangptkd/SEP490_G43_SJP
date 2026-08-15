@@ -177,8 +177,13 @@ export const employerService = {
     return response.data;
   },
 
-  getApplications: async (params?: { jobId?: string; status?: string; search?: string; page?: number; size?: number }): Promise<import('../types/candidateDomain').PageResult<CandidateApplication>> => {
-    const response = await api.get<import('../types/candidateDomain').PageResult<CandidateApplication>>('/employer/applications', { params });
+  getApplications: async (params?: { jobId?: string; status?: string | string[]; search?: string; page?: number; size?: number }): Promise<import('../types/candidateDomain').PageResult<CandidateApplication>> => {
+    const response = await api.get<import('../types/candidateDomain').PageResult<CandidateApplication>>('/employer/applications', {
+      params,
+      paramsSerializer: {
+        indexes: null,
+      },
+    });
     return response.data;
   },
 

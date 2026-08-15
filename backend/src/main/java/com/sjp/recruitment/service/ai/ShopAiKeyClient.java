@@ -852,7 +852,7 @@ public class ShopAiKeyClient {
         int start = content.indexOf('{');
         int end = content.lastIndexOf('}');
         if (start < 0 || end <= start) {
-            throw new AiProviderException("AI_INVALID_JSON", "AI khong tra JSON hop le");
+            throw new AiProviderException("AI_INVALID_JSON", "AI không trả JSON hợp lệ");
         }
         return content.substring(start, end + 1);
     }
@@ -868,7 +868,7 @@ public class ShopAiKeyClient {
     private String conciseQuestion(String value) {
         String normalized = value == null ? "" : value.replaceAll("\\s+", " ").trim();
         if (normalized.length() > 260 || normalized.split("\\?").length > 2) {
-            throw new AiProviderException("AI_QUESTION_TOO_LONG", "AI tao cau hoi qua dai");
+            throw new AiProviderException("AI_QUESTION_TOO_LONG", "AI tạo câu hỏi quá dài");
         }
         return normalized;
     }

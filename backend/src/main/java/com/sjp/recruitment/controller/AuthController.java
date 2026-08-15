@@ -57,14 +57,14 @@ public class AuthController {
     public ResponseEntity<MessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest servletRequest) {
         authRateLimiter.check(AuthRateLimiter.Operation.FORGOT_PASSWORD, request.email(), servletRequest.getRemoteAddr());
         authService.forgotPassword(request);
-        return ResponseEntity.ok(new MessageResponse("Neu email ton tai, huong dan dat lai mat khau da duoc gui"));
+        return ResponseEntity.ok(new MessageResponse("Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi"));
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request, HttpServletRequest servletRequest) {
         authRateLimiter.check(AuthRateLimiter.Operation.RESET_PASSWORD, request.token(), servletRequest.getRemoteAddr());
         authService.resetPassword(request);
-        return ResponseEntity.ok(new MessageResponse("Mat khau da duoc cap nhat"));
+        return ResponseEntity.ok(new MessageResponse("Mật khẩu đã được cập nhật"));
     }
 
     @PostMapping("/verify-email")
@@ -105,7 +105,7 @@ public class AuthController {
     @PutMapping("/account/password")
     public ResponseEntity<MessageResponse> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         authService.changePassword(request);
-        return ResponseEntity.ok(new MessageResponse("Mat khau da duoc cap nhat"));
+        return ResponseEntity.ok(new MessageResponse("Mật khẩu đã được cập nhật"));
     }
 
     @PutMapping(value = "/account/avatar", consumes = "multipart/form-data")
@@ -116,6 +116,6 @@ public class AuthController {
     @PostMapping("/account/deactivate")
     public ResponseEntity<MessageResponse> deactivateAccount(@Valid @RequestBody DeactivateAccountRequest request) {
         authService.deactivateAccount(request);
-        return ResponseEntity.ok(new MessageResponse("Tai khoan da duoc vo hieu hoa"));
+        return ResponseEntity.ok(new MessageResponse("Tài khoản đã được vô hiệu hóa"));
     }
 }
