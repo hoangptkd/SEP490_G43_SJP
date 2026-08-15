@@ -1393,16 +1393,7 @@ function HomePage() {
               </div>
             )}
 
-            {showCandidateHome && quickCategories.length > 0 && (
-              <div className="home-quick-search" aria-label="Tìm nhanh theo ngành nghề">
-                <span>Gợi ý nhanh:</span>
-                {quickCategories.slice(0, 6).map((category) => (
-                  <button key={category.id} type="button" onClick={() => openCategory(category)}>
-                    {category.name}
-                  </button>
-                ))}
-              </div>
-            )}
+
           </div>
         </section>
 
@@ -6210,6 +6201,8 @@ function AiInterviewPage() {
   const [message, setMessage] = useState('');
   const [planLimitReached, setPlanLimitReached] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sessionPage, setSessionPage] = useState(0);
+  const SESSION_PAGE_SIZE = 5;
 
   const practiceCvOptions = useMemo(() => [
     ...practiceCvs.map((cv) => ({
@@ -6243,6 +6236,7 @@ function AiInterviewPage() {
       candidateService.getCvVersions(0, 100),
     ]);
     setSessions(sessionData);
+    setSessionPage(0);
     setApplications(applicationData);
     setPracticeCvs(cvData.items);
     setPracticeCvVersions(cvVersionData.items);
@@ -6539,7 +6533,9 @@ function AiInterviewPage() {
               {sessions.length === 0 && (
                 <div className="empty-state">Chưa có phiên phỏng vấn nào.</div>
               )}
-              {sessions.map((session) => (
+              {sessions
+                .slice(sessionPage * SESSION_PAGE_SIZE, (sessionPage + 1) * SESSION_PAGE_SIZE)
+                .map((session) => (
                 <article className="session-row" key={session.id}>
                   <div>
                     <strong>{session.title}</strong>
@@ -6557,6 +6553,29 @@ function AiInterviewPage() {
                 </article>
               ))}
             </div>
+            {sessions.length > SESSION_PAGE_SIZE && (
+              <div className="pagination-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 8 }}>
+                <button
+                  type="button"
+                  className="outline"
+                  disabled={sessionPage === 0}
+                  onClick={() => setSessionPage((p) => p - 1)}
+                >
+                  ← Trước
+                </button>
+                <span className="muted" style={{ fontSize: '0.875rem' }}>
+                  Trang {sessionPage + 1} / {Math.ceil(sessions.length / SESSION_PAGE_SIZE)}
+                </span>
+                <button
+                  type="button"
+                  className="outline"
+                  disabled={(sessionPage + 1) * SESSION_PAGE_SIZE >= sessions.length}
+                  onClick={() => setSessionPage((p) => p + 1)}
+                >
+                  Sau →
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
