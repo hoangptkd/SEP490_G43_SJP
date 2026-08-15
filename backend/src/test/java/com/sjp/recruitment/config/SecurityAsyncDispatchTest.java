@@ -65,10 +65,11 @@ class SecurityAsyncDispatchTest {
         questionId = UUID.randomUUID().toString();
         captureId = UUID.randomUUID().toString();
         when(captureService.process(eq(sessionId), eq(questionId), eq(captureId), eq(captureId), eq(1),
-                anyList(), eq(java.util.List.of(0)), eq("Spring Boot"), eq(java.util.List.of(1.25))))
+                anyList(), eq(java.util.List.of(0)), eq("Spring Boot"), eq(null), eq(null),
+                eq(java.util.List.of(1.25))))
                 .thenReturn(new HandsFreeAnswerCaptureResponse(
                         questionId, captureId, 1, "Spring Boot", "Spring Boot", "Spring Boot",
-                        "standardized", "AUDIO_GLADIA", null));
+                        "Spring Boot", "NOT_REQUIRED", 0, "standardized", "AUDIO_GLADIA", null));
     }
 
     @Test
@@ -82,7 +83,7 @@ class SecurityAsyncDispatchTest {
         mvc.perform(asyncDispatch(initial))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.captureId").value(captureId))
-                .andExpect(jsonPath("$.finalTranscript").value("Spring Boot"));
+                .andExpect(jsonPath("$.rawTranscript").value("Spring Boot"));
     }
 
     @Test

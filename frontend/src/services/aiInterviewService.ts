@@ -1,13 +1,18 @@
 import { api } from './api';
 import type {
   AiInterviewConfig,
+  AiInterviewConfirmedAnswer,
+  AiInterviewCvProfile,
   AiInterviewEligibleApplication,
+  AiInterviewPracticeInput,
   AiInterviewQuestionSet,
   AiInterviewSession,
   AiInterviewSpeechTicket,
+  AiInterviewLiveTranscriptionSession,
   AiInterviewTranscript,
   HandsFreeAnswerCaptureResult,
   HandsFreeAudioSegmentUpload,
+  AnswerCaptureTranscriptionMetadata,
 } from '../types/aiInterview';
 
 export const aiInterviewService = {
@@ -41,18 +46,13 @@ export const aiInterviewService = {
     return response.data;
   },
 
-  createPracticeSession: async (
-    targetRole: string,
-    skills: string[],
-    jobId?: string,
-    questionSetId?: string,
-  ): Promise<AiInterviewSession> => {
-    const response = await api.post<AiInterviewSession>('/candidate/ai-interviews/sessions/practice', {
-      targetRole,
-      skills,
-      jobId: jobId || null,
-      questionSetId: questionSetId || null,
-    });
+  analyzePracticeCv: async (cvId: string): Promise<AiInterviewCvProfile> => {
+    const response = await api.post<AiInterviewCvProfile>('/candidate/ai-interviews/practice/cv-profile', { cvId });
+    return response.data;
+  },
+
+  createPracticeSession: async (input: AiInterviewPracticeInput): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>('/candidate/ai-interviews/sessions/practice', input);
     return response.data;
   },
 
@@ -72,6 +72,17 @@ export const aiInterviewService = {
     return response.data;
   },
 
+  createLiveTranscription: async (
+    sessionId: string,
+    sampleRate: number,
+  ): Promise<AiInterviewLiveTranscriptionSession> => {
+    const response = await api.post<AiInterviewLiveTranscriptionSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/live-transcription`,
+      { sampleRate },
+    );
+    return response.data;
+  },
+
   finalizeHandsFreeCapture: async (
     sessionId: string,
     questionId: string,
@@ -79,11 +90,14 @@ export const aiInterviewService = {
     captureVersion: number,
     segments: HandsFreeAudioSegmentUpload[],
     browserTranscript: string,
+    transcription: AnswerCaptureTranscriptionMetadata = { source: 'web_speech' },
   ): Promise<HandsFreeAnswerCaptureResult> => {
     const form = new FormData();
     form.append('captureId', captureId);
     form.append('captureVersion', String(captureVersion));
     form.append('browserTranscript', browserTranscript);
+    form.append('transcriptionSource', transcription.source);
+    if (transcription.liveSessionToken) form.append('liveSessionToken', transcription.liveSessionToken);
     segments.forEach((segment) => {
       form.append('audioSegments', segment.file);
       form.append('segmentSequences', String(segment.sequence));
@@ -102,6 +116,39 @@ export const aiInterviewService = {
     return response.data;
   },
 
+  finalizeHandsFreeTurnCapture: async (
+    sessionId: string,
+    turnId: string,
+    captureId: string,
+    captureVersion: number,
+    segments: HandsFreeAudioSegmentUpload[],
+    browserTranscript: string,
+    transcription: AnswerCaptureTranscriptionMetadata = { source: 'web_speech' },
+  ): Promise<HandsFreeAnswerCaptureResult> => {
+    const form = new FormData();
+    form.append('captureId', captureId);
+    form.append('captureVersion', String(captureVersion));
+    form.append('browserTranscript', browserTranscript);
+    form.append('transcriptionSource', transcription.source);
+    if (transcription.liveSessionToken) form.append('liveSessionToken', transcription.liveSessionToken);
+    segments.forEach((segment) => {
+      form.append('audioSegments', segment.file);
+      form.append('segmentSequences', String(segment.sequence));
+      form.append('durationSeconds', String(segment.durationSeconds));
+    });
+    const response = await api.post<HandsFreeAnswerCaptureResult>(
+      `/candidate/ai-interviews/sessions/${sessionId}/turns/${turnId}/answer-capture`,
+      form,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Idempotency-Key': captureId,
+        },
+      },
+    );
+    return { ...response.data, questionId: turnId };
+  },
+
   createSpeechTicket: async (sessionId: string, input: string): Promise<AiInterviewSpeechTicket> => {
     const response = await api.post<AiInterviewSpeechTicket>(
       `/candidate/ai-interviews/sessions/${sessionId}/speech`,
@@ -118,10 +165,14 @@ export const aiInterviewService = {
     return response.data;
   },
 
-  confirmAnswer: async (sessionId: string, questionId: string, transcript: string): Promise<AiInterviewSession> => {
+  confirmAnswer: async (
+    sessionId: string,
+    questionId: string,
+    answer: AiInterviewConfirmedAnswer,
+  ): Promise<AiInterviewSession> => {
     const response = await api.post<AiInterviewSession>(
       `/candidate/ai-interviews/sessions/${sessionId}/questions/${questionId}/confirm`,
-      { transcript },
+      answer,
     );
     return response.data;
   },
@@ -140,6 +191,68 @@ export const aiInterviewService = {
   skipQuestion: async (sessionId: string, questionId: string): Promise<AiInterviewSession> => {
     const response = await api.post<AiInterviewSession>(
       `/candidate/ai-interviews/sessions/${sessionId}/questions/${questionId}/skip`,
+    );
+    return response.data;
+  },
+
+  confirmTurn: async (
+    sessionId: string,
+    turnId: string,
+    idempotencyKey: string,
+    answer: AiInterviewConfirmedAnswer,
+    expectedDialogueVersion: number,
+  ): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/turns/${turnId}/confirm`,
+      { ...answer, expectedDialogueVersion },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    );
+    return response.data;
+  },
+
+  skipTurn: async (
+    sessionId: string,
+    turnId: string,
+    idempotencyKey: string,
+    expectedDialogueVersion: number,
+  ): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/turns/${turnId}/skip`,
+      { expectedDialogueVersion },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    );
+    return response.data;
+  },
+
+  replayTurn: async (
+    sessionId: string,
+    turnId: string,
+    expectedDialogueVersion: number,
+  ): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/turns/${turnId}/replay`,
+      { expectedDialogueVersion },
+    );
+    return response.data;
+  },
+
+  retryConversation: async (sessionId: string): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/conversation/retry`,
+    );
+    return response.data;
+  },
+
+  recordQuestionReplay: async (sessionId: string, questionId: string): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/questions/${questionId}/replay`,
+    );
+    return response.data;
+  },
+
+  retryQuestionGeneration: async (sessionId: string): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/questions/retry`,
     );
     return response.data;
   },

@@ -27,6 +27,42 @@ public class AiSessionFeedback {
     @Column(name = "overall_score")
     private BigDecimal overallScore;
 
+    @Column(name = "content_score")
+    private BigDecimal contentScore;
+
+    @Column(name = "voice_delivery_score")
+    private BigDecimal voiceDeliveryScore;
+
+    @Column(name = "raw_voice_delivery_score")
+    private BigDecimal rawVoiceDeliveryScore;
+
+    @Column(name = "voice_weight")
+    private BigDecimal voiceWeight;
+
+    @Column(name = "replay_count", nullable = false)
+    private int replayCount;
+
+    @Column(name = "replay_penalty", nullable = false)
+    private BigDecimal replayPenalty = BigDecimal.ZERO;
+
+    @Column(name = "voice_evidence_question_count", nullable = false)
+    private int voiceEvidenceQuestionCount;
+
+    @Column(name = "manual_fallback_question_count", nullable = false)
+    private int manualFallbackQuestionCount;
+
+    @Column(name = "reference_only", nullable = false)
+    private boolean referenceOnly = true;
+
+    @Column(name = "evaluation_profile_version", length = 80)
+    private String evaluationProfileVersion;
+
+    @Column(name = "rubric_version", length = 80)
+    private String rubricVersion;
+
+    @Column(name = "speech_calibration_version", length = 80)
+    private String speechCalibrationVersion;
+
     @Column(name = "ai_summary", columnDefinition = "TEXT")
     private String aiSummary;
 

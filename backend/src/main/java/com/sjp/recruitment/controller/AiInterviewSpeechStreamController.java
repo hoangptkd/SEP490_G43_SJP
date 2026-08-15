@@ -26,6 +26,7 @@ public class AiInterviewSpeechStreamController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.ACCEPT_RANGES, "none")
+                .header("X-Accel-Buffering", "no")
                 .contentType(MediaType.parseMediaType(contentType))
                 .body(body);
     }

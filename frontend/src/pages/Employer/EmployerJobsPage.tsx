@@ -47,7 +47,7 @@ function EmployerJobsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const jobsPerPage = 10;
   const [totalPages, setTotalPages] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT' | 'AWAITING_COMPANY'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_REVIEW' | 'PUBLISHED' | 'CLOSED' | 'EXPIRED' | 'DRAFT' | 'AWAITING_COMPANY' | 'ARCHIVED'>('ALL');
   const [viewingJob, setViewingJob] = useState<Job | null>(null);
 
   useEffect(() => {
@@ -1273,6 +1273,7 @@ function EmployerJobsPage() {
               { key: 'CLOSED', label: 'Đã đóng', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'CLOSED').length },
               { key: 'EXPIRED', label: 'Hết hạn', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'EXPIRED').length },
               { key: 'DRAFT', label: 'Bản nháp / Yêu cầu sửa', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'DRAFT' || (j.status?.toUpperCase() || '') === 'REJECTED').length },
+              { key: 'ARCHIVED', label: 'Đã lưu trữ', count: allJobsForCount.filter(j => (j.status?.toUpperCase() || '') === 'ARCHIVED').length },
             ].map((tab) => {
               const active = statusFilter === tab.key;
               return (
@@ -1321,9 +1322,9 @@ function EmployerJobsPage() {
               {jobs.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                   <p style={{ color: '#64748b', fontSize: '1.05rem', margin: '0 0 16px 0' }}>
-                    {jobs.length === 0 ? 'Công ty chưa có tin tuyển dụng nào được đăng trên hệ thống.' : 'Không tìm thấy tin tuyển dụng nào phù hợp với điều kiện lọc.'}
+                    {allJobsForCount.length === 0 ? 'Công ty chưa có tin tuyển dụng nào được đăng trên hệ thống.' : 'Không tìm thấy tin tuyển dụng nào phù hợp với điều kiện lọc.'}
                   </p>
-                  {jobs.length === 0 && isVerified && (
+                  {allJobsForCount.length === 0 && isVerified && (
                     <button
                       onClick={handleOpenAdd}
                       style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)' }}
@@ -1337,11 +1338,11 @@ function EmployerJobsPage() {
                   <div style={{ display: 'grid', gap: '12px' }}>
                     {jobs.map((job) => {
                     const st = job.status?.toLowerCase() || 'draft';
-                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : '#f1f5f9';
-                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : '#64748b';
-                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : '#e2e8f0';
-                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : '#64748b';
-                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : 'Đã đóng';
+                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : st === 'archived' ? '#f3f4f6' : '#f1f5f9';
+                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : st === 'archived' ? '#374151' : '#64748b';
+                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : st === 'archived' ? '#d1d5db' : '#e2e8f0';
+                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : st === 'archived' ? '#6b7280' : '#64748b';
+                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : st === 'archived' ? 'Đã lưu trữ' : 'Đã đóng';
 
                     return (
                       <div key={job.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col lg:flex-row justify-between items-start gap-5">
@@ -1483,18 +1484,14 @@ function EmployerJobsPage() {
                         Mở lại tin
                       </button>
                     )}
+
                     <button
                       onClick={() => setViewingJob(job)}
                       className="inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 transition-colors"
                     >
                       Xem chi tiết
                     </button>
-                    <button
-                      onClick={() => handleDelete(job.id, job.title)}
-                      className="inline-flex items-center px-3 py-1.5 rounded-lg font-semibold text-sm bg-white hover:bg-red-50 border border-red-200 text-red-600 transition-colors"
-                    >
-                      Xóa
-                    </button>
+
                   </div>
                 </div>
               );

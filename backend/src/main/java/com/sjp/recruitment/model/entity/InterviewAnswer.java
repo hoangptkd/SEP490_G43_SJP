@@ -39,12 +39,31 @@ public class InterviewAnswer {
     @Column(name = "transcript_text", columnDefinition = "TEXT")
     private String transcriptText;
 
+    @Column(name = "raw_transcript", columnDefinition = "TEXT")
+    private String rawTranscript;
+
+    @Column(name = "final_transcript", columnDefinition = "TEXT")
+    private String finalTranscript;
+
+    @Column(name = "transcript_edited", nullable = false)
+    private boolean transcriptEdited = false;
+
+    @Column(name = "transcript_edit_count", nullable = false)
+    private int transcriptEditCount = 0;
+
+    @Column(name = "conversation_state", nullable = false, length = 40)
+    private String conversationState = "LISTENING";
+
     @Column(name = "original_speech_transcript", columnDefinition = "TEXT")
     private String originalSpeechTranscript;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "speech_analysis_json", columnDefinition = "jsonb", nullable = false)
     private Map<String, Object> speechAnalysisJson = new HashMap<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "evidence_summary_json", columnDefinition = "jsonb", nullable = false)
+    private Map<String, Object> evidenceSummaryJson = new HashMap<>();
 
     @Column(name = "active_capture_id")
     private UUID activeCaptureId;

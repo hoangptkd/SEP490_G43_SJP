@@ -1,5 +1,6 @@
 package com.sjp.recruitment.model.entity;
 
+import com.sjp.recruitment.model.enums.InterviewDialogueState;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -51,6 +52,10 @@ public class InterviewSession {
     @Column(name = "practice_context_json", columnDefinition = "jsonb", nullable = false)
     private Map<String, Object> practiceContext = new HashMap<>();
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "evaluation_profile_json", columnDefinition = "jsonb", nullable = false)
+    private Map<String, Object> evaluationProfile = new HashMap<>();
+
     @Column(nullable = false)
     private String title;
 
@@ -59,6 +64,36 @@ public class InterviewSession {
 
     @Column(nullable = false)
     private String status = "created";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dialogue_state", length = 32)
+    private InterviewDialogueState dialogueState;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "current_turn_id")
+    private InterviewConversationTurn currentTurn;
+
+    @Column(name = "next_turn_sequence", nullable = false)
+    private Integer nextTurnSequence = 1;
+
+    @Column(name = "assessment_turn_count", nullable = false)
+    private Integer assessmentTurnCount = 0;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "evidence_summary_json", columnDefinition = "jsonb", nullable = false)
+    private Map<String, Object> evidenceSummaryJson = new HashMap<>();
+
+    @Column(name = "dialogue_version", nullable = false)
+    private Integer dialogueVersion = 1;
+
+    @Column(name = "last_error_stage", length = 64)
+    private String lastErrorStage;
+
+    @Column(name = "last_error_code", length = 100)
+    private String lastErrorCode;
+
+    @Column(name = "last_error_message", columnDefinition = "TEXT")
+    private String lastErrorMessage;
 
     @Column(name = "total_questions", nullable = false)
     private Integer totalQuestions = 0;

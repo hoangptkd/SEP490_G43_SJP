@@ -60,7 +60,7 @@ public class CandidateService {
     public CandidateProfile getCurrentCandidateProfile() {
         User user = authService.getCurrentUser();
         requireCandidate(user);
-        return candidateProfileRepository.findByUserId(user.getId())
+        return candidateProfileRepository.findWithSkillsByUserId(user.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CANDIDATE_PROFILE_NOT_FOUND", "Chưa có hồ sơ ứng viên"));
     }
 

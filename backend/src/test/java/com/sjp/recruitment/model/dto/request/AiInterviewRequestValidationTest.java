@@ -4,8 +4,8 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,29 +17,36 @@ class AiInterviewRequestValidationTest {
     @Test
     void rejectsOversizedAndBlankPracticeContext() {
         AiInterviewPracticeSessionRequest oversized = new AiInterviewPracticeSessionRequest(
+                UUID.randomUUID().toString(),
                 "x".repeat(121),
-                Collections.nCopies(13, "Java"),
-                null,
-                null
+                "junior",
+                List.of("Java")
         );
         AiInterviewPracticeSessionRequest blankSkill = new AiInterviewPracticeSessionRequest(
+                UUID.randomUUID().toString(),
                 "Backend Developer",
-                List.of(" "),
-                null,
-                null
+                "junior",
+                List.of(" ")
         );
+        AiInterviewPracticeSessionRequest invalidSeniority = new AiInterviewPracticeSessionRequest(
+                UUID.randomUUID().toString(), "Backend Developer", "lead", List.of());
+        AiInterviewPracticeSessionRequest tooManyFocusSkills = new AiInterviewPracticeSessionRequest(
+                UUID.randomUUID().toString(), "Backend Developer", "junior",
+                List.of("Java", "SQL", "Docker", "Redis"));
 
         assertFalse(validator.validate(oversized).isEmpty());
         assertFalse(validator.validate(blankSkill).isEmpty());
+        assertFalse(validator.validate(invalidSeniority).isEmpty());
+        assertFalse(validator.validate(tooManyFocusSkills).isEmpty());
     }
 
     @Test
     void acceptsBoundedPracticeContext() {
         AiInterviewPracticeSessionRequest request = new AiInterviewPracticeSessionRequest(
+                UUID.randomUUID().toString(),
                 "Backend Developer",
-                List.of("Java", "Spring Boot"),
-                null,
-                null
+                "junior",
+                List.of("Java", "Spring Boot")
         );
 
         assertTrue(validator.validate(request).isEmpty());

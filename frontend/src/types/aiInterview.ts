@@ -8,9 +8,12 @@ export interface AiInterviewConfig {
   audioMaxSizeMb: number;
   voiceStreamingEnabled: boolean;
   voiceProvider: string;
-  voiceSilenceMs: number;
-  voiceConfirmationSilenceMs: number;
-  voiceUnclearConfirmationDelayMs: number;
+  answerTranscriptionProvider: 'web_speech' | 'gladia_live';
+  voiceConfirmationPromptDelayMs: number;
+  voiceConfirmationAutoFinalizeMs: number;
+  voiceRecognitionRestartDelayMs: number;
+  voiceLoadWaitMs: number;
+  voiceNextQuestionDelayMs: number;
 }
 
 export interface AiInterviewEligibleApplication {
@@ -31,7 +34,10 @@ export interface AiInterviewQuestionSet {
 
 export interface AiInterviewFeedback {
   id: string;
-  score: number;
+  questionScore: number;
+  evaluationStatus: 'RATED' | 'NOT_ANSWERED';
+  barsLevel?: number;
+  scoreReason?: 'SKIPPED' | 'NOT_ANSWERED';
   feedback: string;
   strengths: string[];
   weaknesses: string[];
@@ -44,6 +50,11 @@ export interface AiInterviewAnswer {
   id: string;
   questionId: string;
   transcript?: string;
+  rawTranscript?: string;
+  finalTranscript?: string;
+  transcriptEdited: boolean;
+  transcriptEditCount: number;
+  conversationState?: InterviewConversationState;
   skipped: boolean;
   transcriptStatus: string;
   feedbackStatus: string;
@@ -60,15 +71,63 @@ export interface AiInterviewQuestion {
   difficulty?: string;
   skillTag?: string;
   timeLimitSeconds?: number;
+  replayCount: number;
+  sourceType: 'AI_GENERATED' | 'QUESTION_BANK';
+  sourceId?: string;
+  promptVersion?: string;
+  rubricVersion?: string;
+  competencyId?: string;
   answer?: AiInterviewAnswer;
+}
+
+export type InterviewConversationState =
+  | 'AI_SPEAKING'
+  | 'LISTENING'
+  | 'WAITING_FOR_CONTINUATION'
+  | 'PROCESSING_AUDIO'
+  | 'REVIEWING_TRANSCRIPT'
+  | 'ANSWER_CONFIRMED'
+  | 'NEXT_QUESTION';
+
+export interface AiInterviewCvProfile {
+  id: string;
+  cvId: string;
+  cvTitle: string;
+  contentHash: string;
+  summary: string;
+  experienceLevel: 'intern' | 'fresher' | 'junior' | 'middle' | 'senior';
+  skills: string[];
+  suggestedRoles: Array<{ title: string; reason: string }>;
+  evidenceClaims: Array<{ id: string; topic: string; claim: string }>;
+  promptVersion: string;
+  cached: boolean;
+}
+
+export interface AiInterviewPracticeInput {
+  cvId: string;
+  targetRole: string;
+  seniority: AiInterviewCvProfile['experienceLevel'];
+  focusSkills: string[];
 }
 
 export interface AiInterviewSummary {
   overallScore: number;
+  contentScore: number;
+  voiceDeliveryScore?: number;
+  rawVoiceDeliveryScore?: number;
+  voiceWeight: number;
+  replayCount: number;
+  replayPenalty: number;
+  voiceEvidenceQuestionCount: number;
+  manualFallbackQuestionCount: number;
+  referenceOnly: boolean;
   summary: string;
   strengths: string[];
   weaknesses: string[];
   improvementPlan: string[];
+  evaluationProfileVersion?: string;
+  rubricVersion?: string;
+  speechCalibrationVersion?: string;
   source: 'provider' | 'fallback';
   fallback: boolean;
 }
@@ -89,6 +148,55 @@ export interface AiInterviewSession {
   updatedAt?: string;
   questions: AiInterviewQuestion[];
   summary?: AiInterviewSummary;
+  conversation?: AiInterviewConversation;
+}
+
+export type AiInterviewDialogueState =
+  | 'SESSION_START'
+  | 'OPENING'
+  | 'ASK_CORE'
+  | 'WAITING_ANSWER'
+  | 'ANALYZE_ANSWER'
+  | 'ASK_PROBE'
+  | 'ASK_CLARIFY'
+  | 'ACK_TRANSITION'
+  | 'CLOSING'
+  | 'COMPLETED';
+
+export type AiInterviewTurnAnswerStatus =
+  | 'NOT_REQUIRED'
+  | 'WAITING'
+  | 'PROCESSING'
+  | 'REVIEWING'
+  | 'CONFIRMED'
+  | 'SKIPPED';
+
+export interface AiInterviewConversationTurn {
+  id: string;
+  sequence: number;
+  interviewerText: string;
+  rawTranscript?: string;
+  finalTranscript?: string;
+  transcriptEdited: boolean;
+  editCount: number;
+  answerStatus: AiInterviewTurnAnswerStatus;
+  current: boolean;
+  answeredAt?: string;
+  createdAt?: string;
+}
+
+export interface AiInterviewConversation {
+  dialogueState: AiInterviewDialogueState;
+  version: number;
+  currentTurnId?: string;
+  expectsAnswer: boolean;
+  speechText?: string;
+  completedCoreQuestions: number;
+  totalCoreQuestions: number;
+  errorStage?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  timeline: AiInterviewConversationTurn[];
 }
 
 export interface AiInterviewTranscript {
@@ -115,16 +223,38 @@ export interface HandsFreeAnswerCaptureResult {
   captureVersion: number;
   browserTranscript: string;
   gladiaTranscript?: string;
-  finalTranscript: string;
-  transcriptStatus: 'standardized' | 'fallback_browser';
+  rawTranscript: string;
+  correctedTranscript?: string;
+  correctionStatus?: 'PENDING' | 'CORRECTED' | 'UNCHANGED' | 'FAILED' | 'NOT_REQUIRED';
+  correctionCount?: number;
+  transcriptStatus: 'web_speech' | 'standardized' | 'fallback_browser';
   dataQuality: string;
   vadMetrics?: HandsFreeVadMetrics;
+}
+
+export interface AiInterviewConfirmedAnswer {
+  rawTranscript?: string;
+  finalTranscript: string;
 }
 
 export interface HandsFreeAudioSegmentUpload {
   sequence: number;
   file: File;
   durationSeconds: number;
+}
+
+export interface AnswerCaptureTranscriptionMetadata {
+  source: 'web_speech' | 'gladia_live';
+  liveSessionToken?: string;
+}
+
+export interface AiInterviewLiveTranscriptionSession {
+  provider: 'gladia_live';
+  sessionToken: string;
+  jobId: string;
+  websocketUrl: string;
+  targetType: 'turn' | 'question';
+  targetId: string;
 }
 
 export interface AiInterviewSpeechTicket {

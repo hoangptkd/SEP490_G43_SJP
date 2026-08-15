@@ -94,20 +94,42 @@ app:
     shopaikey-api-key: ${SHOPAIKEY_API_KEY:}
     shopaikey-base-url: ${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}
     shopaikey-model: ${SHOPAIKEY_MODEL:gpt-4.1-mini}
-    shopaikey-tts-model: ${SHOPAIKEY_TTS_MODEL:gpt-4o-mini-tts}
-    shopaikey-tts-voice: ${SHOPAIKEY_TTS_VOICE:coral}
-    shopaikey-tts-format: ${SHOPAIKEY_TTS_FORMAT:mp3}
-    shopaikey-tts-instructions: ${SHOPAIKEY_TTS_INSTRUCTIONS:Đọc tiếng Việt rõ ràng, lưu loát, tốc độ vừa phải, giọng thân thiện và chuyên nghiệp của người phỏng vấn.}
+    tts-base-url: ${AI_INTERVIEW_TTS_BASE_URL:https://api.shopaikey.com}
+    tts-model: ${AI_INTERVIEW_TTS_MODEL:gemini-3.1-flash-tts-preview}
+    tts-voice: ${AI_INTERVIEW_TTS_VOICE:Kore}
+    tts-voice-instruction: ${AI_INTERVIEW_TTS_VOICE_INSTRUCTION:Speak naturally as a professional Vietnamese interviewer. Use a warm, conversational tone and moderate pace. Pronounce English technical terms naturally in English. Do not add or remove words.}
+    tts-connect-timeout-ms: ${AI_INTERVIEW_TTS_CONNECT_TIMEOUT_MS:2000}
+    tts-first-audio-timeout-ms: ${AI_INTERVIEW_TTS_FIRST_AUDIO_TIMEOUT_MS:8000}
+    tts-idle-timeout-ms: ${AI_INTERVIEW_TTS_IDLE_TIMEOUT_MS:3000}
+    tts-cache-max-entries: ${AI_INTERVIEW_TTS_CACHE_MAX_ENTRIES:100}
+    tts-cache-ttl-seconds: ${AI_INTERVIEW_TTS_CACHE_TTL_SECONDS:1800}
     audio-max-seconds: ${AI_INTERVIEW_AUDIO_MAX_SECONDS:180}
     audio-max-size-mb: ${AI_INTERVIEW_AUDIO_MAX_SIZE_MB:25}
     question-count: ${AI_INTERVIEW_QUESTION_COUNT:5}
+    max-probes-per-core: ${AI_INTERVIEW_MAX_PROBES_PER_CORE:1}
+    max-clarifies-per-core: ${AI_INTERVIEW_MAX_CLARIFIES_PER_CORE:1}
+    max-total-assessment-turns: ${AI_INTERVIEW_MAX_TOTAL_ASSESSMENT_TURNS:10}
     provider-connect-timeout-ms: ${AI_INTERVIEW_PROVIDER_CONNECT_TIMEOUT_MS:5000}
-    provider-read-timeout-ms: ${AI_INTERVIEW_PROVIDER_READ_TIMEOUT_MS:20000}
+    provider-read-timeout-ms: ${AI_INTERVIEW_PROVIDER_READ_TIMEOUT_MS:60000}
     voice-streaming-enabled: ${AI_INTERVIEW_VOICE_STREAMING_ENABLED:true}
-    voice-provider: ${AI_INTERVIEW_VOICE_PROVIDER:browser_web_speech}
-    voice-silence-ms: ${AI_INTERVIEW_VOICE_SILENCE_MS:3000}
-    voice-confirmation-silence-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_SILENCE_MS:3000}
-    voice-unclear-confirmation-delay-ms: ${AI_INTERVIEW_VOICE_UNCLEAR_CONFIRMATION_DELAY_MS:1200}
+    voice-provider: ${AI_INTERVIEW_VOICE_PROVIDER:shopaikey_gemini_stream}
+    answer-transcription-provider: ${AI_INTERVIEW_ANSWER_TRANSCRIPTION_PROVIDER:web_speech}
+    voice-confirmation-prompt-delay-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_PROMPT_DELAY_MS:2000}
+    voice-confirmation-auto-finalize-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_AUTO_FINALIZE_MS:3000}
+    voice-recognition-restart-delay-ms: ${AI_INTERVIEW_VOICE_RECOGNITION_RESTART_DELAY_MS:250}
+    voice-load-wait-ms: ${AI_INTERVIEW_VOICE_LOAD_WAIT_MS:700}
+    voice-next-question-delay-ms: ${AI_INTERVIEW_VOICE_NEXT_QUESTION_DELAY_MS:150}
+    voice-evidence-core-pool-size: ${AI_INTERVIEW_VOICE_EVIDENCE_CORE_POOL_SIZE:2}
+    voice-evidence-queue-capacity: ${AI_INTERVIEW_VOICE_EVIDENCE_QUEUE_CAPACITY:4}
+    voice-evidence-await-timeout-ms: ${AI_INTERVIEW_VOICE_EVIDENCE_AWAIT_TIMEOUT_MS:5000}
+    transcript-correction-enabled: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_ENABLED:true}
+    transcript-correction-min-confidence: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MIN_CONFIDENCE:0.90}
+    transcript-correction-max-corrections: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_CORRECTIONS:12}
+    transcript-correction-max-evidence-items: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_EVIDENCE_ITEMS:12}
+    transcript-correction-max-context-terms: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_CONTEXT_TERMS:100}
+    transcript-correction-max-previous-context-chars: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_PREVIOUS_CONTEXT_CHARS:1200}
+    transcript-correction-timeout-ms: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_TIMEOUT_MS:15000}
+    transcript-correction-prompt-version: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_PROMPT_VERSION:browser-transcript-correction-v1}
     costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
     gladia-languages: ${GLADIA_LANGUAGES:vi,en}
     gladia-code-switching-enabled: ${GLADIA_CODE_SWITCHING_ENABLED:true}

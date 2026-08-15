@@ -52,6 +52,25 @@ public class AiJobSearchCandidateContextBuilder {
         CandidateCv cv = candidateCvRepository
                 .findFirstByCandidateIdAndDefaultCvTrueAndDeletedAtIsNullOrderByUpdatedAtDesc(candidate.getId())
                 .orElse(null);
+        return buildContext(candidate, cv);
+    }
+
+    @Transactional
+    public AiJobSearchContext build(CandidateProfile candidate, UUID cvId) {
+        if (candidate == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AI_INTERVIEW_CV_REQUIRED",
+                    "Vui lòng chọn một CV trước khi luyện phỏng vấn.");
+        }
+        CandidateCv cv = candidateCvRepository.findByIdAndCandidateId(cvId, candidate.getId())
+                .filter(item -> !item.isDeleted())
+                .filter(item -> "uploaded".equalsIgnoreCase(item.getSourceType())
+                        || "builder".equalsIgnoreCase(item.getSourceType()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND",
+                        "Không tìm thấy CV đã chọn."));
+        return buildContext(candidate, cv);
+    }
+
+    private AiJobSearchContext buildContext(CandidateProfile candidate, CandidateCv cv) {
         List<String> skills = candidate.getSkills().stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)

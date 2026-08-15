@@ -33,6 +33,8 @@ export class CandidateAudioCapture {
   private stopPromise?: Promise<CapturedAudioSegment | null>;
   private resolveStop?: (value: CapturedAudioSegment | null) => void;
   private rejectStop?: (reason: unknown) => void;
+  private generation = 0;
+  private pendingStartGeneration?: number;
 
   constructor(private readonly dependencies = defaultDependencies()) {}
 
@@ -40,42 +42,63 @@ export class CandidateAudioCapture {
     return this.recorder?.state === 'recording';
   }
 
+  getMediaStream() {
+    const stream = this.stream;
+    if (!stream || stream.getTracks().every((track) => track.readyState === 'ended')) return undefined;
+    return stream;
+  }
+
   async startSegment(sequence: number): Promise<void> {
-    if (this.recording) throw new Error('Một audio segment khác đang được ghi');
-    if (!this.stream || this.stream.getTracks().every((track) => track.readyState === 'ended')) {
-      this.stream = await this.dependencies.getUserMedia();
+    if (this.recording || this.pendingStartGeneration !== undefined) {
+      throw new Error('Một audio segment khác đang được ghi');
     }
-    const mimeType = MIME_PREFERENCES.find((value) =>
-      typeof MediaRecorder.isTypeSupported !== 'function' || MediaRecorder.isTypeSupported(value));
-    this.chunks = [];
-    this.sequence = sequence;
-    this.startedAt = this.dependencies.now();
-    const recorder = this.dependencies.createRecorder(this.stream, mimeType ? { mimeType } : undefined);
-    this.recorder = recorder;
-    this.stopPromise = new Promise((resolve, reject) => {
-      this.resolveStop = resolve;
-      this.rejectStop = reject;
-    });
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) this.chunks.push(event.data);
-    };
-    recorder.onerror = () => {
-      this.rejectStop?.(new Error('MediaRecorder không thể ghi audio'));
-      this.resetRecorder();
-    };
-    recorder.onstop = () => {
-      const type = recorder.mimeType || this.chunks[0]?.type || 'audio/webm';
-      const blob = new Blob(this.chunks, { type });
-      const extension = type.includes('ogg') ? 'ogg' : 'webm';
-      const result = blob.size === 0 ? null : {
-        sequence: this.sequence,
-        file: new File([blob], `answer-segment-${this.sequence}.${extension}`, { type }),
-        durationSeconds: Math.max(0.001, (this.dependencies.now() - this.startedAt) / 1000),
+    const generation = this.generation;
+    this.pendingStartGeneration = generation;
+    let stream = this.stream;
+    try {
+      if (!stream || stream.getTracks().every((track) => track.readyState === 'ended')) {
+        stream = await this.dependencies.getUserMedia();
+        if (generation !== this.generation) {
+          stream.getTracks().forEach((track) => track.stop());
+          throw new Error('Yêu cầu microphone đã bị hủy');
+        }
+        this.stream = stream;
+      }
+      if (generation !== this.generation) throw new Error('Yêu cầu microphone đã bị hủy');
+      const mimeType = MIME_PREFERENCES.find((value) =>
+        typeof MediaRecorder.isTypeSupported !== 'function' || MediaRecorder.isTypeSupported(value));
+      this.chunks = [];
+      this.sequence = sequence;
+      this.startedAt = this.dependencies.now();
+      const recorder = this.dependencies.createRecorder(stream, mimeType ? { mimeType } : undefined);
+      this.recorder = recorder;
+      this.stopPromise = new Promise((resolve, reject) => {
+        this.resolveStop = resolve;
+        this.rejectStop = reject;
+      });
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) this.chunks.push(event.data);
       };
-      this.resolveStop?.(result);
-      this.resetRecorder();
-    };
-    recorder.start();
+      recorder.onerror = () => {
+        this.rejectStop?.(new Error('MediaRecorder không thể ghi audio'));
+        this.resetRecorder();
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || this.chunks[0]?.type || 'audio/webm';
+        const blob = new Blob(this.chunks, { type });
+        const extension = type.includes('ogg') ? 'ogg' : 'webm';
+        const result = blob.size === 0 ? null : {
+          sequence: this.sequence,
+          file: new File([blob], `answer-segment-${this.sequence}.${extension}`, { type }),
+          durationSeconds: Math.max(0.001, (this.dependencies.now() - this.startedAt) / 1000),
+        };
+        this.resolveStop?.(result);
+        this.resetRecorder();
+      };
+      recorder.start();
+    } finally {
+      if (this.pendingStartGeneration === generation) this.pendingStartGeneration = undefined;
+    }
   }
 
   async stopSegment(): Promise<CapturedAudioSegment | null> {
@@ -87,6 +110,8 @@ export class CandidateAudioCapture {
   }
 
   abortSegment(): void {
+    this.generation += 1;
+    this.pendingStartGeneration = undefined;
     const recorder = this.recorder;
     if (recorder && recorder.state !== 'inactive') {
       recorder.onstop = () => {

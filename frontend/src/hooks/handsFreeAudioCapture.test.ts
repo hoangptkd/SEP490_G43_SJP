@@ -67,4 +67,22 @@ describe('CandidateAudioCapture', () => {
     expect(capture.recording).toBe(false);
     expect(stopTrack).toHaveBeenCalledOnce();
   });
+
+  it('cancels a pending microphone request without starting a stale recorder', async () => {
+    const stopTrack = vi.fn();
+    const stream = { getTracks: () => [{ readyState: 'live', stop: stopTrack }] } as unknown as MediaStream;
+    let resolveStream!: (value: MediaStream) => void;
+    const getUserMedia = vi.fn(() => new Promise<MediaStream>((resolve) => { resolveStream = resolve; }));
+    const createRecorder = vi.fn(() => new FakeRecorder() as unknown as MediaRecorder);
+    const capture = new CandidateAudioCapture({ getUserMedia, createRecorder, now: () => 1_000 });
+
+    const pending = capture.startSegment(0);
+    await expect(capture.startSegment(1)).rejects.toThrow('đang được ghi');
+    capture.dispose();
+    resolveStream(stream);
+
+    await expect(pending).rejects.toThrow('đã bị hủy');
+    expect(createRecorder).not.toHaveBeenCalled();
+    expect(stopTrack).toHaveBeenCalledOnce();
+  });
 });

@@ -24,4 +24,15 @@ class PcmWaveWriterTest {
         assertThat(bytes[24] & 0xff).isEqualTo(0x80);
         assertThat(bytes[25] & 0xff).isEqualTo(0x3e);
     }
+
+    @Test
+    void createsEquivalentInMemoryWave() throws Exception {
+        PcmWaveWriter writer = new PcmWaveWriter();
+        DecodedPcmAudio pcm = new DecodedPcmAudio(new short[]{0, 32767, -32768}, 16_000);
+        Path target = tempDirectory.resolve("answer-memory-check.wav");
+
+        writer.write(pcm, target);
+
+        assertThat(writer.toByteArray(pcm)).isEqualTo(Files.readAllBytes(target));
+    }
 }

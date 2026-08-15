@@ -5,7 +5,10 @@ import java.util.List;
 
 public record AiInterviewFeedbackResponse(
         String id,
-        BigDecimal score,
+        BigDecimal questionScore,
+        String evaluationStatus,
+        Integer barsLevel,
+        String scoreReason,
         String feedback,
         List<String> strengths,
         List<String> weaknesses,

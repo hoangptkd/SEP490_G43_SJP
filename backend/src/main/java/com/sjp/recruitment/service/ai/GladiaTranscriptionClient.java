@@ -14,6 +14,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.time.Duration;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -58,6 +59,29 @@ public class GladiaTranscriptionClient {
         } catch (IOException | RuntimeException exception) {
             if (exception instanceof AiProviderException providerException) throw providerException;
             throw new AiProviderException("STT_PROVIDER_FAILED", "Hệ thống chưa xử lý được câu trả lời này, vui lòng thử lại.");
+        }
+    }
+
+    public String transcribe(byte[] audio, String filename, String mimeType, GladiaTranscriptionContext context) {
+        if (audio == null || audio.length == 0) {
+            throw new AiProviderException("STT_EMPTY_AUDIO", "Khong co audio de gui sang Gladia");
+        }
+        try {
+            RestClient client = buildClient();
+            InputStreamResource resource = new InputStreamResource(new ByteArrayInputStream(audio)) {
+                @Override public String getFilename() {
+                    return filename == null || filename.isBlank() ? "answer.wav" : filename;
+                }
+                @Override public long contentLength() { return audio.length; }
+            };
+            String audioUrl = uploadAudio(client, resource, resource.getFilename(), audio.length, mimeType);
+            String transcriptionId = startTranscription(client, audioUrl,
+                    context == null ? GladiaTranscriptionContext.empty() : context);
+            return pollTranscript(client, transcriptionId);
+        } catch (RuntimeException exception) {
+            if (exception instanceof AiProviderException providerException) throw providerException;
+            throw new AiProviderException("STT_PROVIDER_FAILED",
+                    "He thong chua xu ly duoc cau tra loi nay, vui long thu lai.");
         }
     }
 
