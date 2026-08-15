@@ -1,19 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { HandsFreeAnswerCaptureResult, HandsFreeAudioSegmentUpload } from '../types/aiInterview';
+import type {
+  AiInterviewSpeechTicket,
+  AiInterviewLiveTranscriptionSession,
+  AnswerCaptureTranscriptionMetadata,
+  HandsFreeAnswerCaptureResult,
+  HandsFreeAudioSegmentUpload,
+  InterviewConversationState,
+} from '../types/aiInterview';
 import { CandidateAudioCapture, type CapturedAudioSegment } from './handsFreeAudioCapture';
+import { PcmAudioStreamPlayer } from './pcmAudioStreamPlayer';
+import type { AnswerTranscriptionProvider, AnswerTranscriptionUpdate } from './answerTranscriptionProvider';
+import { WebSpeechAnswerTranscriptionProvider } from './webSpeechAnswerTranscriptionProvider';
+import { GladiaLiveAnswerTranscriptionProvider } from './gladiaLiveAnswerTranscriptionProvider';
 
 export type VoicePhase =
   | 'IDLE'
-  | 'QUESTION_PLAYING'
-  | 'STARTING_CAPTURE'
+  | 'AI_SPEAKING'
   | 'LISTENING'
-  | 'FINALIZING_AUDIO'
-  | 'TRANSCRIBING'
-  | 'TRANSCRIPT_READY'
-  | 'CONFIRMING'
-  | 'CONTINUING'
-  | 'SUBMITTING'
-  | 'COMPLETED'
+  | 'WAITING_FOR_CONTINUATION'
+  | 'PROCESSING_AUDIO'
+  | 'REVIEWING_TRANSCRIPT'
+  | 'ANSWER_CONFIRMED'
+  | 'NEXT_QUESTION'
   | 'ERROR_RECOVERABLE';
 
 export type ConfirmationIntent = 'positive' | 'negative' | 'unknown';
@@ -22,9 +30,14 @@ interface VoiceConversationOptions {
   questionId?: string;
   questionText?: string;
   initialTranscript: string;
-  silenceMs: number;
-  confirmationSilenceMs: number;
-  unclearConfirmationDelayMs: number;
+  initialRawTranscript?: string;
+  initialConversationState?: InterviewConversationState;
+  confirmationPromptDelayMs: number;
+  confirmationAutoFinalizeMs: number;
+  recognitionRestartDelayMs: number;
+  voiceLoadWaitMs: number;
+  nextQuestionDelayMs: number;
+  answerTranscriptionProvider: 'web_speech' | 'gladia_live';
   disabled?: boolean;
   onTranscript: (value: string) => void;
   onFinalizeCapture: (
@@ -32,24 +45,52 @@ interface VoiceConversationOptions {
     captureId: string,
     captureVersion: number,
     browserTranscript: string,
+    transcription: AnswerCaptureTranscriptionMetadata,
   ) => Promise<HandsFreeAnswerCaptureResult>;
-  onConfirm: (value: string) => Promise<void>;
-  onSpeechUrl?: (text: string) => Promise<string | undefined>;
+  onConfirm: (finalTranscript: string, rawTranscript?: string) => Promise<void>;
+  onReplayQuestion: () => Promise<void>;
+  onSpeechUrl?: (text: string) => Promise<AiInterviewSpeechTicket | undefined>;
+  onCreateLiveTranscription?: (sampleRate: number) => Promise<AiInterviewLiveTranscriptionSession>;
 }
 
 type RecognitionMode = 'answer' | 'confirmation';
-const RESTART_DELAY_MS = 250;
-const VOICE_LOAD_WAIT_MS = 700;
-const TRANSCRIPT_READY_DELAY_MS = 350;
 const VIETNAMESE_LANG = 'vi-VN';
+const CONFIRMATION_PROMPT = 'Bạn đã trả lời xong chưa?';
+
+export type ConfirmationResolution = 'DONE' | 'NOT_DONE' | 'CONTINUED_ANSWER' | 'NO_RESPONSE';
+
+const ALLOWED_TRANSITIONS: Record<VoicePhase, ReadonlySet<VoicePhase>> = {
+  IDLE: new Set(['AI_SPEAKING', 'LISTENING', 'REVIEWING_TRANSCRIPT', 'NEXT_QUESTION']),
+  AI_SPEAKING: new Set(['LISTENING', 'WAITING_FOR_CONTINUATION', 'REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE']),
+  LISTENING: new Set(['WAITING_FOR_CONTINUATION', 'PROCESSING_AUDIO', 'ANSWER_CONFIRMED', 'AI_SPEAKING', 'ERROR_RECOVERABLE']),
+  WAITING_FOR_CONTINUATION: new Set(['LISTENING', 'PROCESSING_AUDIO', 'AI_SPEAKING', 'ERROR_RECOVERABLE']),
+  PROCESSING_AUDIO: new Set(['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE']),
+  REVIEWING_TRANSCRIPT: new Set(['LISTENING', 'ANSWER_CONFIRMED', 'AI_SPEAKING', 'ERROR_RECOVERABLE']),
+  ANSWER_CONFIRMED: new Set(['NEXT_QUESTION', 'ERROR_RECOVERABLE']),
+  NEXT_QUESTION: new Set(['AI_SPEAKING', 'LISTENING', 'REVIEWING_TRANSCRIPT', 'IDLE']),
+  ERROR_RECOVERABLE: new Set(['LISTENING', 'PROCESSING_AUDIO', 'REVIEWING_TRANSCRIPT', 'ANSWER_CONFIRMED', 'IDLE']),
+};
+
+export function canTransitionVoiceState(from: VoicePhase, to: VoicePhase) {
+  return from === to || to === 'IDLE' || to === 'NEXT_QUESTION'
+    || ALLOWED_TRANSITIONS[from].has(to);
+}
+
+export function canFinalizeSpokenAnswer(phase: VoicePhase, saving: boolean) {
+  return !saving && (phase === 'LISTENING' || phase === 'WAITING_FOR_CONTINUATION');
+}
+
+export function canContinueReviewedAnswer(phase: VoicePhase, saving: boolean) {
+  return !saving && phase === 'REVIEWING_TRANSCRIPT';
+}
+
+export function resolveResumedVoicePhase(state?: InterviewConversationState): VoicePhase {
+  return state || 'IDLE';
+}
 
 export function pickVietnameseVoice(voices: SpeechSynthesisVoice[]) {
   return voices.find((voice) => voice.lang?.toLowerCase() === 'vi-vn')
-    || voices.find((voice) => voice.lang?.toLowerCase().startsWith('vi'))
-    || voices.find((voice) => {
-      const searchable = `${voice.name || ''} ${voice.lang || ''}`.toLowerCase();
-      return searchable.includes('vietnamese') || searchable.includes('việt nam') || searchable.includes('tiếng việt');
-    });
+    || voices.find((voice) => voice.lang?.toLowerCase().startsWith('vi-'));
 }
 
 function normalizeSpeech(value: string) {
@@ -57,27 +98,64 @@ function normalizeSpeech(value: string) {
     .toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeConfirmationPhrase(value: string) {
+  return normalizeSpeech(value)
+    .replace(/^(?:da vang|vang|da)\s+/, '')
+    .replace(/\s+a$/, '')
+    .trim();
+}
+
+const NEGATIVE_CONFIRMATION_PHRASES = new Set([
+  'khong', 'khong dau', 'khong xong', 'khong phai', 'chua', 'chua dau', 'chua xong',
+  'chua tra loi xong', 'toi chua xong', 'toi chua tra loi xong', 'em chua xong',
+  'em chua tra loi xong', 'minh chua xong', 'minh chua tra loi xong',
+  'toi muon noi them', 'em muon noi them', 'minh muon noi them', 'muon noi them',
+  'noi them', 'tiep tuc', 'toi muon tiep tuc', 'em muon tiep tuc', 'minh muon tiep tuc',
+]);
+
+const POSITIVE_CONFIRMATION_PHRASES = new Set([
+  'toi da tra loi xong', 'da tra loi xong', 'tra loi xong', 'toi da xong', 'toi xong roi',
+  'em da xong', 'em xong roi', 'em xong', 'minh da xong', 'minh xong roi', 'minh xong',
+  'xong', 'xong roi', 'song', 'song roi', 'toi da song roi', 'hoan thanh', 'da hoan thanh',
+  'ok xong', 'okay xong', 'roi', 'duoc roi', 'dung roi', 'dong y', 'co',
+]);
+
+const WEAK_POSITIVE_CONFIRMATION_PHRASES = new Set([
+  'co', 'roi', 'duoc roi', 'dung roi', 'dong y',
+]);
+
+const WEAK_NEGATIVE_CONFIRMATION_PHRASES = new Set(['khong', 'chua']);
+
 export function classifyConfirmation(value: string): ConfirmationIntent {
-  const normalized = normalizeSpeech(value);
+  const normalized = normalizeConfirmationPhrase(value);
   if (!normalized) return 'unknown';
-  const words = normalized.split(' ');
-  const negativePhrases = [
-    'khong xong', 'khong dau', 'khong phai', 'chua xong', 'chua dau', 'chua tra loi xong',
-    'toi chua xong', 'em chua xong', 'minh chua xong', 'toi muon noi them', 'em muon noi them',
-    'minh muon noi them', 'muon noi them', 'noi them', 'tiep tuc',
-  ];
-  if (normalized === 'khong' || words.includes('chua')
-    || negativePhrases.some((phrase) => normalized === phrase || normalized.includes(phrase))) return 'negative';
-  const positivePhrases = [
-    'toi da tra loi xong', 'da tra loi xong', 'tra loi xong', 'toi da xong', 'toi xong roi',
-    'em da xong', 'em xong roi', 'em xong', 'minh da xong', 'minh xong roi', 'minh xong',
-    'da xong', 'da xong roi', 'da song', 'da song roi', 'song roi', 'xong roi', 'hoan thanh',
-    'da hoan thanh', 'ok xong', 'okay xong', 'da roi', 'duoc roi', 'dung roi', 'dong y',
-  ];
-  return normalized === 'xong' || normalized === 'song' || normalized === 'roi' || normalized === 'co'
-    || words.includes('xong') || words.includes('song')
-    || positivePhrases.some((phrase) => normalized === phrase || normalized.includes(phrase))
-    ? 'positive' : 'unknown';
+  if (NEGATIVE_CONFIRMATION_PHRASES.has(normalized)) return 'negative';
+  return POSITIVE_CONFIRMATION_PHRASES.has(normalized) ? 'positive' : 'unknown';
+}
+
+export function shouldSettleConfirmationImmediately(value: string) {
+  const normalized = normalizeConfirmationPhrase(value);
+  const intent = classifyConfirmation(value);
+  return (intent === 'negative' && !WEAK_NEGATIVE_CONFIRMATION_PHRASES.has(normalized))
+    || (intent === 'positive' && !WEAK_POSITIVE_CONFIRMATION_PHRASES.has(normalized));
+}
+
+export function resolveConfirmationResponse(value: string): ConfirmationResolution {
+  const cleaned = value.trim();
+  if (!cleaned) return 'NO_RESPONSE';
+  const intent = classifyConfirmation(cleaned);
+  if (intent === 'positive') return 'DONE';
+  if (intent === 'negative') return 'NOT_DONE';
+  return 'CONTINUED_ANSWER';
+}
+
+export function preserveTranscriptBeforeRecognitionSwitch(committed: string, draft: string) {
+  const normalizedDraft = draft.replace(/\s+/g, ' ').trim();
+  return normalizedDraft || committed.replace(/\s+/g, ' ').trim();
+}
+
+export function appendTranscriptPart(existing: string, next: string) {
+  return `${existing} ${next}`.replace(/\s+/g, ' ').trim();
 }
 
 function newCaptureId() {
@@ -103,20 +181,50 @@ export function canStartCandidateCapture(active: boolean, systemSpeaking: boolea
 
 export function resolveCaptureTranscript(
   browserTranscript: string,
-  result?: Pick<HandsFreeAnswerCaptureResult, 'finalTranscript' | 'gladiaTranscript' | 'transcriptStatus'>,
+  result?: Pick<HandsFreeAnswerCaptureResult,
+    'rawTranscript' | 'correctedTranscript' | 'correctionStatus' | 'correctionCount'
+    | 'gladiaTranscript' | 'transcriptStatus'>,
+  source: 'web_speech' | 'gladia_live' = 'web_speech',
 ) {
-  if (result?.finalTranscript?.trim()) {
+  if (source === 'web_speech') {
+    const rawTranscript = result?.rawTranscript?.trim() || browserTranscript.trim();
+    const correctionSucceeded = result?.correctionStatus === 'CORRECTED'
+      || result?.correctionStatus === 'UNCHANGED';
+    const displayedTranscript = correctionSucceeded
+      ? result?.correctedTranscript?.trim() || rawTranscript
+      : rawTranscript;
+    let notice = 'Đã hoàn tất audio. Transcript Web Speech được giữ nguyên.';
+    if (!result) notice = 'Không thể xử lý audio. Transcript Web Speech vẫn được giữ lại.';
+    else if (result.correctionStatus === 'CORRECTED') {
+      notice = `AI đã sửa ${result.correctionCount || 0} lỗi nhận dạng có độ tin cậy cao. Hãy kiểm tra trước khi xác nhận.`;
+    } else if (result.correctionStatus === 'UNCHANGED') {
+      notice = 'AI đã kiểm tra và không phát hiện lỗi nhận dạng đủ chắc chắn để sửa.';
+    } else if (result.correctionStatus === 'FAILED') {
+      notice = 'Không thể kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.';
+    } else if (result.correctionStatus === 'PENDING') {
+      notice = 'Chưa hoàn tất kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.';
+    }
     return {
-      displayedTranscript: result.finalTranscript.trim(),
+      rawTranscript,
+      displayedTranscript,
+      gladiaTranscript: '',
+      notice,
+    };
+  }
+  if (result?.rawTranscript?.trim()) {
+    return {
+      rawTranscript: result.rawTranscript.trim(),
+      displayedTranscript: result.rawTranscript.trim(),
       gladiaTranscript: result.gladiaTranscript?.trim() || '',
       notice: result.transcriptStatus === 'standardized'
-        ? 'Đã chuẩn hóa' : 'Không thể chuẩn hóa, sử dụng bản ghi nhận realtime',
+        ? 'Đã tạo transcript draft từ Gladia' : 'Gladia không khả dụng, đang dùng transcript realtime làm draft',
     };
   }
   return {
+    rawTranscript: browserTranscript.trim(),
     displayedTranscript: browserTranscript.trim(),
     gladiaTranscript: '',
-    notice: 'Không thể chuẩn hóa, sử dụng bản ghi nhận realtime',
+    notice: 'Không thể xử lý audio, đang dùng transcript realtime làm draft',
   };
 }
 
@@ -124,36 +232,59 @@ export function canSubmitConfirmation(saving: boolean, transcript: string) {
   return !saving && Boolean(transcript.trim());
 }
 
+export function shouldScheduleConfirmationPrompt(transcript: string) {
+  return Boolean(transcript.trim());
+}
+
+export function shouldEnterManualFallbackForRecognitionError(error: string) {
+  return error !== 'aborted' && error !== 'no-speech';
+}
+
 export function useVoiceConversation({
   questionId,
   questionText,
   initialTranscript,
-  silenceMs,
-  confirmationSilenceMs,
-  unclearConfirmationDelayMs,
+  initialRawTranscript,
+  initialConversationState,
+  confirmationPromptDelayMs,
+  confirmationAutoFinalizeMs,
+  recognitionRestartDelayMs,
+  voiceLoadWaitMs,
+  nextQuestionDelayMs,
+  answerTranscriptionProvider,
   disabled = false,
   onTranscript,
   onFinalizeCapture,
   onConfirm,
+  onReplayQuestion,
   onSpeechUrl,
+  onCreateLiveTranscription,
 }: VoiceConversationOptions) {
   const canUseBrowserSpeech = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const supported = typeof window !== 'undefined'
     && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
     && (canUseBrowserSpeech || Boolean(onSpeechUrl));
   const [active, setActive] = useState(false);
-  const [phase, setPhaseState] = useState<VoicePhase>('IDLE');
+  const resumedPhase = resolveResumedVoicePhase(initialConversationState);
+  const [phase, setPhaseState] = useState<VoicePhase>(resumedPhase);
+  const [manualFallback, setManualFallback] = useState(false);
+  const [rawTranscript, setRawTranscript] = useState(initialRawTranscript?.trim() || '');
   const [interimTranscript, setInterimTranscript] = useState('');
   const [transcriptNotice, setTranscriptNotice] = useState('');
   const [error, setError] = useState('');
+  const [activeTranscriptionSource, setActiveTranscriptionSource] = useState<'web_speech' | 'gladia_live'>(
+    answerTranscriptionProvider,
+  );
 
-  const phaseRef = useRef<VoicePhase>('IDLE');
+  const phaseRef = useRef<VoicePhase>(resumedPhase);
   const activeRef = useRef(false);
   const disabledRef = useRef(disabled);
   const speakingRef = useRef(false);
   const savingRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const answerProviderRef = useRef<AnswerTranscriptionProvider | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pcmPlayerRef = useRef<PcmAudioStreamPlayer | null>(null);
   const audioCaptureRef = useRef(new CandidateAudioCapture());
   const captureAvailableRef = useRef(true);
   const captureIdRef = useRef(newCaptureId());
@@ -162,46 +293,63 @@ export function useVoiceConversation({
   const modeRef = useRef<RecognitionMode>('answer');
   const browserCommittedRef = useRef(initialTranscript.trim());
   const browserDraftRef = useRef(initialTranscript.trim());
+  const rawTranscriptRef = useRef(initialRawTranscript?.trim() || '');
   const confirmedTranscriptRef = useRef(initialTranscript.trim());
   const gladiaTranscriptRef = useRef('');
-  const confirmationTranscriptRef = useRef('');
   const questionIdRef = useRef(questionId);
   const questionTextRef = useRef(questionText);
   const lifecycleTokenRef = useRef(0);
   const speechTokenRef = useRef(0);
-  const answerSilenceTimerRef = useRef<number>();
-  const confirmationTimerRef = useRef<number>();
+  const confirmationCycleRef = useRef(0);
+  const confirmationHandledRef = useRef(false);
+  const confirmationSegmentActiveRef = useRef(false);
+  const confirmationCommittedRef = useRef('');
+  const confirmationDraftRef = useRef('');
+  const confirmationPromptTimerRef = useRef<number>();
+  const confirmationAutoFinalizeTimerRef = useRef<number>();
   const restartTimerRef = useRef<number>();
-  const readyTimerRef = useRef<number>();
   const voiceLoadTimerRef = useRef<number>();
   const voiceLoadCleanupRef = useRef<() => void>(() => undefined);
   const onTranscriptRef = useRef(onTranscript);
   const onFinalizeCaptureRef = useRef(onFinalizeCapture);
   const onConfirmRef = useRef(onConfirm);
+  const onReplayQuestionRef = useRef(onReplayQuestion);
   const onSpeechUrlRef = useRef(onSpeechUrl);
-  const startAnswerListeningRef = useRef<() => void>(() => undefined);
+  const onCreateLiveTranscriptionRef = useRef(onCreateLiveTranscription);
+  const startAnswerListeningRef = useRef<(schedulePromptWithoutNewResult?: boolean) => void>(() => undefined);
   const startAnswerRecognitionRef = useRef<() => void>(() => undefined);
+  const startConfirmationListeningRef = useRef<() => void>(() => undefined);
   const startConfirmationRecognitionRef = useRef<() => void>(() => undefined);
+  const askForConfirmationRef = useRef<() => void>(() => undefined);
+  const settleConfirmationRef = useRef<(
+    resolution: ConfirmationResolution,
+    spokenText?: string,
+  ) => void>(() => undefined);
   const finalizeAnswerRef = useRef<() => void>(() => undefined);
-  const askConfirmationRef = useRef<(clarify?: boolean) => void>(() => undefined);
-  const handleConfirmationRef = useRef<(intent: ConfirmationIntent) => void>(() => undefined);
 
   const setPhase = useCallback((next: VoicePhase) => {
+    if (!canTransitionVoiceState(phaseRef.current, next)) return false;
     phaseRef.current = next;
     setPhaseState(next);
+    return true;
   }, []);
 
   useEffect(() => { onTranscriptRef.current = onTranscript; }, [onTranscript]);
   useEffect(() => { onFinalizeCaptureRef.current = onFinalizeCapture; }, [onFinalizeCapture]);
   useEffect(() => { onConfirmRef.current = onConfirm; }, [onConfirm]);
+  useEffect(() => { onReplayQuestionRef.current = onReplayQuestion; }, [onReplayQuestion]);
   useEffect(() => { onSpeechUrlRef.current = onSpeechUrl; }, [onSpeechUrl]);
+  useEffect(() => { onCreateLiveTranscriptionRef.current = onCreateLiveTranscription; }, [onCreateLiveTranscription]);
   useEffect(() => { disabledRef.current = disabled; }, [disabled]);
+  useEffect(() => {
+    if (!initialConversationState || activeRef.current) return;
+    setPhase(resolveResumedVoicePhase(initialConversationState));
+  }, [initialConversationState, setPhase]);
 
   const clearTimers = useCallback(() => {
-    window.clearTimeout(answerSilenceTimerRef.current);
-    window.clearTimeout(confirmationTimerRef.current);
+    window.clearTimeout(confirmationPromptTimerRef.current);
+    window.clearTimeout(confirmationAutoFinalizeTimerRef.current);
     window.clearTimeout(restartTimerRef.current);
-    window.clearTimeout(readyTimerRef.current);
     window.clearTimeout(voiceLoadTimerRef.current);
     voiceLoadCleanupRef.current();
     voiceLoadCleanupRef.current = () => undefined;
@@ -214,7 +362,14 @@ export function useVoiceConversation({
     try { recognition.abort(); } catch { /* already stopped */ }
   }, []);
 
+  const disposeAnswerProvider = useCallback(() => {
+    const provider = answerProviderRef.current;
+    answerProviderRef.current = null;
+    provider?.dispose();
+  }, []);
+
   const stopAudio = useCallback(() => {
+    pcmPlayerRef.current?.stop();
     const audio = audioRef.current;
     audioRef.current = null;
     if (!audio) return;
@@ -228,17 +383,59 @@ export function useVoiceConversation({
     } catch { /* detached element */ }
   }, []);
 
-  const speak = useCallback((text: string, nextPhase: VoicePhase, onDone: () => void) => {
+  const enterManualFallback = useCallback((message?: string) => {
+    lifecycleTokenRef.current += 1;
+    speechTokenRef.current += 1;
+    confirmationCycleRef.current += 1;
+    confirmationHandledRef.current = true;
+    clearTimers();
+    stopRecognition();
+    disposeAnswerProvider();
+    stopAudio();
+    audioCaptureRef.current.dispose();
+    audioCaptureRef.current = new CandidateAudioCapture();
+    confirmationSegmentActiveRef.current = false;
+    confirmationCommittedRef.current = '';
+    confirmationDraftRef.current = '';
+    modeRef.current = 'answer';
+    captureAvailableRef.current = false;
+    speakingRef.current = false;
+    activeRef.current = true;
+    setActive(true);
+    setManualFallback(true);
+    setInterimTranscript('');
+    setPhase(rawTranscriptRef.current || browserDraftRef.current
+      ? 'REVIEWING_TRANSCRIPT' : 'LISTENING');
+    window.speechSynthesis?.cancel();
+    setError(message || 'Đã chuyển sang nhập transcript thủ công. Nội dung hiện tại vẫn được giữ nguyên.');
+  }, [clearTimers, disposeAnswerProvider, setPhase, stopAudio, stopRecognition]);
+
+  const speak = useCallback((
+    text: string,
+    nextPhase: VoicePhase,
+    onDone: () => void,
+    onStarted?: () => void,
+  ) => {
     if (!supported || !activeRef.current || disabledRef.current) return;
     // Safety barrier: system TTS must never overlap candidate capture.
     if (audioCaptureRef.current.recording) audioCaptureRef.current.abortSegment();
+    answerProviderRef.current?.pause();
     speakingRef.current = true;
     stopRecognition();
     stopAudio();
-    window.speechSynthesis.cancel();
+    window.speechSynthesis?.cancel();
     const speechToken = ++speechTokenRef.current;
+    let started = false;
+    let finished = false;
+    const markStarted = () => {
+      if (speechTokenRef.current !== speechToken || started) return;
+      started = true;
+      setPhase(nextPhase);
+      onStarted?.();
+    };
     const finish = () => {
-      if (speechTokenRef.current !== speechToken) return;
+      if (speechTokenRef.current !== speechToken || finished) return;
+      finished = true;
       speakingRef.current = false;
       stopAudio();
       if (activeRef.current && !disabledRef.current) onDone();
@@ -248,62 +445,153 @@ export function useVoiceConversation({
       if (!canUseBrowserSpeech) return finish();
       const utterance = new SpeechSynthesisUtterance(text);
       const voice = pickVietnameseVoice(window.speechSynthesis.getVoices());
-      if (voice) utterance.voice = voice;
-      utterance.lang = voice?.lang || VIETNAMESE_LANG;
-      utterance.rate = 0.88;
-      utterance.onstart = () => { if (speechTokenRef.current === speechToken) setPhase(nextPhase); };
+      if (!voice) {
+        setError('Không tìm thấy giọng đọc tiếng Việt phù hợp. Bạn có thể đọc câu hỏi trên màn hình và tiếp tục trả lời.');
+        finish();
+        return;
+      }
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
+      utterance.rate = 0.94;
+      utterance.pitch = 1;
+      utterance.onstart = markStarted;
       utterance.onend = finish;
       utterance.onerror = finish;
       window.speechSynthesis.speak(utterance);
     };
     const resolver = onSpeechUrlRef.current;
     if (resolver) {
-      void resolver(text).then((url) => {
+      const providerSpeechFailed = () => {
+        if (speechTokenRef.current !== speechToken || finished) return;
+        setError('Không thể phát trọn vẹn giọng đọc. Hãy đọc câu hỏi trên màn hình và tiếp tục trả lời.');
+        finish();
+      };
+      void resolver(text).then((ticket) => {
         if (speechTokenRef.current !== speechToken || !activeRef.current) return;
-        if (!url) return browserSpeech();
-        const audio = new Audio(url);
+        if (!ticket?.streamUrl) return providerSpeechFailed();
+        if (ticket.contentType?.toLowerCase().startsWith('text/event-stream')) {
+          const player = pcmPlayerRef.current || new PcmAudioStreamPlayer();
+          pcmPlayerRef.current = player;
+          void player.play(ticket.streamUrl, markStarted).then(finish).catch(providerSpeechFailed);
+          return;
+        }
+        const audio = new Audio(ticket.streamUrl);
         audioRef.current = audio;
-        audio.onplaying = () => { if (speechTokenRef.current === speechToken) setPhase(nextPhase); };
+        audio.onplaying = markStarted;
         audio.onended = finish;
-        audio.onerror = browserSpeech;
-        void audio.play().catch(browserSpeech);
-      }).catch(browserSpeech);
+        audio.onerror = providerSpeechFailed;
+        void audio.play().catch(providerSpeechFailed);
+      }).catch(providerSpeechFailed);
       return;
     }
-    if (window.speechSynthesis.getVoices().length) return browserSpeech();
+    if (window.speechSynthesis?.getVoices().length) return browserSpeech();
     const startOnce = () => {
       window.clearTimeout(voiceLoadTimerRef.current);
       voiceLoadCleanupRef.current();
       voiceLoadCleanupRef.current = () => undefined;
       browserSpeech();
     };
-    voiceLoadCleanupRef.current = () => window.speechSynthesis.removeEventListener('voiceschanged', startOnce);
-    window.speechSynthesis.addEventListener('voiceschanged', startOnce, { once: true });
-    voiceLoadTimerRef.current = window.setTimeout(startOnce, VOICE_LOAD_WAIT_MS);
-  }, [canUseBrowserSpeech, setPhase, stopAudio, stopRecognition, supported]);
+    voiceLoadCleanupRef.current = () => window.speechSynthesis?.removeEventListener('voiceschanged', startOnce);
+    window.speechSynthesis?.addEventListener('voiceschanged', startOnce, { once: true });
+    voiceLoadTimerRef.current = window.setTimeout(startOnce, voiceLoadWaitMs);
+  }, [canUseBrowserSpeech, setPhase, stopAudio, stopRecognition, supported, voiceLoadWaitMs]);
 
   const restartRecognition = useCallback((mode: RecognitionMode) => {
     window.clearTimeout(restartTimerRef.current);
     restartTimerRef.current = window.setTimeout(() => {
       if (!activeRef.current || speakingRef.current || savingRef.current || disabledRef.current) return;
       if (modeRef.current !== mode) return;
-      if (mode === 'answer' && phaseRef.current === 'LISTENING') startAnswerRecognitionRef.current();
-      if (mode === 'confirmation' && phaseRef.current === 'CONFIRMING') startConfirmationRecognitionRef.current();
-    }, RESTART_DELAY_MS);
+      if (mode === 'answer' && phaseRef.current === 'LISTENING') {
+        startAnswerRecognitionRef.current();
+      } else if (mode === 'confirmation' && phaseRef.current === 'WAITING_FOR_CONTINUATION'
+        && !confirmationHandledRef.current) {
+        startConfirmationRecognitionRef.current();
+      }
+    }, recognitionRestartDelayMs);
+  }, [recognitionRestartDelayMs]);
+
+  const stopConfirmationSegment = useCallback((preserveAsAnswer: boolean) => {
+    confirmationSegmentActiveRef.current = false;
+    return audioCaptureRef.current.stopSegment().catch(() => null).then((segment) => {
+      if (preserveAsAnswer && segment && segment.sequence === segmentsRef.current.length) {
+        segmentsRef.current.push(segment);
+      }
+      return segment;
+    });
   }, []);
 
-  const startAnswerRecognition = useCallback(() => {
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition || !activeRef.current || phaseRef.current !== 'LISTENING') return;
+  const settleConfirmation = useCallback((
+    resolution: ConfirmationResolution,
+    spokenText = '',
+  ) => {
+    if (!activeRef.current || phaseRef.current !== 'WAITING_FOR_CONTINUATION'
+      || modeRef.current !== 'confirmation' || confirmationHandledRef.current) return;
+    const cycle = confirmationCycleRef.current;
+    const token = lifecycleTokenRef.current;
+    const expectedQuestion = questionIdRef.current;
+    confirmationHandledRef.current = true;
+    window.clearTimeout(confirmationAutoFinalizeTimerRef.current);
     stopRecognition();
-    modeRef.current = 'answer';
+    setInterimTranscript('');
+    void stopConfirmationSegment(resolution === 'CONTINUED_ANSWER').then(() => {
+      if (!activeRef.current || cycle !== confirmationCycleRef.current
+        || token !== lifecycleTokenRef.current || expectedQuestion !== questionIdRef.current) return;
+      modeRef.current = 'answer';
+      confirmationCommittedRef.current = '';
+      confirmationDraftRef.current = '';
+      if (resolution === 'CONTINUED_ANSWER') {
+        const continued = spokenText.trim();
+        if (continued) {
+          const provider = answerProviderRef.current;
+          if (provider) provider.appendExternalTranscript(continued);
+          else {
+            browserCommittedRef.current = appendTranscriptPart(browserCommittedRef.current, continued);
+            browserDraftRef.current = browserCommittedRef.current;
+            onTranscriptRef.current(browserDraftRef.current);
+          }
+        }
+        setTranscriptNotice('Đã ghi nhận phần trả lời tiếp theo. Hệ thống đang tiếp tục lắng nghe.');
+        startAnswerListeningRef.current(true);
+        return;
+      }
+      if (resolution === 'NOT_DONE') {
+        setTranscriptNotice('Được rồi, bạn có thể tiếp tục trả lời.');
+        startAnswerListeningRef.current();
+        return;
+      }
+      setTranscriptNotice(resolution === 'DONE'
+        ? 'Đã ghi nhận bạn trả lời xong. Đang tạo transcript draft để bạn kiểm tra...'
+        : 'Không có phản hồi thêm. Hệ thống đang tạo transcript draft để bạn kiểm tra...');
+      finalizeAnswerRef.current();
+    });
+  }, [stopConfirmationSegment, stopRecognition]);
+  settleConfirmationRef.current = settleConfirmation;
+
+  const scheduleConfirmationAutoFinalize = useCallback(() => {
+    window.clearTimeout(confirmationAutoFinalizeTimerRef.current);
+    const cycle = confirmationCycleRef.current;
+    confirmationAutoFinalizeTimerRef.current = window.setTimeout(() => {
+      if (cycle !== confirmationCycleRef.current || confirmationHandledRef.current
+        || modeRef.current !== 'confirmation' || phaseRef.current !== 'WAITING_FOR_CONTINUATION') return;
+      const spokenText = confirmationDraftRef.current.trim();
+      settleConfirmationRef.current(resolveConfirmationResponse(spokenText), spokenText);
+    }, confirmationAutoFinalizeMs);
+  }, [confirmationAutoFinalizeMs]);
+
+  const startConfirmationRecognition = useCallback(() => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition || !activeRef.current || modeRef.current !== 'confirmation'
+      || phaseRef.current !== 'WAITING_FOR_CONTINUATION' || confirmationHandledRef.current) return;
+    stopRecognition();
+    const cycle = confirmationCycleRef.current;
     const recognition = new Recognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = VIETNAMESE_LANG;
     recognition.maxAlternatives = 1;
     recognition.onresult = (event) => {
-      if (phaseRef.current !== 'LISTENING') return;
+      if (cycle !== confirmationCycleRef.current || confirmationHandledRef.current
+        || modeRef.current !== 'confirmation' || phaseRef.current !== 'WAITING_FOR_CONTINUATION') return;
       let interim = '';
       let finalChunk = '';
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
@@ -312,99 +600,304 @@ export function useVoiceConversation({
         if (result.isFinal) finalChunk += `${text} `;
         else interim += `${text} `;
       }
-      if (finalChunk.trim()) browserCommittedRef.current = `${browserCommittedRef.current} ${finalChunk}`.replace(/\s+/g, ' ').trim();
+      if (finalChunk.trim()) {
+        confirmationCommittedRef.current = `${confirmationCommittedRef.current} ${finalChunk}`
+          .replace(/\s+/g, ' ').trim();
+      }
       const cleanInterim = interim.trim();
-      browserDraftRef.current = `${browserCommittedRef.current} ${cleanInterim}`.replace(/\s+/g, ' ').trim();
-      setInterimTranscript(cleanInterim);
-      onTranscriptRef.current(browserDraftRef.current);
-      if (browserDraftRef.current) {
-        window.clearTimeout(answerSilenceTimerRef.current);
-        answerSilenceTimerRef.current = window.setTimeout(() => finalizeAnswerRef.current(), Math.max(1_000, silenceMs));
+      confirmationDraftRef.current = `${confirmationCommittedRef.current} ${cleanInterim}`
+        .replace(/\s+/g, ' ').trim();
+      setInterimTranscript(confirmationDraftRef.current);
+      scheduleConfirmationAutoFinalize();
+      if (finalChunk.trim() && !cleanInterim) {
+        const spokenText = confirmationCommittedRef.current;
+        if (shouldSettleConfirmationImmediately(spokenText)) {
+          settleConfirmationRef.current(resolveConfirmationResponse(spokenText), spokenText);
+        }
       }
     };
     recognition.onerror = (event) => {
-      if (event.error === 'aborted' || event.error === 'no-speech') return;
-      const permissionDenied = event.error === 'not-allowed' || event.error === 'service-not-allowed';
-      setError(permissionDenied
-        ? 'Web Speech không có quyền microphone; hệ thống sẽ ưu tiên audio MediaRecorder nếu còn khả dụng.'
-        : `Nhận dạng realtime tạm dừng (${event.error}); audio vẫn đang được ghi.`);
-      if (captureAvailableRef.current && phaseRef.current === 'LISTENING') {
-        window.clearTimeout(answerSilenceTimerRef.current);
-        answerSilenceTimerRef.current = window.setTimeout(() => finalizeAnswerRef.current(), Math.max(1_000, silenceMs));
-      }
+      if (!shouldEnterManualFallbackForRecognitionError(event.error)) return;
+      enterManualFallback(event.error === 'not-allowed' || event.error === 'service-not-allowed'
+        ? 'Trình duyệt không có quyền sử dụng microphone. Nội dung câu trả lời hiện tại vẫn được giữ.'
+        : `Nhận dạng phản hồi xác nhận đã dừng (${event.error}). Nội dung hiện tại được giữ để bạn nhập tay.`);
     };
     recognition.onend = () => {
       if (recognitionRef.current === recognition) recognitionRef.current = null;
-      if (activeRef.current && phaseRef.current === 'LISTENING' && !speakingRef.current) restartRecognition('answer');
+      if (activeRef.current && cycle === confirmationCycleRef.current
+        && modeRef.current === 'confirmation' && phaseRef.current === 'WAITING_FOR_CONTINUATION'
+        && !confirmationHandledRef.current && !speakingRef.current) restartRecognition('confirmation');
     };
     recognitionRef.current = recognition;
     try { recognition.start(); } catch {
-      setError('Không thể khởi động transcript realtime; audio vẫn được ghi để Gladia xử lý.');
+      enterManualFallback('Không thể nghe phản hồi xác nhận. Nội dung câu trả lời hiện tại vẫn được giữ để bạn nhập tay.');
     }
-  }, [restartRecognition, silenceMs, stopRecognition]);
-  startAnswerRecognitionRef.current = startAnswerRecognition;
+  }, [enterManualFallback, restartRecognition, scheduleConfirmationAutoFinalize, stopRecognition]);
+  startConfirmationRecognitionRef.current = startConfirmationRecognition;
 
-  const startAnswerListening = useCallback(() => {
-    if (!supported || !canStartCandidateCapture(activeRef.current, speakingRef.current, disabledRef.current)) return;
+  const startConfirmationListening = useCallback(() => {
+    if (!activeRef.current || disabledRef.current || savingRef.current) return;
+    const cycle = confirmationCycleRef.current;
     const token = lifecycleTokenRef.current;
     const expectedQuestion = questionIdRef.current;
+    modeRef.current = 'confirmation';
+    confirmationHandledRef.current = false;
+    confirmationCommittedRef.current = '';
+    confirmationDraftRef.current = '';
+    setInterimTranscript('');
+    if (!setPhase('WAITING_FOR_CONTINUATION')) {
+      modeRef.current = 'answer';
+      confirmationHandledRef.current = true;
+      return;
+    }
+    setTranscriptNotice('Bạn có thể nói “đã xong”, “chưa xong” hoặc tiếp tục câu trả lời. Nếu bạn im lặng, hệ thống sẽ tự hoàn tất.');
+    const capture = audioCaptureRef.current;
+    void capture.startSegment(segmentsRef.current.length).then(() => {
+      if (!activeRef.current || cycle !== confirmationCycleRef.current
+        || token !== lifecycleTokenRef.current || expectedQuestion !== questionIdRef.current
+        || capture !== audioCaptureRef.current
+        || phaseRef.current !== 'WAITING_FOR_CONTINUATION' || confirmationHandledRef.current
+        || modeRef.current !== 'confirmation') {
+        capture.abortSegment();
+        return;
+      }
+      confirmationSegmentActiveRef.current = true;
+      startConfirmationRecognitionRef.current();
+      scheduleConfirmationAutoFinalize();
+    }).catch(() => {
+      if (!activeRef.current || capture !== audioCaptureRef.current
+        || cycle !== confirmationCycleRef.current || token !== lifecycleTokenRef.current
+        || expectedQuestion !== questionIdRef.current) return;
+      confirmationSegmentActiveRef.current = false;
+      enterManualFallback('Không thể ghi phản hồi xác nhận từ microphone. Câu trả lời hiện tại vẫn được giữ để bạn nhập tay.');
+    });
+  }, [enterManualFallback, scheduleConfirmationAutoFinalize, setPhase]);
+  startConfirmationListeningRef.current = startConfirmationListening;
+
+  const askForConfirmation = useCallback(() => {
+    if (!activeRef.current || disabledRef.current || savingRef.current || speakingRef.current
+      || modeRef.current !== 'answer' || phaseRef.current !== 'LISTENING'
+      || !browserDraftRef.current.trim()) return;
+    window.clearTimeout(confirmationPromptTimerRef.current);
+    const cycle = confirmationCycleRef.current + 1;
+    confirmationCycleRef.current = cycle;
+    confirmationHandledRef.current = false;
+    const token = lifecycleTokenRef.current;
+    const expectedQuestion = questionIdRef.current;
+    if (!setPhase('AI_SPEAKING')) return;
+    // Web Speech may still expose the latest answer only as an interim result. Once recognition
+    // is stopped to ask for confirmation, that interim result will never become final, so promote
+    // the complete visible draft before switching modes. Otherwise a continued answer would be
+    // appended to the older committed buffer and the visible part could disappear.
+    const provider = answerProviderRef.current;
+    const preservedTranscript = provider
+      ? provider.snapshotTranscript()
+      : preserveTranscriptBeforeRecognitionSwitch(
+        browserCommittedRef.current,
+        browserDraftRef.current,
+      );
+    browserCommittedRef.current = preservedTranscript;
+    browserDraftRef.current = preservedTranscript;
+    onTranscriptRef.current(preservedTranscript);
+    provider?.pause();
+    stopRecognition();
+    setInterimTranscript('');
+    setTranscriptNotice(CONFIRMATION_PROMPT);
+    void audioCaptureRef.current.stopSegment().catch(() => null).then((segment) => {
+      if (!activeRef.current || cycle !== confirmationCycleRef.current
+        || token !== lifecycleTokenRef.current || expectedQuestion !== questionIdRef.current
+        || phaseRef.current !== 'AI_SPEAKING') return;
+      if (segment && segment.sequence === segmentsRef.current.length) segmentsRef.current.push(segment);
+      speak(CONFIRMATION_PROMPT, 'AI_SPEAKING', () => startConfirmationListeningRef.current());
+    });
+  }, [setPhase, speak, stopRecognition]);
+  askForConfirmationRef.current = askForConfirmation;
+
+  const startAnswerRecognition = useCallback(() => {
+    if (!activeRef.current || phaseRef.current !== 'LISTENING') return;
+    modeRef.current = 'answer';
+    const existing = answerProviderRef.current;
+    if (existing) {
+      void existing.resume().catch(() => {
+        setError('Không thể tiếp tục nguồn transcript hiện tại. Nội dung đã nhận vẫn được giữ lại.');
+        finalizeAnswerRef.current();
+      });
+      return;
+    }
+
+    const stream = audioCaptureRef.current.getMediaStream();
+    if (!stream) {
+      enterManualFallback('Không thể dùng microphone cho nhận dạng giọng nói. Hãy nhập transcript thủ công.');
+      return;
+    }
+    const token = lifecycleTokenRef.current;
+    const expectedQuestion = questionIdRef.current;
+    const applyUpdate = (update: AnswerTranscriptionUpdate) => {
+      if (!activeRef.current || token !== lifecycleTokenRef.current
+        || expectedQuestion !== questionIdRef.current || modeRef.current !== 'answer') return;
+      browserCommittedRef.current = update.committedTranscript;
+      browserDraftRef.current = appendTranscriptPart(update.committedTranscript, update.interimTranscript);
+      setInterimTranscript(update.interimTranscript);
+      onTranscriptRef.current(browserDraftRef.current);
+      if (phaseRef.current === 'LISTENING' && shouldScheduleConfirmationPrompt(browserDraftRef.current)) {
+        window.clearTimeout(confirmationPromptTimerRef.current);
+        confirmationPromptTimerRef.current = window.setTimeout(
+          () => askForConfirmationRef.current(),
+          confirmationPromptDelayMs,
+        );
+      }
+    };
+    const onTerminalError = (message: string) => {
+      if (!activeRef.current || token !== lifecycleTokenRef.current
+        || expectedQuestion !== questionIdRef.current) return;
+      setError(message);
+      setTranscriptNotice('Gladia Live đã dừng. Đang giữ transcript đã nhận để bạn kiểm tra.');
+      if (phaseRef.current === 'LISTENING') finalizeAnswerRef.current();
+    };
+    const createWebSpeech = () => new WebSpeechAnswerTranscriptionProvider(
+      { onUpdate: applyUpdate, onTerminalError },
+      recognitionRestartDelayMs,
+    );
+    const createConfiguredProvider = () => {
+      const createLive = onCreateLiveTranscriptionRef.current;
+      if (answerTranscriptionProvider === 'gladia_live' && createLive) {
+        return new GladiaLiveAnswerTranscriptionProvider(
+          { onUpdate: applyUpdate, onTerminalError },
+          createLive,
+        );
+      }
+      return createWebSpeech();
+    };
+
+    const provider = createConfiguredProvider();
+    answerProviderRef.current = provider;
+    setActiveTranscriptionSource(provider.kind);
+    void provider.start(stream, browserCommittedRef.current).catch(() => {
+      if (answerProviderRef.current !== provider || token !== lifecycleTokenRef.current
+        || expectedQuestion !== questionIdRef.current) return;
+      provider.dispose();
+      answerProviderRef.current = null;
+      if (provider.kind !== 'gladia_live') {
+        enterManualFallback('Không thể khởi động nhận dạng giọng nói. Hãy nhập transcript thủ công hoặc thử microphone lại.');
+        return;
+      }
+      const fallback = createWebSpeech();
+      answerProviderRef.current = fallback;
+      setActiveTranscriptionSource('web_speech');
+      setTranscriptNotice('Gladia Live không khả dụng, đang dùng Web Speech cho câu này.');
+      void fallback.start(stream, browserCommittedRef.current).catch(() => {
+        if (answerProviderRef.current === fallback) fallback.dispose();
+        answerProviderRef.current = null;
+        enterManualFallback('Không thể khởi động Gladia Live hoặc Web Speech. Hãy nhập transcript thủ công.');
+      });
+    });
+  }, [answerTranscriptionProvider, confirmationPromptDelayMs, enterManualFallback,
+    recognitionRestartDelayMs]);
+  startAnswerRecognitionRef.current = startAnswerRecognition;
+
+  const startAnswerListening = useCallback((schedulePromptWithoutNewResult = false) => {
+    if (!supported || !canStartCandidateCapture(activeRef.current, speakingRef.current, disabledRef.current)) return;
+    if (!setPhase('LISTENING')) return;
+    const token = lifecycleTokenRef.current;
+    const expectedQuestion = questionIdRef.current;
+    const capture = audioCaptureRef.current;
+    let captureStarted = false;
     setError('');
-    setTranscriptNotice('');
-    setPhase('STARTING_CAPTURE');
-    void audioCaptureRef.current.startSegment(segmentsRef.current.length)
-      .then(() => { captureAvailableRef.current = true; })
+    setManualFallback(false);
+    modeRef.current = 'answer';
+    confirmationHandledRef.current = true;
+    confirmationSegmentActiveRef.current = false;
+    confirmationCommittedRef.current = '';
+    confirmationDraftRef.current = '';
+    void capture.startSegment(segmentsRef.current.length)
+      .then(() => {
+        captureStarted = true;
+        captureAvailableRef.current = true;
+      })
       .catch(() => {
+        if (!activeRef.current || capture !== audioCaptureRef.current
+          || token !== lifecycleTokenRef.current || expectedQuestion !== questionIdRef.current) return;
         captureAvailableRef.current = false;
-        setError('Không thể ghi audio. Phỏng vấn vẫn tiếp tục bằng transcript realtime.');
+        enterManualFallback('Không thể ghi audio từ microphone. Hãy nhập transcript thủ công hoặc kiểm tra quyền rồi thử lại.');
       })
       .finally(() => {
-        if (!activeRef.current || token !== lifecycleTokenRef.current || expectedQuestion !== questionIdRef.current) {
-          audioCaptureRef.current.abortSegment();
+        if (!activeRef.current || capture !== audioCaptureRef.current
+          || token !== lifecycleTokenRef.current || expectedQuestion !== questionIdRef.current) {
+          capture.abortSegment();
           return;
         }
-        setPhase('LISTENING');
+        if (!captureStarted || !captureAvailableRef.current || phaseRef.current !== 'LISTENING') return;
         startAnswerRecognition();
+        if (schedulePromptWithoutNewResult && shouldScheduleConfirmationPrompt(browserDraftRef.current)) {
+          window.clearTimeout(confirmationPromptTimerRef.current);
+          confirmationPromptTimerRef.current = window.setTimeout(
+            () => askForConfirmationRef.current(),
+            confirmationPromptDelayMs,
+          );
+        }
       });
-  }, [setPhase, startAnswerRecognition, supported]);
+  }, [confirmationPromptDelayMs, enterManualFallback, setPhase, startAnswerRecognition, supported]);
   startAnswerListeningRef.current = startAnswerListening;
 
-  const askConfirmation = useCallback((clarify = false) => {
-    if (!activeRef.current || savingRef.current || audioCaptureRef.current.recording) return;
-    window.clearTimeout(answerSilenceTimerRef.current);
-    stopRecognition();
-    confirmationTranscriptRef.current = '';
-    speak(clarify ? 'Mình chưa nghe rõ. Bạn hãy nói đã xong hoặc chưa xong.' : 'Bạn đã trả lời xong chưa?',
-      'CONFIRMING', () => startConfirmationRecognitionRef.current());
-  }, [speak, stopRecognition]);
-  askConfirmationRef.current = askConfirmation;
-
   const finalizeAnswer = useCallback(() => {
-    if (!activeRef.current || phaseRef.current !== 'LISTENING') return;
+    if (!activeRef.current || !canFinalizeSpokenAnswer(phaseRef.current, savingRef.current)) return;
     const token = lifecycleTokenRef.current;
     const expectedQuestion = questionIdRef.current;
     const expectedCapture = captureIdRef.current;
-    setPhase('FINALIZING_AUDIO');
+    window.clearTimeout(confirmationPromptTimerRef.current);
+    window.clearTimeout(confirmationAutoFinalizeTimerRef.current);
+    confirmationHandledRef.current = true;
+    modeRef.current = 'answer';
+    setPhase('PROCESSING_AUDIO');
     stopRecognition();
     setInterimTranscript('');
-    void audioCaptureRef.current.stopSegment().catch(() => null).then((segment) => {
+    const provider = answerProviderRef.current;
+    answerProviderRef.current = null;
+    const finishTranscription = provider
+      ? provider.finish().catch(() => ({
+        source: 'web_speech' as const,
+        transcript: browserDraftRef.current.trim(),
+      })).finally(() => provider.dispose())
+      : Promise.resolve({
+        source: 'web_speech' as const,
+        transcript: browserDraftRef.current.trim(),
+      });
+    void Promise.all([
+      audioCaptureRef.current.stopSegment().catch(() => null),
+      finishTranscription,
+    ]).then(([segment, transcription]) => {
       if (segment && segment.sequence === segmentsRef.current.length) segmentsRef.current.push(segment);
       const callbackExpected = { token, questionId: expectedQuestion, captureId: expectedCapture };
       const currentLifecycle = () => ({ active: activeRef.current, token: lifecycleTokenRef.current,
         questionId: questionIdRef.current, captureId: captureIdRef.current });
       if (!isCurrentCaptureCallback(callbackExpected, currentLifecycle())) return;
-      const browserTranscript = browserDraftRef.current.trim();
+      const browserTranscript = (transcription.transcript || browserDraftRef.current).trim();
+      browserCommittedRef.current = browserTranscript;
+      browserDraftRef.current = browserTranscript;
+      onTranscriptRef.current(browserTranscript);
       if (!segmentsRef.current.length) {
+        rawTranscriptRef.current = browserTranscript;
+        setRawTranscript(browserTranscript);
         confirmedTranscriptRef.current = browserTranscript;
-        setTranscriptNotice('Không thể chuẩn hóa, sử dụng bản ghi nhận realtime');
-        setPhase('TRANSCRIPT_READY');
-        readyTimerRef.current = window.setTimeout(() => askConfirmationRef.current(false), TRANSCRIPT_READY_DELAY_MS);
+        setTranscriptNotice('Không thể xử lý audio. Transcript realtime vẫn được giữ lại.');
+        onTranscriptRef.current(browserTranscript);
+        setPhase('REVIEWING_TRANSCRIPT');
         return;
       }
       const captureVersion = captureVersionRef.current + 1;
-      setTranscriptNotice('Đang chuẩn hóa câu trả lời...');
-      setPhase('TRANSCRIBING');
+      setTranscriptNotice('Đang hoàn tất audio...');
+      setPhase('PROCESSING_AUDIO');
       const upload = () => onFinalizeCaptureRef.current(
-        segmentsRef.current, expectedCapture, captureVersion, browserTranscript);
+        segmentsRef.current,
+        expectedCapture,
+        captureVersion,
+        browserTranscript,
+        {
+          source: transcription.source,
+          liveSessionToken: 'liveSessionToken' in transcription
+            ? transcription.liveSessionToken : undefined,
+        },
+      );
       let transcriptResolved = false;
       void upload().catch((firstError) => {
         if (!isCurrentCaptureCallback(callbackExpected, currentLifecycle())) {
@@ -413,118 +906,153 @@ export function useVoiceConversation({
         return upload();
       }).then((result) => {
         if (!isCurrentCaptureCallback(callbackExpected, currentLifecycle(), result)) return;
-        const resolved = resolveCaptureTranscript(browserTranscript, result);
+        const resolved = resolveCaptureTranscript(browserTranscript, result, transcription.source);
         captureVersionRef.current = result.captureVersion;
         transcriptResolved = true;
         gladiaTranscriptRef.current = resolved.gladiaTranscript;
+        rawTranscriptRef.current = resolved.rawTranscript;
+        setRawTranscript(resolved.rawTranscript);
         confirmedTranscriptRef.current = resolved.displayedTranscript;
         onTranscriptRef.current(resolved.displayedTranscript);
         setTranscriptNotice(resolved.notice);
       }).catch(() => {
         if (!isCurrentCaptureCallback(callbackExpected, currentLifecycle())) return;
-        const resolved = resolveCaptureTranscript(browserTranscript);
+        const resolved = resolveCaptureTranscript(browserTranscript, undefined, transcription.source);
         transcriptResolved = true;
+        rawTranscriptRef.current = resolved.rawTranscript;
+        setRawTranscript(resolved.rawTranscript);
         confirmedTranscriptRef.current = resolved.displayedTranscript;
         onTranscriptRef.current(resolved.displayedTranscript);
         setTranscriptNotice(resolved.notice);
       }).finally(() => {
         if (!transcriptResolved || !isCurrentCaptureCallback(callbackExpected, currentLifecycle())) return;
-        setPhase('TRANSCRIPT_READY');
-        readyTimerRef.current = window.setTimeout(() => askConfirmationRef.current(false), TRANSCRIPT_READY_DELAY_MS);
+        setPhase('REVIEWING_TRANSCRIPT');
       });
     });
   }, [setPhase, stopRecognition]);
   finalizeAnswerRef.current = finalizeAnswer;
 
-  const handleConfirmation = useCallback((intent: ConfirmationIntent) => {
-    window.clearTimeout(confirmationTimerRef.current);
-    stopRecognition();
-    if (intent === 'negative') {
-      setPhase('CONTINUING');
-      confirmationTranscriptRef.current = '';
-      speak('Được, bạn hãy tiếp tục câu trả lời.', 'CONTINUING', () => startAnswerListeningRef.current());
+  const completeSpokenAnswer = useCallback(() => {
+    if (!canFinalizeSpokenAnswer(phaseRef.current, savingRef.current)) return;
+    if (modeRef.current === 'confirmation') {
+      settleConfirmationRef.current('DONE');
       return;
     }
-    if (intent === 'unknown') {
-      askConfirmationRef.current(true);
-      return;
+    finalizeAnswerRef.current();
+  }, []);
+
+  const continueAnswer = useCallback((reviewedTranscript?: string) => {
+    if (!canContinueReviewedAnswer(phaseRef.current, savingRef.current)) return;
+    if (typeof reviewedTranscript === 'string') {
+      const preserved = reviewedTranscript.trim();
+      browserCommittedRef.current = preserved;
+      browserDraftRef.current = preserved;
+      confirmedTranscriptRef.current = preserved;
+      onTranscriptRef.current(preserved);
     }
-    const answer = confirmedTranscriptRef.current.trim() || browserDraftRef.current.trim();
-    if (!canSubmitConfirmation(savingRef.current, answer)) {
-      speak('Mình chưa nghe thấy câu trả lời. Bạn hãy trả lời câu hỏi trước nhé.', 'CONTINUING',
-        () => startAnswerListeningRef.current());
-      return;
-    }
+    setTranscriptNotice('Đang nghe phần trả lời tiếp theo...');
+    activeRef.current = true;
+    setActive(true);
+    startAnswerListeningRef.current();
+  }, []);
+
+  const confirmTranscript = useCallback((value: string) => {
+    const answer = value.trim();
+    const canConfirm = phaseRef.current === 'REVIEWING_TRANSCRIPT'
+      || phaseRef.current === 'ERROR_RECOVERABLE'
+      || (manualFallback && phaseRef.current === 'LISTENING');
+    if (!canConfirm || !canSubmitConfirmation(savingRef.current, answer)) return;
     savingRef.current = true;
-    setPhase('SUBMITTING');
-    void onConfirmRef.current(answer).catch((confirmError) => {
+    confirmedTranscriptRef.current = answer;
+    setPhase('ANSWER_CONFIRMED');
+    void onConfirmRef.current(answer, rawTranscriptRef.current || undefined).then(() => {
+      setPhase('NEXT_QUESTION');
+      setTranscriptNotice('Được rồi. Câu trả lời đã được lưu.');
+    }).catch((confirmError) => {
       setPhase('ERROR_RECOVERABLE');
       setError(confirmError instanceof Error ? confirmError.message : 'Không thể lưu câu trả lời. Nội dung vẫn được giữ để thử lại.');
     }).finally(() => { savingRef.current = false; });
-  }, [setPhase, speak, stopRecognition]);
-  handleConfirmationRef.current = handleConfirmation;
-
-  const startConfirmationRecognition = useCallback(() => {
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition || !activeRef.current || phaseRef.current !== 'CONFIRMING') return;
-    stopRecognition();
-    modeRef.current = 'confirmation';
-    confirmationTranscriptRef.current = '';
-    const recognition = new Recognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = VIETNAMESE_LANG;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => {
-      let finalChunk = '';
-      let interimChunk = '';
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        const text = result[0]?.transcript?.trim() || '';
-        if (result.isFinal) finalChunk += `${text} `;
-        else interimChunk += `${text} `;
-      }
-      if (finalChunk) confirmationTranscriptRef.current = `${confirmationTranscriptRef.current} ${finalChunk}`.replace(/\s+/g, ' ').trim();
-      const combined = `${confirmationTranscriptRef.current} ${interimChunk}`.replace(/\s+/g, ' ').trim();
-      setInterimTranscript(interimChunk.trim());
-      const intent = classifyConfirmation(combined);
-      if (intent !== 'unknown') {
-        setInterimTranscript('');
-        handleConfirmationRef.current(intent);
-      } else {
-        window.clearTimeout(confirmationTimerRef.current);
-        confirmationTimerRef.current = window.setTimeout(
-          () => handleConfirmationRef.current('unknown'), Math.max(500, unclearConfirmationDelayMs));
-      }
-    };
-    recognition.onerror = (event) => {
-      if (event.error !== 'aborted' && event.error !== 'no-speech') {
-        setError('Không nghe rõ câu xác nhận. Hệ thống sẽ hỏi lại.');
-      }
-    };
-    recognition.onend = () => {
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-      if (activeRef.current && phaseRef.current === 'CONFIRMING') restartRecognition('confirmation');
-    };
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      window.clearTimeout(confirmationTimerRef.current);
-      confirmationTimerRef.current = window.setTimeout(
-        () => handleConfirmationRef.current('unknown'), Math.max(1_000, confirmationSilenceMs));
-    } catch {
-      setPhase('ERROR_RECOVERABLE');
-      setError('Không thể nghe câu xác nhận. Hãy thử lại.');
-    }
-  }, [confirmationSilenceMs, restartRecognition, setPhase, stopRecognition, unclearConfirmationDelayMs]);
-  startConfirmationRecognitionRef.current = startConfirmationRecognition;
+  }, [manualFallback, setPhase]);
 
   const speakQuestion = useCallback(() => {
     const text = questionTextRef.current;
     if (!text || !activeRef.current) return;
     clearTimers();
-    speak(text, 'QUESTION_PLAYING', () => startAnswerListeningRef.current());
+    speak(text, 'AI_SPEAKING', () => startAnswerListeningRef.current());
   }, [clearTimers, speak]);
+
+  const replayQuestion = useCallback(async () => {
+    if (!activeRef.current || disabledRef.current || savingRef.current) return;
+    if (['PROCESSING_AUDIO', 'ANSWER_CONFIRMED', 'AI_SPEAKING'].includes(phaseRef.current)) return;
+    const text = questionTextRef.current;
+    if (!text || !questionIdRef.current) return;
+    const resumeManualFallback = manualFallback;
+    const discardCurrentSegment = modeRef.current === 'confirmation'
+      || confirmationSegmentActiveRef.current;
+    const token = ++lifecycleTokenRef.current;
+    speechTokenRef.current += 1;
+    confirmationCycleRef.current += 1;
+    confirmationHandledRef.current = true;
+    clearTimers();
+    stopRecognition();
+    disposeAnswerProvider();
+    stopAudio();
+    window.speechSynthesis?.cancel();
+    setError('');
+    setPhase('AI_SPEAKING');
+    const segment = await audioCaptureRef.current.stopSegment().catch(() => null);
+    confirmationSegmentActiveRef.current = false;
+    confirmationCommittedRef.current = '';
+    confirmationDraftRef.current = '';
+    modeRef.current = 'answer';
+    if (!discardCurrentSegment && segment && segment.sequence === segmentsRef.current.length) {
+      segmentsRef.current.push(segment);
+    }
+    if (!activeRef.current || token !== lifecycleTokenRef.current || disabledRef.current) return;
+    speak(text, 'AI_SPEAKING', () => {
+      if (resumeManualFallback) {
+        setPhase(rawTranscriptRef.current || browserDraftRef.current
+          ? 'REVIEWING_TRANSCRIPT' : 'LISTENING');
+      } else startAnswerListeningRef.current();
+    }, () => {
+      void onReplayQuestionRef.current().catch((replayError) => {
+        if (token !== lifecycleTokenRef.current) return;
+        setError(replayError instanceof Error
+          ? replayError.message
+          : 'Không thể ghi nhận lần đọc lại. Phỏng vấn vẫn tiếp tục.');
+      });
+    });
+  }, [clearTimers, disposeAnswerProvider, manualFallback, setPhase, speak, stopAudio, stopRecognition]);
+
+  const retryVoice = useCallback(() => {
+    if (!supported || disabledRef.current) return;
+    lifecycleTokenRef.current += 1;
+    confirmationCycleRef.current += 1;
+    confirmationHandledRef.current = true;
+    clearTimers();
+    stopRecognition();
+    disposeAnswerProvider();
+    stopAudio();
+    pcmPlayerRef.current?.dispose();
+    pcmPlayerRef.current = null;
+    audioCaptureRef.current.dispose();
+    audioCaptureRef.current = new CandidateAudioCapture();
+    confirmationSegmentActiveRef.current = false;
+    confirmationCommittedRef.current = '';
+    confirmationDraftRef.current = '';
+    modeRef.current = 'answer';
+    captureAvailableRef.current = true;
+    setManualFallback(false);
+    activeRef.current = true;
+    setActive(true);
+    setError('');
+    setTranscriptNotice('');
+    startAnswerListeningRef.current();
+  }, [clearTimers, disposeAnswerProvider, stopAudio, stopRecognition, supported]);
+
+  const useManualFallback = useCallback(() => {
+    enterManualFallback('Bạn đang nhập transcript thủ công. Nội dung đã có vẫn được giữ nguyên.');
+  }, [enterManualFallback]);
 
   const start = useCallback(() => {
     if (!supported || !questionIdRef.current || !questionTextRef.current || disabledRef.current) return;
@@ -532,6 +1060,7 @@ export function useVoiceConversation({
     setTranscriptNotice('');
     activeRef.current = true;
     setActive(true);
+    if (phaseRef.current === 'REVIEWING_TRANSCRIPT') return;
     speakQuestion();
   }, [speakQuestion, supported]);
 
@@ -542,58 +1071,107 @@ export function useVoiceConversation({
     savingRef.current = false;
     lifecycleTokenRef.current += 1;
     speechTokenRef.current += 1;
+    confirmationCycleRef.current += 1;
+    confirmationHandledRef.current = true;
     clearTimers();
     stopRecognition();
+    disposeAnswerProvider();
     stopAudio();
+    pcmPlayerRef.current?.dispose();
+    pcmPlayerRef.current = null;
     audioCaptureRef.current.dispose();
     audioCaptureRef.current = new CandidateAudioCapture();
+    confirmationSegmentActiveRef.current = false;
+    confirmationCommittedRef.current = '';
+    confirmationDraftRef.current = '';
+    modeRef.current = 'answer';
     window.speechSynthesis?.cancel();
     setPhase('IDLE');
-  }, [clearTimers, setPhase, stopAudio, stopRecognition]);
+  }, [clearTimers, disposeAnswerProvider, setPhase, stopAudio, stopRecognition]);
 
   useEffect(() => {
     const previousQuestion = questionIdRef.current;
+    const continueManually = manualFallback;
     questionIdRef.current = questionId;
     questionTextRef.current = questionText;
     if (previousQuestion === questionId) return;
     lifecycleTokenRef.current += 1;
+    speechTokenRef.current += 1;
+    confirmationCycleRef.current += 1;
+    confirmationHandledRef.current = true;
     clearTimers();
     stopRecognition();
+    disposeAnswerProvider();
     stopAudio();
     audioCaptureRef.current.dispose();
     audioCaptureRef.current = new CandidateAudioCapture();
+    confirmationSegmentActiveRef.current = false;
+    confirmationCommittedRef.current = '';
+    confirmationDraftRef.current = '';
+    modeRef.current = 'answer';
     captureIdRef.current = newCaptureId();
     captureVersionRef.current = 0;
     segmentsRef.current = [];
     browserCommittedRef.current = initialTranscript.trim();
     browserDraftRef.current = initialTranscript.trim();
     confirmedTranscriptRef.current = initialTranscript.trim();
+    rawTranscriptRef.current = initialRawTranscript?.trim() || '';
+    setRawTranscript(rawTranscriptRef.current);
     gladiaTranscriptRef.current = '';
-    confirmationTranscriptRef.current = '';
     setInterimTranscript('');
     setTranscriptNotice('');
     onTranscriptRef.current(initialTranscript.trim());
-    window.speechSynthesis.cancel();
+    window.speechSynthesis?.cancel();
+    setPhase('NEXT_QUESTION');
     if (!activeRef.current) return;
     if (questionId && questionText) {
-      const timer = window.setTimeout(speakQuestion, 150);
+      if (continueManually) {
+        const timer = window.setTimeout(() => {
+          speak(questionText, 'AI_SPEAKING', () => setPhase('LISTENING'));
+        }, nextQuestionDelayMs);
+        return () => window.clearTimeout(timer);
+      }
+      const timer = window.setTimeout(speakQuestion, nextQuestionDelayMs);
       return () => window.clearTimeout(timer);
     }
-    speak('Bạn đã hoàn thành các câu hỏi. Hãy bấm kết thúc phỏng vấn để nhận điểm và nhận xét.',
-      'COMPLETED', () => setPhase('COMPLETED'));
+    setTranscriptNotice('Bạn đã hoàn thành các câu hỏi. Hãy bấm kết thúc phỏng vấn để nhận điểm và nhận xét.');
     return undefined;
-  }, [clearTimers, initialTranscript, questionId, questionText, setPhase, speak, speakQuestion, stopAudio, stopRecognition]);
+  }, [clearTimers, disposeAnswerProvider, initialRawTranscript, initialTranscript, manualFallback, nextQuestionDelayMs,
+    questionId, questionText, setPhase, speak, speakQuestion, stopAudio, stopRecognition]);
 
   useEffect(() => () => {
     activeRef.current = false;
     lifecycleTokenRef.current += 1;
     speechTokenRef.current += 1;
+    confirmationCycleRef.current += 1;
+    confirmationHandledRef.current = true;
     clearTimers();
     stopRecognition();
+    disposeAnswerProvider();
     stopAudio();
+    pcmPlayerRef.current?.dispose();
+    pcmPlayerRef.current = null;
     audioCaptureRef.current.dispose();
     window.speechSynthesis?.cancel();
-  }, [clearTimers, stopAudio, stopRecognition]);
+  }, [clearTimers, disposeAnswerProvider, stopAudio, stopRecognition]);
 
-  return { supported, active, phase, interimTranscript, transcriptNotice, error, start, stop };
+  return {
+    supported,
+    active,
+    phase,
+    manualFallback,
+    rawTranscript,
+    interimTranscript,
+    transcriptNotice,
+    error,
+    activeTranscriptionSource,
+    start,
+    stop,
+    replayQuestion,
+    done: completeSpokenAnswer,
+    continueAnswer,
+    confirmTranscript,
+    retryVoice,
+    useManualFallback,
+  };
 }

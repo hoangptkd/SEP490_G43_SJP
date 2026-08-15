@@ -8,8 +8,11 @@ public record AiInterviewConfigResponse(
         int audioMaxSizeMb,
         boolean voiceStreamingEnabled,
         String voiceProvider,
-        int voiceSilenceMs,
-        int voiceConfirmationSilenceMs,
-        int voiceUnclearConfirmationDelayMs
+        String answerTranscriptionProvider,
+        int voiceConfirmationPromptDelayMs,
+        int voiceConfirmationAutoFinalizeMs,
+        int voiceRecognitionRestartDelayMs,
+        int voiceLoadWaitMs,
+        int voiceNextQuestionDelayMs
 ) {
 }

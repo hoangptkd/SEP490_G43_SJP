@@ -39,6 +39,15 @@ public class AiAnswerFeedback {
     @Column(name = "overall_score")
     private BigDecimal overallScore;
 
+    @Column(name = "evaluation_status", nullable = false, length = 30)
+    private String evaluationStatus = "RATED";
+
+    @Column(name = "bars_level")
+    private Integer barsLevel;
+
+    @Column(name = "score_reason", length = 40)
+    private String scoreReason;
+
     @Column(columnDefinition = "TEXT")
     private String feedback;
 

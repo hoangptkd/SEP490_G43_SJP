@@ -34,6 +34,7 @@ import {
   IconMapPin,
   IconMic,
   IconProfile,
+  IconRefresh,
   IconRobot,
   IconSearch,
   IconSettings,
@@ -46,10 +47,11 @@ import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
 import type {
+  AnswerCaptureTranscriptionMetadata,
   AiInterviewConfig,
+  AiInterviewCvProfile,
   AiInterviewEligibleApplication,
   AiInterviewQuestion,
-  AiInterviewQuestionSet,
   AiInterviewSession,
 } from './types/aiInterview';
 import type {
@@ -6183,44 +6185,63 @@ function EmployerLayout() {
 function AiInterviewPage() {
   const [config, setConfig] = useState<AiInterviewConfig | null>(null);
   const [applications, setApplications] = useState<AiInterviewEligibleApplication[]>([]);
-  const [questionSets, setQuestionSets] = useState<AiInterviewQuestionSet[]>([]);
   const [sessions, setSessions] = useState<AiInterviewSession[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [practiceCvs, setPracticeCvs] = useState<CvFile[]>([]);
+  const [practiceCvVersions, setPracticeCvVersions] = useState<CvVersion[]>([]);
   const [activeTab, setActiveTab] = useState<'application' | 'practice'>('application');
-  const [questionMode, setQuestionMode] = useState<'ai_generated' | 'fixed'>('ai_generated');
-  const [selectedQuestionSetId, setSelectedQuestionSetId] = useState('');
-  const [targetRole, setTargetRole] = useState('Java Backend Developer');
-  const [skills, setSkills] = useState('Spring Boot, PostgreSQL');
-  const [jobId, setJobId] = useState('');
+  const [selectedCvId, setSelectedCvId] = useState('');
+  const [cvProfile, setCvProfile] = useState<AiInterviewCvProfile | null>(null);
+  const [targetRole, setTargetRole] = useState('');
+  const [seniority, setSeniority] = useState<AiInterviewCvProfile['experienceLevel']>('fresher');
+  const [focusSkills, setFocusSkills] = useState<string[]>([]);
+  const [analyzingCv, setAnalyzingCv] = useState(false);
   const [selectedSession, setSelectedSession] = useState<AiInterviewSession | null>(null);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<AiInterviewSession | null>(null);
   const [message, setMessage] = useState('');
   const [planLimitReached, setPlanLimitReached] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const practiceCvOptions = useMemo(() => [
+    ...practiceCvs.map((cv) => ({
+      id: cv.id,
+      label: cv.originalFileName,
+      source: 'CV tải lên',
+      defaultCv: cv.defaultCv,
+    })),
+    ...practiceCvVersions.map((cv) => ({
+      id: cv.id,
+      label: cv.title,
+      source: 'CV Builder',
+      defaultCv: false,
+    })),
+  ], [practiceCvs, practiceCvVersions]);
+
   async function load() {
     const configData = await aiInterviewService.configStatus();
     setConfig(configData);
     if (!configData.enabled) {
       setApplications([]);
-      setQuestionSets([]);
       setSessions([]);
-      setJobs([]);
+      setPracticeCvs([]);
+      setPracticeCvVersions([]);
       return;
     }
-    const sessionData = await aiInterviewService.sessions();
+    const [sessionData, applicationData, cvData, cvVersionData] = await Promise.all([
+      aiInterviewService.sessions(),
+      aiInterviewService.eligibleApplications(),
+      candidateService.getCvs(0, 100),
+      candidateService.getCvVersions(0, 100),
+    ]);
     setSessions(sessionData);
-    if (configData.enabled) {
-      const [applicationData, jobsData, questionSetData] = await Promise.all([
-        aiInterviewService.eligibleApplications(),
-        jobService.getAll({ sort: 'newest' }, 0, 20).then((result) => result.content),
-        aiInterviewService.questionSets(),
-      ]);
-      setApplications(applicationData);
-      setJobs(jobsData);
-      setQuestionSets(questionSetData);
-      setSelectedQuestionSetId((current) => current || questionSetData[0]?.id || '');
-    }
+    setApplications(applicationData);
+    setPracticeCvs(cvData.items);
+    setPracticeCvVersions(cvVersionData.items);
+    const availableIds = new Set([...cvData.items, ...cvVersionData.items].map((cv) => cv.id));
+    const preferredCvId = cvData.items.find((cv) => cv.defaultCv)?.id
+      || cvData.items[0]?.id
+      || cvVersionData.items[0]?.id
+      || '';
+    setSelectedCvId((current) => availableIds.has(current) ? current : preferredCvId);
   }
 
   useEffect(() => {
@@ -6249,18 +6270,16 @@ function AiInterviewPage() {
     setMessage('');
     setPlanLimitReached(false);
     try {
-      const skillList = skills.split(',').map((item) => item.trim()).filter(Boolean);
-      if (questionMode === 'fixed' && !selectedQuestionSetId) {
-        setMessage('Hay chon mot bo cau hoi co san truoc khi tao practice session.');
-        setLoading(false);
+      if (!selectedCvId || !cvProfile || cvProfile.cvId !== selectedCvId) {
+        setMessage('Vui lòng chọn và phân tích một CV trước khi bắt đầu.');
         return;
       }
-      const session = await aiInterviewService.createPracticeSession(
+      const session = await aiInterviewService.createPracticeSession({
+        cvId: selectedCvId,
         targetRole,
-        skillList,
-        jobId || undefined,
-        questionMode === 'fixed' ? selectedQuestionSetId : undefined,
-      );
+        seniority,
+        focusSkills,
+      });
       setSelectedSession(session);
       await load();
     } catch (err) {
@@ -6269,6 +6288,35 @@ function AiInterviewPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function analyzeSelectedCv() {
+    if (!selectedCvId) {
+      setMessage('Bạn chưa có CV để luyện phỏng vấn.');
+      return;
+    }
+    setAnalyzingCv(true);
+    setMessage('');
+    try {
+      const profile = await aiInterviewService.analyzePracticeCv(selectedCvId);
+      setCvProfile(profile);
+      setTargetRole(profile.suggestedRoles[0]?.title || '');
+      setSeniority(profile.experienceLevel);
+      setFocusSkills([]);
+    } catch (err) {
+      setCvProfile(null);
+      setMessage(readError(err));
+    } finally {
+      setAnalyzingCv(false);
+    }
+  }
+
+  function toggleFocusSkill(skill: string) {
+    setFocusSkills((current) => {
+      if (current.includes(skill)) return current.filter((item) => item !== skill);
+      if (current.length >= 3) return current;
+      return [...current, skill];
+    });
   }
 
   async function openSession(id: string) {
@@ -6345,7 +6393,7 @@ function AiInterviewPage() {
                 className={activeTab === 'practice' ? 'active' : ''}
                 onClick={() => setActiveTab('practice')}
               >
-                🎯 Practice tự do
+                🎯 Luyện theo CV
               </button>
             </div>
 
@@ -6375,60 +6423,85 @@ function AiInterviewPage() {
                 <motion.form key="practice" className="form-grid" onSubmit={createPractice}
                   variants={fadeUp} initial="initial" animate="animate" exit="exit"
                   transition={{ duration: 0.18, ease: EASE_OUT }}>
-                  <div className="segmented" role="tablist" aria-label="Che do cau hoi practice">
-                    <button
-                      type="button"
-                      className={questionMode === 'ai_generated' ? 'active' : ''}
-                      onClick={() => setQuestionMode('ai_generated')}
+                  <label>
+                    Chọn CV để luyện tập
+                    <select
+                      required
+                      value={selectedCvId}
+                      onChange={(event) => {
+                        setSelectedCvId(event.target.value);
+                        setCvProfile(null);
+                        setTargetRole('');
+                        setFocusSkills([]);
+                      }}
                     >
-                      AI tu tao cau hoi
-                    </button>
-                    <button
-                      type="button"
-                      className={questionMode === 'fixed' ? 'active' : ''}
-                      onClick={() => setQuestionMode('fixed')}
-                    >
-                      Bo cau hoi co san
-                    </button>
-                  </div>
-                  {questionMode === 'fixed' ? (
-                    <label>
-                      Bo cau hoi test
-                      <select
-                        required
-                        value={selectedQuestionSetId}
-                        onChange={(event) => setSelectedQuestionSetId(event.target.value)}
-                      >
-                        {questionSets.length === 0 ? (
-                          <option value="">Chua co bo cau hoi active</option>
-                        ) : null}
-                        {questionSets.map((questionSet) => (
-                          <option value={questionSet.id} key={questionSet.id}>
-                            {questionSet.title} ({questionSet.questionCount} cau)
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  <label>
-                    Target role
-                    <input required value={targetRole} onChange={(event) => setTargetRole(event.target.value)} />
-                  </label>
-                  <label>
-                    Skills
-                    <input required value={skills} onChange={(event) => setSkills(event.target.value)}
-                      placeholder="Spring Boot, PostgreSQL" />
-                  </label>
-                  <label>
-                    Chọn job (tùy chọn)
-                    <select value={jobId} onChange={(event) => setJobId(event.target.value)}>
-                      <option value="">Không chọn job</option>
-                      {jobs.map((job) => <option value={job.id} key={job.id}>{job.title}</option>)}
+                      {practiceCvOptions.length === 0 ? <option value="">Bạn chưa có CV</option> : null}
+                      {practiceCvOptions.map((cv) => (
+                        <option value={cv.id} key={cv.id}>
+                          {cv.label} — {cv.source}{cv.defaultCv ? ' (mặc định)' : ''}
+                        </option>
+                      ))}
                     </select>
                   </label>
-                  <button type="submit" disabled={loading}>
-                    {loading ? 'Đang tạo...' : '🚀 Tạo practice session'}
+
+                  <button type="button" className="outline" disabled={!selectedCvId || analyzingCv}
+                    onClick={analyzeSelectedCv}>
+                    {analyzingCv ? 'Đang phân tích CV...' : cvProfile ? 'Phân tích lại CV' : 'Phân tích CV và gợi ý vị trí'}
                   </button>
+
+                  {cvProfile ? (
+                    <>
+                      <div className="notice-panel" role="status">
+                        <strong>Hồ sơ phỏng vấn từ CV</strong>
+                        <p style={{ margin: '4px 0 0' }}>{cvProfile.summary}</p>
+                      </div>
+
+                      <label>
+                        Vị trí mục tiêu
+                        <input required list="ai-interview-role-suggestions" value={targetRole}
+                          onChange={(event) => setTargetRole(event.target.value)}
+                          placeholder="Chọn gợi ý hoặc nhập vị trí khác" />
+                        <datalist id="ai-interview-role-suggestions">
+                          {cvProfile.suggestedRoles.map((role) => (
+                            <option value={role.title} key={role.title}>{role.reason}</option>
+                          ))}
+                        </datalist>
+                      </label>
+
+                      <label>
+                        Cấp độ phỏng vấn
+                        <select value={seniority}
+                          onChange={(event) => setSeniority(event.target.value as AiInterviewCvProfile['experienceLevel'])}>
+                          <option value="intern">Intern</option>
+                          <option value="fresher">Fresher</option>
+                          <option value="junior">Junior</option>
+                          <option value="middle">Middle</option>
+                          <option value="senior">Senior</option>
+                        </select>
+                      </label>
+
+                      <fieldset className="practice-skill-fieldset">
+                        <legend>Kỹ năng muốn luyện sâu — chọn tối đa 3</legend>
+                        <div className="practice-skill-grid">
+                          {cvProfile.skills.map((skill) => {
+                            const selected = focusSkills.includes(skill);
+                            return (
+                              <label key={skill} className={`practice-skill-option${selected ? ' selected' : ''}`}>
+                                <input type="checkbox" checked={selected}
+                                  disabled={!selected && focusSkills.length >= 3}
+                                  onChange={() => toggleFocusSkill(skill)} />
+                                <span>{skill}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+
+                      <button type="submit" disabled={loading || analyzingCv || !targetRole.trim()}>
+                        {loading ? 'Đang tạo...' : '🚀 Bắt đầu luyện theo CV'}
+                      </button>
+                    </>
+                  ) : null}
                 </motion.form>
               )}
             </AnimatePresence>
@@ -6495,7 +6568,449 @@ function AiInterviewPage() {
 }
 
 // ─── AI INTERVIEW ROOM ───────────────────────────────────────────────────────
-function AiInterviewRoom({
+function AiInterviewRoom(props: {
+  config: AiInterviewConfig;
+  session: AiInterviewSession;
+  onSessionChange: (session: AiInterviewSession) => void;
+  onBack: () => void;
+}) {
+  return props.session.conversation
+    ? <AiConversationRoom {...props} />
+    : <LegacyAiInterviewRoom {...props} />;
+}
+
+function AiConversationRoom({
+  config,
+  session,
+  onSessionChange,
+  onBack,
+}: {
+  config: AiInterviewConfig;
+  session: AiInterviewSession;
+  onSessionChange: (session: AiInterviewSession) => void;
+  onBack: () => void;
+}) {
+  const conversation = session.conversation!;
+  const currentTurn = conversation.timeline.find((turn) => turn.id === conversation.currentTurnId);
+  const [transcript, setTranscript] = useState(
+    currentTurn?.finalTranscript || currentTurn?.rawTranscript || '',
+  );
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const commandIdsRef = useRef(new Map<string, string>());
+  const latestSnapshotRef = useRef({
+    sessionId: session.id,
+    version: conversation.version,
+  });
+
+  useEffect(() => {
+    if (latestSnapshotRef.current.sessionId !== session.id) {
+      latestSnapshotRef.current = { sessionId: session.id, version: conversation.version };
+      return;
+    }
+    latestSnapshotRef.current.version = Math.max(
+      latestSnapshotRef.current.version,
+      conversation.version,
+    );
+  }, [conversation.version, session.id]);
+
+  const applySnapshot = useCallback((next: AiInterviewSession) => {
+    if (!next.conversation) {
+      onSessionChange(next);
+      return;
+    }
+    const nextVersion = next.conversation.version || 0;
+    const latest = latestSnapshotRef.current;
+    if (next.id === latest.sessionId && nextVersion < latest.version) return;
+    latestSnapshotRef.current = { sessionId: next.id, version: nextVersion };
+    onSessionChange(next);
+  }, [onSessionChange]);
+
+  const refreshSession = useCallback(async () => {
+    const refreshed = await aiInterviewService.getSession(session.id);
+    applySnapshot(refreshed);
+    return refreshed;
+  }, [applySnapshot, session.id]);
+
+  useEffect(() => {
+    setTranscript(currentTurn?.finalTranscript || currentTurn?.rawTranscript || '');
+    setError('');
+    setBusy('');
+  }, [currentTurn?.id]);
+
+  useEffect(() => {
+    const waitingForServer = !conversation.errorCode
+      && session.status !== 'completed'
+      && (currentTurn?.answerStatus === 'PROCESSING'
+        || ['ANALYZE_ANSWER', 'ACK_TRANSITION', 'CLOSING'].includes(conversation.dialogueState));
+    if (!waitingForServer) return undefined;
+    const timer = window.setTimeout(() => {
+      void refreshSession().catch(() => undefined);
+    }, 1400);
+    return () => window.clearTimeout(timer);
+  }, [conversation.dialogueState, conversation.errorCode, conversation.version,
+    currentTurn?.answerStatus, refreshSession, session.status]);
+
+  const commandId = useCallback((kind: string, turnId: string) => {
+    const key = `${kind}:${turnId}`;
+    const existing = commandIdsRef.current.get(key);
+    if (existing) return existing;
+    const created = window.crypto.randomUUID();
+    commandIdsRef.current.set(key, created);
+    return created;
+  }, []);
+
+  const createSpeechUrl = useCallback((text: string) => (
+    aiInterviewService.createSpeechTicket(session.id, text)
+  ), [session.id]);
+
+  const createLiveTranscription = useCallback((sampleRate: number) => (
+    aiInterviewService.createLiveTranscription(session.id, sampleRate)
+  ), [session.id]);
+
+  const finalizeCapture = useCallback(async (
+    segments: Array<{ sequence: number; file: File; durationSeconds: number }>,
+    captureId: string,
+    captureVersion: number,
+    browserTranscript: string,
+    transcription: AnswerCaptureTranscriptionMetadata,
+  ) => {
+    if (!currentTurn || !conversation.expectsAnswer) {
+      throw new Error('Lượt hội thoại hiện tại không còn nhận câu trả lời.');
+    }
+    return aiInterviewService.finalizeHandsFreeTurnCapture(
+      session.id,
+      currentTurn.id,
+      captureId,
+      captureVersion,
+      segments,
+      browserTranscript,
+      transcription,
+    );
+  }, [conversation.expectsAnswer, currentTurn, session.id]);
+
+  const confirmAnswer = useCallback(async (finalTranscript: string, rawTranscript?: string) => {
+    if (!currentTurn || !finalTranscript.trim()) return;
+    setBusy('AI đang phân tích bằng chứng trong câu trả lời...');
+    setError('');
+    try {
+      const next = await aiInterviewService.confirmTurn(
+        session.id,
+        currentTurn.id,
+        commandId('confirm', currentTurn.id),
+        { rawTranscript, finalTranscript: finalTranscript.trim() },
+        conversation.version,
+      );
+      applySnapshot(next);
+    } catch (confirmError) {
+      const message = readError(confirmError);
+      setError(message);
+      await refreshSession().catch(() => undefined);
+      throw new Error(message);
+    } finally {
+      setBusy('');
+    }
+  }, [applySnapshot, commandId, conversation.version, currentTurn, refreshSession, session.id]);
+
+  const replayTurn = useCallback(async () => {
+    if (!currentTurn) throw new Error('Lượt hội thoại hiện tại không còn hợp lệ.');
+    setBusy('Đang ghi nhận lần đọc lại...');
+    try {
+      applySnapshot(await aiInterviewService.replayTurn(
+        session.id,
+        currentTurn.id,
+        conversation.version,
+      ));
+    } catch (replayError) {
+      throw new Error(readError(replayError));
+    } finally {
+      setBusy('');
+    }
+  }, [applySnapshot, conversation.version, currentTurn, session.id]);
+
+  const voice = useVoiceConversation({
+    questionId: currentTurn?.id,
+    questionText: conversation.speechText || currentTurn?.interviewerText,
+    initialTranscript: currentTurn?.finalTranscript || currentTurn?.rawTranscript || '',
+    initialRawTranscript: currentTurn?.rawTranscript,
+    initialConversationState: turnVoiceState(currentTurn?.answerStatus),
+    confirmationPromptDelayMs: config.voiceConfirmationPromptDelayMs,
+    confirmationAutoFinalizeMs: config.voiceConfirmationAutoFinalizeMs,
+    recognitionRestartDelayMs: config.voiceRecognitionRestartDelayMs,
+    voiceLoadWaitMs: config.voiceLoadWaitMs,
+    nextQuestionDelayMs: config.voiceNextQuestionDelayMs,
+    // UI actions are disabled separately while a command is pending. Keeping the
+    // voice lifecycle enabled here lets the newly published CORE question speak
+    // as soon as the monotonic backend snapshot arrives.
+    disabled: !conversation.expectsAnswer,
+    onTranscript: setTranscript,
+    onFinalizeCapture: finalizeCapture,
+    onConfirm: confirmAnswer,
+    onReplayQuestion: replayTurn,
+    onSpeechUrl: config.voiceStreamingEnabled ? createSpeechUrl : undefined,
+    answerTranscriptionProvider: config.answerTranscriptionProvider,
+    onCreateLiveTranscription: config.answerTranscriptionProvider === 'gladia_live'
+      ? createLiveTranscription
+      : undefined,
+  });
+
+  async function skipCurrentTurn() {
+    if (!currentTurn) return;
+    voice.stop();
+    setBusy('Đang chuyển sang nội dung tiếp theo...');
+    setError('');
+    try {
+      applySnapshot(await aiInterviewService.skipTurn(
+        session.id,
+        currentTurn.id,
+        commandId('skip', currentTurn.id),
+        conversation.version,
+      ));
+    } catch (skipError) {
+      setError(readError(skipError));
+      await refreshSession().catch(() => undefined);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function retryConversation() {
+    setBusy('Đang thử lại đúng bước bị lỗi...');
+    setError('');
+    try {
+      applySnapshot(await aiInterviewService.retryConversation(session.id));
+    } catch (retryError) {
+      setError(readError(retryError));
+      await refreshSession().catch(() => undefined);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  useEffect(() => () => voice.stop(), [voice.stop]);
+
+  if (session.status === 'completed') {
+    return (
+      <div className="interview-room conversation-room">
+        <button type="button" className="outline" onClick={onBack}>← Quay lại danh sách</button>
+        <div className="result-panel conversation-result">
+          <p className="eyebrow">Kết quả luyện tập tham khảo</p>
+          <h2>{session.title}</h2>
+          <strong className="score-display">
+            {Math.round(Number(session.summary?.overallScore || session.overallScore || 0))}%
+          </strong>
+          {session.summary ? (
+            <>
+              <div className="chip-row result-score-breakdown">
+                <span className="chip">Nội dung: {Math.round(Number(session.summary.contentScore || 0))}%</span>
+                {session.summary.voiceDeliveryScore != null
+                  ? <span className="chip">Giọng nói: {Math.round(Number(session.summary.voiceDeliveryScore))}%</span>
+                  : <span className="chip warning">Chưa đủ dữ liệu giọng nói</span>}
+                {session.summary.replayCount > 0 ? (
+                  <span className="chip neutral">
+                    Đọc lại {session.summary.replayCount} lần · trừ {Number(session.summary.replayPenalty || 0).toFixed(0)} điểm giao tiếp
+                  </span>
+                ) : null}
+              </div>
+              <p className="conversation-summary-copy">{session.summary.summary}</p>
+              <FeedbackList title="Điểm mạnh" items={session.summary.strengths || []} />
+              <FeedbackList title="Điểm cần cải thiện" items={session.summary.weaknesses || []} />
+              <FeedbackList title="Kế hoạch cải thiện" items={session.summary.improvementPlan || []} />
+            </>
+          ) : null}
+          <p className="muted conversation-reference-note">
+            Kết quả chỉ phục vụ luyện tập; hệ thống không dùng bằng cấp hoặc thông tin ngoài phần phỏng vấn để chấm.
+          </p>
+        </div>
+        <ConversationTimeline turns={conversation.timeline} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="interview-room conversation-room">
+      <button type="button" className="outline" onClick={onBack}>← Quay lại danh sách</button>
+      <section className="conversation-stage" aria-labelledby="conversation-title">
+        <header className="conversation-stage-header">
+          <div>
+            <p className="eyebrow">Phỏng vấn mô phỏng</p>
+            <h2 id="conversation-title">{session.title}</h2>
+            <p className="muted">Một cuộc trao đổi liền mạch, gồm đúng 5 nội dung CORE được chấm.</p>
+          </div>
+          <div className="conversation-progress" aria-label={`${conversation.completedCoreQuestions} trên ${conversation.totalCoreQuestions} nội dung CORE đã hoàn tất`}>
+            <strong>{conversation.completedCoreQuestions}/{conversation.totalCoreQuestions}</strong>
+            <span>CORE hoàn tất</span>
+          </div>
+        </header>
+
+        <div className="conversation-progress-track" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, (conversation.completedCoreQuestions / conversation.totalCoreQuestions) * 100)}%` }} />
+        </div>
+
+        <ConversationTimeline turns={conversation.timeline} compact />
+
+        {conversation.errorCode ? (
+          <div className="conversation-retry-panel" role="alert">
+            <div>
+              <strong>Thao tác AI tạm thời chưa hoàn tất</strong>
+              <p>{conversation.errorMessage || 'Câu trả lời đã được giữ an toàn. Bạn chỉ cần thử lại bước đang lỗi.'}</p>
+            </div>
+            <button type="button" disabled={Boolean(busy)} onClick={() => void retryConversation()}>
+              Thử lại bước này
+            </button>
+          </div>
+        ) : null}
+
+        {conversation.expectsAnswer && currentTurn ? (
+          <section className="conversation-answer-dock" aria-labelledby="answer-dock-title">
+            <div className="conversation-answer-heading">
+              <div>
+                <h3 id="answer-dock-title">Câu trả lời của bạn</h3>
+                <p className="muted">
+                  Im lặng khoảng {Math.round(config.voiceConfirmationPromptDelayMs / 1000)} giây, hệ thống sẽ hỏi xác nhận;
+                  {' '}bạn vẫn có thể nói tiếp hoặc tự bấm hoàn tất.
+                </p>
+              </div>
+              <span className="conversation-live-status" aria-live="polite">
+                {voicePhaseLabel(voice.phase)}
+              </span>
+            </div>
+
+            <div className="voice-controls conversation-controls">
+              <button
+                type="button"
+                className={voice.active ? 'outline' : ''}
+                disabled={Boolean(busy) || ['PROCESSING_AUDIO', 'ANSWER_CONFIRMED'].includes(voice.phase)}
+                onClick={() => { if (voice.active) voice.stop(); else voice.start(); }}
+              >
+                {voice.active ? 'Dừng chế độ thoại' : 'Bắt đầu trả lời bằng giọng nói'}
+              </button>
+              <button
+                type="button"
+                disabled={!voice.active || Boolean(busy)
+                  || !['LISTENING', 'WAITING_FOR_CONTINUATION'].includes(voice.phase)}
+                onClick={voice.done}
+              >
+                Tôi đã trả lời xong
+              </button>
+              <button
+                type="button"
+                className="outline"
+                disabled={Boolean(busy) || ['PROCESSING_AUDIO', 'ANSWER_CONFIRMED', 'AI_SPEAKING'].includes(voice.phase)}
+                onClick={() => void voice.replayQuestion()}
+              >
+                <IconRefresh size={16} /> Đọc lại câu hỏi
+              </button>
+              <button
+                type="button"
+                className="outline"
+                disabled={Boolean(busy) || voice.phase === 'PROCESSING_AUDIO'}
+                onClick={voice.manualFallback ? voice.retryVoice : voice.useManualFallback}
+              >
+                {voice.manualFallback ? <><IconMic size={16} /> Thử microphone lại</> : 'Nhập transcript thủ công'}
+              </button>
+            </div>
+
+            <p className="voice-replay-note">
+              Mỗi lần đọc lại trừ 2 điểm giao tiếp; tổng mức trừ tối đa là 10 điểm cho cả phiên.
+            </p>
+            <p className="voice-status" role="status">
+              Nguồn transcript: {voice.activeTranscriptionSource === 'gladia_live' ? 'Gladia Live' : 'Web Speech'}
+            </p>
+            {voice.transcriptNotice ? <p className="voice-status" role="status">{voice.transcriptNotice}</p> : null}
+            {voice.interimTranscript ? <p className="voice-interim">Đang nghe: {voice.interimTranscript}</p> : null}
+
+            <label className="transcript-editor">
+              {['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || voice.manualFallback
+                ? 'Kiểm tra và chỉnh sửa transcript trước khi xác nhận'
+                : 'Transcript draft trong lúc bạn nói'}
+              <textarea
+                value={transcript}
+                readOnly={!['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) && !voice.manualFallback}
+                onChange={['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || voice.manualFallback
+                  ? (event) => setTranscript(event.target.value) : undefined}
+                placeholder={voice.manualFallback
+                  ? 'Nhập câu trả lời của bạn tại đây...'
+                  : 'Nội dung sẽ xuất hiện khi bạn nói...'}
+              />
+            </label>
+            <p className="muted conversation-transcript-note">
+              Nội dung đã sửa không bị trừ điểm. Điểm nói vẫn lấy từ audio/VAD gốc, điểm nội dung chỉ dùng transcript bạn xác nhận.
+            </p>
+
+            {voice.error ? <div className="error-panel" role="alert">{voice.error}</div> : null}
+            {error ? <div className="error-panel" role="alert">{error}</div> : null}
+            {['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || voice.manualFallback ? (
+              <div className="manual-fallback-actions">
+                {voice.phase === 'REVIEWING_TRANSCRIPT' && !voice.manualFallback ? (
+                  <button type="button" className="outline" disabled={Boolean(busy)}
+                    onClick={() => voice.continueAnswer(transcript)}>
+                    Tiếp tục trả lời
+                  </button>
+                ) : null}
+                <button type="button"
+                  disabled={!transcript.trim() || Boolean(busy)
+                    || ['PROCESSING_AUDIO', 'ANSWER_CONFIRMED', 'NEXT_QUESTION'].includes(voice.phase)}
+                  onClick={() => voice.confirmTranscript(transcript)}>
+                  Xác nhận câu trả lời
+                </button>
+                <button type="button" className="outline" disabled={Boolean(busy)}
+                  onClick={() => void skipCurrentTurn()}>
+                  Bỏ qua nội dung này
+                </button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {busy ? (
+          <p className="conversation-processing" role="status">
+            <span className="conversation-spinner" aria-hidden="true" /> {busy}
+          </p>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function ConversationTimeline({
+  turns,
+  compact = false,
+}: {
+  turns: NonNullable<AiInterviewSession['conversation']>['timeline'];
+  compact?: boolean;
+}) {
+  return (
+    <section className={`conversation-timeline${compact ? ' compact' : ''}`} aria-label="Nội dung hội thoại đã diễn ra">
+      {turns.map((turn) => {
+        const candidateText = turn.finalTranscript || turn.rawTranscript;
+        return (
+          <div className={`conversation-exchange${turn.current ? ' current' : ''}`} key={turn.id}>
+            <article className="conversation-bubble interviewer">
+              <span className="conversation-speaker">Nhà phỏng vấn AI</span>
+              <p>{turn.interviewerText}</p>
+            </article>
+            {candidateText || turn.answerStatus === 'SKIPPED' ? (
+              <article className="conversation-bubble candidate">
+                <span className="conversation-speaker">Bạn</span>
+                <p>{turn.answerStatus === 'SKIPPED' ? 'Đã bỏ qua nội dung này.' : candidateText}</p>
+                {turn.transcriptEdited ? <small>Transcript đã được bạn chỉnh sửa</small> : null}
+              </article>
+            ) : null}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function turnVoiceState(status?: NonNullable<AiInterviewSession['conversation']>['timeline'][number]['answerStatus']) {
+  if (status === 'PROCESSING') return 'PROCESSING_AUDIO' as const;
+  if (status === 'REVIEWING') return 'REVIEWING_TRANSCRIPT' as const;
+  return undefined;
+}
+
+function LegacyAiInterviewRoom({
   config,
   session,
   onSessionChange,
@@ -6523,7 +7038,12 @@ function AiInterviewRoom({
   useEffect(() => {
     setAudioFile(null);
     setAudioDurationSeconds(0);
-    setTranscript(currentQuestion?.answer?.answeredAt ? '' : currentQuestion?.answer?.transcript || '');
+    setTranscript(currentQuestion?.answer?.answeredAt
+      ? ''
+      : currentQuestion?.answer?.finalTranscript
+        || currentQuestion?.answer?.transcript
+        || currentQuestion?.answer?.rawTranscript
+        || '');
     setError('');
     setBusy('');
   }, [currentQuestion?.answer?.answeredAt, currentQuestion?.answer?.transcript, currentQuestion?.id]);
@@ -6596,14 +7116,14 @@ function AiInterviewRoom({
     }
   }
 
-  async function confirmVoiceAnswer(answerText: string) {
-    if (!currentQuestion || !answerText.trim()) return;
+  async function confirmVoiceAnswer(finalTranscript: string, rawTranscript?: string) {
+    if (!currentQuestion || !finalTranscript.trim()) return;
     setError('');
     try {
       onSessionChange(await aiInterviewService.confirmAnswer(
         session.id,
         currentQuestion.id,
-        answerText.trim(),
+        { rawTranscript, finalTranscript: finalTranscript.trim() },
       ));
     } catch (err) {
       const message = readError(err);
@@ -6644,6 +7164,19 @@ function AiInterviewRoom({
     }
   }
 
+  async function retryQuestionGeneration() {
+    setBusy('Đang thử tạo lại câu hỏi thích ứng...');
+    setError('');
+    try {
+      onSessionChange(await aiInterviewService.retryQuestionGeneration(session.id));
+    } catch (err) {
+      setError(readError(err));
+      await refreshSession().catch(() => undefined);
+    } finally {
+      setBusy('');
+    }
+  }
+
   async function retryFeedback(question: AiInterviewQuestion) {
     setBusy('Đang thử lại feedback...');
     setError('');
@@ -6657,29 +7190,21 @@ function AiInterviewRoom({
     }
   }
 
-  async function retrySummary() {
-    setBusy('Đang tạo lại tổng kết...');
-    setError('');
-    try {
-      onSessionChange(await aiInterviewService.retrySummary(session.id));
-    } catch (err) {
-      setError(readError(err));
-    } finally {
-      setBusy('');
-    }
-  }
-
   const createSpeechUrl = useCallback(async (text: string) => {
-    if (config.voiceProvider !== 'shopaikey_tts') return undefined;
-    const ticket = await aiInterviewService.createSpeechTicket(session.id, text);
-    return ticket.streamUrl;
+    if (config.voiceProvider !== 'shopaikey_gemini_stream') return undefined;
+    return aiInterviewService.createSpeechTicket(session.id, text);
   }, [config.voiceProvider, session.id]);
+
+  const createLiveTranscription = useCallback((sampleRate: number) => (
+    aiInterviewService.createLiveTranscription(session.id, sampleRate)
+  ), [session.id]);
 
   const finalizeHandsFreeCapture = useCallback(async (
     segments: Array<{ sequence: number; file: File; durationSeconds: number }>,
     captureId: string,
     captureVersion: number,
     browserTranscript: string,
+    transcription: AnswerCaptureTranscriptionMetadata,
   ) => {
     if (!currentQuestion) throw new Error('Câu hỏi hiện tại không còn hợp lệ.');
     return aiInterviewService.finalizeHandsFreeCapture(
@@ -6689,22 +7214,46 @@ function AiInterviewRoom({
       captureVersion,
       segments,
       browserTranscript,
+      transcription,
     );
   }, [currentQuestion, session.id]);
+
+  const recordQuestionReplay = useCallback(async () => {
+    if (!currentQuestion) throw new Error('Câu hỏi hiện tại không còn hợp lệ.');
+    try {
+      onSessionChange(await aiInterviewService.recordQuestionReplay(session.id, currentQuestion.id));
+    } catch (replayError) {
+      throw new Error(readError(replayError));
+    }
+  }, [currentQuestion, onSessionChange, session.id]);
 
   const voice = useVoiceConversation({
     questionId: currentQuestion?.id,
     questionText: currentQuestion?.content,
-    initialTranscript: currentQuestion?.answer?.transcript || '',
-    silenceMs: config.voiceSilenceMs || 3000,
-    confirmationSilenceMs: config.voiceConfirmationSilenceMs || 3000,
-    unclearConfirmationDelayMs: config.voiceUnclearConfirmationDelayMs || 1200,
+    initialTranscript: currentQuestion?.answer?.finalTranscript
+      || currentQuestion?.answer?.transcript
+      || currentQuestion?.answer?.rawTranscript
+      || '',
+    initialRawTranscript: currentQuestion?.answer?.rawTranscript,
+    initialConversationState: currentQuestion?.answer?.conversationState,
+    confirmationPromptDelayMs: config.voiceConfirmationPromptDelayMs,
+    confirmationAutoFinalizeMs: config.voiceConfirmationAutoFinalizeMs,
+    recognitionRestartDelayMs: config.voiceRecognitionRestartDelayMs,
+    voiceLoadWaitMs: config.voiceLoadWaitMs,
+    nextQuestionDelayMs: config.voiceNextQuestionDelayMs,
     disabled: Boolean(busy),
     onTranscript: setTranscript,
     onFinalizeCapture: finalizeHandsFreeCapture,
     onConfirm: confirmVoiceAnswer,
-    onSpeechUrl: config.voiceProvider === 'shopaikey_tts' ? createSpeechUrl : undefined,
+    onReplayQuestion: recordQuestionReplay,
+    onSpeechUrl: config.voiceProvider === 'shopaikey_gemini_stream' ? createSpeechUrl : undefined,
+    answerTranscriptionProvider: config.answerTranscriptionProvider,
+    onCreateLiveTranscription: config.answerTranscriptionProvider === 'gladia_live'
+      ? createLiveTranscription
+      : undefined,
   });
+
+  const manualFallback = voice.manualFallback;
 
   useEffect(() => () => {
     window.clearTimeout(timerRef.current);
@@ -6722,15 +7271,36 @@ function AiInterviewRoom({
           <strong className="score-display">
             {Math.round(Number(session.summary?.overallScore || session.overallScore || 0))}%
           </strong>
-          <p style={{ color: 'var(--on-muted)' }}>{session.summary?.summary}</p>
-          {session.summary?.fallback ? (
-            <div className="notice-panel" role="status" style={{ margin: '12px 0' }}>
-              <p style={{ margin: 0 }}>Đây là tổng kết dự phòng vì dịch vụ AI tạm thời chưa phản hồi.</p>
-              <button type="button" disabled={Boolean(busy)} onClick={retrySummary} style={{ marginTop: 8 }}>
-                Thử tạo lại tổng kết AI
-              </button>
-            </div>
+          <p><strong>Điểm luyện tập tham khảo</strong></p>
+          {session.summary ? (
+            <>
+              <div className="chip-row result-score-breakdown">
+                <span className="chip">Nội dung: {Math.round(Number(session.summary.contentScore || 0))}%</span>
+                {session.summary.voiceDeliveryScore != null ? (
+                  <span className="chip">Giọng nói: {Math.round(Number(session.summary.voiceDeliveryScore))}%</span>
+                ) : (
+                  <span className="chip warning">Chưa đủ dữ liệu giọng nói</span>
+                )}
+                <span className="chip">Trọng số giọng nói áp dụng: {Math.round(Number(session.summary.voiceWeight || 0) * 100)}%</span>
+                {session.summary.replayCount > 0 ? (
+                  <span className="chip neutral">
+                    Đọc lại {session.summary.replayCount} lần · trừ {Number(session.summary.replayPenalty || 0).toFixed(0)} điểm giao tiếp
+                  </span>
+                ) : null}
+              </div>
+              {session.summary.voiceEvidenceQuestionCount === 0 ? (
+                <p className="notice-panel" role="status">
+                  Không đủ dữ liệu để chấm tốc độ nói và khoảng nghỉ. Điểm tổng hiện chỉ dựa trên nội dung câu trả lời.
+                </p>
+              ) : session.summary.manualFallbackQuestionCount > 0 ? (
+                <p className="muted">
+                  Điểm giọng nói được tính từ {session.summary.voiceEvidenceQuestionCount} câu có audio;
+                  {' '}{session.summary.manualFallbackQuestionCount} câu nhập thủ công chỉ được chấm nội dung.
+                </p>
+              ) : null}
+            </>
           ) : null}
+          <p style={{ color: 'var(--on-muted)' }}>{session.summary?.summary}</p>
           <FeedbackList title="Điểm mạnh" items={session.summary?.strengths || []} />
           <FeedbackList title="Điểm cần cải thiện" items={session.summary?.weaknesses || []} />
           <FeedbackList title="Kế hoạch cải thiện" items={session.summary?.improvementPlan || []} />
@@ -6774,26 +7344,62 @@ function AiInterviewRoom({
                 <div>
                   <h3 id="voice-conversation-title">Phỏng vấn rảnh tay</h3>
                   <p className="muted">
-                    Sau {Math.round((config.voiceSilenceMs || 3000) / 1000)} giây im lặng, AI sẽ hỏi bạn đã trả lời xong chưa.
-                    Hãy nói “đã xong” hoặc “chưa xong”.
+                    Sau khoảng {Math.round(config.voiceConfirmationPromptDelayMs / 1000)} giây im lặng,
+                    {' '}hệ thống sẽ hỏi bạn đã trả lời xong chưa. Nếu bạn không phản hồi thêm trong
+                    {' '}{Math.round(config.voiceConfirmationAutoFinalizeMs / 1000)} giây, câu trả lời sẽ được tự hoàn tất.
                   </p>
                 </div>
                 <div className="voice-controls">
                   <button
                     type="button"
-                    className={voice.active ? 'danger' : ''}
+                    className={voice.active ? 'outline' : ''}
                     aria-pressed={voice.active}
-                    disabled={Boolean(busy) || ['FINALIZING_AUDIO', 'TRANSCRIBING', 'SUBMITTING'].includes(voice.phase)}
+                    disabled={Boolean(busy) || ['PROCESSING_AUDIO', 'ANSWER_CONFIRMED'].includes(voice.phase)}
                     onClick={() => {
-                      if (voice.active) void finishInterview();
+                      if (voice.active) voice.stop();
                       else voice.start();
                     }}
                   >
-                    {voice.active ? 'Kết thúc phỏng vấn' : 'Bắt đầu phỏng vấn'}
+                    {voice.active ? 'Dừng chế độ thoại' : 'Bắt đầu phỏng vấn'}
                   </button>
+                  <button
+                    type="button"
+                    disabled={!voice.active || Boolean(busy)
+                      || !['LISTENING', 'WAITING_FOR_CONTINUATION'].includes(voice.phase)}
+                    onClick={voice.done}
+                  >
+                    Tôi đã trả lời xong
+                  </button>
+                  <button
+                    type="button"
+                    className="outline"
+                    disabled={!voice.active || Boolean(busy)
+                      || ['PROCESSING_AUDIO', 'ANSWER_CONFIRMED', 'AI_SPEAKING'].includes(voice.phase)}
+                    onClick={() => void voice.replayQuestion()}
+                  >
+                    <IconRefresh size={16} /> Đọc lại câu hỏi
+                  </button>
+                  {manualFallback ? (
+                    <button type="button" className="outline"
+                      disabled={Boolean(busy) || voice.phase === 'PROCESSING_AUDIO'} onClick={voice.retryVoice}>
+                      <IconMic size={16} /> Thử microphone lại
+                    </button>
+                  ) : (
+                    <button type="button" className="outline"
+                      disabled={Boolean(busy) || voice.phase === 'PROCESSING_AUDIO'} onClick={voice.useManualFallback}>
+                      Nhập transcript thủ công
+                    </button>
+                  )}
                 </div>
+                <p className="voice-replay-note">
+                  Đã đọc lại {currentQuestion.replayCount || 0} lần. Mỗi lần đọc lại trừ 2 điểm giao tiếp,
+                  tối đa 10 điểm giao tiếp cho cả phiên.
+                </p>
                 <p className="voice-status" role="status" aria-live="polite">
                   Trạng thái: {voicePhaseLabel(voice.phase)}
+                </p>
+                <p className="voice-status" role="status">
+                  Nguồn transcript: {voice.activeTranscriptionSource === 'gladia_live' ? 'Gladia Live' : 'Web Speech'}
                 </p>
                 {voice.transcriptNotice ? (
                   <p className="voice-status" role="status" aria-live="polite">{voice.transcriptNotice}</p>
@@ -6802,18 +7408,46 @@ function AiInterviewRoom({
                   <p className="voice-interim" aria-live="polite">Đang nghe: {voice.interimTranscript}</p>
                 ) : null}
                 <label className="transcript-editor">
-                  Nội dung hệ thống đang nghe
+                  {['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || manualFallback
+                    ? 'Kiểm tra và chỉnh sửa transcript trước khi xác nhận'
+                    : 'Nội dung hệ thống đang nghe'}
                   <textarea
                     value={transcript}
-                    readOnly
-                    placeholder="Câu trả lời sẽ xuất hiện trực tiếp khi bạn nói..."
+                    readOnly={!['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) && !manualFallback}
+                    onChange={['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || manualFallback
+                      ? (event) => setTranscript(event.target.value) : undefined}
+                    placeholder={manualFallback
+                      ? 'Nhập câu trả lời của bạn tại đây...'
+                      : 'Câu trả lời sẽ xuất hiện trực tiếp khi bạn nói...'}
                     aria-describedby="hands-free-transcript-help"
                   />
                 </label>
                 <p id="hands-free-transcript-help" className="muted">
-                  Câu xác nhận “đã xong/chưa xong” được xử lý riêng và không được thêm vào câu trả lời.
+                  {manualFallback
+                    ? 'Câu nhập thủ công vẫn được chấm nội dung nhưng không dùng để tính tốc độ nói và khoảng nghỉ.'
+                    : 'Nội dung đã sửa không bị trừ điểm; chỉ transcript đã xác nhận mới dùng để chấm nội dung.'}
                 </p>
                 {voice.error ? <div className="error-panel" role="alert">{voice.error}</div> : null}
+                {['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || manualFallback ? (
+                  <div className="manual-fallback-actions">
+                    {voice.phase === 'REVIEWING_TRANSCRIPT' && !manualFallback ? (
+                      <button type="button" className="outline" disabled={Boolean(busy)}
+                        onClick={() => voice.continueAnswer(transcript)}>
+                        Tiếp tục trả lời
+                      </button>
+                    ) : null}
+                    <button type="button"
+                      disabled={!transcript.trim() || Boolean(busy)
+                        || ['PROCESSING_AUDIO', 'ANSWER_CONFIRMED', 'NEXT_QUESTION'].includes(voice.phase)}
+                      onClick={() => voice.confirmTranscript(transcript)}>
+                      Xác nhận câu trả lời
+                    </button>
+                    <button type="button" className="outline" disabled={Boolean(busy)}
+                      onClick={() => void skipQuestion()}>
+                      Bỏ qua câu này
+                    </button>
+                  </div>
+                ) : null}
               </section>
             ) : (
               <>
@@ -6862,6 +7496,13 @@ function AiInterviewRoom({
               </>
             )}
           </>
+        ) : session.totalQuestions < config.questionCount ? (
+          <div className="notice-panel">
+            <p>Câu trả lời đã được lưu, nhưng AI chưa tạo được phần câu hỏi thích ứng. Bạn có thể thử lại mà không cần trả lời lại câu trước.</p>
+            <button type="button" disabled={Boolean(busy)} onClick={() => void retryQuestionGeneration()} style={{ marginTop: 8 }}>
+              Thử tạo lại câu hỏi
+            </button>
+          </div>
         ) : (
           <div className="notice-panel">
             <p>Đã hoàn thành phần câu hỏi. Điểm và nhận xét chỉ được tạo sau khi bạn kết thúc phỏng vấn.</p>
@@ -6891,16 +7532,13 @@ function findCurrentQuestion(session: AiInterviewSession) {
 function voicePhaseLabel(phase: VoicePhase) {
   const labels: Record<VoicePhase, string> = {
     IDLE: 'Sẵn sàng',
-    QUESTION_PLAYING: 'AI đang đọc câu hỏi',
-    STARTING_CAPTURE: 'Đang mở microphone',
-    LISTENING: 'Đang nghe...',
-    FINALIZING_AUDIO: 'Đang hoàn tất bản ghi âm',
-    TRANSCRIBING: 'Đang chuẩn hóa câu trả lời...',
-    TRANSCRIPT_READY: 'Đã chuẩn hóa transcript',
-    CONFIRMING: 'Đang chờ bạn nói đã xong hoặc chưa xong',
-    CONTINUING: 'Đang chuẩn bị để bạn nói tiếp',
-    SUBMITTING: 'Đang lưu câu trả lời và chuẩn bị câu tiếp theo',
-    COMPLETED: 'Đã hết câu hỏi, đang chờ kết thúc phỏng vấn',
+    AI_SPEAKING: 'AI đang nói',
+    LISTENING: 'Đang lắng nghe...',
+    WAITING_FOR_CONTINUATION: 'Đang nghe xác nhận hoặc phần trả lời tiếp theo',
+    PROCESSING_AUDIO: 'Đang xử lý audio và tạo transcript draft',
+    REVIEWING_TRANSCRIPT: 'Đang chờ bạn kiểm tra transcript',
+    ANSWER_CONFIRMED: 'Câu trả lời đã được xác nhận',
+    NEXT_QUESTION: 'Đang chuẩn bị câu hỏi tiếp theo',
     ERROR_RECOVERABLE: 'Có lỗi tạm thời, câu trả lời vẫn được giữ',
   };
   return labels[phase];
@@ -6931,7 +7569,12 @@ function QuestionHistory({
                 {question.answer.feedback && (
                   <div className="feedback-box">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="chip match">{Math.round(Number(question.answer.feedback.score))}%</span>
+                      <span className="chip match">{Math.round(Number(question.answer.feedback.questionScore))}%</span>
+                      {question.answer.feedback.evaluationStatus === 'NOT_ANSWERED' ? (
+                        <span className="chip neutral">
+                          Không chấm BARS · {question.answer.feedback.scoreReason === 'SKIPPED' ? 'Đã bỏ qua' : 'Chưa trả lời'}
+                        </span>
+                      ) : null}
                       {question.answer.feedback.fallback ? (
                         <>
                           <span className="fallback-pill">Đánh giá dự phòng</span>

@@ -6,7 +6,10 @@ public record HandsFreeAnswerCaptureResponse(
         int captureVersion,
         String browserTranscript,
         String gladiaTranscript,
-        String finalTranscript,
+        String rawTranscript,
+        String correctedTranscript,
+        String correctionStatus,
+        int correctionCount,
         String transcriptStatus,
         String dataQuality,
         HandsFreeVadMetricsResponse vadMetrics

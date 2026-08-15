@@ -25,4 +25,8 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select session from InterviewSession session where session.id = :id and session.candidate.id = :candidateId and session.deletedAt is null")
     Optional<InterviewSession> findOwnedForUpdate(@Param("id") UUID id, @Param("candidateId") UUID candidateId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select session from InterviewSession session where session.id = :id and session.deletedAt is null")
+    Optional<InterviewSession> findByIdForUpdate(@Param("id") UUID id);
 }
