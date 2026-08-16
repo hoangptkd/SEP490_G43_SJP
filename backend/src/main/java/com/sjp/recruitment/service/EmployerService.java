@@ -67,16 +67,19 @@ public class EmployerService {
 
     private final AuthService authService;
     
-    @Transactional
+    @Transactional(readOnly = true)
     public EmployerDashboardResponse getDashboardStats() {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         UUID employerId = employer.getId();
         
         long totalJobs = jobRepository.countByEmployerIdAndStatusNot(employerId, "archived");
-        long activeJobs = jobRepository.countByEmployerIdAndStatus(employerId, "published");
-        long totalApplications = applicationRepository.countByJobEmployerIdAndJobStatus(employerId, "published");
-        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "applied", "published");
         
+        // Fetch active/published jobs once
+        List<Job> activeJobsQuery = jobRepository.findByEmployerIdAndStatus(employerId, "published");
+        long activeJobs = activeJobsQuery.size();
+        long totalApplications = applicationRepository.countByJobEmployerIdAndJobStatus(employerId, "published");
+        
+        // Application counts grouped by status (1 DB Query instead of 10+)
         List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatus(employerId, "published");
         Map<String, Long> applicationsByStatus = statusCounts.stream()
                 .collect(Collectors.toMap(
@@ -84,11 +87,20 @@ public class EmployerService {
                         row -> (Long) row[1]
                 ));
                 
-        List<ApplicationResponse> recentApplications = applicationRepository
+        long pendingApplications = applicationsByStatus.getOrDefault("applied", 0L);
+        long countNewlyApplied = pendingApplications;
+        long countShortlisted = applicationsByStatus.getOrDefault("shortlisted", 0L);
+        long countInterviewScheduled = applicationsByStatus.getOrDefault("interview_scheduled", 0L);
+        long countReviewed = applicationsByStatus.getOrDefault("reviewed", 0L);
+        long countInterview = countShortlisted + countInterviewScheduled;
+        long countOffer = applicationsByStatus.getOrDefault("accepted", 0L);
+        long countHired = applicationsByStatus.getOrDefault("hired", 0L);
+
+        // Fetch recent applications and map using toResponseBulk
+        List<Application> recentAppsList = applicationRepository
                 .findByEmployerIdAndJobStatus(employerId, "published", PageRequest.of(0, 5, Sort.by("submittedAt").descending()))
-                .getContent().stream()
-                .map(applicationService::toResponse)
-                .collect(Collectors.toList());
+                .getContent();
+        List<ApplicationResponse> recentApplications = applicationService.toResponseBulk(recentAppsList);
                 
         // Time Context Calculations
         LocalDateTime now = LocalDateTime.now();
@@ -266,11 +278,13 @@ public class EmployerService {
                 ));
             }
         }
+        
         // 7. TopCV Action Summary
         long unreadMessagesCount = notificationRepository.countByRecipientUserIdAndReadFalse(employer.getUser().getId());
         
-        long expiringJobsCount = jobRepository.findByEmployerIdAndStatus(employerId, "published").stream()
-                .filter(j -> j.getDeadline() != null && j.getDeadline().isBefore(now.toLocalDate().plusDays(4)) && !j.getDeadline().isBefore(now.toLocalDate()))
+        // Count expiring jobs from already fetched activeJobsQuery
+        long expiringJobsCount = activeJobsQuery.stream()
+                .filter(j -> j.getDeadline() != null && !j.getDeadline().isBefore(now.toLocalDate()) && j.getDeadline().isBefore(now.toLocalDate().plusDays(4)))
                 .count();
 
         long todayInterviewsCount = futureInterviews.stream()
@@ -279,10 +293,6 @@ public class EmployerService {
                               !"NO_SHOW".equals(iv.getStatus()) && 
                               !"CANCELLED".equals(iv.getStatus()))
                 .count();
-        
-        long countNewlyApplied = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "applied", "published");
-        long countShortlisted = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "shortlisted", "published");
-        long countInterviewScheduled = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "interview_scheduled", "published");
 
         long pendingAppsCount = countInterviewScheduled;
 
@@ -294,14 +304,10 @@ public class EmployerService {
         );
 
         // 8. TopCV Pipeline Stats
-        long countReviewed = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "reviewed", "published");
-        long countInterview = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "shortlisted", "published") + countInterviewScheduled;
-        long countOffer = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "accepted", "published");
-        long countHired = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "hired", "published");
-
         long interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published");
         long interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("ACCEPTED"), "published");
         long interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("COMPLETED"), "published");
+        long rescheduleRequestedCount = interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(employerId, "RESCHEDULE_REQUESTED", "published");
 
         long offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("sent", "pending_response", "negotiation_requested"), "published");
         long offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("accepted"), "published");
@@ -318,35 +324,40 @@ public class EmployerService {
                 countInterviewScheduled,
                 interviewPendingResponseCount,
                 interviewAcceptedCount,
-                interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(employerId, "RESCHEDULE_REQUESTED", "published"),
+                rescheduleRequestedCount,
                 interviewCompletedCount,
                 offerPendingResponseCount,
                 offerAcceptedCount,
                 offerRejectedCount
         );
 
-        // 9. TopCV Active Jobs List
-        List<Job> activeJobsQuery = jobRepository.findByEmployerIdAndStatus(employerId, "published");
+        // 9. TopCV Active Jobs List (Batch Count using countByJobIdIn)
         List<EmployerDashboardResponse.ActiveJobSummary> activeJobsList = new ArrayList<>();
-        for (Job j : activeJobsQuery) {
-            long appCount = applicationRepository.countByJobId(j.getId());
-            long daysLeft = j.getDeadline() != null ? java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), j.getDeadline()) : 0;
-            if (daysLeft < 0) daysLeft = 0;
-            
-            activeJobsList.add(new EmployerDashboardResponse.ActiveJobSummary(
-                    j.getId(),
-                    j.getTitle(),
-                    j.getLocation(),
-                    j.getJobType(),
-                    j.getStatus(),
-                    j.getViewsCount() != null ? j.getViewsCount() : 0,
-                    appCount,
-                    daysLeft
-            ));
+        if (!activeJobsQuery.isEmpty()) {
+            List<UUID> jobIds = activeJobsQuery.stream().map(Job::getId).toList();
+            Map<UUID, Long> appCountMap = applicationRepository.countByJobIdIn(jobIds).stream()
+                    .collect(Collectors.toMap(
+                            row -> (UUID) row[0],
+                            row -> (Long) row[1]
+                    ));
+            for (Job j : activeJobsQuery) {
+                long appCount = appCountMap.getOrDefault(j.getId(), 0L);
+                long daysLeft = j.getDeadline() != null ? java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), j.getDeadline()) : 0;
+                if (daysLeft < 0) daysLeft = 0;
+                
+                activeJobsList.add(new EmployerDashboardResponse.ActiveJobSummary(
+                        j.getId(),
+                        j.getTitle(),
+                        j.getLocation(),
+                        j.getJobType(),
+                        j.getStatus(),
+                        j.getViewsCount() != null ? j.getViewsCount() : 0,
+                        appCount,
+                        daysLeft
+                ));
+            }
+            activeJobsList.sort(Comparator.comparing(EmployerDashboardResponse.ActiveJobSummary::daysLeft));
         }
-        
-        // Sort active jobs by days left (expiring soon first)
-        activeJobsList.sort(Comparator.comparing(EmployerDashboardResponse.ActiveJobSummary::daysLeft));
 
         // 10. TopCV Activity Logs
         List<com.sjp.recruitment.model.entity.Notification> notifications = notificationRepository
@@ -409,17 +420,8 @@ public class EmployerService {
 
         return employerRepository.findByUserId(user.getId())
                 .orElseGet(() -> {
-                    // Tạo một công ty tạm thời cho nhà tuyển dụng
-                    String baseName = "Công ty của " + (user.getFullName() != null && !user.getFullName().isEmpty() ? user.getFullName() : user.getEmail());
-                    String name = baseName;
-                    int count = 1;
-                    while (companyRepository.findByName(name).isPresent()) {
-                        name = baseName + " (" + count + ")";
-                        count++;
-                    }
-
                     Company company = new Company();
-                    company.setName(name);
+                    company.setName("");
                     company.setDescription("Chưa có mô tả");
                     company.setStatus("pending");
                     company.setVerificationStatus("unverified");
@@ -1106,7 +1108,7 @@ public class EmployerService {
         return values;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ApplicationResponse getApplicationDetail(String id) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         UUID appId;
@@ -1121,6 +1123,11 @@ public class EmployerService {
                 
         if (app.getJob() == null || app.getJob().getCompany() == null || !app.getJob().getCompany().getId().equals(employer.getCompany().getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền xem hồ sơ này");
+        }
+        
+        // Tự động chuyển trạng thái từ Mới nộp (SUBMITTED/applied) sang Đã xem (UNDER_REVIEW/reviewed) khi Nhà tuyển dụng xem chi tiết
+        if ("applied".equalsIgnoreCase(app.getStatus()) || "SUBMITTED".equalsIgnoreCase(app.getStatus())) {
+            applicationService.seedStatus(app, Application.ApplicationStatus.UNDER_REVIEW, "Nhà tuyển dụng đã xem hồ sơ ứng tuyển");
         }
         
         return applicationService.toResponse(app);

@@ -3,6 +3,7 @@ package com.sjp.recruitment.repository;
 import com.sjp.recruitment.model.entity.InterviewSchedule;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -29,12 +30,14 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     Page<InterviewSchedule> findByEmployerIdAndStatusOrderByScheduledAtDesc(UUID employerId, String status, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "application", "application.job"})
     @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = :status AND i.application.job.status = :jobStatus ORDER BY i.scheduledAt DESC")
     Page<InterviewSchedule> findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(@Param("employerId") UUID employerId, @Param("status") String status, @Param("jobStatus") String jobStatus, Pageable pageable);
 
     @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = 'COMPLETED' AND NOT EXISTS (SELECT o FROM JobOffer o WHERE o.application = i.application) ORDER BY i.scheduledAt DESC")
     Page<InterviewSchedule> findCompletedInterviewsWithoutOffer(@Param("employerId") UUID employerId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "application", "application.job"})
     @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = 'COMPLETED' AND NOT EXISTS (SELECT o FROM JobOffer o WHERE o.application = i.application) AND i.application.job.status = :jobStatus ORDER BY i.scheduledAt DESC")
     Page<InterviewSchedule> findCompletedInterviewsWithoutOfferAndJobStatus(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, Pageable pageable);
 
@@ -44,6 +47,7 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     List<InterviewSchedule> findByEmployerIdAndScheduledAtAfterOrderByScheduledAtAsc(UUID employerId, java.time.LocalDateTime start);
 
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "application", "application.job"})
     @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.scheduledAt > :start AND i.application.job.status = :jobStatus ORDER BY i.scheduledAt ASC")
     List<InterviewSchedule> findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(@Param("employerId") UUID employerId, @Param("start") java.time.LocalDateTime start, @Param("jobStatus") String jobStatus);
 

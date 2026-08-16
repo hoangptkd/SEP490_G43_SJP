@@ -46,7 +46,7 @@ function CompanyProfilePage() {
             inds = [{ categoryId: matchedCat.id, categoryName: matchedCat.name, primary: true }];
           }
         }
-        if (companyData.name && companyData.name.startsWith('Công ty chưa cập nhật - ')) {
+        if (companyData.name && (companyData.name.startsWith('Công ty chưa cập nhật') || companyData.name.startsWith('Công ty của '))) {
           companyData.name = '';
         }
         setCompany({ ...companyData, industries: inds });

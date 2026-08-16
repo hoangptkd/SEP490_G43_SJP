@@ -258,4 +258,9 @@ export const employerService = {
   rejectApplication: async (applicationId: string, note?: string): Promise<void> => {
     await api.post(`/v1/applications/${applicationId}/reject`, null, { params: { note } });
   },
+
+  getAiRankingQuota: async (): Promise<{ used: number; limit: number; remaining: number; isUnlimited: boolean }> => {
+    const response = await api.get<{ used: number; limit: number; remaining: number; isUnlimited: boolean }>('/employer/ai-ranking-quota');
+    return response.data;
+  },
 };

@@ -39,6 +39,7 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     List<Application> findByJobEmployerIdAndStatus(UUID employerId, String status);
     
     Page<Application> findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(UUID employerId, String status, Pageable pageable);
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "job"})
     Page<Application> findByJobEmployerIdAndStatusAndJobStatusOrderBySubmittedAtDesc(UUID employerId, String status, String jobStatus, Pageable pageable);
     
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.submittedAt >= :startDate")
@@ -59,9 +60,11 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId")
     Page<Application> findByEmployerId(UUID employerId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "job"})
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus")
     Page<Application> findByEmployerIdAndJobStatus(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "job", "job.company"})
     @Query(
             value = "SELECT a FROM Application a WHERE a.job.company.id = :companyId " +
                     "AND (:jobId IS NULL OR a.job.id = :jobId) " +
@@ -76,7 +79,7 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
                     "WHEN 'accepted' THEN 5 " +
                     "WHEN 'rejected' THEN 6 " +
                     "WHEN 'withdrawn' THEN 7 " +
-                    "ELSE 8 END ASC, a.submittedAt DESC",
+                    "ELSE 8 END ASC, CASE WHEN a.aiMatchScore IS NULL THEN 1 ELSE 0 END ASC, a.aiMatchScore DESC, a.submittedAt DESC",
             countQuery = "SELECT COUNT(a) FROM Application a WHERE a.job.company.id = :companyId " +
                     "AND (:jobId IS NULL OR a.job.id = :jobId) " +
                     "AND a.status IN (:statuses) " +

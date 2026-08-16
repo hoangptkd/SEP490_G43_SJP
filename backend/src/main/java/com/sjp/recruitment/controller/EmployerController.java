@@ -157,15 +157,18 @@ public class EmployerController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/ai-ranking-quota")
+    public ResponseEntity<Map<String, Object>> getAiRankingQuota() {
+        return ResponseEntity.ok(aiRankingService.getAiRankingQuota(authService.getCurrentUser()));
+    }
+
     @PostMapping("/jobs/{id}/ai-rank-bulk")
     public ResponseEntity<MessageResponse> bulkRankApplications(@PathVariable String id) {
-        if (!featureLimitService.hasActivePaidPlan(authService.getCurrentUser())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "PLAN_UPGRADE_REQUIRED", "Tính năng Phân tích AI hàng loạt yêu cầu gói dịch vụ nâng cao.");
-        }
+        com.sjp.recruitment.model.entity.User currentUser = authService.getCurrentUser();
         java.util.UUID jobId = java.util.UUID.fromString(id);
-        aiRankingService.markApplicationsAsProcessing(jobId);
+        int marked = aiRankingService.markApplicationsAsProcessing(jobId, currentUser);
         aiRankingService.rankApplicationsBulkAsync(jobId);
-        return ResponseEntity.accepted().body(new MessageResponse("Đã bắt đầu phân tích AI hàng loạt. Quá trình này sẽ diễn ra trong nền."));
+        return ResponseEntity.accepted().body(new MessageResponse("Đã bắt đầu Xếp hạng ứng viên bằng AI cho " + marked + " hồ sơ. Quá trình này sẽ diễn ra trong nền."));
     }
 
     @PostMapping("/jobs/{id}/close")
