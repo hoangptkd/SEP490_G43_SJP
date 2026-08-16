@@ -115,7 +115,7 @@ public class AuthService {
             ensureCandidateProfile(savedUser);
         } else if (savedUser.getRoleEnum() == User.UserRole.EMPLOYER) {
             com.sjp.recruitment.model.entity.Company company = new com.sjp.recruitment.model.entity.Company();
-            company.setName("Công ty chưa cập nhật - " + java.util.UUID.randomUUID().toString().substring(0, 8));
+            company.setName("");
             company.setDescription("Chưa có mô tả");
             company.setStatus("pending");
             company.setVerificationStatus("unverified");
@@ -269,7 +269,7 @@ public class AuthService {
             profile.setFullName(token.getFullName());
         } else if (saved.getRoleEnum() == User.UserRole.EMPLOYER) {
             com.sjp.recruitment.model.entity.Company company = new com.sjp.recruitment.model.entity.Company();
-            company.setName("Công ty chưa cập nhật - " + java.util.UUID.randomUUID().toString().substring(0, 8));
+            company.setName("");
             company.setDescription("Chưa có mô tả");
             company.setStatus("pending");
             company.setVerificationStatus("unverified");

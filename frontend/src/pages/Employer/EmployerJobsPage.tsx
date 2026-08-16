@@ -282,7 +282,14 @@ function EmployerJobsPage() {
       setJobs(jobs.map((j) => (j.id === job.id ? updated : j)));
       setMessage(`Đã mở lại tin tuyển dụng "${job.title}" thành công.`);
     } catch (err: any) {
-      await customAlert(err?.response?.data?.message || 'Không thể mở lại tin tuyển dụng này.');
+      const msg = err?.response?.data?.message || 'Không thể mở lại tin tuyển dụng này.';
+      if (err?.response?.data?.errorCode === 'PLAN_LIMIT_REACHED' || err?.response?.status === 402 || msg.includes('nâng cấp gói') || msg.includes('đạt giới hạn')) {
+        if (await customConfirm(`${msg}\n\nBạn có muốn đi đến trang Nâng cấp gói dịch vụ không?`)) {
+          window.location.href = '/employer/subscription/plans';
+        }
+      } else {
+        await customAlert(msg);
+      }
     }
   }
 
@@ -905,18 +912,11 @@ function EmployerJobsPage() {
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-gray-900 m-0">Cấu hình AI chấm điểm (Smart Ranking)</h3>
                     <p className="text-sm text-gray-500 mt-1 m-0">Hệ thống tự động đánh giá độ phù hợp của CV với Yêu cầu tuyển dụng.</p>
-                    {(!subscription || !subscription.planId) && (
-                      <p className="text-sm text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8V7a4 4 0 00-8 0v4h8z"></path></svg>
-                        Tính năng nâng cao. Vui lòng <a href="/employer/subscription/plans" className="underline hover:text-red-700">nâng cấp gói dịch vụ</a> để sử dụng.
-                      </p>
-                    )}
                   </div>
                   
-                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-full border transition-all ${formData.rankingConfig?.enabled ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'} ${(!subscription || !subscription.planId) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-full border transition-all ${formData.rankingConfig?.enabled ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'}`}>
                     <input
                       type="checkbox"
-                      disabled={!subscription || !subscription.planId}
                       checked={formData.rankingConfig?.enabled || false}
                       onChange={(e) => {
                         const isEnabled = e.target.checked;

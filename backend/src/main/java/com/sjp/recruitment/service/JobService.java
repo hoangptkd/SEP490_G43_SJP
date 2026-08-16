@@ -158,7 +158,32 @@ public class JobService {
 
     @Transactional
     public JobResponse findJobResponseById(String id) {
-        return findJobResponseById(id, true);
+        boolean shouldIncrement = true;
+        try {
+            User currentUser = authService.getCurrentUser();
+            if (currentUser != null && isEmployerOwnerOfJob(currentUser.getId(), id)) {
+                shouldIncrement = false;
+            }
+        } catch (Exception ignored) {
+        }
+        return findJobResponseById(id, shouldIncrement);
+    }
+
+    private boolean isEmployerOwnerOfJob(UUID userId, String jobId) {
+        try {
+            Long count = namedParameterJdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM jobs j
+                JOIN employers e ON e.id = j.created_by_employer_id
+                WHERE j.id = CAST(:jobId AS uuid) AND e.user_id = CAST(:userId AS uuid)
+                """,
+                new MapSqlParameterSource()
+                    .addValue("jobId", jobId)
+                    .addValue("userId", userId.toString()),
+                Long.class);
+            return count != null && count > 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -702,11 +727,6 @@ public class JobService {
         job.setWorkMode(request.getWorkMode() != null ? request.getWorkMode() : "onsite");
         job.setExperienceLevel(request.getExperienceLevel() != null ? request.getExperienceLevel() : "fresher");
         
-        if (request.getRankingConfig() != null && request.getRankingConfig().has("enabled") && request.getRankingConfig().get("enabled").asBoolean()) {
-            if (!featureLimitService.hasActivePaidPlan(authService.getCurrentUser())) {
-                throw new ApiException(HttpStatus.FORBIDDEN, "PLAN_UPGRADE_REQUIRED", "Tính năng Smart Ranking yêu cầu gói dịch vụ nâng cao.");
-            }
-        }
         job.setRankingConfig(request.getRankingConfig());
 
         if (request.getDeadline() != null && !request.getDeadline().isBlank()) {
