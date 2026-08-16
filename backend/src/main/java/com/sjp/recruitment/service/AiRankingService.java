@@ -7,6 +7,7 @@ import com.sjp.recruitment.model.entity.AiRankingResult;
 import com.sjp.recruitment.model.entity.Application;
 import com.sjp.recruitment.model.entity.CandidateCv;
 import com.sjp.recruitment.model.entity.Job;
+import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.repository.AiRankingResultRepository;
 import com.sjp.recruitment.repository.ApplicationRepository;
 import com.sjp.recruitment.repository.CandidateCvRepository;
@@ -42,6 +43,7 @@ public class AiRankingService {
     private final CandidateCvRepository candidateCvRepository;
     private final StorageService storageService;
     private final ObjectMapper objectMapper;
+    private final FeatureLimitService featureLimitService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -130,16 +132,52 @@ public class AiRankingService {
         }
     }
 
+    public static final int FREE_LIMIT = 1; // Tạm thời để 1 lượt để test (sau này đổi lại 20)
+
     @Transactional
-    public void markApplicationsAsProcessing(UUID jobId) {
+    public int markApplicationsAsProcessing(UUID jobId, User user) {
         List<Application> apps = applicationRepository.findAllByJobId(jobId);
+        boolean isPaid = featureLimitService.hasActivePaidPlan(user);
+        
+        long remainingQuota = -1;
+        if (!isPaid) {
+            LocalDateTime startOfMonth = java.time.LocalDate.now().withDayOfMonth(1).atStartOfDay();
+            long usedThisMonth = rankingResultRepository.countByEmployerUserIdSince(user.getId(), startOfMonth);
+            remainingQuota = FREE_LIMIT - usedThisMonth;
+            if (remainingQuota <= 0) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "QUOTA_EXCEEDED", "Tài khoản Miễn phí đã sử dụng hết " + FREE_LIMIT + "/" + FREE_LIMIT + " lượt Xếp hạng ứng viên bằng AI trong tháng này. Lượt miễn phí sẽ tự động làm mới vào đầu tháng sau, hoặc bạn có thể nâng cấp gói dịch vụ để xếp hạng không giới hạn ngay bây giờ.");
+            }
+        }
+        
+        int markedCount = 0;
         for (Application app : apps) {
             if (app.getAiMatchScore() == null || Boolean.TRUE.equals(app.getNeedRerank()) || "ERROR".equals(app.getAiMatchAnalysis())) {
+                if (!isPaid && markedCount >= remainingQuota) {
+                    break;
+                }
                 app.setAiMatchScore(null);
                 app.setAiMatchAnalysis("PROCESSING");
                 applicationRepository.save(app);
+                markedCount++;
             }
         }
+        return markedCount;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAiRankingQuota(User user) {
+        boolean isPaid = featureLimitService.hasActivePaidPlan(user);
+        LocalDateTime startOfMonth = java.time.LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        long usedThisMonth = rankingResultRepository.countByEmployerUserIdSince(user.getId(), startOfMonth);
+        long limit = isPaid ? -1 : FREE_LIMIT;
+        long remaining = isPaid ? -1 : Math.max(0, FREE_LIMIT - usedThisMonth);
+        
+        Map<String, Object> quota = new HashMap<>();
+        quota.put("used", usedThisMonth);
+        quota.put("limit", limit);
+        quota.put("remaining", remaining);
+        quota.put("isUnlimited", isPaid);
+        return quota;
     }
 
     @org.springframework.scheduling.annotation.Async

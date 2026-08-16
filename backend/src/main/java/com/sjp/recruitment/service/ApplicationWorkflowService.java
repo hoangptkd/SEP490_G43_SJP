@@ -281,12 +281,12 @@ public class ApplicationWorkflowService {
         offer.setBenefits(request.benefits());
         offer.setWorkingLocation(request.workingLocation());
         offer.setOfferLetterUrl(request.offerLetterUrl());
-        offer.setEmployerNote(request.employerNote());
+        offer.setStatus("sent");
         offer.setSentAt(LocalDateTime.now());
 
         JobOffer saved = jobOfferRepository.save(offer);
 
-        applicationService.seedStatus(application, Application.ApplicationStatus.ACCEPTED, "Đã gửi Job Offer");
+        applicationService.seedStatus(application, Application.ApplicationStatus.ACCEPTED, "Đã gửi Thư mời nhận việc (Job Offer) thành công");
 
         // Send email
         CandidateProfile candidate = application.getCandidate();

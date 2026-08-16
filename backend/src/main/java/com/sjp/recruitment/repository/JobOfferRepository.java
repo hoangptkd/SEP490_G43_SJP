@@ -1,6 +1,7 @@
 package com.sjp.recruitment.repository;
 
 import com.sjp.recruitment.model.entity.JobOffer;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,6 +24,7 @@ public interface JobOfferRepository extends JpaRepository<JobOffer, UUID> {
 
     org.springframework.data.domain.Page<JobOffer> findByApplicationJobEmployerIdAndStatusOrderByCreatedAtDesc(UUID employerId, String status, org.springframework.data.domain.Pageable pageable);
 
+    @EntityGraph(attributePaths = {"application", "application.candidate", "application.candidate.user"})
     @Query("SELECT o FROM JobOffer o WHERE o.application.job.employer.id = :employerId AND o.status = :status AND o.application.job.status = :jobStatus ORDER BY o.createdAt DESC")
     org.springframework.data.domain.Page<JobOffer> findByApplicationJobEmployerIdAndStatusAndJobStatusOrderByCreatedAtDesc(@Param("employerId") UUID employerId, @Param("status") String status, @Param("jobStatus") String jobStatus, org.springframework.data.domain.Pageable pageable);
 

@@ -65,10 +65,10 @@ public class FeatureLimitService {
 
     @Transactional(readOnly = true)
     public void requireJobPost(User user) {
-        int limit = resolveLimit(user, "maxJobs", "max_free_job_posts", 15);
+        int limit = resolveLimit(user, "maxJobs", "max_free_job_posts", 20);
         int used = countEmployerJobs(user.getId());
         enforce(user, used, limit,
-                "Bạn đã sử dụng hết lượt đăng tin (" + used + "/" + limit + ").");
+                "Bạn đã đạt giới hạn tối đa " + limit + " tin tuyển dụng đang mở cùng lúc (" + used + "/" + limit + "). Vui lòng đóng bớt tin khác hoặc nâng cấp gói dịch vụ mới có thể đăng tin mới hoặc mở lại tin cũ.");
     }
 
     @Transactional

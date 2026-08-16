@@ -13,7 +13,7 @@ import { buildExcelXml, downloadExcelFile, sanitizeFileName } from '../../utils/
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   SUBMITTED: { label: 'Mới nộp', color: '#1d4ed8', bg: '#dbeafe' },
-  UNDER_REVIEW: { label: 'Đang xem xét', color: '#4338ca', bg: '#e0e7ff' },
+  UNDER_REVIEW: { label: 'Đã xem', color: '#4338ca', bg: '#e0e7ff' },
   SHORTLISTED: { label: 'Đã rút gọn', color: '#6d28d9', bg: '#ede9fe' },
   INTERVIEW_SCHEDULED: { label: 'Đang chờ xử lý', color: '#b45309', bg: '#fef3c7' },
   ACCEPTED: { label: 'Trúng tuyển', color: '#047857', bg: '#d1fae5' },
@@ -23,6 +23,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 
 const STATUS_FILTER_TABS = [
   { key: 'SUBMITTED', label: 'Mới nộp' },
+  { key: 'UNDER_REVIEW', label: 'Đã xem' },
   { key: 'SHORTLISTED', label: 'Đã rút gọn' },
   { key: 'INTERVIEW_SCHEDULED', label: 'Đang chờ xử lý' },
   { key: 'ACCEPTED', label: 'Trúng tuyển' },
@@ -47,8 +48,167 @@ function sortApplicationsByStatus(items: CandidateApplication[]): CandidateAppli
     const rankA = orderA === -1 ? 99 : orderA;
     const rankB = orderB === -1 ? 99 : orderB;
     if (rankA !== rankB) return rankA - rankB;
+
+    const scoreA = a.aiMatchScore ?? a.matchScore ?? -999;
+    const scoreB = b.aiMatchScore ?? b.matchScore ?? -999;
+    if (scoreA !== scoreB) {
+      return scoreB - scoreA;
+    }
+
     return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
   });
+}
+
+function RecruitmentStageStepper({ app }: { app: CandidateApplication | any }) {
+  const status = app?.status || 'SUBMITTED';
+  const isRejected = status === 'REJECTED';
+  const isWithdrawn = status === 'WITHDRAWN';
+
+  const interviews: any[] = app?.interviews || [];
+  const hasCompletedInterview = interviews.some((iv) => iv.status === 'COMPLETED');
+  const hasActiveInterview = interviews.some((iv) => ['SCHEDULED', 'PENDING_RESPONSE', 'ACCEPTED', 'RESCHEDULE_REQUESTED'].includes(iv.status));
+  const hasOffer = !!app?.jobOffer || status === 'ACCEPTED' || status === 'HIRED';
+
+  let subCaseText = '';
+  let currentStageIndex = 0; // 0: Nộp
+
+  if (hasOffer) {
+    currentStageIndex = 4; // 4: Gửi Offer
+    if (app?.jobOffer) {
+      if (app.jobOffer.status === 'accepted') subCaseText = '🎉 Ứng viên đã chấp nhận Offer';
+      else if (app.jobOffer.status === 'rejected') subCaseText = '⚠️ Ứng viên từ chối Offer (Có thương lượng)';
+      else subCaseText = '✉️ Đã gửi Thư mời nhận việc (Job Offer)';
+    } else {
+      subCaseText = '✅ Đã trúng tuyển / Nhận việc';
+    }
+  } else if (hasCompletedInterview) {
+    currentStageIndex = 3; // 3: Sau phỏng vấn (Đánh giá PV)
+    subCaseText = '🎤 Đã phỏng vấn xong - Đang đánh giá kết quả';
+  } else if (status === 'INTERVIEW_SCHEDULED' || hasActiveInterview) {
+    currentStageIndex = 2; // 2: Lên lịch PV
+    const activeIv = interviews.find((iv) => ['SCHEDULED', 'PENDING_RESPONSE', 'ACCEPTED', 'RESCHEDULE_REQUESTED'].includes(iv.status));
+    if (activeIv) {
+      if (activeIv.status === 'ACCEPTED') subCaseText = '✅ Ứng viên đã xác nhận tham gia PV';
+      else if (activeIv.status === 'RESCHEDULE_REQUESTED') subCaseText = '🔄 Ứng viên gửi yêu cầu đổi lịch PV';
+      else if (activeIv.status === 'PENDING_RESPONSE') subCaseText = '⏳ Đã gửi lịch PV - Chờ ứng viên phản hồi';
+      else subCaseText = '📅 Đã lên lịch phỏng vấn';
+    } else {
+      subCaseText = '📅 Đang trong giai đoạn phỏng vấn';
+    }
+  } else if (status === 'UNDER_REVIEW' || status === 'SHORTLISTED') {
+    currentStageIndex = 1; // 1: Xem
+    subCaseText = '👁️ Nhà tuyển dụng đã xem hồ sơ';
+  } else {
+    currentStageIndex = 0; // 0: Nộp
+    subCaseText = '📥 Hồ sơ mới nộp';
+  }
+
+  if (isRejected || isWithdrawn) {
+    currentStageIndex = -1;
+  }
+
+  const stages = [
+    { key: 0, label: 'Nộp' },
+    { key: 1, label: 'Xem' },
+    { key: 2, label: 'Lên lịch PV' },
+    { key: 3, label: 'Sau phỏng vấn' },
+    { key: 4, label: 'Gửi Offer' },
+  ];
+
+  return (
+    <div style={{
+      width: '100%',
+      padding: '12px 16px 10px 16px',
+      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+      borderRadius: '8px',
+      marginBottom: '8px',
+      border: '1px solid #e2e8f0',
+      boxSizing: 'border-box'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+        {/* Background Connecting Line */}
+        <div style={{
+          position: 'absolute',
+          top: '14px',
+          left: '25px',
+          right: '25px',
+          height: '3px',
+          background: '#cbd5e1',
+          zIndex: 0
+        }} />
+        
+        {/* Active Filled Progress Line (Red Highlight) */}
+        {currentStageIndex >= 0 && (
+          <div style={{
+            position: 'absolute',
+            top: '14px',
+            left: '25px',
+            width: `calc(${currentStageIndex} * ((100% - 50px) / 4))`,
+            height: '3px',
+            background: 'linear-gradient(90deg, #ef4444, #dc2626)',
+            transition: 'width 0.4s ease',
+            zIndex: 1
+          }} />
+        )}
+
+        {stages.map((stage, idx) => {
+          const isPassed = currentStageIndex >= idx;
+          const isCurrent = currentStageIndex === idx;
+
+          let stepBg = '#ffffff';
+          let stepBorder = '#cbd5e1';
+          let stepColor = '#64748b';
+
+          if (isRejected) {
+            stepBg = '#fee2e2';
+            stepBorder = '#f87171';
+            stepColor = '#991b1b';
+          } else if (isPassed) {
+            stepBg = '#ef4444'; // Red active fill
+            stepBorder = '#dc2626';
+            stepColor = '#ffffff';
+          }
+
+          return (
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                background: stepBg,
+                border: `2px solid ${stepBorder}`,
+                color: stepColor,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                boxShadow: isCurrent ? '0 0 0 4px rgba(239, 68, 68, 0.25)' : 'none',
+                transition: 'all 0.3s ease'
+              }}>
+                {isPassed ? (isCurrent ? '●' : '✓') : (idx + 1)}
+              </div>
+              <span style={{
+                fontSize: '0.72rem',
+                fontWeight: isCurrent ? 700 : 500,
+                color: isCurrent ? '#dc2626' : isPassed ? '#1e293b' : '#94a3b8',
+                marginTop: '4px',
+                textAlign: 'center',
+                whiteSpace: 'nowrap'
+              }}>
+                {stage.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Sub-cases / Status detail note */}
+      <div style={{ textAlign: 'center', marginTop: '6px', fontSize: '0.75rem', fontWeight: 600, color: isRejected ? '#dc2626' : '#991b1b', background: isRejected ? '#fee2e2' : '#fff5f5', padding: '3px 10px', borderRadius: '12px', display: 'inline-block', width: '100%', boxSizing: 'border-box', border: isRejected ? '1px solid #fecaca' : '1px solid #ffe4e6' }}>
+        {isRejected ? '❌ Hồ sơ đã bị từ chối' : isWithdrawn ? '↩️ Ứng viên đã rút đơn' : subCaseText}
+      </div>
+    </div>
+  );
 }
 
 function getSelectedStatusLabels(selectedStatuses: string[]): string {
@@ -72,6 +232,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
   const [error, setError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
+  const [aiQuota, setAiQuota] = useState<{ used: number; limit: number; remaining: number; isUnlimited: boolean } | null>(null);
 
   // Filters
   const [selectedJobId, setSelectedJobId] = useState<string>(queryJobId);
@@ -150,20 +311,26 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
   async function loadJobs() {
     try {
       const pageSize = 100;
-      const [firstPage, subData, compData] = await Promise.all([
+      const [firstPage, subData, compData, quotaData] = await Promise.all([
         employerService.getJobs({ page: 1, size: pageSize }),
         billingService.getMySubscription().catch(() => null),
-        employerService.getCompanyProfile().catch(() => null)
+        employerService.getCompanyProfile().catch(() => null),
+        employerService.getAiRankingQuota().catch(() => null)
       ]);
       const allJobs: Job[] = [...(firstPage.items || [])];
-      const totalPages = Math.min(firstPage.totalPages || 1, 50);
-      for (let page = 2; page <= totalPages; page += 1) {
-        const nextPage = await employerService.getJobs({ page, size: pageSize });
-        allJobs.push(...(nextPage.items || []));
+      const totalPages = Math.min(firstPage.totalPages || 1, 10);
+      if (totalPages > 1) {
+        const pagePromises = [];
+        for (let page = 2; page <= totalPages; page += 1) {
+          pagePromises.push(employerService.getJobs({ page, size: pageSize }));
+        }
+        const extraPages = await Promise.all(pagePromises);
+        extraPages.forEach(p => allJobs.push(...(p.items || [])));
       }
       setJobs(allJobs);
       setSubscription(subData);
       setCompany(compData);
+      setAiQuota(quotaData);
     } catch (err) {
       console.error('Failed to load jobs', err);
     }
@@ -242,13 +409,13 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
   const [bulkRanking, setBulkRanking] = useState(false);
   async function handleBulkAiRanking() {
     if (!selectedJobId) return;
-    if (!subscription || !subscription.planId) {
-      if (await customConfirm('Tính năng Phân tích AI hàng loạt yêu cầu gói dịch vụ nâng cao. Bạn có muốn đi đến trang Nâng cấp gói dịch vụ?')) {
+    if (aiQuota && !aiQuota.isUnlimited && aiQuota.remaining <= 0) {
+      if (await customConfirm(`Tài khoản Miễn phí của bạn đã sử dụng hết ${aiQuota.limit}/${aiQuota.limit} lượt Xếp hạng ứng viên bằng AI trong tháng này.\n\nLượt miễn phí sẽ tự động làm mới vào đầu tháng sau, hoặc bạn có thể nâng cấp gói dịch vụ để xếp hạng không giới hạn ngay bây giờ. Bạn có muốn đi đến trang Nâng cấp gói dịch vụ không?`)) {
         window.location.href = '/employer/subscription/plans';
       }
       return;
     }
-    if (await customConfirm('Hệ thống sẽ phân tích AI dưới nền. Bạn có muốn tiếp tục?')) {
+    if (await customConfirm('Hệ thống sẽ Xếp hạng ứng viên bằng AI dưới nền. Bạn có muốn tiếp tục?')) {
       setBulkRanking(true);
       try {
         setApplications(apps => apps.map(app => {
@@ -257,14 +424,33 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
           }
           return app;
         }));
-        await employerService.triggerBulkAiRanking(selectedJobId);
-        showToast('Đã bắt đầu phân tích AI', 'success');
+        const res = await employerService.triggerBulkAiRanking(selectedJobId);
+        showToast(res?.message || 'Đã bắt đầu Xếp hạng ứng viên bằng AI', 'success');
+        employerService.getAiRankingQuota().then(setAiQuota).catch(() => null);
       } catch (err: any) {
-        showToast(err.response?.data?.message || 'Có lỗi khi phân tích AI', 'error');
+        const backendMsg = err.response?.data?.message || err.message || 'Có lỗi khi xếp hạng AI';
+        if (err.response?.data?.errorCode === 'QUOTA_EXCEEDED' || err.response?.status === 403) {
+          if (await customConfirm(backendMsg + '\n\nBạn có muốn đi đến trang Nâng cấp gói dịch vụ để xếp hạng không giới hạn?')) {
+            window.location.href = '/employer/subscription/plans';
+          }
+        } else {
+          showToast(backendMsg, 'error');
+        }
         loadApplications();
       } finally {
         setBulkRanking(false);
       }
+    }
+  }
+
+  async function handleOpenAppDetail(app: CandidateApplication) {
+    setSelectedAppDetail(app);
+    try {
+      const fresh = await employerService.getApplicationDetail(app.id);
+      setSelectedAppDetail(fresh);
+      setApplications((prev) => prev.map((item) => (item.id === app.id ? fresh : item)));
+    } catch (err) {
+      console.error('Failed to update app status to viewed', err);
     }
   }
 
@@ -493,7 +679,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
       if (selectedAppDetail) {
         setSelectedAppDetail(null); // Just close detail modal to avoid stale data
       }
-      showToast('Cập nhật trạng thái thành công!', 'success');
+      showToast(targetStatus === 'ACCEPTED' ? 'Đã gửi Thư mời nhận việc (Job Offer) thành công cho ứng viên!' : 'Cập nhật trạng thái thành công!', 'success');
     } catch (err: any) {
       const message =
         err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi cập nhật trạng thái';
@@ -560,25 +746,32 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
         </div>
 
         {selectedJobId && currentJob?.rankingConfig?.enabled && (
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              onClick={handleBulkAiRanking}
-              disabled={bulkRanking}
-              style={{
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: '#fff',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '6px',
-                fontWeight: 600,
-                fontSize: '0.85rem',
-                cursor: bulkRanking ? 'not-allowed' : 'pointer',
-                opacity: bulkRanking ? 0.7 : 1,
-                boxShadow: '0 2px 4px rgba(99,102,241,0.2)',
-              }}
-            >
-              {bulkRanking ? '⏳ Đang khởi tạo...' : '✨ Phân tích AI tất cả'}
-            </button>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <button
+                onClick={handleBulkAiRanking}
+                disabled={bulkRanking}
+                style={{
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: bulkRanking ? 'not-allowed' : 'pointer',
+                  opacity: bulkRanking ? 0.7 : 1,
+                  boxShadow: '0 2px 4px rgba(99,102,241,0.2)',
+                }}
+              >
+                {bulkRanking ? '⏳ Đang khởi tạo...' : '✨ Xếp hạng ứng viên bằng AI'}
+              </button>
+              {aiQuota && !aiQuota.isUnlimited && (
+                <div style={{ fontSize: '0.75rem', marginTop: '4px', fontWeight: 500, color: '#64748b' }}>
+                  (Còn lại {Math.max(0, aiQuota.remaining)}/{aiQuota.limit} lượt xếp hạng miễn phí tháng này)
+                </div>
+              )}
+            </div>
             <button
               onClick={() => {
                 setSelectedJobId('');
@@ -736,12 +929,12 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                   background: '#fff',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  flexWrap: 'wrap',
-                  gap: '20px',
+                  flexDirection: 'column',
+                  gap: '16px',
                 }}
               >
+                <RecruitmentStageStepper app={app} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
                 {/* Candidate and Job Info */}
                 <div
                   onClick={() => setSelectedAppDetail(app)}
@@ -897,7 +1090,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                 {/* Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '180px', alignSelf: 'center' }}>
                   <button
-                    onClick={() => setSelectedAppDetail(app)}
+                    onClick={() => void handleOpenAppDetail(app)}
                     style={{
                       background: '#f8fafc',
                       color: '#2563eb',
@@ -963,7 +1156,8 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                   </div>
                 </div>
               </div>
-            );
+            </div>
+          );
           })}
           {/* Pagination Controls */}
           {totalPages > 1 && (
@@ -1344,6 +1538,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
 
             {/* Modal Body */}
             <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <RecruitmentStageStepper app={selectedAppDetail} />
               {/* Overview Info Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
