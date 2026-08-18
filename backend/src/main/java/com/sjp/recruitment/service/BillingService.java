@@ -391,6 +391,41 @@ public class BillingService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public List<PaymentStatusResponse> getMyPaymentHistory() {
+        User user = authService.getCurrentUser();
+        return jdbc.query("""
+                        SELECT p.id::text AS id,
+                               p.status,
+                               p.amount,
+                               p.currency,
+                               p.payment_method,
+                               pl.name AS plan_name,
+                               s.status AS subscription_status,
+                               p.paid_at,
+                               p.failure_reason,
+                               p.created_at
+                        FROM payments p
+                        LEFT JOIN subscriptions s ON s.id = p.subscription_id
+                        LEFT JOIN plans pl ON pl.id = s.plan_id
+                        WHERE p.user_id = CAST(:userId AS uuid)
+                        ORDER BY p.created_at DESC
+                        """,
+                new MapSqlParameterSource("userId", user.getId().toString()),
+                (rs, rowNum) -> new PaymentStatusResponse(
+                        rs.getString("id"),
+                        rs.getString("status"),
+                        rs.getBigDecimal("amount"),
+                        rs.getString("currency"),
+                        rs.getString("payment_method"),
+                        rs.getString("plan_name"),
+                        rs.getString("subscription_status"),
+                        rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toLocalDateTime(),
+                        rs.getString("failure_reason"),
+                        rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toLocalDateTime()
+                ));
+    }
+
     @Transactional
     public void handlePayOsWebhook(Map<String, Object> payload) {
         Long orderCode = payOsPaymentGateway.extractOrderCode(payload);

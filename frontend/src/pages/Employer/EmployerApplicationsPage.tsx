@@ -35,7 +35,10 @@ const STATUS_FILTER_KEYS = new Set<string>(STATUS_FILTER_TABS.map((tab) => tab.k
 function parseStatusQuery(raw: string): string[] {
   return raw
     .split(',')
-    .map((part) => part.trim().toUpperCase())
+    .map((part) => {
+      const uppercase = part.trim().toUpperCase();
+      return uppercase === 'APPLIED' ? 'SUBMITTED' : uppercase;
+    })
     .filter((part) => STATUS_FILTER_KEYS.has(part));
 }
 
@@ -1867,7 +1870,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                       return (
                         <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '10px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>Vòng {iv.roundNumber}</span>
+                            <span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>Lịch phỏng vấn</span>
                             <span style={{ fontSize: '0.8rem', background: statusBg, color: statusColor, padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                               {statusText}
                             </span>
@@ -1923,6 +1926,40 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                       const toSt = statusConfig[t.toStatus] || { label: t.toStatus, color: '#475569', bg: '#f1f5f9' };
                       const fromSt = t.fromStatus ? (statusConfig[t.fromStatus] || { label: t.fromStatus }) : null;
                       const isSameStatus = idx > 0 && selectedAppDetail.timeline[idx - 1].toStatus === t.toStatus;
+
+                      let displayNote = t.publicNote;
+                      if (displayNote) {
+                        const rescheduleMatch = displayNote.match(/(?:Nhà tuyển dụng phản hồi đổi lịch:\s*)?Chấp nhận đổi lịch phỏng vấn mới\s*\(Lịch cũ:\s*([^\-]+?)\s*->\s*Lịch mới:\s*([^)]+)\)/i);
+                        if (rescheduleMatch) {
+                          displayNote = `Đã đổi lịch phỏng vấn từ ${rescheduleMatch[1].trim()} thành ${rescheduleMatch[2].trim()}`;
+                        } else if (displayNote.toLowerCase().includes('yêu cầu đổi lịch phỏng vấn')) {
+                          if (!displayNote.includes('Lý do:') && selectedAppDetail.interviews && selectedAppDetail.interviews.length > 0) {
+                            const latestIv = selectedAppDetail.interviews[selectedAppDetail.interviews.length - 1];
+                            if (latestIv && latestIv.candidateRescheduleNote) {
+                              displayNote = `Ứng viên đã yêu cầu đổi lịch phỏng vấn (Lý do: ${latestIv.candidateRescheduleNote})`;
+                            } else {
+                              displayNote = 'Ứng viên đã yêu cầu đổi lịch phỏng vấn';
+                            }
+                          }
+                        } else if (displayNote.toLowerCase().includes('từ chối đổi lịch phỏng vấn')) {
+                          if (!displayNote.includes('Lý do:') && selectedAppDetail.interviews && selectedAppDetail.interviews.length > 0) {
+                            const latestIv = selectedAppDetail.interviews[selectedAppDetail.interviews.length - 1];
+                            if (latestIv && latestIv.employerRescheduleNote) {
+                              displayNote = `Nhà tuyển dụng phản hồi đổi lịch: Từ chối đổi lịch phỏng vấn (Lý do: ${latestIv.employerRescheduleNote})`;
+                            }
+                          }
+                        } else if (
+                          displayNote === 'Đã lên lịch phỏng vấn' &&
+                          selectedAppDetail.interviews && selectedAppDetail.interviews.length > 0
+                        ) {
+                          const latestIv = selectedAppDetail.interviews[selectedAppDetail.interviews.length - 1];
+                          if (latestIv && latestIv.scheduledAt) {
+                            const ivTimeStr = new Date(latestIv.scheduledAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+                            displayNote += ` (Thời gian: ${ivTimeStr})`;
+                          }
+                        }
+                      }
+
                       return (
                         <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', background: '#f8fafc', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                           <div style={{ width: '130px', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', paddingTop: '2px' }}>
@@ -1937,7 +1974,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                             )}
                           </div>
                           <div style={{ flex: 1 }}>
-                            {t.publicNote && <div style={{ fontSize: '0.88rem', color: '#334155', marginBottom: '4px' }}>💬 {t.publicNote}</div>}
+                            {displayNote && <div style={{ fontSize: '0.88rem', color: '#334155', marginBottom: '4px' }}>💬 {displayNote}</div>}
                             <div style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span>🕒 Cập nhật lúc: {new Date(t.createdAt).toLocaleString('vi-VN')}</span>
                               {t.publicNote && t.publicNote.toLowerCase().includes('job offer') && (
@@ -1948,16 +1985,6 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                                   onClick={() => setManageOfferApp(selectedAppDetail)}
                                 >
                                   📄 Xem Offer
-                                </button>
-                              )}
-                              {t.publicNote && t.publicNote.toLowerCase().includes('phỏng vấn') && (
-                                <button
-                                  type="button"
-                                  className="button outline"
-                                  style={{ padding: '2px 8px', fontSize: '0.75rem', borderRadius: '4px', height: 'auto', minHeight: 'auto', borderColor: '#c2410c', color: '#c2410c' }}
-                                  onClick={() => setManageInterviewApp(selectedAppDetail)}
-                                >
-                                  🗓️ Xem Lịch
                                 </button>
                               )}
                             </div>
@@ -2064,8 +2091,8 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h4 style={{ margin: 0, color: '#b45309' }}>Chi tiết Offer</h4>
-                  <span style={{ fontSize: '0.8rem', background: manageOfferApp.jobOffer.status === 'accepted' ? '#d1fae5' : manageOfferApp.jobOffer.status === 'rejected' ? '#fee2e2' : '#fef3c7', color: manageOfferApp.jobOffer.status === 'accepted' ? '#047857' : manageOfferApp.jobOffer.status === 'rejected' ? '#b91c1c' : '#b45309', padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>
-                    {manageOfferApp.jobOffer.status === 'accepted' ? 'Đã đồng ý' : manageOfferApp.jobOffer.status === 'rejected' ? 'Bị từ chối' : 'Chờ phản hồi'}
+                  <span style={{ fontSize: '0.8rem', background: manageOfferApp.jobOffer.status === 'accepted' ? '#dcfce7' : manageOfferApp.jobOffer.status === 'rejected' ? '#fee2e2' : '#fef3c7', color: manageOfferApp.jobOffer.status === 'accepted' ? '#166534' : manageOfferApp.jobOffer.status === 'rejected' ? '#b91c1c' : '#b45309', padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>
+                    {manageOfferApp.jobOffer.status === 'accepted' ? 'Hoàn tất (Đã gửi Offer)' : manageOfferApp.jobOffer.status === 'rejected' ? 'Bị từ chối' : 'Chờ phản hồi'}
                   </span>
                 </div>
 
@@ -2143,7 +2170,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                     return (
                       <div key={idx} style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: '16px', borderRadius: '10px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 600, color: '#9a3412', fontSize: '1rem' }}>Phỏng vấn Vòng {iv.roundNumber}</span>
+                          <span style={{ fontWeight: 600, color: '#9a3412', fontSize: '1rem' }}>Lịch phỏng vấn</span>
                           <span style={{ fontSize: '0.8rem', background: statusBg, color: statusColor, padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>
                             {statusText}
                           </span>

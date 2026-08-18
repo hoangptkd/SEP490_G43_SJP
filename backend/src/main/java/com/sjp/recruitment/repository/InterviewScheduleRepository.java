@@ -51,6 +51,10 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
     @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.scheduledAt > :start AND i.application.job.status = :jobStatus ORDER BY i.scheduledAt ASC")
     List<InterviewSchedule> findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(@Param("employerId") UUID employerId, @Param("start") java.time.LocalDateTime start, @Param("jobStatus") String jobStatus);
 
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "application", "application.job"})
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.scheduledAt >= :start AND i.scheduledAt <= :end AND i.application.job.status = :jobStatus ORDER BY i.scheduledAt ASC")
+    List<InterviewSchedule> findByEmployerIdAndScheduledAtBetweenAndJobStatusOrderByScheduledAtAsc(@Param("employerId") UUID employerId, @Param("start") java.time.LocalDateTime start, @Param("end") java.time.LocalDateTime end, @Param("jobStatus") String jobStatus);
+
     @Query("SELECT COUNT(s) > 0 FROM InterviewSchedule s " +
            "WHERE s.application.id IN :applicationIds " +
            "AND UPPER(s.status) IN ('PENDING_RESPONSE', 'ACCEPTED', 'RESCHEDULE_REQUESTED', 'SCHEDULED', 'RESCHEDULED')")
@@ -66,4 +70,22 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status IN :statuses AND i.application.status = 'interview_scheduled' AND i.application.job.status = :jobStatus")
     long countActiveInterviewsByStatusesAndJobStatus(@Param("employerId") UUID employerId, @Param("statuses") List<String> statuses, @Param("jobStatus") String jobStatus);
+
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "application", "application.job"})
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.scheduledAt >= :from AND i.scheduledAt < :to ORDER BY i.scheduledAt ASC")
+    List<InterviewSchedule> findByEmployerIdAndScheduledAtBetweenOrderByScheduledAt(
+            @Param("employerId") UUID employerId,
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to);
+
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "application", "application.job"})
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId ORDER BY i.scheduledAt ASC")
+    List<InterviewSchedule> findByEmployerIdOrderByScheduledAtAsc(@Param("employerId") UUID employerId);
+
+    @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status = :status AND i.scheduledAt >= :from AND i.scheduledAt < :to")
+    long countByEmployerIdAndStatusAndScheduledAtBetween(
+            @Param("employerId") UUID employerId,
+            @Param("status") String status,
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to);
 }

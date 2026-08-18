@@ -68,45 +68,64 @@ public class EmployerService {
     private final AuthService authService;
     
     @Transactional(readOnly = true)
-    public EmployerDashboardResponse getDashboardStats() {
+    public EmployerDashboardResponse getDashboardStats(java.time.LocalDate startDate, java.time.LocalDate endDate) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         UUID employerId = employer.getId();
+        
+        boolean hasDateFilter = startDate != null && endDate != null;
+        LocalDateTime startDateTime = hasDateFilter ? startDate.atStartOfDay() : null;
+        LocalDateTime endDateTime = hasDateFilter ? endDate.atTime(23, 59, 59, 999999999) : null;
         
         long totalJobs = jobRepository.countByEmployerIdAndStatusNot(employerId, "archived");
         
         // Fetch active/published jobs once
         List<Job> activeJobsQuery = jobRepository.findByEmployerIdAndStatus(employerId, "published");
         long activeJobs = activeJobsQuery.size();
-        long totalApplications = applicationRepository.countByJobEmployerIdAndJobStatus(employerId, "published");
         
-        // Application counts grouped by status (1 DB Query instead of 10+)
-        List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatus(employerId, "published");
+        // Application counts grouped by status
+        List<Object[]> statusCounts;
+        if (hasDateFilter) {
+            statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatusAndDateRange(employerId, "published", startDateTime, endDateTime);
+        } else {
+            statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatus(employerId, "published");
+        }
+        
+        long totalApplications = statusCounts.stream().mapToLong(row -> (Long) row[1]).sum();
         Map<String, Long> applicationsByStatus = statusCounts.stream()
                 .collect(Collectors.toMap(
                         row -> (String) row[0],
-                        row -> (Long) row[1]
+                        row -> (Long) row[1],
+                        Long::sum
                 ));
                 
-        long pendingApplications = applicationsByStatus.getOrDefault("applied", 0L);
+        long pendingApplications = getStatusCount(applicationsByStatus, Application.ApplicationStatus.SUBMITTED);
         long countNewlyApplied = pendingApplications;
-        long countShortlisted = applicationsByStatus.getOrDefault("shortlisted", 0L);
-        long countInterviewScheduled = applicationsByStatus.getOrDefault("interview_scheduled", 0L);
-        long countReviewed = applicationsByStatus.getOrDefault("reviewed", 0L);
+        long countShortlisted = getStatusCount(applicationsByStatus, Application.ApplicationStatus.SHORTLISTED);
+        long countInterviewScheduled = getStatusCount(applicationsByStatus, Application.ApplicationStatus.INTERVIEW_SCHEDULED);
+        long countReviewed = getStatusCount(applicationsByStatus, Application.ApplicationStatus.UNDER_REVIEW);
         long countInterview = countShortlisted + countInterviewScheduled;
-        long countOffer = applicationsByStatus.getOrDefault("accepted", 0L);
-        long countHired = applicationsByStatus.getOrDefault("hired", 0L);
+        long countOffer = getStatusCount(applicationsByStatus, Application.ApplicationStatus.ACCEPTED);
+        long countHired = getStatusCount(applicationsByStatus, Application.ApplicationStatus.HIRED);
 
         // Fetch recent applications and map using toResponseBulk
-        List<Application> recentAppsList = applicationRepository
-                .findByEmployerIdAndJobStatus(employerId, "published", PageRequest.of(0, 5, Sort.by("submittedAt").descending()))
-                .getContent();
+        List<Application> recentAppsList;
+        if (hasDateFilter) {
+            recentAppsList = applicationRepository.findByEmployerIdAndJobStatusAndDateRange(employerId, "published", startDateTime, endDateTime, PageRequest.of(0, 5, Sort.by("submittedAt").descending())).getContent();
+        } else {
+            recentAppsList = applicationRepository.findByEmployerIdAndJobStatus(employerId, "published", PageRequest.of(0, 5, Sort.by("submittedAt").descending())).getContent();
+        }
         List<ApplicationResponse> recentApplications = applicationService.toResponseBulk(recentAppsList);
                 
         // Time Context Calculations
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime fourteenDaysAgo = now.minusDays(14);
         
-        List<Object[]> dateRows = applicationRepository.findApplicationDatesByEmployerSinceAndJobStatus(employerId, fourteenDaysAgo, "published");
+        List<Object[]> dateRows;
+        if (hasDateFilter) {
+            dateRows = applicationRepository.findApplicationDatesByEmployerAndJobStatusAndDateRange(employerId, "published", startDateTime, endDateTime);
+        } else {
+            dateRows = applicationRepository.findApplicationDatesByEmployerSinceAndJobStatus(employerId, fourteenDaysAgo, "published");
+        }
         
         Map<String, Long> trendMap = dateRows.stream()
                 .collect(Collectors.groupingBy(
@@ -115,9 +134,18 @@ public class EmployerService {
                 ));
                 
         List<EmployerDashboardResponse.DailyApplicationTrend> applicationTrend = new ArrayList<>();
-        for (int i = 13; i >= 0; i--) {
-            String dateStr = now.minusDays(i).toLocalDate().format(DateTimeFormatter.ISO_DATE);
-            applicationTrend.add(new EmployerDashboardResponse.DailyApplicationTrend(dateStr, trendMap.getOrDefault(dateStr, 0L)));
+        if (hasDateFilter) {
+            java.time.LocalDate current = startDate;
+            while (!current.isAfter(endDate) && applicationTrend.size() < 60) {
+                String dateStr = current.format(DateTimeFormatter.ISO_DATE);
+                applicationTrend.add(new EmployerDashboardResponse.DailyApplicationTrend(dateStr, trendMap.getOrDefault(dateStr, 0L)));
+                current = current.plusDays(1);
+            }
+        } else {
+            for (int i = 13; i >= 0; i--) {
+                String dateStr = now.minusDays(i).toLocalDate().format(DateTimeFormatter.ISO_DATE);
+                applicationTrend.add(new EmployerDashboardResponse.DailyApplicationTrend(dateStr, trendMap.getOrDefault(dateStr, 0L)));
+            }
         }
         
         LocalDateTime sevenDaysAgo = now.minusDays(7);
@@ -242,8 +270,12 @@ public class EmployerService {
         }
 
         // 6. Today's Interviews & Upcoming Timeline
-        List<com.sjp.recruitment.model.entity.InterviewSchedule> futureInterviews = interviewScheduleRepository
-                .findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1), "published");
+        List<com.sjp.recruitment.model.entity.InterviewSchedule> futureInterviews;
+        if (hasDateFilter) {
+            futureInterviews = interviewScheduleRepository.findByEmployerIdAndScheduledAtBetweenAndJobStatusOrderByScheduledAtAsc(employerId, startDateTime, endDateTime, "published");
+        } else {
+            futureInterviews = interviewScheduleRepository.findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1), "published");
+        }
 
         for (var interview : futureInterviews) {
             if ("COMPLETED".equals(interview.getStatus()) || "NO_SHOW".equals(interview.getStatus()) || "CANCELLED".equals(interview.getStatus())) {
@@ -294,7 +326,7 @@ public class EmployerService {
                               !"CANCELLED".equals(iv.getStatus()))
                 .count();
 
-        long pendingAppsCount = countInterviewScheduled;
+        long pendingAppsCount = pendingApplications;
 
         EmployerDashboardResponse.ActionSummary actionSummary = new EmployerDashboardResponse.ActionSummary(
                 pendingAppsCount,
@@ -410,6 +442,58 @@ public class EmployerService {
     private final com.sjp.recruitment.repository.UserRepository userRepository;
     private final com.sjp.recruitment.repository.JobOfferRepository jobOfferRepository;
     private final TaxCodeLookupService taxCodeLookupService;
+
+    @Transactional(readOnly = true)
+    public List<com.sjp.recruitment.model.dto.response.EmployerInterviewResponse> getInterviews(String range) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        UUID employerId = employer.getId();
+
+        LocalDateTime now = LocalDateTime.now();
+        List<com.sjp.recruitment.model.entity.InterviewSchedule> interviews;
+
+        if ("today".equals(range)) {
+            LocalDateTime startOfDay = now.toLocalDate().atStartOfDay();
+            LocalDateTime endOfDay = startOfDay.plusDays(1);
+            interviews = interviewScheduleRepository.findByEmployerIdAndScheduledAtBetweenOrderByScheduledAt(employerId, startOfDay, endOfDay);
+        } else if ("week".equals(range)) {
+            LocalDateTime startOfWeek = now.toLocalDate().atStartOfDay();
+            LocalDateTime endOfWeek = startOfWeek.plusDays(7);
+            interviews = interviewScheduleRepository.findByEmployerIdAndScheduledAtBetweenOrderByScheduledAt(employerId, startOfWeek, endOfWeek);
+        } else {
+            interviews = interviewScheduleRepository.findByEmployerIdOrderByScheduledAtAsc(employerId);
+        }
+
+        return interviews.stream().map(iv -> {
+            String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null
+                    ? iv.getCandidate().getFullName() : "Ứng viên";
+            String candidatePhone = iv.getCandidate() != null ? iv.getCandidate().getPhone() : null;
+            String candidateEmail = iv.getCandidate() != null && iv.getCandidate().getUser() != null
+                    ? iv.getCandidate().getUser().getEmail() : null;
+            String jobTitle = iv.getApplication() != null && iv.getApplication().getJob() != null
+                    ? iv.getApplication().getJob().getTitle() : "Việc làm";
+            java.util.UUID jobId = iv.getApplication() != null && iv.getApplication().getJob() != null
+                    ? iv.getApplication().getJob().getId() : null;
+
+            return new com.sjp.recruitment.model.dto.response.EmployerInterviewResponse(
+                    iv.getId(),
+                    iv.getApplication() != null ? iv.getApplication().getId() : null,
+                    iv.getRoundNumber(),
+                    iv.getStatus(),
+                    iv.getScheduledAt(),
+                    iv.getLocation(),
+                    iv.getMeetingLink(),
+                    iv.getViewedAt(),
+                    iv.getCandidateRescheduleNote(),
+                    candidateName,
+                    candidatePhone,
+                    candidateEmail,
+                    jobTitle,
+                    jobId,
+                    iv.getCreatedAt(),
+                    iv.getUpdatedAt()
+            );
+        }).collect(Collectors.toList());
+    }
 
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {
@@ -1089,6 +1173,22 @@ public class EmployerService {
         return new PageResponse<>(responses, page, size, appPage.getTotalElements(), appPage.getTotalPages(), appPage.isFirst(), appPage.isLast());
     }
 
+    private long getStatusCount(Map<String, Long> map, Application.ApplicationStatus statusEnum) {
+        if (map == null || statusEnum == null) {
+            return 0L;
+        }
+        long sum = 0;
+        for (Map.Entry<String, Long> entry : map.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                String key = entry.getKey().trim();
+                if (key.equalsIgnoreCase(statusEnum.databaseValue()) || key.equalsIgnoreCase(statusEnum.name())) {
+                    sum += entry.getValue();
+                }
+            }
+        }
+        return sum;
+    }
+
     private List<String> parseApplicationStatusFilters(String status) {
         if (status == null || status.isBlank()) {
             return List.of();
@@ -1100,9 +1200,11 @@ public class EmployerService {
                 continue;
             }
             try {
-                values.add(Application.ApplicationStatus.valueOf(token.toUpperCase(Locale.ROOT)).databaseValue());
+                Application.ApplicationStatus appStatus = Application.ApplicationStatus.valueOf(token.toUpperCase(Locale.ROOT));
+                values.add(appStatus.databaseValue());
+                values.add(appStatus.name());
             } catch (IllegalArgumentException ignored) {
-                // Skip unknown tokens so a bad filter does not collapse to SUBMITTED.
+                values.add(token);
             }
         }
         return values;
