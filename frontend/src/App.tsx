@@ -94,6 +94,7 @@ const EmployerApplicationsPage = lazy(() => import('./pages/Employer/EmployerApp
 const EmployerNotificationsPage = lazy(() => import('./pages/Employer/EmployerNotificationsPage'));
 const EmployerSettingsPage = lazy(() => import('./pages/Employer/EmployerSettingsPage'));
 const EmployerDashboardPage = lazy(() => import('./pages/Employer/EmployerDashboardPage'));
+const EmployerInterviewsPage = lazy(() => import('./pages/Employer/EmployerInterviewsPage'));
 const EmployerLandingPage = lazy(() => import('./pages/Employer/EmployerLandingPage'));
 
 // ─── Framer Motion variants ────────────────────────────────────────────────
@@ -219,7 +220,7 @@ function App() {
         <Route path="verification" element={<CompanyVerificationPage />} />
         <Route path="jobs" element={<EmployerJobsPage />} />
         <Route path="applications" element={<EmployerApplicationsPage />} />
-        <Route path="interviews" element={<EmployerApplicationsPage isInterviewOnly={true} />} />
+        <Route path="interviews" element={<EmployerInterviewsPage />} />
         <Route path="notifications" element={<EmployerNotificationsPage />} />
         <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
         <Route path="subscription" element={<EmployerSubscriptionPage />} />
@@ -1732,7 +1733,11 @@ function LoginPage() {
           )}
         </AnimatePresence>
 
-        <form className="auth-form" onSubmit={submit}>
+        <form className="auth-form" onSubmit={submit} autoComplete="off">
+          {/* Dummy hidden inputs to defeat Chrome/Edge aggressive autofill heuristics */}
+          <input type="text" name="fake_username_login" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+          <input type="password" name="fake_password_login" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+
           {/* Email */}
           <label>
             Email
@@ -1748,9 +1753,8 @@ function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="tên@côngty.com"
                 required
-                autoComplete="email"
+                autoComplete="off"
               />
             </div>
           </label>
@@ -1773,9 +1777,8 @@ function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
                 style={{ paddingRight: 44 }}
               />
               <button
@@ -1926,7 +1929,10 @@ function RegisterPage() {
         <p>{role === 'EMPLOYER' ? 'Tìm kiếm ứng viên tài năng cùng hệ thống của chúng tôi' : 'Tham gia Smart Recruitment Portal'}</p>
       </div>
 
-      <form className="auth-form" onSubmit={submit}>
+      <form className="auth-form" onSubmit={submit} autoComplete="off">
+        {/* Dummy hidden inputs to defeat Chrome/Edge aggressive autofill heuristics */}
+        <input type="text" name="fake_username_reg" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+        <input type="password" name="fake_password_reg" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
         {role === 'EMPLOYER' && (
           <label>
             Họ và tên
@@ -1941,8 +1947,8 @@ function RegisterPage() {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="Nguyễn Văn A"
                 required
+                autoComplete="off"
               />
             </div>
           </label>
@@ -1961,8 +1967,8 @@ function RegisterPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="tên@côngty.com"
               required
+              autoComplete="off"
             />
           </div>
         </label>
@@ -1980,8 +1986,8 @@ function RegisterPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Tối thiểu 8 ký tự"
               required
+              autoComplete="new-password"
             />
           </div>
         </label>
@@ -1999,7 +2005,6 @@ function RegisterPage() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Nhập lại mật khẩu"
               required
               autoComplete="new-password"
             />
@@ -2022,8 +2027,8 @@ function RegisterPage() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="09xx xxx xxx"
                   required
+                  autoComplete="off"
                 />
               </div>
             </label>
@@ -2178,9 +2183,8 @@ function ForgotPasswordPage() {
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="tên@côngty.com"
                 required
-                autoComplete="email"
+                autoComplete="off"
               />
             </div>
           </label>
@@ -2283,7 +2287,6 @@ function ResetPasswordPage() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password123"
               required
               autoComplete="new-password"
             />
@@ -2302,7 +2305,6 @@ function ResetPasswordPage() {
               type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Password123"
               required
               autoComplete="new-password"
             />
@@ -5320,6 +5322,15 @@ function ApplicationDetailPage() {
     if (!id) return;
     const app = await candidateService.getApplication(id);
     setApplication(app);
+
+    // Auto-mark unviewed interviews as viewed
+    if (app.interviews && Array.isArray(app.interviews)) {
+      app.interviews.forEach(interview => {
+        if (!interview.viewedAt) {
+          candidateService.viewInterview(interview.id).catch(console.error);
+        }
+      });
+    }
   }, [id]);
 
   useEffect(() => {
@@ -5586,29 +5597,63 @@ function ApplicationDetailPage() {
       <div className="card">
         <h2 style={{ marginBottom: 0 }}>Lịch sử trạng thái</h2>
         <div className="timeline">
-          {application.timeline.map((item, i) => (
-            <motion.div key={item.id} className="timeline-item"
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.06 }}>
-              
-              {i > 0 && application.timeline[i - 1].toStatus === item.toStatus ? (
-                <span style={{ display: 'inline-block', marginBottom: 8, fontSize: '1.2rem', color: 'var(--text-muted)', opacity: 0.6 }}>↳</span>
-              ) : (
-                <strong className={`chip ${statusColors[item.toStatus] || ''}`} style={{ display: 'inline-flex', marginBottom: 8 }}>
-                  {statusLabels[item.toStatus] || item.toStatus}
-                </strong>
-              )}
-              <span className="timeline-item-date">
-                {formatDateTime(item.createdAt)}
-              </span>
-              {item.publicNote && (
-                <p style={{ margin: '6px 0 0', color: 'var(--on-muted)', fontSize: '0.875rem' }}>
-                  {item.publicNote}
-                </p>
-              )}
-            </motion.div>
-          ))}
+          {application.timeline.map((item, i) => {
+            let displayNote = item.publicNote;
+            if (displayNote) {
+              const rescheduleMatch = displayNote.match(/(?:Nhà tuyển dụng phản hồi đổi lịch:\s*)?Chấp nhận đổi lịch phỏng vấn mới\s*\(Lịch cũ:\s*([^\-]+?)\s*->\s*Lịch mới:\s*([^)]+)\)/i);
+              if (rescheduleMatch) {
+                displayNote = `Đã đổi lịch phỏng vấn từ ${rescheduleMatch[1].trim()} thành ${rescheduleMatch[2].trim()}`;
+              } else if (displayNote.toLowerCase().includes('yêu cầu đổi lịch phỏng vấn')) {
+                if (!displayNote.includes('Lý do:') && application.interviews && application.interviews.length > 0) {
+                  const latestIv = application.interviews[application.interviews.length - 1];
+                  if (latestIv && latestIv.candidateRescheduleNote) {
+                    displayNote = `Ứng viên đã yêu cầu đổi lịch phỏng vấn (Lý do: ${latestIv.candidateRescheduleNote})`;
+                  } else {
+                    displayNote = 'Ứng viên đã yêu cầu đổi lịch phỏng vấn';
+                  }
+                }
+              } else if (displayNote.toLowerCase().includes('từ chối đổi lịch phỏng vấn')) {
+                if (!displayNote.includes('Lý do:') && application.interviews && application.interviews.length > 0) {
+                  const latestIv = application.interviews[application.interviews.length - 1];
+                  if (latestIv && latestIv.employerRescheduleNote) {
+                    displayNote = `Nhà tuyển dụng phản hồi đổi lịch: Từ chối đổi lịch phỏng vấn (Lý do: ${latestIv.employerRescheduleNote})`;
+                  }
+                }
+              } else if (
+                displayNote === 'Đã lên lịch phỏng vấn' &&
+                application.interviews && application.interviews.length > 0
+              ) {
+                const latestIv = application.interviews[application.interviews.length - 1];
+                if (latestIv && latestIv.scheduledAt) {
+                  displayNote += ` (Thời gian: ${formatDateTime(latestIv.scheduledAt)})`;
+                }
+              }
+            }
+
+            return (
+              <motion.div key={item.id} className="timeline-item"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.06 }}>
+                
+                {i > 0 && application.timeline[i - 1].toStatus === item.toStatus ? (
+                  <span style={{ display: 'inline-block', marginBottom: 8, fontSize: '1.2rem', color: 'var(--text-muted)', opacity: 0.6 }}>↳</span>
+                ) : (
+                  <strong className={`chip ${statusColors[item.toStatus] || ''}`} style={{ display: 'inline-flex', marginBottom: 8 }}>
+                    {statusLabels[item.toStatus] || item.toStatus}
+                  </strong>
+                )}
+                <span className="timeline-item-date">
+                  {formatDateTime(item.createdAt)}
+                </span>
+                {displayNote && (
+                  <p style={{ margin: '6px 0 0', color: 'var(--on-muted)', fontSize: '0.875rem' }}>
+                    {displayNote}
+                  </p>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
       </div>
       <AnimatePresence>

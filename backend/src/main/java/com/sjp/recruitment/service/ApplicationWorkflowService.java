@@ -155,6 +155,12 @@ public class ApplicationWorkflowService {
 
         if ("declined".equals(request.response())) {
             applicationService.seedStatus(schedule.getApplication(), Application.ApplicationStatus.REJECTED, "Ứng viên đã từ chối tham gia phỏng vấn");
+        } else if ("request_reschedule".equals(request.response())) {
+            String noteStr = "Ứng viên đã yêu cầu đổi lịch phỏng vấn";
+            if (request.rescheduleNote() != null && !request.rescheduleNote().isBlank()) {
+                noteStr += " (Lý do: " + request.rescheduleNote().trim() + ")";
+            }
+            applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), noteStr);
         } else {
             applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Ứng viên đã " + responseText);
         }
@@ -252,12 +258,21 @@ public class ApplicationWorkflowService {
             );
         }
         
-        String actionText = "accept_reschedule".equals(request.response()) ? "Chấp nhận đổi lịch phỏng vấn mới" : "Từ chối đổi lịch phỏng vấn";
-        if ("accept_reschedule".equals(request.response()) && request.scheduledAt() != null) {
-            String newTimeStr = request.scheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
-            actionText += " (Lịch cũ: " + oldTimeStr + " -> Lịch mới: " + newTimeStr + ")";
+        String seedNote;
+        if ("accept_reschedule".equals(request.response())) {
+            if (request.scheduledAt() != null) {
+                String newTimeStr = request.scheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+                seedNote = "Đã đổi lịch phỏng vấn từ " + oldTimeStr + " thành " + newTimeStr;
+            } else {
+                seedNote = "Nhà tuyển dụng đã chấp nhận đổi lịch phỏng vấn";
+            }
+        } else {
+            seedNote = "Nhà tuyển dụng phản hồi đổi lịch: Từ chối đổi lịch phỏng vấn";
+            if (request.note() != null && !request.note().isBlank()) {
+                seedNote += " (Lý do: " + request.note().trim() + ")";
+            }
         }
-        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Nhà tuyển dụng phản hồi đổi lịch: " + actionText);
+        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), seedNote);
 
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
@@ -281,7 +296,7 @@ public class ApplicationWorkflowService {
         offer.setBenefits(request.benefits());
         offer.setWorkingLocation(request.workingLocation());
         offer.setOfferLetterUrl(request.offerLetterUrl());
-        offer.setStatus("sent");
+        offer.setStatus("accepted");
         offer.setSentAt(LocalDateTime.now());
 
         JobOffer saved = jobOfferRepository.save(offer);

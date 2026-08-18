@@ -47,8 +47,16 @@ public class EmployerController {
     private final TaxCodeLookupService taxCodeLookupService;
 
     @GetMapping("/dashboard")
-    public ResponseEntity<EmployerDashboardResponse> getDashboardStats() {
-        return ResponseEntity.ok(employerService.getDashboardStats());
+    public ResponseEntity<EmployerDashboardResponse> getDashboardStats(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate) {
+        return ResponseEntity.ok(employerService.getDashboardStats(startDate, endDate));
+    }
+
+    @GetMapping("/interviews")
+    public ResponseEntity<List<com.sjp.recruitment.model.dto.response.EmployerInterviewResponse>> getInterviews(
+            @RequestParam(defaultValue = "all") String range) {
+        return ResponseEntity.ok(employerService.getInterviews(range));
     }
 
     @GetMapping("/company")

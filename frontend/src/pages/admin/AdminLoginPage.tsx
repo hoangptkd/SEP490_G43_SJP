@@ -50,7 +50,9 @@ export default function AdminLoginPage() {
         <h1>Đăng nhập quản trị</h1>
         <p className="muted">Đăng nhập để truy cập bảng quản trị.</p>
 
-        <form onSubmit={submit} className="form-grid">
+        <form onSubmit={submit} className="form-grid" autoComplete="off">
+          <input type="text" name="fake_admin_username" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+          <input type="password" name="fake_admin_password" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
           <label>
             Email
             <input
@@ -59,6 +61,7 @@ export default function AdminLoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@example.com"
               required
+              autoComplete="off"
             />
           </label>
           <label>
@@ -68,6 +71,7 @@ export default function AdminLoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="new-password"
             />
           </label>
           {error && <p className="error">{error}</p>}
