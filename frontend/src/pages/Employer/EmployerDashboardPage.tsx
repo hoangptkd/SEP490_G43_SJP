@@ -499,7 +499,7 @@ export default function EmployerDashboardPage() {
                     <div className="fs-title">1. Ứng tuyển</div>
                     <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.appliedCount}</div>
                     <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
-                      (Mới nộp: {pipeline.newlyAppliedCount} | Đã xem: {pipeline.reviewedCount})
+                      (Mới nộp: {pipeline.newlyAppliedCount} | Đã xem: {pipeline.reviewedCount} | Đã hoàn thành: {pipeline.offerCount})
                     </div>
                   </div>
                   <div className="funnel-arrow">→</div>
@@ -507,11 +507,8 @@ export default function EmployerDashboardPage() {
                     <div className="fs-icon mono-icon"><IconCalendar size={22} /></div>
                     <div className="fs-title">2. Lịch pv</div>
                     <div className="fs-value" style={{ color: '#0284c7' }}>{pipeline.interviewCount}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span>(Chờ xếp lịch: {pipeline.shortlistedCount} | Đã xếp lịch: {pipeline.interviewScheduledCount})</span>
-                      {pipeline.interviewPendingResponseCount !== undefined && (
-                        <span>(UV chốt lịch: {pipeline.interviewAcceptedCount})</span>
-                      )}
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
+                      (Đã xếp lịch: {pipeline.interviewScheduledCount} | UV chốt lịch: {pipeline.interviewAcceptedCount})
                     </div>
                   </div>
                   <div className="funnel-arrow">→</div>
@@ -519,9 +516,8 @@ export default function EmployerDashboardPage() {
                     <div className="fs-icon mono-icon"><IconUsers size={22} /></div>
                     <div className="fs-title">3. Kết quả pv</div>
                     <div className="fs-value" style={{ color: '#8b5cf6' }}>{pipeline.interviewCompletedCount}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span>(Đã phỏng vấn: {pipeline.interviewCompletedCount})</span>
-                      <span>(Đã hoàn thành vòng PV)</span>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
+                      (Đã phỏng vấn: {pipeline.interviewCompletedCount})
                     </div>
                   </div>
                   <div className="funnel-arrow">→</div>
@@ -529,9 +525,97 @@ export default function EmployerDashboardPage() {
                     <div className="fs-icon mono-icon"><IconHandshake size={22} /></div>
                     <div className="fs-title">4. Offer</div>
                     <div className="fs-value" style={{ color: '#16a34a' }}>{pipeline.offerCount}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', textAlign: 'center', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span>(Đã phát hành Offer: {pipeline.offerCount})</span>
-                      <span>(Tuyển dụng thành công: {pipeline.hiredCount})</span>
+                    <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', textAlign: 'center', fontWeight: 600 }}>
+                      (Đã phát hành Offer: {pipeline.offerCount})
+                    </div>
+                  </div>
+                </div>
+
+                {/* Conversion Funnel Rates Card */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                  borderRadius: '12px',
+                  border: '1px solid #cbd5e1',
+                  padding: '20px',
+                  marginTop: '20px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>📈</span> Tỷ lệ chuyển đổi tuyển dụng (Conversion Funnel Rates)
+                    </h3>
+                    <span style={{ fontSize: '0.8rem', color: '#334155', fontWeight: 600, background: '#ffffff', padding: '4px 12px', borderRadius: '20px', border: '1px solid #cbd5e1' }}>
+                      Tổng lượt xem tin: <strong>{pipeline.totalViews || 0}</strong> lượt xem
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+                    {/* Stage 1: Views -> Applications */}
+                    <div style={{ background: '#ffffff', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+                        1. Lượt xem → Nộp hồ sơ
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#3b82f6' }}>
+                          {pipeline.totalViews && pipeline.totalViews > 0 ? ((pipeline.appliedCount / pipeline.totalViews) * 100).toFixed(1) : 0}%
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: '#475569' }}>
+                          ({pipeline.totalViews || 0} xem → {pipeline.appliedCount} nộp)
+                        </span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${Math.min(100, pipeline.totalViews ? (pipeline.appliedCount / pipeline.totalViews) * 100 : 0)}%`,
+                          background: '#3b82f6',
+                          borderRadius: '3px'
+                        }} />
+                      </div>
+                    </div>
+
+                    {/* Stage 2: Applications -> Accepted Interview */}
+                    <div style={{ background: '#ffffff', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+                        2. Nộp hồ sơ → Xác nhận PV (2 bên chốt)
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0284c7' }}>
+                          {pipeline.appliedCount > 0 ? ((pipeline.interviewAcceptedCount / pipeline.appliedCount) * 100).toFixed(1) : 0}%
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: '#475569' }}>
+                          ({pipeline.appliedCount} nộp → {pipeline.interviewAcceptedCount} chốt)
+                        </span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${Math.min(100, pipeline.appliedCount ? (pipeline.interviewAcceptedCount / pipeline.appliedCount) * 100 : 0)}%`,
+                          background: '#0284c7',
+                          borderRadius: '3px'
+                        }} />
+                      </div>
+                    </div>
+
+                    {/* Stage 3: Accepted Interview -> Interview Evaluated (Đạt/Trượt) */}
+                    <div style={{ background: '#ffffff', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+                        3. Xác nhận PV → Đã phỏng vấn (Đạt/Trượt)
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#8b5cf6' }}>
+                          {pipeline.interviewAcceptedCount > 0 ? ((pipeline.interviewCompletedCount / pipeline.interviewAcceptedCount) * 100).toFixed(1) : 0}%
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: '#475569' }}>
+                          ({pipeline.interviewAcceptedCount} chốt → {pipeline.interviewCompletedCount} xong PV)
+                        </span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${Math.min(100, pipeline.interviewAcceptedCount ? (pipeline.interviewCompletedCount / pipeline.interviewAcceptedCount) * 100 : 0)}%`,
+                          background: '#8b5cf6',
+                          borderRadius: '3px'
+                        }} />
+                      </div>
                     </div>
                   </div>
                 </div>

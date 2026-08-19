@@ -66,7 +66,8 @@ public record EmployerDashboardResponse(
             long interviewCompletedCount,
             long offerPendingResponseCount,
             long offerAcceptedCount,
-            long offerRejectedCount
+            long offerRejectedCount,
+            long totalViews
     ) {}
 
     public record ActiveJobSummary(

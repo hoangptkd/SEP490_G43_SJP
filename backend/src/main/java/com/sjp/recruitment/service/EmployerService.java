@@ -388,6 +388,11 @@ public class EmployerService {
                     employerId, List.of("rejected", "declined"), "published");
         }
 
+        long totalViews = jobRepository.findByEmployerIdAndStatusNot(employerId, "archived")
+                .stream()
+                .mapToLong(j -> j.getViewsCount() != null ? j.getViewsCount() : 0)
+                .sum();
+
         EmployerDashboardResponse.PipelineStats pipelineStats = new EmployerDashboardResponse.PipelineStats(
                 totalApplications,
                 countReviewed,
@@ -403,7 +408,8 @@ public class EmployerService {
                 interviewCompletedCount,
                 offerPendingResponseCount,
                 offerAcceptedCount,
-                offerRejectedCount
+                offerRejectedCount,
+                totalViews
         );
 
         // 9. TopCV Active Jobs List (Batch Count using countByJobIdIn)
