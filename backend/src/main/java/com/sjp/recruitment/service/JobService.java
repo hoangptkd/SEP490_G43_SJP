@@ -32,6 +32,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.sql.Array;
@@ -40,6 +44,7 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -65,6 +70,9 @@ public class JobService {
     private final FeatureLimitService featureLimitService;
     private final AuthService authService;
     private final CandidateRealtimeEventPublisher realtimeEventPublisher;
+
+    private final Map<String, Long> recentJobViews = new ConcurrentHashMap<>();
+    private static final long VIEW_COOLDOWN_MS = 2 * 60 * 60 * 1000L; // 2 hours view deduplication cooldown
 
     @Transactional(readOnly = true)
     public JobPageResponse search(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
@@ -161,8 +169,38 @@ public class JobService {
         boolean shouldIncrement = true;
         try {
             User currentUser = authService.getCurrentUser();
-            if (currentUser != null && isEmployerOwnerOfJob(currentUser.getId(), id)) {
-                shouldIncrement = false;
+            String viewerKey = null;
+
+            if (currentUser != null) {
+                User.UserRole role = currentUser.getRoleEnum();
+                if (role == User.UserRole.EMPLOYER || role == User.UserRole.ADMIN || isEmployerOwnerOfJob(currentUser.getId(), id)) {
+                    shouldIncrement = false;
+                } else {
+                    viewerKey = "user:" + currentUser.getId() + ":job:" + id;
+                }
+            } else {
+                ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attrs != null) {
+                    HttpServletRequest req = attrs.getRequest();
+                    String ip = req.getHeader("X-Forwarded-For");
+                    if (ip == null || ip.isBlank()) {
+                        ip = req.getRemoteAddr();
+                    }
+                    viewerKey = "ip:" + ip + ":job:" + id;
+                }
+            }
+
+            if (shouldIncrement && viewerKey != null) {
+                long now = System.currentTimeMillis();
+                Long lastViewed = recentJobViews.get(viewerKey);
+                if (lastViewed != null && (now - lastViewed < VIEW_COOLDOWN_MS)) {
+                    shouldIncrement = false;
+                } else {
+                    recentJobViews.put(viewerKey, now);
+                    if (recentJobViews.size() > 10000) {
+                        recentJobViews.entrySet().removeIf(entry -> (now - entry.getValue()) > VIEW_COOLDOWN_MS);
+                    }
+                }
             }
         } catch (Exception ignored) {
         }
