@@ -45,4 +45,9 @@ public class BillingController {
     public ResponseEntity<BankTransferInfo> getBankTransfer(@PathVariable String id) {
         return ResponseEntity.ok(billingService.getBankTransferCheckout(id));
     }
+
+    @GetMapping("/history")
+    public ResponseEntity<List<PaymentStatusResponse>> getMyPaymentHistory() {
+        return ResponseEntity.ok(billingService.getMyPaymentHistory());
+    }
 }

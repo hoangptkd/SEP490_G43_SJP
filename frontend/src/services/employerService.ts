@@ -48,14 +48,45 @@ export interface TaxCodeLookupResult {
   status?: string;
 }
 
+export interface EmployerInterview {
+  id: string;
+  applicationId: string;
+  roundNumber: number;
+  status: string;
+  scheduledAt: string;
+  location: string | null;
+  meetingLink: string | null;
+  viewedAt: string | null;
+  candidateRescheduleNote: string | null;
+  candidateName: string;
+  candidatePhone: string | null;
+  candidateEmail: string | null;
+  jobTitle: string;
+  jobId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
     const response = await api.get<Company>('/employer/company');
     return response.data;
   },
 
-  getDashboardStats: async (): Promise<EmployerDashboardStats> => {
-    const response = await api.get<EmployerDashboardStats>('/employer/dashboard');
+  getDashboardStats: async (startDate?: string, endDate?: string): Promise<EmployerDashboardStats> => {
+    const params: Record<string, string> = {};
+    if (startDate && endDate) {
+      params.startDate = startDate;
+      params.endDate = endDate;
+    }
+    const response = await api.get<EmployerDashboardStats>('/employer/dashboard', { params });
+    return response.data;
+  },
+
+  getInterviews: async (range?: 'today' | 'week' | 'all'): Promise<EmployerInterview[]> => {
+    const response = await api.get<EmployerInterview[]>('/employer/interviews', {
+      params: range ? { range } : undefined,
+    });
     return response.data;
   },
 
