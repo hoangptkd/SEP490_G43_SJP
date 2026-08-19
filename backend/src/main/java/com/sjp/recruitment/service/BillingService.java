@@ -82,6 +82,14 @@ public class BillingService {
         }
 
         PlanRow plan = findActivePlan(request.planId().trim(), resolveTargetRole(user));
+
+        UserSubscriptionResponse activeSub = getMySubscription();
+        if (activeSub != null && "active".equalsIgnoreCase(activeSub.status()) &&
+                ((activeSub.planId() != null && activeSub.planId().equalsIgnoreCase(plan.id())) ||
+                 (activeSub.planName() != null && activeSub.planName().equalsIgnoreCase(plan.name())))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ALREADY_ACTIVE_PLAN", "Bạn đang sử dụng gói dịch vụ này rồi");
+        }
+
         String paymentMethod = StringUtils.hasText(request.paymentMethod())
                 ? request.paymentMethod().trim().toLowerCase(Locale.ROOT)
                 : systemSettingsService.defaultPaymentProvider();
@@ -1040,7 +1048,8 @@ public class BillingService {
                 featureLimitService.featureIntOrNull(featuresJson, "maxApplicationsPerDay"),
                 featureLimitService.featureIntOrNull(featuresJson, "maxAiSessionsPerDay"),
                 featureLimitService.featureIntOrNull(featuresJson, "maxAiJobSearchesPerMonth"),
-                featureLimitService.featureIntOrNull(featuresJson, "listingPriority")
+                featureLimitService.featureIntOrNull(featuresJson, "listingPriority"),
+                featureLimitService.featureIntOrNull(featuresJson, "maxJobPostingDays")
         );
     }
 

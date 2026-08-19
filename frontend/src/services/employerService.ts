@@ -208,6 +208,11 @@ export const employerService = {
     return response.data;
   },
 
+  extendJobDeadline: async (id: string, deadline: string): Promise<Job> => {
+    const response = await api.put<Job>(`/employer/jobs/${id}/extend-deadline`, { deadline });
+    return response.data;
+  },
+
   getApplications: async (params?: { jobId?: string; status?: string | string[]; search?: string; page?: number; size?: number }): Promise<import('../types/candidateDomain').PageResult<CandidateApplication>> => {
     const response = await api.get<import('../types/candidateDomain').PageResult<CandidateApplication>>('/employer/applications', {
       params,

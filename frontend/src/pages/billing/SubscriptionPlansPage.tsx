@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { billingService } from '../../services/billingService';
+import { billingService, type UserSubscription } from '../../services/billingService';
 import type { PlanCatalogItem } from '../../types/billing';
 import '../../styles/admin.css';
 
@@ -37,6 +37,7 @@ function planLimitLines(plan: PlanCatalogItem) {
   const lines: string[] = [];
   if (plan.targetRole === 'employer' || plan.targetRole === 'all') {
     if (plan.maxJobs != null) lines.push(`Tin đăng tối đa: ${plan.maxJobs}`);
+    if (plan.maxJobPostingDays != null) lines.push(`Hạn đăng tin tối đa: ${plan.maxJobPostingDays} ngày`);
   }
   if (plan.targetRole === 'job_seeker' || plan.targetRole === 'all') {
     if (plan.maxCv != null) lines.push(`CV tối đa: ${plan.maxCv}`);
@@ -74,6 +75,7 @@ export default function SubscriptionPlansPage({
 }: Props) {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<PlanCatalogItem[]>([]);
+  const [currentSub, setCurrentSub] = useState<UserSubscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -81,8 +83,12 @@ export default function SubscriptionPlansPage({
     setLoading(true);
     setError('');
     try {
-      const data = await billingService.listPlans();
-      setPlans(data);
+      const [plansData, subData] = await Promise.all([
+        billingService.listPlans(),
+        billingService.getMySubscription().catch(() => null),
+      ]);
+      setPlans(plansData);
+      setCurrentSub(subData);
     } catch (err) {
       setError(readError(err));
       setPlans([]);
@@ -135,13 +141,24 @@ export default function SubscriptionPlansPage({
         <div className="plan-catalog-grid">
           {plans.map((plan) => {
             const benefits = displayBenefits(plan);
+            const isCurrentActive = Boolean(
+              currentSub &&
+              currentSub.status?.toLowerCase() === 'active' &&
+              ((currentSub.planId && currentSub.planId === plan.id) ||
+               (!currentSub.planId && currentSub.planName && currentSub.planName.trim().toLowerCase() === plan.name.trim().toLowerCase()))
+            );
             const featured = plan.id === featuredPlanId && plans.length > 1;
+
             return (
               <article
                 key={plan.id}
-                className={`plan-catalog-card${featured ? ' is-featured' : ''}`}
+                className={`plan-catalog-card${featured ? ' is-featured' : ''}${isCurrentActive ? ' is-current' : ''}`}
               >
-                {featured && <div className="plan-catalog-ribbon">Phổ biến nhất</div>}
+                {isCurrentActive ? (
+                  <div className="plan-catalog-ribbon current">Đang sử dụng</div>
+                ) : featured ? (
+                  <div className="plan-catalog-ribbon">Phổ biến nhất</div>
+                ) : null}
                 <div className="plan-catalog-head">
                   <div className="plan-catalog-meta">
                     <span className={`plan-catalog-role ${plan.targetRole === 'employer' ? 'is-employer' : 'is-candidate'}`}>
@@ -171,9 +188,15 @@ export default function SubscriptionPlansPage({
                   <p className="plan-catalog-desc">{plan.description.trim()}</p>
                 )}
 
-                <button type="button" className="plan-catalog-buy" onClick={() => handleBuy(plan)}>
-                  {featured ? 'Chọn gói này' : 'Mua ngay'}
-                </button>
+                {isCurrentActive ? (
+                  <button type="button" className="plan-catalog-buy is-active-plan" disabled>
+                    ✓ Đang sử dụng
+                  </button>
+                ) : (
+                  <button type="button" className="plan-catalog-buy" onClick={() => handleBuy(plan)}>
+                    {featured ? 'Chọn gói này' : 'Mua ngay'}
+                  </button>
+                )}
               </article>
             );
           })}
