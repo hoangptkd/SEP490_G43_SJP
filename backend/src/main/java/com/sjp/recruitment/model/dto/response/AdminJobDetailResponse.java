@@ -7,6 +7,7 @@ public record AdminJobDetailResponse(
         String employerEmail,
         String employerName,
         String employerPosition,
+        String companyVerificationStatus,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

@@ -76,6 +76,7 @@ export interface AdminJobDetail {
   employerEmail?: string;
   employerName?: string;
   employerPosition?: string;
+  companyVerificationStatus?: string;
   createdAt: string;
   updatedAt: string;
 }
