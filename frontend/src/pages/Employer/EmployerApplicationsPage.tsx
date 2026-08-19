@@ -2299,6 +2299,12 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                               <div style={{ color: '#b45309', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center' }}>
                                 ⏳ Ứng viên chưa xác nhận lịch phỏng vấn...
                               </div>
+                            ) : new Date(iv.scheduledAt).getTime() > Date.now() ? (
+                              <div style={{ background: '#fffbeb', color: '#b45309', padding: '12px 14px', borderRadius: '8px', border: '1px solid #fde68a', fontSize: '0.85rem', textAlign: 'center', lineHeight: 1.5 }}>
+                                ⏳ <strong>Chưa đến giờ phỏng vấn</strong> (Lịch hẹn: <strong>{new Date(iv.scheduledAt).toLocaleString('vi-VN')}</strong>).
+                                <br />
+                                Bạn chỉ có thể đánh giá kết quả phỏng vấn sau khi thời gian hẹn phỏng vấn bắt đầu.
+                              </div>
                             ) : !isInterviewOnly ? (
                               <button
                                 onClick={() => { setEvaluatingInterviewId(iv.id); setManageInterviewApp(null); openUpdateModal(manageInterviewApp, 'EVALUATE_INTERVIEW'); }}

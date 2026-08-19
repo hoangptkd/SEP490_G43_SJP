@@ -10,6 +10,7 @@ type PlanLimits = {
   maxAiSessionsPerDay: number;
   maxAiJobSearchesPerMonth: number;
   listingPriority: number;
+  maxJobPostingDays: number;
 };
 
 type FeatureState = {
@@ -24,24 +25,24 @@ const PLAN_TIERS = [
     listingPriority: 1,
     sortOrder: 1,
     employerHint: 'tin được ưu tiên hiển thị',
-    employerLimits: { maxJobs: 20, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 0, listingPriority: 1 },
-    candidateLimits: { maxJobs: 5, maxCv: 10, maxApplicationsPerDay: 30, maxAiSessionsPerDay: 10, maxAiJobSearchesPerMonth: 10, listingPriority: 0 },
+    employerLimits: { maxJobs: 20, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 0, listingPriority: 1, maxJobPostingDays: 30 },
+    candidateLimits: { maxJobs: 5, maxCv: 10, maxApplicationsPerDay: 30, maxAiSessionsPerDay: 10, maxAiJobSearchesPerMonth: 10, listingPriority: 0, maxJobPostingDays: 30 },
   },
   {
     name: 'Pro',
     listingPriority: 2,
     sortOrder: 2,
     employerHint: 'tin ưu tiên cao hơn Plus',
-    employerLimits: { maxJobs: 50, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 0, listingPriority: 2 },
-    candidateLimits: { maxJobs: 5, maxCv: 20, maxApplicationsPerDay: 50, maxAiSessionsPerDay: 20, maxAiJobSearchesPerMonth: 20, listingPriority: 0 },
+    employerLimits: { maxJobs: 50, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 0, listingPriority: 2, maxJobPostingDays: 60 },
+    candidateLimits: { maxJobs: 5, maxCv: 20, maxApplicationsPerDay: 50, maxAiSessionsPerDay: 20, maxAiJobSearchesPerMonth: 20, listingPriority: 0, maxJobPostingDays: 60 },
   },
   {
     name: 'Premium',
     listingPriority: 3,
     sortOrder: 3,
     employerHint: 'tin ưu tiên cao nhất',
-    employerLimits: { maxJobs: 100, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 0, listingPriority: 3 },
-    candidateLimits: { maxJobs: 5, maxCv: 50, maxApplicationsPerDay: 100, maxAiSessionsPerDay: 50, maxAiJobSearchesPerMonth: 50, listingPriority: 0 },
+    employerLimits: { maxJobs: 100, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 0, listingPriority: 3, maxJobPostingDays: 90 },
+    candidateLimits: { maxJobs: 5, maxCv: 50, maxApplicationsPerDay: 100, maxAiSessionsPerDay: 50, maxAiJobSearchesPerMonth: 50, listingPriority: 0, maxJobPostingDays: 90 },
   },
 ] as const;
 
@@ -128,9 +129,9 @@ function limitsFor(role: string, planName?: string): PlanLimits {
   }
   // Gói tùy chỉnh: mặc định hạn mức vừa phải, ưu tiên tin = 0
   if (normalizedRole === 'job_seeker') {
-    return { maxJobs: 5, maxCv: 10, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 5, listingPriority: 0 };
+    return { maxJobs: 5, maxCv: 10, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 5, listingPriority: 0, maxJobPostingDays: 30 };
   }
-  return { maxJobs: 15, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 0, listingPriority: 0 };
+  return { maxJobs: 15, maxCv: 5, maxApplicationsPerDay: 20, maxAiSessionsPerDay: 5, maxAiJobSearchesPerMonth: 0, listingPriority: 0, maxJobPostingDays: 30 };
 }
 
 function defaultFeaturesForRole(role: string, planName = 'Plus'): FeatureState {
@@ -161,6 +162,7 @@ function parseFeatures(featuresJson: string | undefined, role: string, planName?
       maxAiSessionsPerDay?: unknown;
       maxAiJobSearchesPerMonth?: unknown;
       listingPriority?: unknown;
+      maxJobPostingDays?: unknown;
     };
     const rawBenefits = Array.isArray(parsed.benefits)
       ? parsed.benefits.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
@@ -185,6 +187,7 @@ function parseFeatures(featuresJson: string | undefined, role: string, planName?
           ? Number(parsed.maxAiJobSearchesPerMonth)
           : fallback.limits.maxAiJobSearchesPerMonth,
         listingPriority,
+        maxJobPostingDays: Number(parsed.maxJobPostingDays) || fallback.limits.maxJobPostingDays || 30,
       },
     };
   } catch {
@@ -210,6 +213,7 @@ function buildFeaturesJson(state: FeatureState, role: string, planName: string):
   if (role === 'employer') {
     payload.maxJobs = Number(state.limits.maxJobs) || 0;
     payload.listingPriority = priority;
+    payload.maxJobPostingDays = Number(state.limits.maxJobPostingDays) || 30;
     EMPLOYER_DEFAULT_BENEFITS.forEach((item) => benefitSet.delete(item));
   }
   if (role === 'job_seeker') {
@@ -759,6 +763,18 @@ export default function AdminPlanFormPage() {
                     min={0}
                     value={features.limits.maxJobs}
                     onChange={(e) => updateLimit('maxJobs', Number(e.target.value))}
+                  />
+                </label>
+              )}
+              {showEmployerLimits && (
+                <label className="admin-plan-limit-card">
+                  <span className="admin-plan-limit-title">Hạn đăng tin tối đa (ngày)</span>
+                  <span className="muted">Số ngày tối đa cho phép chọn Hạn nộp hồ sơ tin đăng (Mặc định Free = 30 ngày)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={features.limits.maxJobPostingDays || 30}
+                    onChange={(e) => updateLimit('maxJobPostingDays', Number(e.target.value))}
                   />
                 </label>
               )}

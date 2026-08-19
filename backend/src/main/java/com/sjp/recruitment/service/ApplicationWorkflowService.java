@@ -173,6 +173,14 @@ public class ApplicationWorkflowService {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndEmployerId(scheduleId, employerId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Không tìm thấy lịch phỏng vấn"));
 
+        if (!"ACCEPTED".equalsIgnoreCase(schedule.getStatus()) && !"COMPLETED".equalsIgnoreCase(schedule.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_NOT_ACCEPTED", "Ứng viên chưa xác nhận tham gia phỏng vấn");
+        }
+
+        if (schedule.getScheduledAt() != null && schedule.getScheduledAt().isAfter(LocalDateTime.now())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_NOT_STARTED_YET", "Chưa đến thời gian phỏng vấn. Bạn chỉ có thể đánh giá kết quả sau khi thời gian phỏng vấn bắt đầu.");
+        }
+
         schedule.setStatus("COMPLETED".equalsIgnoreCase(request.result()) ? "COMPLETED" : "NO_SHOW".equalsIgnoreCase(request.result()) ? "NO_SHOW" : request.result());
         schedule.setNote(request.note());
 

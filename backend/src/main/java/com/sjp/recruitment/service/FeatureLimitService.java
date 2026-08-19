@@ -71,6 +71,31 @@ public class FeatureLimitService {
                 "Bạn đã đạt giới hạn tối đa " + limit + " tin tuyển dụng đang mở cùng lúc (" + used + "/" + limit + "). Vui lòng đóng bớt tin khác hoặc nâng cấp gói dịch vụ mới có thể đăng tin mới hoặc mở lại tin cũ.");
     }
 
+    @Transactional(readOnly = true)
+    public int resolveMaxJobPostingDays(User user) {
+        return resolveLimit(user, "maxJobPostingDays", "max_free_job_posting_days", 30);
+    }
+
+    @Transactional(readOnly = true)
+    public void requireValidJobDeadline(User user, java.time.LocalDate deadline) {
+        if (deadline == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DEADLINE_REQUIRED", "Hạn nộp hồ sơ là bắt buộc.");
+        }
+        java.time.LocalDate today = java.time.LocalDate.now(BUSINESS_ZONE);
+        if (deadline.isBefore(today)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DEADLINE_IN_PAST", "Hạn nộp hồ sơ không được ở trong quá khứ.");
+        }
+        int maxDays = resolveMaxJobPostingDays(user);
+        if (maxDays > 0) {
+            java.time.LocalDate maxAllowedDate = today.plusDays(maxDays);
+            if (deadline.isAfter(maxAllowedDate)) {
+                String dateFormatted = maxAllowedDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+                throw new ApiException(HttpStatus.BAD_REQUEST, "DEADLINE_EXCEEDS_PLAN_LIMIT",
+                        "Gói dịch vụ hiện tại chỉ cho phép chọn Hạn nộp hồ sơ tối đa " + maxDays + " ngày từ hôm nay (đến ngày " + dateFormatted + "). Vui lòng chọn ngày hợp lệ hoặc nâng cấp gói dịch vụ.");
+            }
+        }
+    }
+
     @Transactional
     public void consumeJobPost(User user) {
         bumpUsage(user, JOB_POSTS, "maxJobs", "max_free_job_posts", 15, false);

@@ -14,6 +14,7 @@ export interface PlanCatalogItem {
   maxAiSessionsPerDay?: number | null;
   maxAiJobSearchesPerMonth?: number | null;
   listingPriority?: number | null;
+  maxJobPostingDays?: number | null;
 }
 
 export interface FeatureUsage {

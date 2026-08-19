@@ -86,6 +86,7 @@ export default function EmployerDashboardPage() {
   const [dateFilter, setDateFilter] = useState<{ start: string; end: string } | null>(null);
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [activeQuickFilter, setActiveQuickFilter] = useState<number | 'custom'>(-1);
 
   useEffect(() => {
     employerService.getCompanyProfile().then(setCompany).catch(() => null);
@@ -100,6 +101,7 @@ export default function EmployerDashboardPage() {
   }, [dateFilter]);
 
   const handleQuickFilter = (days: number) => {
+    setActiveQuickFilter(days);
     if (days === 0) {
       const today = new Date().toISOString().split('T')[0];
       setDateFilter({ start: today, end: today });
@@ -123,6 +125,7 @@ export default function EmployerDashboardPage() {
 
   const applyCustomFilter = () => {
     if (customStart && customEnd) {
+      setActiveQuickFilter('custom');
       setDateFilter({ start: customStart, end: customEnd });
     }
   };
@@ -424,25 +427,50 @@ export default function EmployerDashboardPage() {
       {activeTab === 'analytics' && (
         <div>
           {/* Date Range Filter Bar */}
-          <div style={{ background: '#fff', padding: '16px 24px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '24px', display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+          <div style={{ background: '#fff', padding: '16px 24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '24px', display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '6px', color: 'var(--text-secondary)' }}>Từ ngày</label>
-                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} style={{ padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', outline: 'none' }} />
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', color: '#334155' }}>Từ ngày</label>
+                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none', background: '#ffffff', color: '#0f172a', fontSize: '0.88rem', fontWeight: 500 }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '6px', color: 'var(--text-secondary)' }}>Đến ngày</label>
-                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={{ padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', outline: 'none' }} />
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', color: '#334155' }}>Đến ngày</label>
+                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none', background: '#ffffff', color: '#0f172a', fontSize: '0.88rem', fontWeight: 500 }} />
               </div>
-              <button onClick={applyCustomFilter} style={{ padding: '8px 16px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500, height: '37.5px' }}>Lọc dữ liệu</button>
+              <button onClick={applyCustomFilter} style={{ padding: '8px 16px', background: activeQuickFilter === 'custom' ? '#00507d' : 'var(--primary, #00507d)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, height: '37.5px', boxShadow: activeQuickFilter === 'custom' ? '0 2px 6px rgba(0, 80, 125, 0.25)' : 'none' }}>Lọc dữ liệu</button>
             </div>
             
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', height: '37.5px' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginRight: '8px', fontWeight: 500 }}>Bộ lọc nhanh:</span>
-              <button onClick={() => handleQuickFilter(0)} style={{ padding: '6px 12px', background: dateFilter?.start === customStart && customStart === new Date().toISOString().split('T')[0] ? '#e2e8f0' : '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500 }}>Hôm nay</button>
-              <button onClick={() => handleQuickFilter(7)} style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>7 ngày</button>
-              <button onClick={() => handleQuickFilter(30)} style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>30 ngày</button>
-              <button onClick={() => handleQuickFilter(-1)} style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tất cả</button>
+              <span style={{ fontSize: '0.88rem', color: '#334155', marginRight: '4px', fontWeight: 600 }}>Bộ lọc nhanh:</span>
+              {[
+                { days: 0, label: 'Hôm nay' },
+                { days: 7, label: '7 ngày' },
+                { days: 30, label: '30 ngày' },
+                { days: -1, label: 'Tất cả' },
+              ].map(({ days, label }) => {
+                const isActive = activeQuickFilter === days;
+                return (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => handleQuickFilter(days)}
+                    style={{
+                      padding: '7px 14px',
+                      background: isActive ? 'var(--primary, #00507d)' : '#ffffff',
+                      color: isActive ? '#ffffff' : '#1e293b',
+                      border: isActive ? '1px solid var(--primary, #00507d)' : '1px solid #cbd5e1',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: isActive ? 600 : 500,
+                      boxShadow: isActive ? '0 2px 6px rgba(0, 80, 125, 0.25)' : '0 1px 2px rgba(0, 0, 0, 0.05)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -476,32 +504,34 @@ export default function EmployerDashboardPage() {
                   </div>
                   <div className="funnel-arrow">→</div>
                   <div className="funnel-step">
-                    <div className="fs-icon mono-icon"><IconUsers size={22} /></div>
-                    <div className="fs-title">2. Phỏng vấn</div>
-                    <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.interviewCount}</div>
+                    <div className="fs-icon mono-icon"><IconCalendar size={22} /></div>
+                    <div className="fs-title">2. Lịch pv</div>
+                    <div className="fs-value" style={{ color: '#0284c7' }}>{pipeline.interviewCount}</div>
                     <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span>(Chờ xếp lịch: {pipeline.shortlistedCount} | Đã xếp lịch: {pipeline.interviewScheduledCount})</span>
                       {pipeline.interviewPendingResponseCount !== undefined && (
-                        <span>(UV chốt: {pipeline.interviewAcceptedCount} | Đã PV: {pipeline.interviewCompletedCount})</span>
+                        <span>(UV chốt lịch: {pipeline.interviewAcceptedCount})</span>
                       )}
                     </div>
                   </div>
                   <div className="funnel-arrow">→</div>
                   <div className="funnel-step">
-                    <div className="fs-icon mono-icon"><IconBriefcase size={22} /></div>
-                    <div className="fs-title">3. Offer</div>
-                    <div className="fs-value" style={{ color: '#3b82f6' }}>{pipeline.offerCount}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
-                      (Đã phát hành Offer)
+                    <div className="fs-icon mono-icon"><IconUsers size={22} /></div>
+                    <div className="fs-title">3. Kết quả pv</div>
+                    <div className="fs-value" style={{ color: '#8b5cf6' }}>{pipeline.interviewCompletedCount}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span>(Đã phỏng vấn: {pipeline.interviewCompletedCount})</span>
+                      <span>(Đã hoàn thành vòng PV)</span>
                     </div>
                   </div>
                   <div className="funnel-arrow">→</div>
                   <div className="funnel-step">
                     <div className="fs-icon mono-icon"><IconHandshake size={22} /></div>
-                    <div className="fs-title">4. Nhận việc</div>
-                    <div className="fs-value" style={{ color: '#16a34a' }}>{pipeline.hiredCount}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', textAlign: 'center', fontWeight: 600 }}>
-                      (Tuyển dụng thành công)
+                    <div className="fs-title">4. Offer</div>
+                    <div className="fs-value" style={{ color: '#16a34a' }}>{pipeline.offerCount}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', textAlign: 'center', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <span>(Đã phát hành Offer: {pipeline.offerCount})</span>
+                      <span>(Tuyển dụng thành công: {pipeline.hiredCount})</span>
                     </div>
                   </div>
                 </div>

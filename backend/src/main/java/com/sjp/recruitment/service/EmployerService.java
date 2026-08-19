@@ -336,14 +336,57 @@ public class EmployerService {
         );
 
         // 8. TopCV Pipeline Stats
-        long interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published");
-        long interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("ACCEPTED"), "published");
-        long interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("COMPLETED"), "published");
-        long rescheduleRequestedCount = interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(employerId, "RESCHEDULE_REQUESTED", "published");
+        long interviewPendingResponseCount;
+        long interviewAcceptedCount;
+        long interviewCompletedCount;
+        long rescheduleRequestedCount;
+        long offerPendingResponseCount;
+        long offerAcceptedCount;
+        long offerRejectedCount;
 
-        long offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("sent", "pending_response", "negotiation_requested"), "published");
-        long offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("accepted"), "published");
-        long offerRejectedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("rejected", "declined"), "published");
+        if (hasDateFilter) {
+            interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published", startDateTime, endDateTime);
+            interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("ACCEPTED"), "published", startDateTime, endDateTime);
+            interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("COMPLETED"), "published", startDateTime, endDateTime);
+            rescheduleRequestedCount = interviewScheduleRepository.countByEmployerIdAndStatusAndScheduledAtBetween(
+                    employerId, "RESCHEDULE_REQUESTED", startDateTime, endDateTime);
+
+            offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("sent", "pending_response", "negotiation_requested"), "published", startDateTime, endDateTime);
+            offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("accepted"), "published", startDateTime, endDateTime);
+            offerRejectedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("rejected", "declined"), "published", startDateTime, endDateTime);
+
+            long scheduledInPeriod = interviewScheduleRepository.countInterviewsByEmployerAndJobStatusAndDateRange(employerId, "published", startDateTime, endDateTime);
+            if (scheduledInPeriod > countInterviewScheduled) {
+                countInterviewScheduled = scheduledInPeriod;
+            }
+            countInterview = Math.max(scheduledInPeriod, countShortlisted + countInterviewScheduled);
+            long offersInPeriod = offerPendingResponseCount + offerAcceptedCount;
+            if (offersInPeriod > countOffer) {
+                countOffer = offersInPeriod;
+            }
+        } else {
+            interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(
+                    employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published");
+            interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(
+                    employerId, List.of("ACCEPTED"), "published");
+            interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(
+                    employerId, List.of("COMPLETED"), "published");
+            rescheduleRequestedCount = interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(
+                    employerId, "RESCHEDULE_REQUESTED", "published");
+
+            offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(
+                    employerId, List.of("sent", "pending_response", "negotiation_requested"), "published");
+            offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(
+                    employerId, List.of("accepted"), "published");
+            offerRejectedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(
+                    employerId, List.of("rejected", "declined"), "published");
+        }
 
         EmployerDashboardResponse.PipelineStats pipelineStats = new EmployerDashboardResponse.PipelineStats(
                 totalApplications,
@@ -1129,6 +1172,12 @@ public class EmployerService {
     public JobResponse reopenJob(String id, String newDeadline) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         return jobService.reopenJobForEmployer(id, employer, newDeadline);
+    }
+
+    @Transactional
+    public JobResponse extendJobDeadline(String id, String newDeadline) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        return jobService.extendJobDeadline(id, employer, newDeadline);
     }
 
     @Transactional(readOnly = true)

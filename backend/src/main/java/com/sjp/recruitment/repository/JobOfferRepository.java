@@ -35,6 +35,14 @@ public interface JobOfferRepository extends JpaRepository<JobOffer, UUID> {
     @Query("SELECT COUNT(o) FROM JobOffer o WHERE o.application.job.employer.id = :employerId AND o.status IN :statuses AND o.application.status = 'accepted'")
     long countActiveOffersByStatuses(@Param("employerId") UUID employerId, @Param("statuses") List<String> statuses);
 
-    @Query("SELECT COUNT(o) FROM JobOffer o WHERE o.application.job.employer.id = :employerId AND o.status IN :statuses AND o.application.status = 'accepted' AND o.application.job.status = :jobStatus")
+    @Query("SELECT COUNT(o) FROM JobOffer o WHERE o.application.job.employer.id = :employerId AND o.status IN :statuses AND o.application.job.status = :jobStatus")
     long countActiveOffersByStatusesAndJobStatus(@Param("employerId") UUID employerId, @Param("statuses") List<String> statuses, @Param("jobStatus") String jobStatus);
+
+    @Query("SELECT COUNT(o) FROM JobOffer o WHERE o.application.job.employer.id = :employerId AND o.status IN :statuses AND o.application.job.status = :jobStatus AND o.createdAt >= :start AND o.createdAt <= :end")
+    long countActiveOffersByStatusesAndJobStatusAndDateRange(
+            @Param("employerId") UUID employerId,
+            @Param("statuses") List<String> statuses,
+            @Param("jobStatus") String jobStatus,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end);
 }

@@ -68,8 +68,23 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
     @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status IN :statuses AND i.application.status = 'interview_scheduled'")
     long countActiveInterviewsByStatuses(@Param("employerId") UUID employerId, @Param("statuses") List<String> statuses);
 
-    @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status IN :statuses AND i.application.status = 'interview_scheduled' AND i.application.job.status = :jobStatus")
+    @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status IN :statuses AND i.application.job.status = :jobStatus")
     long countActiveInterviewsByStatusesAndJobStatus(@Param("employerId") UUID employerId, @Param("statuses") List<String> statuses, @Param("jobStatus") String jobStatus);
+
+    @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.status IN :statuses AND i.application.job.status = :jobStatus AND i.scheduledAt >= :start AND i.scheduledAt <= :end")
+    long countActiveInterviewsByStatusesAndJobStatusAndDateRange(
+            @Param("employerId") UUID employerId,
+            @Param("statuses") List<String> statuses,
+            @Param("jobStatus") String jobStatus,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end);
+
+    @Query("SELECT COUNT(i) FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.application.job.status = :jobStatus AND i.scheduledAt >= :start AND i.scheduledAt <= :end")
+    long countInterviewsByEmployerAndJobStatusAndDateRange(
+            @Param("employerId") UUID employerId,
+            @Param("jobStatus") String jobStatus,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end);
 
     @EntityGraph(attributePaths = {"candidate", "candidate.user", "application", "application.job"})
     @Query("SELECT i FROM InterviewSchedule i WHERE i.employer.id = :employerId AND i.scheduledAt >= :from AND i.scheduledAt < :to ORDER BY i.scheduledAt ASC")

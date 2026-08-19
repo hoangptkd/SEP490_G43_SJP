@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useState, useRef } from 'react';
+import { FormEvent, useEffect, useState, useRef, useMemo } from 'react';
 import { employerService } from '../../services/employerService';
 import type { Company, CompanyLocation, Job } from '../../types/job';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { billingService, UserSubscription } from '../../services/billingService';
+import type { PlanCatalogItem } from '../../types/billing';
 import PlanLimitAlert from '../../components/PlanLimitAlert';
 import { parseApiError } from '../../utils/planLimits';
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
@@ -37,6 +38,10 @@ function EmployerJobsPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [planLimitReached, setPlanLimitReached] = useState(false);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [plans, setPlans] = useState<PlanCatalogItem[]>([]);
+  const [extendingJob, setExtendingJob] = useState<Job | null>(null);
+  const [newDeadlineInput, setNewDeadlineInput] = useState<string>('');
+  const [extendingLoading, setExtendingLoading] = useState<boolean>(false);
 
   const submitTargetRef = useRef<string | undefined>(undefined);
 
@@ -103,11 +108,27 @@ function EmployerJobsPage() {
     }
   }, [searchParams, locations, formOpenedFromParams]);
 
+  const activePlan = useMemo(() => {
+    if (!subscription || subscription.status !== 'active') return null;
+    return plans.find((p) => p.id === subscription.planId || p.name === subscription.planName) || null;
+  }, [subscription, plans]);
+
+  const maxJobPostingDays = useMemo(() => {
+    if (!activePlan || !activePlan.maxJobPostingDays) return 30;
+    return activePlan.maxJobPostingDays > 0 ? activePlan.maxJobPostingDays : 30;
+  }, [activePlan]);
+
+  const maxAllowedDateStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + maxJobPostingDays);
+    return d.toISOString().split('T')[0];
+  }, [maxJobPostingDays]);
+
   async function loadData() {
     setLoading(true);
     setError('');
     try {
-      const [compData, jobsData, locsData, subData, allJobsData] = await Promise.all([
+      const [compData, jobsData, locsData, subData, allJobsData, plansData] = await Promise.all([
         employerService.getCompanyProfile(),
         employerService.getJobs({
           page: currentPage,
@@ -121,7 +142,8 @@ function EmployerJobsPage() {
           page: 1,
           size: 1000,
           search: searchTerm || undefined
-        }).catch(() => ({ items: [] }) as any)
+        }).catch(() => ({ items: [] }) as any),
+        billingService.listPlans().catch(() => []),
       ]);
       setCompany(compData);
       setJobs(jobsData.items || []);
@@ -129,6 +151,7 @@ function EmployerJobsPage() {
       setTotalPages(jobsData.totalPages || 1);
       setLocations(locsData);
       setSubscription(subData);
+      setPlans(plansData);
     } catch (err: any) {
       setError('Không thể tải thông tin tuyển dụng.');
     } finally {
@@ -144,7 +167,7 @@ function EmployerJobsPage() {
     setShowAiConfig(false);
     const defaultLoc = locations.find((l) => l.headquarter) || locations[0];
     const defaultDate = new Date();
-    defaultDate.setDate(defaultDate.getDate() + 30);
+    defaultDate.setDate(defaultDate.getDate() + maxJobPostingDays);
     const deadlineStr = defaultDate.toISOString().split('T')[0];
 
     setFormData({
@@ -345,8 +368,15 @@ function EmployerJobsPage() {
       const selectedDate = new Date(formData.deadline);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const maxDate = new Date(today);
+      maxDate.setDate(maxDate.getDate() + maxJobPostingDays);
+      maxDate.setHours(23, 59, 59, 999);
+
       if (selectedDate < today) {
         errors.deadline = 'Hạn nộp hồ sơ không được ở trong quá khứ.';
+      } else if (selectedDate > maxDate) {
+        const formattedMax = new Date(today.getTime() + maxJobPostingDays * 86400000).toLocaleDateString('vi-VN');
+        errors.deadline = `Gói hiện tại (${subscription?.planName || 'Miễn phí'}) chỉ cho phép chọn Hạn nộp tối đa ${maxJobPostingDays} ngày kể từ hôm nay (đến ngày ${formattedMax}).`;
       }
     } else {
       errors.deadline = 'Hạn nộp hồ sơ là bắt buộc.';
@@ -805,9 +835,13 @@ function EmployerJobsPage() {
                 type="date"
                 required
                 min={new Date().toISOString().split('T')[0]}
+                max={maxAllowedDateStr}
                 value={formData.deadline}
                 onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
               />
+              <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md font-medium mt-1">
+                ℹ️ Gói dịch vụ ({subscription?.planName || 'Miễn phí'}): Được chọn Hạn nộp hồ sơ tối đa <strong>{maxJobPostingDays} ngày</strong> kể từ hôm nay (đến ngày <strong>{new Date(new Date().getTime() + maxJobPostingDays * 86400000).toLocaleDateString('vi-VN')}</strong>).
+              </span>
               {fieldErrors.deadline && <span className="text-red-600 text-sm mt-1">{fieldErrors.deadline}</span>}
             </label>
 
@@ -1338,11 +1372,13 @@ function EmployerJobsPage() {
                   <div style={{ display: 'grid', gap: '12px' }}>
                     {jobs.map((job) => {
                     const st = job.status?.toLowerCase() || 'draft';
-                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : st === 'archived' ? '#f3f4f6' : '#f1f5f9';
-                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : st === 'archived' ? '#374151' : '#64748b';
-                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : st === 'archived' ? '#d1d5db' : '#e2e8f0';
-                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : st === 'archived' ? '#6b7280' : '#64748b';
-                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : st === 'archived' ? 'Đã lưu trữ' : 'Đã đóng';
+                    const isPastDeadline = job.deadline ? new Date(job.deadline).getTime() < new Date().setHours(0, 0, 0, 0) : false;
+                    const isExpired = st === 'expired' || (st === 'published' && isPastDeadline);
+                    const statusBg = isExpired ? '#fff1f2' : st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'draft' ? '#f8fafc' : st === 'archived' ? '#f3f4f6' : '#f1f5f9';
+                    const statusColor = isExpired ? '#9f1239' : st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'draft' ? '#475569' : st === 'archived' ? '#374151' : '#64748b';
+                    const statusBorder = isExpired ? '#fecdd3' : st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'draft' ? '#cbd5e1' : st === 'archived' ? '#d1d5db' : '#e2e8f0';
+                    const statusDot = isExpired ? '#e11d48' : st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'draft' ? '#94a3b8' : st === 'archived' ? '#6b7280' : '#64748b';
+                    const statusLabel = isExpired ? 'Hết hạn (Expired)' : st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'draft' ? 'Bản nháp' : st === 'archived' ? 'Đã lưu trữ' : 'Đã đóng';
 
                     return (
                       <div key={job.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col lg:flex-row justify-between items-start gap-5">
@@ -1389,7 +1425,7 @@ function EmployerJobsPage() {
                                 <span className="hidden sm:inline text-gray-300">•</span>
                                 <span className="flex items-center gap-1.5">
                                   <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                  Hạn nộp: <strong className="text-gray-700 font-medium">{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong>
+                                  Hạn nộp: <strong className={isExpired ? "text-red-600 font-bold" : "text-gray-700 font-medium"}>{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong>
                                 </span>
                               </>
                             )}
@@ -1402,6 +1438,46 @@ function EmployerJobsPage() {
                             {s}
                           </span>
                         ))}
+                      </div>
+                    )}
+
+                    {isExpired && (
+                      <div style={{ marginTop: '16px', background: '#fff1f2', border: '1px solid #fecdd3', borderLeft: '4px solid #e11d48', padding: '14px 16px', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <span style={{ fontWeight: 700, color: '#9f1239', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>⚠️</span> Tin tuyển dụng đã Hết hạn nộp hồ sơ
+                          </span>
+                        </div>
+                        <div style={{ color: '#881337', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '10px' }}>
+                          Tin tuyển dụng này đã hết hạn nộp hồ sơ và tạm ẩn khỏi ứng viên. Bạn có thể <strong>Gia hạn tin</strong> để tiếp tục tuyển dụng, <strong>Nâng cấp gói</strong> để tăng số ngày được đăng hoặc <strong>Tạo tin mới</strong>.
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExtendingJob(job);
+                              const defaultDate = new Date();
+                              defaultDate.setDate(defaultDate.getDate() + maxJobPostingDays);
+                              setNewDeadlineInput(defaultDate.toISOString().split('T')[0]);
+                            }}
+                            style={{ background: '#2563eb', color: '#ffffff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            🔄 Gia hạn tin tuyển dụng
+                          </button>
+                          <Link
+                            to="/employer/subscription/plans"
+                            style={{ background: '#10b981', color: '#ffffff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
+                          >
+                            ⚡ Nâng cấp gói dịch vụ
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={handleOpenAdd}
+                            style={{ background: '#ffffff', color: '#374151', border: '1px solid #d1d5db', padding: '7px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                          >
+                            ➕ Tạo tin mới
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -1639,6 +1715,83 @@ function EmployerJobsPage() {
         </div>
       </div>
     )}
+
+      {extendingJob && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.15rem', fontWeight: 700 }}>🔄 Gia hạn hạn nộp hồ sơ tin tuyển dụng</h3>
+              <button onClick={() => setExtendingJob(null)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: '16px', background: '#f8fafc', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}>
+              <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{extendingJob.title}</div>
+              <div style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                Gói hiện tại: <strong style={{ color: '#2563eb' }}>{subscription?.planName || 'Miễn phí'}</strong> (Hạn đăng tối đa {maxJobPostingDays} ngày)
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontWeight: 600, color: '#334155', fontSize: '0.9rem', marginBottom: '6px' }}>
+                Hạn nộp hồ sơ mới <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <input
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                max={maxAllowedDateStr}
+                value={newDeadlineInput}
+                onChange={(e) => setNewDeadlineInput(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem' }}
+              />
+              <div style={{ fontSize: '0.8rem', color: '#2563eb', marginTop: '6px' }}>
+                ℹ️ Bạn có thể chọn Hạn nộp mới tối đa đến ngày <strong>{new Date(new Date().getTime() + maxJobPostingDays * 86400000).toLocaleDateString('vi-VN')}</strong>.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setExtendingJob(null)}
+                style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={extendingLoading}
+                onClick={async () => {
+                  if (!extendingJob) return;
+                  if (!newDeadlineInput) {
+                    await customAlert('Vui lòng chọn hạn nộp hồ sơ mới.');
+                    return;
+                  }
+                  setExtendingLoading(true);
+                  try {
+                    const updated = await employerService.extendJobDeadline(extendingJob.id, newDeadlineInput);
+                    setJobs(jobs.map((j) => (j.id === extendingJob.id ? updated : j)));
+                    setMessage(`Đã gia hạn thành công tin tuyển dụng "${extendingJob.title}" đến ngày ${new Date(newDeadlineInput).toLocaleDateString('vi-VN')}.`);
+                    setExtendingJob(null);
+                  } catch (err: any) {
+                    const msg = err?.response?.data?.message || 'Không thể gia hạn tin tuyển dụng này.';
+                    if (err?.response?.data?.errorCode === 'PLAN_LIMIT_REACHED' || err?.response?.status === 402 || msg.includes('nâng cấp gói') || msg.includes('giới hạn')) {
+                      if (await customConfirm(`${msg}\n\nBạn có muốn đi đến trang Nâng cấp gói dịch vụ không?`)) {
+                        window.location.href = '/employer/subscription/plans';
+                      }
+                    } else {
+                      await customAlert(msg);
+                    }
+                  } finally {
+                    setExtendingLoading(false);
+                  }
+                }}
+                style={{ background: '#2563eb', color: '#ffffff', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', opacity: extendingLoading ? 0.7 : 1 }}
+              >
+                {extendingLoading ? 'Đang gia hạn...' : 'Xác nhận gia hạn tin'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -192,6 +192,13 @@ public class EmployerController {
         return ResponseEntity.ok(employerService.reopenJob(id, targetDeadline));
     }
 
+    @PutMapping("/jobs/{id}/extend-deadline")
+    public ResponseEntity<JobResponse> extendJobDeadline(@PathVariable String id,
+                                                         @RequestBody Map<String, String> body) {
+        String deadline = body != null ? body.get("deadline") : null;
+        return ResponseEntity.ok(employerService.extendJobDeadline(id, deadline));
+    }
+
     @GetMapping("/applications")
     public ResponseEntity<com.sjp.recruitment.model.dto.response.PageResponse<ApplicationResponse>> getCompanyApplications(
             @RequestParam(required = false) String jobId,

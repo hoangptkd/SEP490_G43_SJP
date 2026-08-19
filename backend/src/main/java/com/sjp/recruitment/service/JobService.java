@@ -333,7 +333,20 @@ public class JobService {
         }
         User currentUser = authService.getCurrentUser();
         featureLimitService.requireJobPost(currentUser);
-        Job saved = buildAndSaveJob(new Job(), employer, company, request);
+        Job job = new Job();
+        if (request.getDeadline() != null && !request.getDeadline().isBlank()) {
+            try {
+                LocalDate deadline = LocalDate.parse(request.getDeadline());
+                featureLimitService.requireValidJobDeadline(currentUser, deadline);
+            } catch (ApiException ae) {
+                throw ae;
+            } catch (Exception ignored) {}
+        } else {
+            int maxDays = featureLimitService.resolveMaxJobPostingDays(currentUser);
+            LocalDate defaultDeadline = LocalDate.now().plusDays(maxDays > 0 ? maxDays : 30);
+            request.setDeadline(defaultDeadline.toString());
+        }
+        Job saved = buildAndSaveJob(job, employer, company, request);
         featureLimitService.consumeJobPost(currentUser);
         return saved;
     }
@@ -664,15 +677,20 @@ public class JobService {
             // Tin đóng/hết hạn không nằm trong quota hiện tại → mở lại phải còn slot
             featureLimitService.requireJobPost(authService.getCurrentUser());
         }
+        User currentUser = authService.getCurrentUser();
         if (newDeadline != null && !newDeadline.isBlank()) {
             try {
-                job.setDeadline(LocalDate.parse(newDeadline));
+                LocalDate parsedDate = LocalDate.parse(newDeadline);
+                featureLimitService.requireValidJobDeadline(currentUser, parsedDate);
+                job.setDeadline(parsedDate);
+            } catch (ApiException ae) {
+                throw ae;
             } catch (Exception e) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_DEADLINE", "Hạn nộp hồ sơ mới không đúng định dạng (YYYY-MM-DD)");
             }
         }
-        if (job.getDeadline() != null && job.getDeadline().isBefore(LocalDate.now())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "DEADLINE_EXPIRED", "Tin tuyển dụng đã hết hạn nộp hồ sơ. Vui lòng cập nhật hạn nộp hồ sơ mới trước khi mở lại tin.");
+        if (job.getDeadline() != null) {
+            featureLimitService.requireValidJobDeadline(currentUser, job.getDeadline());
         }
         long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
         if (job.getVacancies() != null && acceptedCount >= job.getVacancies()) {
@@ -682,6 +700,14 @@ public class JobService {
         job.setClosedAt(null);
         job = jobRepository.save(job);
         return dtoMapper.toJobResponse(job, false, false, null);
+    }
+
+    @Transactional
+    public JobResponse extendJobDeadline(String id, Employer employer, String newDeadline) {
+        if (newDeadline == null || newDeadline.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DEADLINE_REQUIRED", "Hạn nộp hồ sơ mới là bắt buộc.");
+        }
+        return reopenJobForEmployer(id, employer, newDeadline);
     }
 
     @Transactional
