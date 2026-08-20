@@ -1762,16 +1762,19 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                   return eduList.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {eduList.map((item, idx) => {
-                        const inst = item.institution || item.school || item.schoolName || 'Trường / Cơ sở đào tạo';
-                        const deg = item.degree || item.major || item.field || '';
-                        const field = item.field && item.degree ? ` - ${item.field}` : '';
-                        const start = item.startDate || item.startYear || '';
-                        const end = item.endDate || item.endYear || 'Hiện tại';
+                        const inst = item.institution || item.school || item.schoolName || item.organization || item.title || item.name || 'Trường / Cơ sở đào tạo';
+                        const deg = item.degree || item.major || item.field || (item.title && item.title !== inst ? item.title : '') || (item.organization && item.organization !== inst ? item.organization : '') || '';
+                        const field = item.field && item.degree && item.field !== item.degree ? ` - ${item.field}` : '';
+                        const start = item.startDate || item.startYear || item.time || '';
+                        const end = item.endDate || item.endYear || '';
+                        const timeRange = (start || end) ? `🕒 ${[start, end].filter(Boolean).join(' - ')}` : '';
+                        const desc = item.description || item.summary || '';
                         return (
                           <div key={idx} style={{ borderLeft: '3px solid #2563eb', paddingLeft: '14px', background: '#f8fafc', padding: '12px 14px', borderRadius: '0 8px 8px 0' }}>
                             <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>{String(inst)}</div>
                             {deg && <div style={{ color: '#334155', fontSize: '0.9rem', marginTop: '2px' }}>{String(deg)}{field}</div>}
-                            {(start || end) && <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>🕒 {String(start)} - {String(end)}</div>}
+                            {timeRange && <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>{timeRange}</div>}
+                            {desc && <div style={{ color: '#475569', fontSize: '0.88rem', marginTop: '6px', whiteSpace: 'pre-line' }}>{String(desc)}</div>}
                           </div>
                         );
                       })}
@@ -1798,16 +1801,17 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                   return expList.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {expList.map((item, idx) => {
-                        const comp = item.company || item.companyName || 'Công ty / Tổ chức';
-                        const pos = item.position || item.title || item.role || '';
-                        const start = item.startDate || item.startYear || '';
-                        const end = item.endDate || item.endYear || 'Hiện tại';
+                        const comp = item.company || item.companyName || item.organization || item.title || item.name || 'Công ty / Tổ chức';
+                        const pos = item.position || item.role || item.jobTitle || (item.title && item.title !== comp ? item.title : '') || (item.organization && item.organization !== comp ? item.organization : '') || '';
+                        const start = item.startDate || item.startYear || item.time || '';
+                        const end = item.endDate || item.endYear || '';
+                        const timeRange = (start || end) ? `🕒 ${[start, end].filter(Boolean).join(' - ')}` : '';
                         const desc = item.description || item.summary || '';
                         return (
                           <div key={idx} style={{ borderLeft: '3px solid #10b981', paddingLeft: '14px', background: '#f8fafc', padding: '12px 14px', borderRadius: '0 8px 8px 0' }}>
                             <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>{String(comp)}</div>
                             {pos && <div style={{ color: '#10b981', fontWeight: 600, fontSize: '0.9rem', marginTop: '2px' }}>{String(pos)}</div>}
-                            {(start || end) && <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>🕒 {String(start)} - {String(end)}</div>}
+                            {timeRange && <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>{timeRange}</div>}
                             {desc && <div style={{ color: '#334155', fontSize: '0.88rem', marginTop: '6px', whiteSpace: 'pre-line' }}>{String(desc)}</div>}
                           </div>
                         );
@@ -1820,33 +1824,91 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
               </div>
 
               {/* Projects Section */}
-              {(() => {
-                const projList = (selectedAppDetail.candidate?.projects && selectedAppDetail.candidate.projects.length > 0)
-                  ? selectedAppDetail.candidate.projects
-                  : Array.isArray(selectedAppDetail.cvVersion?.snapshot?.projects)
-                  ? (selectedAppDetail.cvVersion.snapshot.projects as Record<string, unknown>[])
-                  : [];
-                return projList.length > 0 ? (
-                  <div>
-                    <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
-                      🚀 Dự án đã thực hiện
-                    </h4>
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                  🚀 Dự án đã thực hiện
+                </h4>
+                {(() => {
+                  const projList = (selectedAppDetail.candidate?.projects && selectedAppDetail.candidate.projects.length > 0)
+                    ? selectedAppDetail.candidate.projects
+                    : Array.isArray(selectedAppDetail.cvVersion?.snapshot?.projects)
+                    ? (selectedAppDetail.cvVersion.snapshot.projects as Record<string, unknown>[])
+                    : [];
+                  return projList.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {projList.map((item, idx) => {
                         const name = item.name || item.projectName || item.title || 'Tên dự án';
-                        const role = item.role || item.position || '';
+                        const role = item.role || item.position || item.organization || '';
+                        const time = item.time || item.startDate || (item.startYear ? [item.startYear, item.endYear].filter(Boolean).join(' - ') : '');
                         const desc = item.description || item.summary || '';
+                        const url = item.url || item.link || item.credentialUrl || '';
                         return (
                           <div key={idx} style={{ borderLeft: '3px solid #8b5cf6', paddingLeft: '14px', background: '#f8fafc', padding: '12px 14px', borderRadius: '0 8px 8px 0' }}>
                             <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>{String(name)} {role ? `(${role})` : ''}</div>
+                            {time && <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>🕒 {String(time)}</div>}
                             {desc && <div style={{ color: '#334155', fontSize: '0.88rem', marginTop: '6px', whiteSpace: 'pre-line' }}>{String(desc)}</div>}
+                            {url && (
+                              <div style={{ marginTop: '6px' }}>
+                                <a href={String(url)} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontSize: '0.85rem', textDecoration: 'underline' }}>
+                                  Xem liên kết dự án ↗
+                                </a>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
-                  </div>
-                ) : null;
-              })()}
+                  ) : (
+                    <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>Chưa bổ sung thông tin dự án.</p>
+                  );
+                })()}
+              </div>
+
+              {/* Certificates Section */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: '1.05rem', borderBottom: '2px solid #2563eb', paddingBottom: '6px', display: 'inline-block' }}>
+                  🏆 Chứng chỉ & Bằng cấp chuyên môn
+                </h4>
+                {(() => {
+                  const certSnapshot = selectedAppDetail.cvVersion?.snapshot;
+                  const snapshotCerts = certSnapshot?.certifications || certSnapshot?.certificates;
+                  const certList = (selectedAppDetail.candidate?.certifications && selectedAppDetail.candidate.certifications.length > 0)
+                    ? selectedAppDetail.candidate.certifications
+                    : ((selectedAppDetail.candidate as any)?.certificates && (selectedAppDetail.candidate as any).certificates.length > 0)
+                    ? (selectedAppDetail.candidate as any).certificates
+                    : Array.isArray(snapshotCerts)
+                    ? (snapshotCerts as Record<string, unknown>[])
+                    : [];
+                  return certList.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {certList.map((item: any, idx: number) => {
+                        const name = item.title || item.name || item.certificateName || 'Tên chứng chỉ';
+                        const org = item.organization || item.issuer || item.issuedBy || '';
+                        const time = item.time || item.issueDate || item.year || '';
+                        const desc = item.description || item.summary || '';
+                        const url = item.credentialUrl || item.url || '';
+                        return (
+                          <div key={idx} style={{ borderLeft: '3px solid #eab308', paddingLeft: '14px', background: '#f8fafc', padding: '12px 14px', borderRadius: '0 8px 8px 0' }}>
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>{String(name)}</div>
+                            {org && <div style={{ color: '#ca8a04', fontWeight: 600, fontSize: '0.9rem', marginTop: '2px' }}>Tổ chức cấp: {String(org)}</div>}
+                            {time && <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>🕒 {String(time)}</div>}
+                            {desc && <div style={{ color: '#334155', fontSize: '0.88rem', marginTop: '6px', whiteSpace: 'pre-line' }}>{String(desc)}</div>}
+                            {url && (
+                              <div style={{ marginTop: '6px' }}>
+                                <a href={String(url)} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontSize: '0.85rem', textDecoration: 'underline' }}>
+                                  Xem chứng chỉ ↗
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>Chưa bổ sung thông tin chứng chỉ.</p>
+                  );
+                })()}
+              </div>
 
               {selectedAppDetail.interviews && selectedAppDetail.interviews.length > 0 && (
                 <div>

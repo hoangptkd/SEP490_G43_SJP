@@ -1347,12 +1347,12 @@ public class EmployerService {
     }
 
     @Transactional(readOnly = true)
-    public List<NotificationResponse> getNotifications() {
+    public PageResponse<NotificationResponse> getNotifications(int page, int size) {
         User user = authService.getCurrentUser();
-        return notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
-                .stream()
-                .map(dtoMapper::toNotificationResponse)
-                .toList();
+        int pageIndex = page > 0 ? page - 1 : 0;
+        org.springframework.data.domain.Pageable pageable = PageRequest.of(pageIndex, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        org.springframework.data.domain.Page<Notification> result = notificationRepository.findByRecipientUserId(user.getId(), pageable);
+        return PageResponse.from(result, dtoMapper::toNotificationResponse);
     }
 
     @Transactional

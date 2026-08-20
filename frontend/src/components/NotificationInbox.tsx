@@ -64,8 +64,9 @@ export function NotificationInbox({
   onMarkAllRead?: () => void;
 }) {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
-  const unreadCount = items.filter((item) => !item.read).length;
-  const visible = filter === 'unread' ? items.filter((item) => !item.read) : items;
+  const safeItems = Array.isArray(items) ? items : [];
+  const unreadCount = safeItems.filter((item) => !item.read).length;
+  const visible = filter === 'unread' ? safeItems.filter((item) => !item.read) : safeItems;
   const groups = useMemo(() => {
     const map = new Map<string, NotificationItem[]>();
     visible.forEach((item) => {
