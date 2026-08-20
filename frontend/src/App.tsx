@@ -480,8 +480,71 @@ function ApplyJobModal({
   const [selectedResume, setSelectedResume] = useState(defaultResume);
   const [file, setFile] = useState<File | undefined>();
   const [preferredLocation, setPreferredLocation] = useState(job.location || '');
+  const [companyLocations, setCompanyLocations] = useState<CompanyLocation[]>(job.company?.locations || []);
   const [coverLetter, setCoverLetter] = useState('');
   const [fileError, setFileError] = useState('');
+
+  useEffect(() => {
+    if (job.company?.id) {
+      jobService.getCompany(job.company.id)
+        .then((comp) => {
+          if (comp.locations && comp.locations.length > 0) {
+            setCompanyLocations(comp.locations);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [job.company?.id]);
+
+  const locationOptions = useMemo(() => {
+    const list: { value: string; label: string }[] = [];
+    const addedValues = new Set<string>();
+
+    list.push({ value: 'Remote', label: 'Làm việc từ xa (Remote)' });
+    addedValues.add('Remote');
+    addedValues.add('Làm việc từ xa');
+    addedValues.add('Remote / Làm việc từ xa');
+
+    const addLoc = (value?: string, label?: string) => {
+      const val = value?.trim();
+      if (!val || addedValues.has(val)) return;
+      addedValues.add(val);
+      list.push({ value: val, label: label?.trim() || val });
+    };
+
+    if (job.companyLocation) {
+      const fullLoc = [job.companyLocation.branchName, job.companyLocation.address, job.companyLocation.city]
+        .filter(Boolean).join(' - ');
+      if (job.companyLocation.branchName) addLoc(job.companyLocation.branchName, fullLoc || job.companyLocation.branchName);
+      if (fullLoc) addLoc(fullLoc, fullLoc);
+    }
+
+    if (job.location) {
+      addLoc(job.location, job.location);
+    }
+
+    companyLocations.forEach((loc) => {
+      const fullLoc = [loc.branchName, loc.address, loc.city].filter(Boolean).join(' - ');
+      if (loc.branchName) addLoc(loc.branchName, fullLoc || loc.branchName);
+      if (fullLoc) addLoc(fullLoc, fullLoc);
+    });
+
+    if (job.company?.location) {
+      addLoc(job.company.location, job.company.location);
+    }
+
+    return list;
+  }, [job, companyLocations]);
+
+  useEffect(() => {
+    if (!preferredLocation && locationOptions.length > 0) {
+      const match = locationOptions.find((opt) => opt.value === job.location) || locationOptions[0];
+      if (match) {
+        setPreferredLocation(match.value);
+      }
+    }
+  }, [locationOptions, job.location, preferredLocation]);
+
   const dirty = selectedResume !== defaultResume
     || Boolean(file)
     || preferredLocation !== (job.location || '')
@@ -652,14 +715,24 @@ function ApplyJobModal({
             </div>
           </section>
 
-          <ProvinceLocationSelect
-            className="application-field"
-            label="Địa điểm làm việc mong muốn"
-            value={preferredLocation}
-            onChange={setPreferredLocation}
-            allowRemote
-            required
-          />
+          <label className="application-field">
+            <span className="application-field-row">
+              Địa điểm làm việc mong muốn <span style={{ color: 'var(--danger)' }}>*</span>
+            </span>
+            <select
+              className="application-select"
+              value={preferredLocation}
+              onChange={(event) => setPreferredLocation(event.target.value)}
+              required
+            >
+              <option value="" disabled>-- Chọn địa điểm / chi nhánh làm việc --</option>
+              {locationOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="application-field">
             <span className="application-field-row">
@@ -6131,8 +6204,9 @@ function EmployerLayout() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    employerService.getNotifications().then(data => {
-      setUnreadCount(data.filter(n => !n.read).length);
+    employerService.getNotifications(1, 20).then(data => {
+      const list = Array.isArray(data) ? data : (data?.items || []);
+      setUnreadCount(list.filter(n => !n.read).length);
     }).catch(() => {});
   }, []);
 

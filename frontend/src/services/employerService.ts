@@ -1,6 +1,6 @@
 import { api } from './api';
 import type { Company, CompanyLocation, CompanyDocument, Job } from '../types/job';
-import type { CandidateApplication, NotificationItem } from '../types/candidateDomain';
+import type { CandidateApplication, NotificationItem, PageResult } from '../types/candidateDomain';
 
 export interface EmployerDashboardStats {
   totalJobs: number;
@@ -248,8 +248,8 @@ export const employerService = {
     return response.data;
   },
 
-  getNotifications: async (): Promise<NotificationItem[]> => {
-    const response = await api.get<NotificationItem[]>('/employer/notifications');
+  getNotifications: async (page = 1, size = 10): Promise<PageResult<NotificationItem>> => {
+    const response = await api.get<PageResult<NotificationItem>>('/employer/notifications', { params: { page, size } });
     return response.data;
   },
 

@@ -12,6 +12,7 @@ import com.sjp.recruitment.model.dto.response.JobResponse;
 import com.sjp.recruitment.model.dto.response.ApplicationResponse;
 import com.sjp.recruitment.model.dto.response.MessageResponse;
 import com.sjp.recruitment.model.dto.response.NotificationResponse;
+import com.sjp.recruitment.model.dto.response.PageResponse;
 import com.sjp.recruitment.model.dto.response.TaxCodeLookupResponse;
 import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.EmployerService;
@@ -248,8 +249,10 @@ public class EmployerController {
     }
 
     @GetMapping("/notifications")
-    public ResponseEntity<List<NotificationResponse>> notifications() {
-        return ResponseEntity.ok(employerService.getNotifications());
+    public ResponseEntity<PageResponse<NotificationResponse>> notifications(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(employerService.getNotifications(page, size));
     }
 
     @PatchMapping("/notifications/{id}/read")
