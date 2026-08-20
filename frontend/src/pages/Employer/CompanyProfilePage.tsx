@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { employerService } from '../../services/employerService';
 import { jobService } from '../../services/jobService';
 import type { Company, Category } from '../../types/job';
-import { FiCamera, FiCheckCircle, FiClock, FiAlertCircle, FiChevronDown, FiX, FiSearch } from '../../components/Icons';
+import { FiCamera, FiCheckCircle, FiClock, FiAlertCircle, FiChevronDown, FiX, FiSearch, FiBuilding } from '../../components/Icons';
 import { TaxCodeLookupField } from '../../components/employer/TaxCodeLookupField';
 import { isVietnamTaxCodeFormat } from '../../utils/taxCode';
 
@@ -230,21 +230,17 @@ function CompanyProfilePage() {
                 {company.logoUrl ? (
                   <img src={company.logoUrl} alt={company.name} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-3xl font-bold text-slate-800">
-                    {company.name ? company.name.charAt(0).toUpperCase() : 'C'}
-                  </span>
+                  <FiBuilding className="w-10 h-10 text-slate-400" />
                 )}
               </div>
-              {!isVerified && (
-                <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center cursor-pointer">
-                  {uploadingLogo ? (
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent"></div>
-                  ) : (
-                    <FiCamera className="w-6 h-6 text-white" />
-                  )}
-                  <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} className="hidden" />
-                </label>
-              )}
+              <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center cursor-pointer">
+                {uploadingLogo ? (
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent"></div>
+                ) : (
+                  <FiCamera className="w-6 h-6 text-white" />
+                )}
+                <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} className="hidden" />
+              </label>
             </div>
             
             <div className="company-profile-banner-copy">
@@ -262,13 +258,11 @@ function CompanyProfilePage() {
               <statusBadge.icon className="w-4 h-4" />
               {statusBadge.text}
             </span>
-            {!isVerified && (
-              <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${uploadingLogo ? 'bg-white/10 text-white/50 cursor-wait' : 'bg-white/10 hover:bg-white/20 text-white cursor-pointer backdrop-blur-sm border border-white/10'}`}>
-                <FiCamera className="w-4 h-4" />
-                {uploadingLogo ? 'Đang cập nhật...' : 'Thay đổi logo'}
-                <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} className="hidden" />
-              </label>
-            )}
+            <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${uploadingLogo ? 'bg-white/10 text-white/50 cursor-wait' : 'bg-white/10 hover:bg-white/20 text-white cursor-pointer backdrop-blur-sm border border-white/10'}`}>
+              <FiCamera className="w-4 h-4" />
+              {uploadingLogo ? 'Đang cập nhật...' : 'Thay đổi logo'}
+              <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} className="hidden" />
+            </label>
           </div>
         </div>
       </div>

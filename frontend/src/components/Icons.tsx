@@ -162,3 +162,12 @@ export const FiUsers = (props: any) => (
     <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
   </IconBase>
 );
+
+export const FiBuilding = (props: any) => (
+  <IconBase {...props}>
+    <path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16" />
+    <path d="M15 10h4a1 1 0 0 1 1 1v10" />
+    <path d="M8 8h2M8 12h2M8 16h2M4 21h16" />
+  </IconBase>
+);
+
