@@ -5,6 +5,8 @@ import type { AdminCompanyDetail } from '../../types/admin';
 import type { CompanyDocument } from '../../types/job';
 import { downloadFile, openFileInNewTab } from '../../utils/helpers';
 
+import { FiBuilding } from '../../components/Icons';
+
 function verificationLabel(status?: string) {
   const value = status?.toLowerCase() || 'unverified';
   switch (value) {
@@ -362,7 +364,7 @@ export default function AdminCompanyDetailPage() {
                     color: '#64748b',
                   }}
                 >
-                  {detail.company.name?.charAt(0)?.toUpperCase() || 'C'}
+                  <FiBuilding className="w-8 h-8 text-slate-400" />
                 </div>
               )}
               <div>

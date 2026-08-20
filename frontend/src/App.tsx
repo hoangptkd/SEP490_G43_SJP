@@ -1501,7 +1501,7 @@ function HomePage() {
                 {hiringCompanies.map((company) => (
                   <div key={company.id} className="home-company-card">
                     <div className="home-company-logo">
-                      {company.logoUrl ? <img src={company.logoUrl} alt="" loading="lazy" /> : <span>{companyInitials(company.name)}</span>}
+                      {company.logoUrl ? <img src={company.logoUrl} alt={company.name} loading="lazy" /> : <IconBuilding size={24} style={{ opacity: 0.6 }} />}
                     </div>
                     <div>
                       <strong>{company.name}</strong>
@@ -3244,7 +3244,13 @@ function JobCard({ job }: { job: Job }) {
     >
       <article className={`job-card${job.featured ? ' is-featured' : ''}${showFooter ? ' has-footer' : ''}`}>
         <div className="job-card-header">
-          <div className="job-company-logo">{initials}</div>
+          <div className="job-company-logo">
+            {job.company.logoUrl ? (
+              <img src={job.company.logoUrl} alt={job.company.name} />
+            ) : (
+              <IconBuilding size={22} style={{ opacity: 0.6 }} />
+            )}
+          </div>
           <div className="job-card-info">
             <div className="job-card-title-row">
               <h3>{job.title}</h3>
@@ -3324,7 +3330,7 @@ function CompanyDetailPage() {
             <section className="card" style={{ marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <div className="job-company-logo" style={{ width: 72, height: 72 }}>
-                  {company.logoUrl ? <img src={company.logoUrl} alt="" /> : companyInitials(company.name)}
+                  {company.logoUrl ? <img src={company.logoUrl} alt={company.name} /> : <IconBuilding size={36} style={{ opacity: 0.6 }} />}
                 </div>
                 <div>
                   <h1 style={{ margin: 0 }}>{company.name}</h1>
@@ -3593,8 +3599,12 @@ function JobDetailPage() {
           <motion.div className="job-detail-header" variants={fadeUp} initial="initial" animate="animate"
             transition={{ duration: 0.28, ease: EASE_OUT }}>
             <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-              <div className="job-company-logo" style={{ width: 64, height: 64, fontSize: '1.4rem', borderRadius: 12 }}>
-                {initials}
+              <div className="job-company-logo" style={{ width: 64, height: 64, borderRadius: 12 }}>
+                {job.company.logoUrl ? (
+                  <img src={job.company.logoUrl} alt={job.company.name} />
+                ) : (
+                  <IconBuilding size={32} style={{ opacity: 0.6 }} />
+                )}
               </div>
               <div style={{ flex: 1 }}>
                 <Link className="eyebrow" to={`/companies/${job.company.id}`}>{job.company.name}</Link>
@@ -5169,7 +5179,7 @@ function ApplicationsPage() {
                       {logoUrl ? (
                         <img src={logoUrl} alt="" />
                       ) : (
-                        <span>{companyInitials(company.name)}</span>
+                        <IconBuilding size={24} style={{ opacity: 0.6 }} />
                       )}
                     </div>
 
