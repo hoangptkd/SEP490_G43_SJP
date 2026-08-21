@@ -27,4 +27,18 @@ class AiInterviewRateLimiterTest {
         assertDoesNotThrow(() -> limiter.check(candidateId, "transcribe"));
         assertDoesNotThrow(() -> limiter.check(UUID.randomUUID(), "answer"));
     }
+
+    @Test
+    void allowsRequestsUnderConfiguredLimit() {
+        AiInterviewProperties properties = new AiInterviewProperties();
+        properties.setCostlyRequestsPerMinute(10);
+        AiInterviewRateLimiter limiter = new AiInterviewRateLimiter(properties);
+        UUID candidateId = UUID.randomUUID();
+
+        for (int i = 0; i < 10; i++) {
+            assertDoesNotThrow(() -> limiter.check(candidateId, "answer"));
+        }
+        ApiException exception = assertThrows(ApiException.class, () -> limiter.check(candidateId, "answer"));
+        assertEquals("AI_INTERVIEW_RATE_LIMITED", exception.getCode());
+    }
 }
