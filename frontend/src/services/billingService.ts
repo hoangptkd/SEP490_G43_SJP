@@ -38,4 +38,9 @@ export const billingService = {
     const response = await api.get<BankTransferInfo>(`/billing/payments/${paymentId}/bank-transfer`);
     return response.data;
   },
+
+  getMyPaymentHistory: async (): Promise<PaymentStatus[]> => {
+    const response = await api.get<PaymentStatus[]>('/billing/history');
+    return response.data;
+  },
 };

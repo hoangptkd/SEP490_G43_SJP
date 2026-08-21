@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useState, useRef } from 'react';
+import { FormEvent, useEffect, useState, useRef, useMemo } from 'react';
 import { employerService } from '../../services/employerService';
 import type { Company, CompanyLocation, Job } from '../../types/job';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { billingService, UserSubscription } from '../../services/billingService';
+import type { PlanCatalogItem } from '../../types/billing';
 import PlanLimitAlert from '../../components/PlanLimitAlert';
 import { parseApiError } from '../../utils/planLimits';
 import { customAlert, customConfirm, customPrompt } from '../../utils/dialog';
@@ -37,6 +38,10 @@ function EmployerJobsPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [planLimitReached, setPlanLimitReached] = useState(false);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [plans, setPlans] = useState<PlanCatalogItem[]>([]);
+  const [extendingJob, setExtendingJob] = useState<Job | null>(null);
+  const [newDeadlineInput, setNewDeadlineInput] = useState<string>('');
+  const [extendingLoading, setExtendingLoading] = useState<boolean>(false);
 
   const submitTargetRef = useRef<string | undefined>(undefined);
 
@@ -103,11 +108,27 @@ function EmployerJobsPage() {
     }
   }, [searchParams, locations, formOpenedFromParams]);
 
+  const activePlan = useMemo(() => {
+    if (!subscription || subscription.status !== 'active') return null;
+    return plans.find((p) => p.id === subscription.planId || p.name === subscription.planName) || null;
+  }, [subscription, plans]);
+
+  const maxJobPostingDays = useMemo(() => {
+    if (!activePlan || !activePlan.maxJobPostingDays) return 30;
+    return activePlan.maxJobPostingDays > 0 ? activePlan.maxJobPostingDays : 30;
+  }, [activePlan]);
+
+  const maxAllowedDateStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + maxJobPostingDays);
+    return d.toISOString().split('T')[0];
+  }, [maxJobPostingDays]);
+
   async function loadData() {
     setLoading(true);
     setError('');
     try {
-      const [compData, jobsData, locsData, subData, allJobsData] = await Promise.all([
+      const [compData, jobsData, locsData, subData, allJobsData, plansData] = await Promise.all([
         employerService.getCompanyProfile(),
         employerService.getJobs({
           page: currentPage,
@@ -121,7 +142,8 @@ function EmployerJobsPage() {
           page: 1,
           size: 1000,
           search: searchTerm || undefined
-        }).catch(() => ({ items: [] }) as any)
+        }).catch(() => ({ items: [] }) as any),
+        billingService.listPlans().catch(() => []),
       ]);
       setCompany(compData);
       setJobs(jobsData.items || []);
@@ -129,6 +151,7 @@ function EmployerJobsPage() {
       setTotalPages(jobsData.totalPages || 1);
       setLocations(locsData);
       setSubscription(subData);
+      setPlans(plansData);
     } catch (err: any) {
       setError('Không thể tải thông tin tuyển dụng.');
     } finally {
@@ -144,7 +167,7 @@ function EmployerJobsPage() {
     setShowAiConfig(false);
     const defaultLoc = locations.find((l) => l.headquarter) || locations[0];
     const defaultDate = new Date();
-    defaultDate.setDate(defaultDate.getDate() + 30);
+    defaultDate.setDate(defaultDate.getDate() + maxJobPostingDays);
     const deadlineStr = defaultDate.toISOString().split('T')[0];
 
     setFormData({
@@ -282,7 +305,14 @@ function EmployerJobsPage() {
       setJobs(jobs.map((j) => (j.id === job.id ? updated : j)));
       setMessage(`Đã mở lại tin tuyển dụng "${job.title}" thành công.`);
     } catch (err: any) {
-      await customAlert(err?.response?.data?.message || 'Không thể mở lại tin tuyển dụng này.');
+      const msg = err?.response?.data?.message || 'Không thể mở lại tin tuyển dụng này.';
+      if (err?.response?.data?.errorCode === 'PLAN_LIMIT_REACHED' || err?.response?.status === 402 || msg.includes('nâng cấp gói') || msg.includes('đạt giới hạn')) {
+        if (await customConfirm(`${msg}\n\nBạn có muốn đi đến trang Nâng cấp gói dịch vụ không?`)) {
+          window.location.href = '/employer/subscription/plans';
+        }
+      } else {
+        await customAlert(msg);
+      }
     }
   }
 
@@ -338,8 +368,15 @@ function EmployerJobsPage() {
       const selectedDate = new Date(formData.deadline);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const maxDate = new Date(today);
+      maxDate.setDate(maxDate.getDate() + maxJobPostingDays);
+      maxDate.setHours(23, 59, 59, 999);
+
       if (selectedDate < today) {
         errors.deadline = 'Hạn nộp hồ sơ không được ở trong quá khứ.';
+      } else if (selectedDate > maxDate) {
+        const formattedMax = new Date(today.getTime() + maxJobPostingDays * 86400000).toLocaleDateString('vi-VN');
+        errors.deadline = `Gói hiện tại (${subscription?.planName || 'Miễn phí'}) chỉ cho phép chọn Hạn nộp tối đa ${maxJobPostingDays} ngày kể từ hôm nay (đến ngày ${formattedMax}).`;
       }
     } else {
       errors.deadline = 'Hạn nộp hồ sơ là bắt buộc.';
@@ -548,30 +585,30 @@ function EmployerJobsPage() {
           </div>
           
           <div className="p-6 lg:p-8 flex-1">
-            {editingId && (() => {
-              const editingJob = jobs.find((j) => j.id === editingId);
-              const st = editingJob?.status?.toLowerCase();
-              if (st !== 'rejected' && st !== 'awaiting_company') return null;
-              const isReportFix = st === 'awaiting_company';
-              return (
+          {editingId && (() => {
+            const editingJob = jobs.find((j) => j.id === editingId);
+            const st = editingJob?.status?.toLowerCase();
+            if (st !== 'rejected' && st !== 'awaiting_company') return null;
+            const isReportFix = st === 'awaiting_company';
+            return (
               <div className={`mb-6 p-5 rounded-xl border-l-4 ${isReportFix ? 'bg-orange-50 border-orange-200 border-l-orange-600' : 'bg-red-50 border-red-200 border-l-red-600'}`}>
                 <div className={`font-semibold mb-2 ${isReportFix ? 'text-orange-800' : 'text-red-800'}`}>
-                  {isReportFix ? 'Yêu cầu chỉnh sửa từ Admin (tin bị báo cáo)' : 'Phản hồi từ Bộ phận kiểm duyệt'}
-                </div>
+                {isReportFix ? 'Yêu cầu chỉnh sửa từ Admin (tin bị báo cáo)' : 'Phản hồi từ Bộ phận kiểm duyệt'}
+              </div>
                 <div className={`bg-white p-3 rounded-lg border mb-3 text-sm leading-relaxed ${isReportFix ? 'border-orange-100 text-orange-900' : 'border-red-100 text-red-900'}`}>
-                  {editingJob?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
-                </div>
+                {editingJob?.rejectionReason || 'Vui lòng kiểm tra và hoàn thiện các nội dung chưa đạt yêu cầu trước khi gửi lại.'}
+              </div>
                 {isReportFix && editingJob?.reportFixDeadline && (
                   <div className="text-sm font-semibold text-orange-800 mb-2">
                     Hạn chỉnh sửa: {new Date(editingJob.reportFixDeadline).toLocaleString('vi-VN')}. Quá hạn tin sẽ bị gỡ tự động.
                   </div>
                 )}
                 <div className={`text-sm opacity-90 ${isReportFix ? 'text-orange-800' : 'text-red-800'}`}>
-                  Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để gửi lại cho Admin duyệt.
-                </div>
+                Anh/chị vui lòng cập nhật lại thông tin bên dưới theo yêu cầu, sau đó nhấn nút <b>"Lưu & Nộp kiểm duyệt"</b> để gửi lại cho Admin duyệt.
               </div>
-              );
-            })()}
+            </div>
+            );
+          })()}
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <label className="md:col-span-2 flex flex-col gap-1.5 text-sm font-semibold text-gray-700">
@@ -781,9 +818,9 @@ function EmployerJobsPage() {
                 ) : (
                   <VietnamAddressPicker
                     label="Địa điểm hiển thị trên tin tuyển dụng"
-                    required
+                  required
                     allowRemote
-                    value={formData.location || ''}
+                  value={formData.location || ''}
                     onChange={(value) => setFormData({ ...formData, location: value })}
                   />
                 )}
@@ -798,9 +835,13 @@ function EmployerJobsPage() {
                 type="date"
                 required
                 min={new Date().toISOString().split('T')[0]}
+                max={maxAllowedDateStr}
                 value={formData.deadline}
                 onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
               />
+              <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md font-medium mt-1">
+                ℹ️ Gói dịch vụ ({subscription?.planName || 'Miễn phí'}): Được chọn Hạn nộp hồ sơ tối đa <strong>{maxJobPostingDays} ngày</strong> kể từ hôm nay (đến ngày <strong>{new Date(new Date().getTime() + maxJobPostingDays * 86400000).toLocaleDateString('vi-VN')}</strong>).
+              </span>
               {fieldErrors.deadline && <span className="text-red-600 text-sm mt-1">{fieldErrors.deadline}</span>}
             </label>
 
@@ -905,18 +946,11 @@ function EmployerJobsPage() {
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-gray-900 m-0">Cấu hình AI chấm điểm (Smart Ranking)</h3>
                     <p className="text-sm text-gray-500 mt-1 m-0">Hệ thống tự động đánh giá độ phù hợp của CV với Yêu cầu tuyển dụng.</p>
-                    {(!subscription || !subscription.planId) && (
-                      <p className="text-sm text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8V7a4 4 0 00-8 0v4h8z"></path></svg>
-                        Tính năng nâng cao. Vui lòng <a href="/employer/subscription/plans" className="underline hover:text-red-700">nâng cấp gói dịch vụ</a> để sử dụng.
-                      </p>
-                    )}
                   </div>
                   
-                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-full border transition-all ${formData.rankingConfig?.enabled ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'} ${(!subscription || !subscription.planId) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-full border transition-all ${formData.rankingConfig?.enabled ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'}`}>
                     <input
                       type="checkbox"
-                      disabled={!subscription || !subscription.planId}
                       checked={formData.rankingConfig?.enabled || false}
                       onChange={(e) => {
                         const isEnabled = e.target.checked;
@@ -1138,57 +1172,57 @@ function EmployerJobsPage() {
                 
                 return (
                   <>
-                    {editingId ? (
-                      <button
-                        type="submit"
+              {editingId ? (
+                <button
+                  type="submit"
                         disabled={saving || isInvalidConfig}
-                        onClick={() => {
-                          const editingStatus = jobs.find((j) => j.id === editingId)?.status?.toLowerCase();
-                          if (editingStatus === 'awaiting_company' || editingStatus === 'rejected') {
-                            submitTargetRef.current = 'pending_review';
-                            setFormData((prev) => ({ ...prev, status: 'pending_review' }));
-                          } else {
-                            submitTargetRef.current = formData.status;
-                          }
-                        }}
+                  onClick={() => {
+                    const editingStatus = jobs.find((j) => j.id === editingId)?.status?.toLowerCase();
+                    if (editingStatus === 'awaiting_company' || editingStatus === 'rejected') {
+                      submitTargetRef.current = 'pending_review';
+                      setFormData((prev) => ({ ...prev, status: 'pending_review' }));
+                    } else {
+                      submitTargetRef.current = formData.status;
+                    }
+                  }}
                         className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
                           (saving || isInvalidConfig) 
                             ? 'bg-gray-400 text-white cursor-not-allowed' 
                             : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                         }`}
-                      >
-                        {saving
-                          ? 'Đang xử lý...'
-                          : (jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'awaiting_company'
-                            || jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected')
-                            ? 'Lưu & Nộp kiểm duyệt'
-                            : 'Lưu lại'}
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="submit"
+                >
+                  {saving
+                    ? 'Đang xử lý...'
+                    : (jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'awaiting_company'
+                      || jobs.find((j) => j.id === editingId)?.status?.toLowerCase() === 'rejected')
+                      ? 'Lưu & Nộp kiểm duyệt'
+                      : 'Lưu lại'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="submit"
                           disabled={saving || isInvalidConfig}
-                          onClick={() => {
-                            submitTargetRef.current = 'draft';
-                            setFormData((prev) => ({ ...prev, status: 'draft' }));
-                          }}
+                    onClick={() => {
+                      submitTargetRef.current = 'draft';
+                      setFormData((prev) => ({ ...prev, status: 'draft' }));
+                    }}
                           className={`px-5 py-2.5 rounded-lg font-semibold text-[15px] border transition-colors ${
                             (saving || isInvalidConfig)
                               ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                               : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300 shadow-sm'
                           }`}
-                        >
-                          {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
-                        </button>
-                        {hasApprovedJob ? (
-                          <button
-                            type="submit"
+                  >
+                    {saving ? 'Đang xử lý...' : 'Lưu bản nháp'}
+                  </button>
+                  {hasApprovedJob ? (
+                    <button
+                      type="submit"
                             disabled={saving || isInvalidConfig}
-                            onClick={() => {
-                              submitTargetRef.current = 'published';
-                              setFormData((prev) => ({ ...prev, status: 'published' }));
-                            }}
+                      onClick={() => {
+                        submitTargetRef.current = 'published';
+                        setFormData((prev) => ({ ...prev, status: 'published' }));
+                      }}
                             className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
                               (saving || isInvalidConfig)
                                 ? 'bg-gray-400 text-white cursor-not-allowed'
@@ -1196,39 +1230,39 @@ function EmployerJobsPage() {
                             }`}
                           >
                             {saving ? 'Đang xử lý...' : 'Đăng tin ngay (Miễn duyệt)'}
-                          </button>
-                        ) : (
-                          <button
-                            type="submit"
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
                             disabled={saving || isInvalidConfig}
-                            onClick={() => {
-                              submitTargetRef.current = 'pending_review';
-                              setFormData((prev) => ({ ...prev, status: 'pending_review' }));
-                            }}
+                      onClick={() => {
+                        submitTargetRef.current = 'pending_review';
+                        setFormData((prev) => ({ ...prev, status: 'pending_review' }));
+                      }}
                             className={`px-6 py-2.5 rounded-lg font-semibold text-[15px] transition-colors ${
                               (saving || isInvalidConfig)
                                 ? 'bg-gray-400 text-white cursor-not-allowed'
                                 : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                             }`}
-                          >
-                            {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
-                          </button>
-                        )}
-                      </>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setShowForm(false)}
-                      className="px-5 py-2.5 rounded-lg font-semibold text-[15px] text-gray-600 hover:bg-gray-100 transition-colors bg-transparent"
                     >
-                      Hủy
+                      {saving ? 'Đang xử lý...' : 'Lưu & Nộp kiểm duyệt'}
                     </button>
+                  )}
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                      className="px-5 py-2.5 rounded-lg font-semibold text-[15px] text-gray-600 hover:bg-gray-100 transition-colors bg-transparent"
+              >
+                Hủy
+              </button>
                   </>
                 );
               })()}
             </div>
           </form>
-          </div>
+        </div>
         </div>
       </div>
       )}
@@ -1338,11 +1372,13 @@ function EmployerJobsPage() {
                   <div style={{ display: 'grid', gap: '12px' }}>
                     {jobs.map((job) => {
                     const st = job.status?.toLowerCase() || 'draft';
-                    const statusBg = st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'expired' ? '#fef3c7' : st === 'draft' ? '#f8fafc' : st === 'archived' ? '#f3f4f6' : '#f1f5f9';
-                    const statusColor = st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'expired' ? '#b45309' : st === 'draft' ? '#475569' : st === 'archived' ? '#374151' : '#64748b';
-                    const statusBorder = st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'expired' ? '#fde68a' : st === 'draft' ? '#cbd5e1' : st === 'archived' ? '#d1d5db' : '#e2e8f0';
-                    const statusDot = st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'expired' ? '#f59e0b' : st === 'draft' ? '#94a3b8' : st === 'archived' ? '#6b7280' : '#64748b';
-                    const statusLabel = st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'expired' ? 'Hết hạn' : st === 'draft' ? 'Bản nháp' : st === 'archived' ? 'Đã lưu trữ' : 'Đã đóng';
+                    const isPastDeadline = job.deadline ? new Date(job.deadline).getTime() < new Date().setHours(0, 0, 0, 0) : false;
+                    const isExpired = st === 'expired' || (st === 'published' && isPastDeadline);
+                    const statusBg = isExpired ? '#fff1f2' : st === 'published' || st === 'active' ? '#ecfdf5' : st === 'pending_review' ? '#eff6ff' : st === 'awaiting_company' ? '#fff7ed' : st === 'rejected' ? '#fef2f2' : st === 'draft' ? '#f8fafc' : st === 'archived' ? '#f3f4f6' : '#f1f5f9';
+                    const statusColor = isExpired ? '#9f1239' : st === 'published' || st === 'active' ? '#047857' : st === 'pending_review' ? '#1d4ed8' : st === 'awaiting_company' ? '#c2410c' : st === 'rejected' ? '#b91c1c' : st === 'draft' ? '#475569' : st === 'archived' ? '#374151' : '#64748b';
+                    const statusBorder = isExpired ? '#fecdd3' : st === 'published' || st === 'active' ? '#a7f3d0' : st === 'pending_review' ? '#bfdbfe' : st === 'awaiting_company' ? '#fed7aa' : st === 'rejected' ? '#fecaca' : st === 'draft' ? '#cbd5e1' : st === 'archived' ? '#d1d5db' : '#e2e8f0';
+                    const statusDot = isExpired ? '#e11d48' : st === 'published' || st === 'active' ? '#10b981' : st === 'pending_review' ? '#3b82f6' : st === 'awaiting_company' ? '#ea580c' : st === 'rejected' ? '#ef4444' : st === 'draft' ? '#94a3b8' : st === 'archived' ? '#6b7280' : '#64748b';
+                    const statusLabel = isExpired ? 'Hết hạn (Expired)' : st === 'published' || st === 'active' ? 'Đang tuyển' : st === 'pending_review' ? 'Chờ kiểm duyệt' : st === 'awaiting_company' ? 'Chờ công ty kiểm tra' : st === 'rejected' ? 'Yêu cầu chỉnh sửa' : st === 'draft' ? 'Bản nháp' : st === 'archived' ? 'Đã lưu trữ' : 'Đã đóng';
 
                     return (
                       <div key={job.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col lg:flex-row justify-between items-start gap-5">
@@ -1352,14 +1388,14 @@ function EmployerJobsPage() {
                               {job.title}
                             </h3>
                             <div className="flex">
-                              <span style={{
-                                background: statusBg,
-                                color: statusColor,
-                                border: `1px solid ${statusBorder}`,
+                            <span style={{
+                              background: statusBg,
+                              color: statusColor,
+                              border: `1px solid ${statusBorder}`,
                               }} className="px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-2">
                                 <span style={{ background: statusDot }} className="w-1.5 h-1.5 rounded-full"></span>
-                                {statusLabel}
-                              </span>
+                              {statusLabel}
+                            </span>
                             </div>
                           </div>
 
@@ -1389,7 +1425,7 @@ function EmployerJobsPage() {
                                 <span className="hidden sm:inline text-gray-300">•</span>
                                 <span className="flex items-center gap-1.5">
                                   <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                  Hạn nộp: <strong className="text-gray-700 font-medium">{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong>
+                                  Hạn nộp: <strong className={isExpired ? "text-red-600 font-bold" : "text-gray-700 font-medium"}>{new Date(job.deadline).toLocaleDateString('vi-VN')}</strong>
                                 </span>
                               </>
                             )}
@@ -1402,6 +1438,46 @@ function EmployerJobsPage() {
                             {s}
                           </span>
                         ))}
+                      </div>
+                    )}
+
+                    {isExpired && (
+                      <div style={{ marginTop: '16px', background: '#fff1f2', border: '1px solid #fecdd3', borderLeft: '4px solid #e11d48', padding: '14px 16px', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <span style={{ fontWeight: 700, color: '#9f1239', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>⚠️</span> Tin tuyển dụng đã Hết hạn nộp hồ sơ
+                          </span>
+                        </div>
+                        <div style={{ color: '#881337', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '10px' }}>
+                          Tin tuyển dụng này đã hết hạn nộp hồ sơ và tạm ẩn khỏi ứng viên. Bạn có thể <strong>Gia hạn tin</strong> để tiếp tục tuyển dụng, <strong>Nâng cấp gói</strong> để tăng số ngày được đăng hoặc <strong>Tạo tin mới</strong>.
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExtendingJob(job);
+                              const defaultDate = new Date();
+                              defaultDate.setDate(defaultDate.getDate() + maxJobPostingDays);
+                              setNewDeadlineInput(defaultDate.toISOString().split('T')[0]);
+                            }}
+                            style={{ background: '#2563eb', color: '#ffffff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            🔄 Gia hạn tin tuyển dụng
+                          </button>
+                          <Link
+                            to="/employer/subscription/plans"
+                            style={{ background: '#10b981', color: '#ffffff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
+                          >
+                            ⚡ Nâng cấp gói dịch vụ
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={handleOpenAdd}
+                            style={{ background: '#ffffff', color: '#374151', border: '1px solid #d1d5db', padding: '7px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                          >
+                            ➕ Tạo tin mới
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -1492,6 +1568,18 @@ function EmployerJobsPage() {
                       Xem chi tiết
                     </button>
 
+                    {(st === 'draft' || st === 'pending_review') && (
+                      <button
+                        onClick={() => handleDelete(job.id, job.title)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-sm bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 transition-colors"
+                        title="Xóa tin tuyển dụng"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Xóa tin
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1577,45 +1665,58 @@ function EmployerJobsPage() {
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Mô tả công việc</h4>
                 <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
-                  {viewingJob.description}
-                </div>
+                {viewingJob.description}
+              </div>
               </section>
 
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Yêu cầu công việc</h4>
                 <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
-                  {viewingJob.requirements?.join('\n') || viewingJob.skills?.join(', ')}
-                </div>
+                {viewingJob.requirements?.join('\n') || viewingJob.skills?.join(', ')}
+              </div>
               </section>
 
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Quyền lợi</h4>
                 <div className="whitespace-pre-wrap text-gray-600 leading-relaxed text-[15px]">
-                  {viewingJob.benefits || 'Theo quy định của công ty'}
-                </div>
+                {viewingJob.benefits || 'Theo quy định của công ty'}
+              </div>
               </section>
 
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Kỹ năng chuyên môn</h4>
                 <div className="flex gap-2 flex-wrap mt-2">
-                  {viewingJob.skills?.map((s, idx) => (
+                {viewingJob.skills?.map((s, idx) => (
                     <span key={idx} className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200">
-                      {s}
-                    </span>
-                  ))}
-                </div>
+                    {s}
+                  </span>
+                ))}
+              </div>
               </section>
 
               <section>
                 <h4 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4">Thời gian làm việc</h4>
                 <div className="text-gray-600 text-[15px]">
-                  {viewingJob.workingTime || 'Giờ hành chính'}
-                </div>
+                {viewingJob.workingTime || 'Giờ hành chính'}
+              </div>
               </section>
             </div>
 
-            {/* Footer with Đóng tin button */}
+            {/* Footer with action buttons */}
             <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end gap-3">
+              {(viewingJob.status?.toLowerCase() === 'draft' || viewingJob.status?.toLowerCase() === 'pending_review') && (
+                <button
+                  onClick={async () => {
+                    const jobToDelete = viewingJob;
+                    setViewingJob(null);
+                    await handleDelete(jobToDelete.id, jobToDelete.title);
+                  }}
+                  className="inline-flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-5 py-2.5 rounded-lg font-semibold transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                  Xóa tin tuyển dụng
+                </button>
+              )}
               {isVerified && (viewingJob.status?.toLowerCase() === 'published' || viewingJob.status?.toLowerCase() === 'active') && (
                 <button
                   onClick={async () => {
@@ -1639,6 +1740,83 @@ function EmployerJobsPage() {
         </div>
       </div>
     )}
+
+      {extendingJob && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.15rem', fontWeight: 700 }}>🔄 Gia hạn hạn nộp hồ sơ tin tuyển dụng</h3>
+              <button onClick={() => setExtendingJob(null)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: '16px', background: '#f8fafc', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}>
+              <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{extendingJob.title}</div>
+              <div style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                Gói hiện tại: <strong style={{ color: '#2563eb' }}>{subscription?.planName || 'Miễn phí'}</strong> (Hạn đăng tối đa {maxJobPostingDays} ngày)
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontWeight: 600, color: '#334155', fontSize: '0.9rem', marginBottom: '6px' }}>
+                Hạn nộp hồ sơ mới <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <input
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                max={maxAllowedDateStr}
+                value={newDeadlineInput}
+                onChange={(e) => setNewDeadlineInput(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem' }}
+              />
+              <div style={{ fontSize: '0.8rem', color: '#2563eb', marginTop: '6px' }}>
+                ℹ️ Bạn có thể chọn Hạn nộp mới tối đa đến ngày <strong>{new Date(new Date().getTime() + maxJobPostingDays * 86400000).toLocaleDateString('vi-VN')}</strong>.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setExtendingJob(null)}
+                style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={extendingLoading}
+                onClick={async () => {
+                  if (!extendingJob) return;
+                  if (!newDeadlineInput) {
+                    await customAlert('Vui lòng chọn hạn nộp hồ sơ mới.');
+                    return;
+                  }
+                  setExtendingLoading(true);
+                  try {
+                    const updated = await employerService.extendJobDeadline(extendingJob.id, newDeadlineInput);
+                    setJobs(jobs.map((j) => (j.id === extendingJob.id ? updated : j)));
+                    setMessage(`Đã gia hạn thành công tin tuyển dụng "${extendingJob.title}" đến ngày ${new Date(newDeadlineInput).toLocaleDateString('vi-VN')}.`);
+                    setExtendingJob(null);
+                  } catch (err: any) {
+                    const msg = err?.response?.data?.message || 'Không thể gia hạn tin tuyển dụng này.';
+                    if (err?.response?.data?.errorCode === 'PLAN_LIMIT_REACHED' || err?.response?.status === 402 || msg.includes('nâng cấp gói') || msg.includes('giới hạn')) {
+                      if (await customConfirm(`${msg}\n\nBạn có muốn đi đến trang Nâng cấp gói dịch vụ không?`)) {
+                        window.location.href = '/employer/subscription/plans';
+                      }
+                    } else {
+                      await customAlert(msg);
+                    }
+                  } finally {
+                    setExtendingLoading(false);
+                  }
+                }}
+                style={{ background: '#2563eb', color: '#ffffff', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', opacity: extendingLoading ? 0.7 : 1 }}
+              >
+                {extendingLoading ? 'Đang gia hạn...' : 'Xác nhận gia hạn tin'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

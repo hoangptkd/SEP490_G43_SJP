@@ -93,6 +93,7 @@ const EmployerApplicationsPage = lazy(() => import('./pages/Employer/EmployerApp
 const EmployerNotificationsPage = lazy(() => import('./pages/Employer/EmployerNotificationsPage'));
 const EmployerSettingsPage = lazy(() => import('./pages/Employer/EmployerSettingsPage'));
 const EmployerDashboardPage = lazy(() => import('./pages/Employer/EmployerDashboardPage'));
+const EmployerInterviewsPage = lazy(() => import('./pages/Employer/EmployerInterviewsPage'));
 const EmployerLandingPage = lazy(() => import('./pages/Employer/EmployerLandingPage'));
 
 // ─── Framer Motion variants ────────────────────────────────────────────────
@@ -218,7 +219,7 @@ function App() {
         <Route path="verification" element={<CompanyVerificationPage />} />
         <Route path="jobs" element={<EmployerJobsPage />} />
         <Route path="applications" element={<EmployerApplicationsPage />} />
-        <Route path="interviews" element={<EmployerApplicationsPage isInterviewOnly={true} />} />
+        <Route path="interviews" element={<EmployerInterviewsPage />} />
         <Route path="notifications" element={<EmployerNotificationsPage />} />
         <Route path="jobs/:jobId/applications" element={<EmployerApplicationsPage />} />
         <Route path="subscription" element={<EmployerSubscriptionPage />} />
@@ -478,8 +479,98 @@ function ApplyJobModal({
   const [selectedResume, setSelectedResume] = useState(defaultResume);
   const [file, setFile] = useState<File | undefined>();
   const [preferredLocation, setPreferredLocation] = useState(job.location || '');
+  const [companyLocations, setCompanyLocations] = useState<CompanyLocation[]>(job.company?.locations || []);
   const [coverLetter, setCoverLetter] = useState('');
   const [fileError, setFileError] = useState('');
+
+  useEffect(() => {
+    if (job.company?.id) {
+      jobService.getCompany(job.company.id)
+        .then((comp) => {
+          if (comp.locations && comp.locations.length > 0) {
+            setCompanyLocations(comp.locations);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [job.company?.id]);
+
+  const locationOptions = useMemo(() => {
+    const list: { value: string; label: string }[] = [];
+    const addedKeys = new Set<string>();
+
+    list.push({ value: 'Remote', label: 'Làm việc từ xa (Remote)' });
+    addedKeys.add('remote');
+    addedKeys.add('làm việc từ xa');
+    addedKeys.add('làm việc từ xa (remote)');
+
+    const addLoc = (displayLoc?: string) => {
+      const val = displayLoc?.trim();
+      if (!val) return;
+      const key = val.toLowerCase();
+      if (addedKeys.has(key)) return;
+      addedKeys.add(key);
+      list.push({ value: val, label: val });
+    };
+
+    // 1. Thu thập tất cả các Chi nhánh Công ty chính thức
+    const allBranches = [...(companyLocations || [])];
+    if (job.companyLocation && !allBranches.some((b) => b.id === job.companyLocation?.id)) {
+      allBranches.unshift(job.companyLocation);
+    }
+
+    const branchNamesSet = new Set<string>();
+
+    allBranches.forEach((loc) => {
+      const fullLoc = [loc.branchName, loc.address, loc.city].filter(Boolean).join(' - ');
+      if (fullLoc) {
+        addLoc(fullLoc);
+      }
+      if (loc.branchName) {
+        branchNamesSet.add(loc.branchName.trim().toLowerCase());
+      }
+    });
+
+    const isCoveredByBranches = (text?: string) => {
+      if (!text) return true;
+      const norm = text.trim().toLowerCase();
+      if (!norm) return true;
+      if (addedKeys.has(norm)) return true;
+      for (const branchName of branchNamesSet) {
+        if (branchName === norm || branchName.includes(norm) || norm.includes(branchName)) {
+          return true;
+        }
+      }
+      for (const key of addedKeys) {
+        if (key.includes(norm) || norm.includes(key)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // 2. Chỉ thêm job.location hoặc company.location nếu chưa được bao gồm bởi chi nhánh chính thức
+    if (job.location && !isCoveredByBranches(job.location)) {
+      addLoc(job.location);
+    }
+
+    if (job.company?.location && !isCoveredByBranches(job.company.location)) {
+      addLoc(job.company.location);
+    }
+
+    return list;
+  }, [job, companyLocations]);
+
+  useEffect(() => {
+    if (!preferredLocation && locationOptions.length > 0) {
+      const locLower = (job.location || '').trim().toLowerCase();
+      const match = locationOptions.find((opt) => opt.value.toLowerCase() === locLower || opt.label.toLowerCase().includes(locLower)) || locationOptions[0];
+      if (match) {
+        setPreferredLocation(match.value);
+      }
+    }
+  }, [locationOptions, job.location, preferredLocation]);
+
   const dirty = selectedResume !== defaultResume
     || Boolean(file)
     || preferredLocation !== (job.location || '')
@@ -650,14 +741,24 @@ function ApplyJobModal({
             </div>
           </section>
 
-          <ProvinceLocationSelect
-            className="application-field"
-            label="Địa điểm làm việc mong muốn"
-            value={preferredLocation}
-            onChange={setPreferredLocation}
-            allowRemote
-            required
-          />
+          <label className="application-field">
+            <span className="application-field-row">
+              Địa điểm làm việc mong muốn <span style={{ color: 'var(--danger)' }}>*</span>
+            </span>
+            <select
+              className="application-select"
+              value={preferredLocation}
+              onChange={(event) => setPreferredLocation(event.target.value)}
+              required
+            >
+              <option value="" disabled>-- Chọn địa điểm / chi nhánh làm việc --</option>
+              {locationOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="application-field">
             <span className="application-field-row">
@@ -1490,7 +1591,7 @@ function HomePage() {
                 {hiringCompanies.map((company) => (
                   <div key={company.id} className="home-company-card">
                     <div className="home-company-logo">
-                      {company.logoUrl ? <img src={company.logoUrl} alt="" loading="lazy" /> : <span>{companyInitials(company.name)}</span>}
+                      {company.logoUrl ? <img src={company.logoUrl} alt={company.name} loading="lazy" /> : <IconBuilding size={24} style={{ opacity: 0.6 }} />}
                     </div>
                     <div>
                       <strong>{company.name}</strong>
@@ -1722,7 +1823,11 @@ function LoginPage() {
           )}
         </AnimatePresence>
 
-        <form className="auth-form" onSubmit={submit}>
+        <form className="auth-form" onSubmit={submit} autoComplete="off">
+          {/* Dummy hidden inputs to defeat Chrome/Edge aggressive autofill heuristics */}
+          <input type="text" name="fake_username_login" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+          <input type="password" name="fake_password_login" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+
           {/* Email */}
           <label>
             Email
@@ -1738,9 +1843,8 @@ function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="tên@côngty.com"
                 required
-                autoComplete="email"
+                autoComplete="off"
               />
             </div>
           </label>
@@ -1763,9 +1867,8 @@ function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
                 style={{ paddingRight: 44 }}
               />
               <button
@@ -1916,7 +2019,10 @@ function RegisterPage() {
         <p>{role === 'EMPLOYER' ? 'Tìm kiếm ứng viên tài năng cùng hệ thống của chúng tôi' : 'Tham gia Smart Recruitment Portal'}</p>
       </div>
 
-      <form className="auth-form" onSubmit={submit}>
+      <form className="auth-form" onSubmit={submit} autoComplete="off">
+        {/* Dummy hidden inputs to defeat Chrome/Edge aggressive autofill heuristics */}
+        <input type="text" name="fake_username_reg" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+        <input type="password" name="fake_password_reg" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
         {role === 'EMPLOYER' && (
           <label>
             Họ và tên
@@ -1931,8 +2037,8 @@ function RegisterPage() {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="Nguyễn Văn A"
                 required
+                autoComplete="off"
               />
             </div>
           </label>
@@ -1951,8 +2057,8 @@ function RegisterPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="tên@côngty.com"
               required
+              autoComplete="off"
             />
           </div>
         </label>
@@ -1970,8 +2076,8 @@ function RegisterPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Tối thiểu 8 ký tự"
               required
+              autoComplete="new-password"
             />
           </div>
         </label>
@@ -1989,7 +2095,6 @@ function RegisterPage() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Nhập lại mật khẩu"
               required
               autoComplete="new-password"
             />
@@ -2012,8 +2117,8 @@ function RegisterPage() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="09xx xxx xxx"
                   required
+                  autoComplete="off"
                 />
               </div>
             </label>
@@ -2168,9 +2273,8 @@ function ForgotPasswordPage() {
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="tên@côngty.com"
                 required
-                autoComplete="email"
+                autoComplete="off"
               />
             </div>
           </label>
@@ -2273,7 +2377,6 @@ function ResetPasswordPage() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password123"
               required
               autoComplete="new-password"
             />
@@ -2292,7 +2395,6 @@ function ResetPasswordPage() {
               type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Password123"
               required
               autoComplete="new-password"
             />
@@ -3232,7 +3334,13 @@ function JobCard({ job }: { job: Job }) {
     >
       <article className={`job-card${job.featured ? ' is-featured' : ''}${showFooter ? ' has-footer' : ''}`}>
         <div className="job-card-header">
-          <div className="job-company-logo">{initials}</div>
+          <div className="job-company-logo">
+            {job.company.logoUrl ? (
+              <img src={job.company.logoUrl} alt={job.company.name} />
+            ) : (
+              <IconBuilding size={22} style={{ opacity: 0.6 }} />
+            )}
+          </div>
           <div className="job-card-info">
             <div className="job-card-title-row">
               <h3>{job.title}</h3>
@@ -3312,7 +3420,7 @@ function CompanyDetailPage() {
             <section className="card" style={{ marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <div className="job-company-logo" style={{ width: 72, height: 72 }}>
-                  {company.logoUrl ? <img src={company.logoUrl} alt="" /> : companyInitials(company.name)}
+                  {company.logoUrl ? <img src={company.logoUrl} alt={company.name} /> : <IconBuilding size={36} style={{ opacity: 0.6 }} />}
                 </div>
                 <div>
                   <h1 style={{ margin: 0 }}>{company.name}</h1>
@@ -3581,8 +3689,12 @@ function JobDetailPage() {
           <motion.div className="job-detail-header" variants={fadeUp} initial="initial" animate="animate"
             transition={{ duration: 0.28, ease: EASE_OUT }}>
             <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-              <div className="job-company-logo" style={{ width: 64, height: 64, fontSize: '1.4rem', borderRadius: 12 }}>
-                {initials}
+              <div className="job-company-logo" style={{ width: 64, height: 64, borderRadius: 12 }}>
+                {job.company.logoUrl ? (
+                  <img src={job.company.logoUrl} alt={job.company.name} />
+                ) : (
+                  <IconBuilding size={32} style={{ opacity: 0.6 }} />
+                )}
               </div>
               <div style={{ flex: 1 }}>
                 <Link className="eyebrow" to={`/companies/${job.company.id}`}>{job.company.name}</Link>
@@ -5157,7 +5269,7 @@ function ApplicationsPage() {
                       {logoUrl ? (
                         <img src={logoUrl} alt="" />
                       ) : (
-                        <span>{companyInitials(company.name)}</span>
+                        <IconBuilding size={24} style={{ opacity: 0.6 }} />
                       )}
                     </div>
 
@@ -5310,6 +5422,15 @@ function ApplicationDetailPage() {
     if (!id) return;
     const app = await candidateService.getApplication(id);
     setApplication(app);
+
+    // Auto-mark unviewed interviews as viewed
+    if (app.interviews && Array.isArray(app.interviews)) {
+      app.interviews.forEach(interview => {
+        if (!interview.viewedAt) {
+          candidateService.viewInterview(interview.id).catch(console.error);
+        }
+      });
+    }
   }, [id]);
 
   useEffect(() => {
@@ -5532,6 +5653,7 @@ function ApplicationDetailPage() {
                    : interview.status === 'DECLINED' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
                    : interview.status === 'COMPLETED' ? <span style={{ color: '#4338ca' }}>Đã phỏng vấn xong</span>
                    : interview.status === 'NO_SHOW' ? <span style={{ color: '#b91c1c' }}>Không tham gia</span>
+                   : interview.status === 'NO_RESPONSE' ? <span style={{ color: '#b91c1c', fontWeight: 600 }}>🔴 Đã hết hạn phản hồi</span>
                    : interview.status}
                 </p>
 
@@ -5576,29 +5698,63 @@ function ApplicationDetailPage() {
       <div className="card">
         <h2 style={{ marginBottom: 0 }}>Lịch sử trạng thái</h2>
         <div className="timeline">
-          {application.timeline.map((item, i) => (
-            <motion.div key={item.id} className="timeline-item"
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.06 }}>
+          {application.timeline.map((item, i) => {
+            let displayNote = item.publicNote;
+            if (displayNote) {
+              const rescheduleMatch = displayNote.match(/(?:Nhà tuyển dụng phản hồi đổi lịch:\s*)?Chấp nhận đổi lịch phỏng vấn mới\s*\(Lịch cũ:\s*([^\-]+?)\s*->\s*Lịch mới:\s*([^)]+)\)/i);
+              if (rescheduleMatch) {
+                displayNote = `Đã đổi lịch phỏng vấn từ ${rescheduleMatch[1].trim()} thành ${rescheduleMatch[2].trim()}`;
+              } else if (displayNote.toLowerCase().includes('yêu cầu đổi lịch phỏng vấn')) {
+                if (!displayNote.includes('Lý do:') && application.interviews && application.interviews.length > 0) {
+                  const latestIv = application.interviews[application.interviews.length - 1];
+                  if (latestIv && latestIv.candidateRescheduleNote) {
+                    displayNote = `Ứng viên đã yêu cầu đổi lịch phỏng vấn (Lý do: ${latestIv.candidateRescheduleNote})`;
+                  } else {
+                    displayNote = 'Ứng viên đã yêu cầu đổi lịch phỏng vấn';
+                  }
+                }
+              } else if (displayNote.toLowerCase().includes('từ chối đổi lịch phỏng vấn')) {
+                if (!displayNote.includes('Lý do:') && application.interviews && application.interviews.length > 0) {
+                  const latestIv = application.interviews[application.interviews.length - 1];
+                  if (latestIv && latestIv.employerRescheduleNote) {
+                    displayNote = `Nhà tuyển dụng phản hồi đổi lịch: Từ chối đổi lịch phỏng vấn (Lý do: ${latestIv.employerRescheduleNote})`;
+                  }
+                }
+              } else if (
+                displayNote === 'Đã lên lịch phỏng vấn' &&
+                application.interviews && application.interviews.length > 0
+              ) {
+                const latestIv = application.interviews[application.interviews.length - 1];
+                if (latestIv && latestIv.scheduledAt) {
+                  displayNote += ` (Thời gian: ${formatDateTime(latestIv.scheduledAt)})`;
+                }
+              }
+            }
 
-              {i > 0 && application.timeline[i - 1].toStatus === item.toStatus ? (
-                <span style={{ display: 'inline-block', marginBottom: 8, fontSize: '1.2rem', color: 'var(--text-muted)', opacity: 0.6 }}>↳</span>
-              ) : (
-                <strong className={`chip ${statusColors[item.toStatus] || ''}`} style={{ display: 'inline-flex', marginBottom: 8 }}>
-                  {statusLabels[item.toStatus] || item.toStatus}
-                </strong>
-              )}
-              <span className="timeline-item-date">
-                {formatDateTime(item.createdAt)}
-              </span>
-              {item.publicNote && (
-                <p style={{ margin: '6px 0 0', color: 'var(--on-muted)', fontSize: '0.875rem' }}>
-                  {item.publicNote}
-                </p>
-              )}
-            </motion.div>
-          ))}
+            return (
+              <motion.div key={item.id} className="timeline-item"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.06 }}>
+
+                {i > 0 && application.timeline[i - 1].toStatus === item.toStatus ? (
+                  <span style={{ display: 'inline-block', marginBottom: 8, fontSize: '1.2rem', color: 'var(--text-muted)', opacity: 0.6 }}>↳</span>
+                ) : (
+                  <strong className={`chip ${statusColors[item.toStatus] || ''}`} style={{ display: 'inline-flex', marginBottom: 8 }}>
+                    {statusLabels[item.toStatus] || item.toStatus}
+                  </strong>
+                )}
+                <span className="timeline-item-date">
+                  {formatDateTime(item.createdAt)}
+                </span>
+                {displayNote && (
+                  <p style={{ margin: '6px 0 0', color: 'var(--on-muted)', fontSize: '0.875rem' }}>
+                    {displayNote}
+                  </p>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
       </div>
       <AnimatePresence>
@@ -6066,8 +6222,9 @@ function EmployerLayout() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    employerService.getNotifications().then(data => {
-      setUnreadCount(data.filter(n => !n.read).length);
+    employerService.getNotifications(1, 20).then(data => {
+      const list = Array.isArray(data) ? data : (data?.items || []);
+      setUnreadCount(list.filter(n => !n.read).length);
     }).catch(() => {});
   }, []);
 

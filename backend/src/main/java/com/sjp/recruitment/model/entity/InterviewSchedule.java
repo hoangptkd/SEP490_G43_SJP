@@ -63,6 +63,9 @@ public class InterviewSchedule {
     @Column(name = "last_reminder_at")
     private LocalDateTime lastReminderAt;
 
+    @Column(name = "reminder_count", nullable = false)
+    private Integer reminderCount = 0;
+
     @Column(name = "candidate_reschedule_note")
     private String candidateRescheduleNote;
 

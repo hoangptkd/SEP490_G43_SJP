@@ -43,6 +43,49 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleString('vi-VN');
 }
 
+function jobTypeLabel(value?: string) {
+  const map: Record<string, string> = {
+    full_time: 'Toàn thời gian',
+    part_time: 'Bán thời gian',
+    contract: 'Hợp đồng',
+    internship: 'Thực tập',
+    freelance: 'Freelance',
+  };
+  return map[value || ''] || value || '—';
+}
+
+function workModeLabel(value?: string) {
+  const map: Record<string, string> = {
+    onsite: 'Tại văn phòng',
+    remote: 'Làm từ xa',
+    hybrid: 'Kết hợp',
+  };
+  return map[value || ''] || value || '—';
+}
+
+function salaryTypeLabel(value?: string) {
+  const map: Record<string, string> = {
+    range: 'Khoảng lương',
+    fixed: 'Lương cố định',
+    negotiable: 'Thỏa thuận',
+  };
+  return map[value || ''] || value || '—';
+}
+
+function companyVerificationLabel(status?: string) {
+  const value = status?.toLowerCase() || 'unverified';
+  switch (value) {
+    case 'verified':
+      return { text: 'Công ty đã xác thực', className: 'status-verified' };
+    case 'pending':
+      return { text: 'Công ty chờ duyệt', className: 'status-pending' };
+    case 'rejected':
+      return { text: 'Công ty bị từ chối', className: 'status-rejected' };
+    default:
+      return { text: 'Công ty chưa xác thực', className: 'status-unverified' };
+  }
+}
+
 function formatMoney(min?: number, max?: number) {
   if (!min && !max) return 'Thỏa thuận';
   if (min && max) {
@@ -319,12 +362,23 @@ export default function AdminJobDetailPage() {
 
           <div className="admin-company-info-grid">
             <div><span>Công ty</span><strong>{detail.job.company?.name || '—'}</strong></div>
+            <div>
+              <span>Xác thực công ty</span>
+              <strong>
+                <span className={`admin-status-badge ${companyVerificationLabel(detail.companyVerificationStatus).className}`}>
+                  {companyVerificationLabel(detail.companyVerificationStatus).text}
+                </span>
+              </strong>
+            </div>
             <div><span>Địa điểm</span><strong>{detail.job.location || '—'}</strong></div>
             <div><span>Mức lương</span><strong>{formatMoney(detail.job.salaryMin, detail.job.salaryMax)}</strong></div>
+            <div><span>Loại lương</span><strong>{salaryTypeLabel(detail.job.salaryType)}</strong></div>
             <div><span>Kinh nghiệm</span><strong>{detail.job.experienceLevel || '—'}</strong></div>
-            <div><span>Loại hình</span><strong>{detail.job.jobType || '—'}</strong></div>
-            <div><span>Hình thức</span><strong>{detail.job.workMode || '—'}</strong></div>
+            <div><span>Loại hình</span><strong>{jobTypeLabel(detail.job.jobType)}</strong></div>
+            <div><span>Hình thức</span><strong>{workModeLabel(detail.job.workMode)}</strong></div>
+            <div><span>Thời gian làm việc</span><strong>{detail.job.workingTime || '—'}</strong></div>
             <div><span>Số lượng tuyển</span><strong>{detail.job.vacancies ?? '—'}</strong></div>
+            <div><span>Lượt xem</span><strong>{detail.job.viewsCount ?? 0}</strong></div>
             <div><span>Hạn nộp</span><strong>{detail.job.deadline ? formatDate(detail.job.deadline) : '—'}</strong></div>
           </div>
 

@@ -67,34 +67,65 @@ public class EmployerService {
 
     private final AuthService authService;
     
-    @Transactional
-    public EmployerDashboardResponse getDashboardStats() {
+    @Transactional(readOnly = true)
+    public EmployerDashboardResponse getDashboardStats(java.time.LocalDate startDate, java.time.LocalDate endDate) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         UUID employerId = employer.getId();
         
-        long totalJobs = jobRepository.countByEmployerIdAndStatusNot(employerId, "archived");
-        long activeJobs = jobRepository.countByEmployerIdAndStatus(employerId, "published");
-        long totalApplications = applicationRepository.countByJobEmployerIdAndJobStatus(employerId, "published");
-        long pendingApplications = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "applied", "published");
+        boolean hasDateFilter = startDate != null && endDate != null;
+        LocalDateTime startDateTime = hasDateFilter ? startDate.atStartOfDay() : null;
+        LocalDateTime endDateTime = hasDateFilter ? endDate.atTime(23, 59, 59, 999999999) : null;
         
-        List<Object[]> statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatus(employerId, "published");
+        long totalJobs = jobRepository.countByEmployerIdAndStatusNot(employerId, "archived");
+        
+        // Fetch active/published jobs once
+        List<Job> activeJobsQuery = jobRepository.findByEmployerIdAndStatus(employerId, "published");
+        long activeJobs = activeJobsQuery.size();
+        
+        // Application counts grouped by status
+        List<Object[]> statusCounts;
+        if (hasDateFilter) {
+            statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatusAndDateRange(employerId, "published", startDateTime, endDateTime);
+        } else {
+            statusCounts = applicationRepository.countApplicationsByStatusForEmployerAndJobStatus(employerId, "published");
+        }
+        
+        long totalApplications = statusCounts.stream().mapToLong(row -> (Long) row[1]).sum();
         Map<String, Long> applicationsByStatus = statusCounts.stream()
                 .collect(Collectors.toMap(
                         row -> (String) row[0],
-                        row -> (Long) row[1]
+                        row -> (Long) row[1],
+                        Long::sum
                 ));
                 
-        List<ApplicationResponse> recentApplications = applicationRepository
-                .findByEmployerIdAndJobStatus(employerId, "published", PageRequest.of(0, 5, Sort.by("submittedAt").descending()))
-                .getContent().stream()
-                .map(applicationService::toResponse)
-                .collect(Collectors.toList());
+        long pendingApplications = getStatusCount(applicationsByStatus, Application.ApplicationStatus.SUBMITTED);
+        long countNewlyApplied = pendingApplications;
+        long countShortlisted = getStatusCount(applicationsByStatus, Application.ApplicationStatus.SHORTLISTED);
+        long countInterviewScheduled = getStatusCount(applicationsByStatus, Application.ApplicationStatus.INTERVIEW_SCHEDULED);
+        long countReviewed = getStatusCount(applicationsByStatus, Application.ApplicationStatus.UNDER_REVIEW);
+        long countInterview = countShortlisted + countInterviewScheduled;
+        long countOffer = getStatusCount(applicationsByStatus, Application.ApplicationStatus.ACCEPTED);
+        long countHired = getStatusCount(applicationsByStatus, Application.ApplicationStatus.HIRED);
+
+        // Fetch recent applications and map using toResponseBulk
+        List<Application> recentAppsList;
+        if (hasDateFilter) {
+            recentAppsList = applicationRepository.findByEmployerIdAndJobStatusAndDateRange(employerId, "published", startDateTime, endDateTime, PageRequest.of(0, 5, Sort.by("submittedAt").descending())).getContent();
+        } else {
+            recentAppsList = applicationRepository.findByEmployerIdAndJobStatus(employerId, "published", PageRequest.of(0, 5, Sort.by("submittedAt").descending())).getContent();
+        }
+        List<ApplicationResponse> recentApplications = applicationService.toResponseBulk(recentAppsList);
                 
         // Time Context Calculations
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime fourteenDaysAgo = now.minusDays(14);
         
-        List<Object[]> dateRows = applicationRepository.findApplicationDatesByEmployerSinceAndJobStatus(employerId, fourteenDaysAgo, "published");
+        List<Object[]> dateRows;
+        if (hasDateFilter) {
+            dateRows = applicationRepository.findApplicationDatesByEmployerAndJobStatusAndDateRange(employerId, "published", startDateTime, endDateTime);
+        } else {
+            dateRows = applicationRepository.findApplicationDatesByEmployerSinceAndJobStatus(employerId, fourteenDaysAgo, "published");
+        }
         
         Map<String, Long> trendMap = dateRows.stream()
                 .collect(Collectors.groupingBy(
@@ -103,9 +134,18 @@ public class EmployerService {
                 ));
                 
         List<EmployerDashboardResponse.DailyApplicationTrend> applicationTrend = new ArrayList<>();
-        for (int i = 13; i >= 0; i--) {
-            String dateStr = now.minusDays(i).toLocalDate().format(DateTimeFormatter.ISO_DATE);
-            applicationTrend.add(new EmployerDashboardResponse.DailyApplicationTrend(dateStr, trendMap.getOrDefault(dateStr, 0L)));
+        if (hasDateFilter) {
+            java.time.LocalDate current = startDate;
+            while (!current.isAfter(endDate) && applicationTrend.size() < 60) {
+                String dateStr = current.format(DateTimeFormatter.ISO_DATE);
+                applicationTrend.add(new EmployerDashboardResponse.DailyApplicationTrend(dateStr, trendMap.getOrDefault(dateStr, 0L)));
+                current = current.plusDays(1);
+            }
+        } else {
+            for (int i = 13; i >= 0; i--) {
+                String dateStr = now.minusDays(i).toLocalDate().format(DateTimeFormatter.ISO_DATE);
+                applicationTrend.add(new EmployerDashboardResponse.DailyApplicationTrend(dateStr, trendMap.getOrDefault(dateStr, 0L)));
+            }
         }
         
         LocalDateTime sevenDaysAgo = now.minusDays(7);
@@ -230,8 +270,12 @@ public class EmployerService {
         }
 
         // 6. Today's Interviews & Upcoming Timeline
-        List<com.sjp.recruitment.model.entity.InterviewSchedule> futureInterviews = interviewScheduleRepository
-                .findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1), "published");
+        List<com.sjp.recruitment.model.entity.InterviewSchedule> futureInterviews;
+        if (hasDateFilter) {
+            futureInterviews = interviewScheduleRepository.findByEmployerIdAndScheduledAtBetweenAndJobStatusOrderByScheduledAtAsc(employerId, startDateTime, endDateTime, "published");
+        } else {
+            futureInterviews = interviewScheduleRepository.findByEmployerIdAndScheduledAtAfterAndJobStatusOrderByScheduledAtAsc(employerId, startOfDay.minusNanos(1), "published");
+        }
 
         for (var interview : futureInterviews) {
             if ("COMPLETED".equals(interview.getStatus()) || "NO_SHOW".equals(interview.getStatus()) || "CANCELLED".equals(interview.getStatus())) {
@@ -249,7 +293,7 @@ public class EmployerService {
                         "Phỏng vấn hôm nay: " + candidateName,
                         "Vị trí " + jobTitle + " lúc " + interview.getScheduledAt().format(DateTimeFormatter.ofPattern("HH:mm")),
                         "interview_today",
-                        "/employer/applications/" + interview.getApplication().getId(),
+                        "/employer/applications?appId=" + interview.getApplication().getId(),
                         interview.getScheduledAt()
                 ));
             } else if ("SCHEDULED".equals(interview.getStatus())
@@ -266,11 +310,13 @@ public class EmployerService {
                 ));
             }
         }
+        
         // 7. TopCV Action Summary
         long unreadMessagesCount = notificationRepository.countByRecipientUserIdAndReadFalse(employer.getUser().getId());
         
-        long expiringJobsCount = jobRepository.findByEmployerIdAndStatus(employerId, "published").stream()
-                .filter(j -> j.getDeadline() != null && j.getDeadline().isBefore(now.toLocalDate().plusDays(4)) && !j.getDeadline().isBefore(now.toLocalDate()))
+        // Count expiring jobs from already fetched activeJobsQuery
+        long expiringJobsCount = activeJobsQuery.stream()
+                .filter(j -> j.getDeadline() != null && !j.getDeadline().isBefore(now.toLocalDate()) && j.getDeadline().isBefore(now.toLocalDate().plusDays(4)))
                 .count();
 
         long todayInterviewsCount = futureInterviews.stream()
@@ -279,12 +325,8 @@ public class EmployerService {
                               !"NO_SHOW".equals(iv.getStatus()) && 
                               !"CANCELLED".equals(iv.getStatus()))
                 .count();
-        
-        long countNewlyApplied = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "applied", "published");
-        long countShortlisted = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "shortlisted", "published");
-        long countInterviewScheduled = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "interview_scheduled", "published");
 
-        long pendingAppsCount = countInterviewScheduled;
+        long pendingAppsCount = pendingApplications;
 
         EmployerDashboardResponse.ActionSummary actionSummary = new EmployerDashboardResponse.ActionSummary(
                 pendingAppsCount,
@@ -294,18 +336,62 @@ public class EmployerService {
         );
 
         // 8. TopCV Pipeline Stats
-        long countReviewed = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "reviewed", "published");
-        long countInterview = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "shortlisted", "published") + countInterviewScheduled;
-        long countOffer = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "accepted", "published");
-        long countHired = applicationRepository.countByJobEmployerIdAndStatusAndJobStatus(employerId, "hired", "published");
+        long interviewPendingResponseCount;
+        long interviewAcceptedCount;
+        long interviewCompletedCount;
+        long rescheduleRequestedCount;
+        long offerPendingResponseCount;
+        long offerAcceptedCount;
+        long offerRejectedCount;
 
-        long interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published");
-        long interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("ACCEPTED"), "published");
-        long interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(employerId, List.of("COMPLETED"), "published");
+        if (hasDateFilter) {
+            interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published", startDateTime, endDateTime);
+            interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("ACCEPTED"), "published", startDateTime, endDateTime);
+            interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("COMPLETED"), "published", startDateTime, endDateTime);
+            rescheduleRequestedCount = interviewScheduleRepository.countByEmployerIdAndStatusAndScheduledAtBetween(
+                    employerId, "RESCHEDULE_REQUESTED", startDateTime, endDateTime);
 
-        long offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("sent", "pending_response", "negotiation_requested"), "published");
-        long offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("accepted"), "published");
-        long offerRejectedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(employerId, List.of("rejected", "declined"), "published");
+            offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("sent", "pending_response", "negotiation_requested"), "published", startDateTime, endDateTime);
+            offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("accepted"), "published", startDateTime, endDateTime);
+            offerRejectedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("rejected", "declined"), "published", startDateTime, endDateTime);
+
+            long scheduledInPeriod = interviewScheduleRepository.countInterviewsByEmployerAndJobStatusAndDateRange(employerId, "published", startDateTime, endDateTime);
+            if (scheduledInPeriod > countInterviewScheduled) {
+                countInterviewScheduled = scheduledInPeriod;
+            }
+            countInterview = Math.max(scheduledInPeriod, countShortlisted + countInterviewScheduled);
+            long offersInPeriod = offerPendingResponseCount + offerAcceptedCount;
+            if (offersInPeriod > countOffer) {
+                countOffer = offersInPeriod;
+            }
+        } else {
+            interviewPendingResponseCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(
+                    employerId, List.of("PENDING_RESPONSE", "SCHEDULED", "RESCHEDULE_REQUESTED"), "published");
+            interviewAcceptedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(
+                    employerId, List.of("ACCEPTED"), "published");
+            interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(
+                    employerId, List.of("COMPLETED"), "published");
+            rescheduleRequestedCount = interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(
+                    employerId, "RESCHEDULE_REQUESTED", "published");
+
+            offerPendingResponseCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(
+                    employerId, List.of("sent", "pending_response", "negotiation_requested"), "published");
+            offerAcceptedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(
+                    employerId, List.of("accepted"), "published");
+            offerRejectedCount = jobOfferRepository.countActiveOffersByStatusesAndJobStatus(
+                    employerId, List.of("rejected", "declined"), "published");
+        }
+
+        long totalViews = jobRepository.findByEmployerIdAndStatusNot(employerId, "archived")
+                .stream()
+                .mapToLong(j -> j.getViewsCount() != null ? j.getViewsCount() : 0)
+                .sum();
 
         EmployerDashboardResponse.PipelineStats pipelineStats = new EmployerDashboardResponse.PipelineStats(
                 totalApplications,
@@ -318,35 +404,41 @@ public class EmployerService {
                 countInterviewScheduled,
                 interviewPendingResponseCount,
                 interviewAcceptedCount,
-                interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(employerId, "RESCHEDULE_REQUESTED", "published"),
+                rescheduleRequestedCount,
                 interviewCompletedCount,
                 offerPendingResponseCount,
                 offerAcceptedCount,
-                offerRejectedCount
+                offerRejectedCount,
+                totalViews
         );
 
-        // 9. TopCV Active Jobs List
-        List<Job> activeJobsQuery = jobRepository.findByEmployerIdAndStatus(employerId, "published");
+        // 9. TopCV Active Jobs List (Batch Count using countByJobIdIn)
         List<EmployerDashboardResponse.ActiveJobSummary> activeJobsList = new ArrayList<>();
-        for (Job j : activeJobsQuery) {
-            long appCount = applicationRepository.countByJobId(j.getId());
-            long daysLeft = j.getDeadline() != null ? java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), j.getDeadline()) : 0;
-            if (daysLeft < 0) daysLeft = 0;
-            
-            activeJobsList.add(new EmployerDashboardResponse.ActiveJobSummary(
-                    j.getId(),
-                    j.getTitle(),
-                    j.getLocation(),
-                    j.getJobType(),
-                    j.getStatus(),
-                    j.getViewsCount() != null ? j.getViewsCount() : 0,
-                    appCount,
-                    daysLeft
-            ));
+        if (!activeJobsQuery.isEmpty()) {
+            List<UUID> jobIds = activeJobsQuery.stream().map(Job::getId).toList();
+            Map<UUID, Long> appCountMap = applicationRepository.countByJobIdIn(jobIds).stream()
+                    .collect(Collectors.toMap(
+                            row -> (UUID) row[0],
+                            row -> (Long) row[1]
+                    ));
+            for (Job j : activeJobsQuery) {
+                long appCount = appCountMap.getOrDefault(j.getId(), 0L);
+                long daysLeft = j.getDeadline() != null ? java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), j.getDeadline()) : 0;
+                if (daysLeft < 0) daysLeft = 0;
+                
+                activeJobsList.add(new EmployerDashboardResponse.ActiveJobSummary(
+                        j.getId(),
+                        j.getTitle(),
+                        j.getLocation(),
+                        j.getJobType(),
+                        j.getStatus(),
+                        j.getViewsCount() != null ? j.getViewsCount() : 0,
+                        appCount,
+                        daysLeft
+                ));
+            }
+            activeJobsList.sort(Comparator.comparing(EmployerDashboardResponse.ActiveJobSummary::daysLeft));
         }
-        
-        // Sort active jobs by days left (expiring soon first)
-        activeJobsList.sort(Comparator.comparing(EmployerDashboardResponse.ActiveJobSummary::daysLeft));
 
         // 10. TopCV Activity Logs
         List<com.sjp.recruitment.model.entity.Notification> notifications = notificationRepository
@@ -400,6 +492,58 @@ public class EmployerService {
     private final com.sjp.recruitment.repository.JobOfferRepository jobOfferRepository;
     private final TaxCodeLookupService taxCodeLookupService;
 
+    @Transactional(readOnly = true)
+    public List<com.sjp.recruitment.model.dto.response.EmployerInterviewResponse> getInterviews(String range) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        UUID employerId = employer.getId();
+
+        LocalDateTime now = LocalDateTime.now();
+        List<com.sjp.recruitment.model.entity.InterviewSchedule> interviews;
+
+        if ("today".equals(range)) {
+            LocalDateTime startOfDay = now.toLocalDate().atStartOfDay();
+            LocalDateTime endOfDay = startOfDay.plusDays(1);
+            interviews = interviewScheduleRepository.findByEmployerIdAndScheduledAtBetweenOrderByScheduledAt(employerId, startOfDay, endOfDay);
+        } else if ("week".equals(range)) {
+            LocalDateTime startOfWeek = now.toLocalDate().atStartOfDay();
+            LocalDateTime endOfWeek = startOfWeek.plusDays(7);
+            interviews = interviewScheduleRepository.findByEmployerIdAndScheduledAtBetweenOrderByScheduledAt(employerId, startOfWeek, endOfWeek);
+        } else {
+            interviews = interviewScheduleRepository.findByEmployerIdOrderByScheduledAtAsc(employerId);
+        }
+
+        return interviews.stream().map(iv -> {
+            String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null
+                    ? iv.getCandidate().getFullName() : "Ứng viên";
+            String candidatePhone = iv.getCandidate() != null ? iv.getCandidate().getPhone() : null;
+            String candidateEmail = iv.getCandidate() != null && iv.getCandidate().getUser() != null
+                    ? iv.getCandidate().getUser().getEmail() : null;
+            String jobTitle = iv.getApplication() != null && iv.getApplication().getJob() != null
+                    ? iv.getApplication().getJob().getTitle() : "Việc làm";
+            java.util.UUID jobId = iv.getApplication() != null && iv.getApplication().getJob() != null
+                    ? iv.getApplication().getJob().getId() : null;
+
+            return new com.sjp.recruitment.model.dto.response.EmployerInterviewResponse(
+                    iv.getId(),
+                    iv.getApplication() != null ? iv.getApplication().getId() : null,
+                    iv.getRoundNumber(),
+                    iv.getStatus(),
+                    iv.getScheduledAt(),
+                    iv.getLocation(),
+                    iv.getMeetingLink(),
+                    iv.getViewedAt(),
+                    iv.getCandidateRescheduleNote(),
+                    candidateName,
+                    candidatePhone,
+                    candidateEmail,
+                    jobTitle,
+                    jobId,
+                    iv.getCreatedAt(),
+                    iv.getUpdatedAt()
+            );
+        }).collect(Collectors.toList());
+    }
+
     @Transactional
     public Employer getCurrentEmployerOrRegisterPlaceholder() {
         User user = authService.getCurrentUser();
@@ -409,17 +553,8 @@ public class EmployerService {
 
         return employerRepository.findByUserId(user.getId())
                 .orElseGet(() -> {
-                    // Tạo một công ty tạm thời cho nhà tuyển dụng
-                    String baseName = "Công ty của " + (user.getFullName() != null && !user.getFullName().isEmpty() ? user.getFullName() : user.getEmail());
-                    String name = baseName;
-                    int count = 1;
-                    while (companyRepository.findByName(name).isPresent()) {
-                        name = baseName + " (" + count + ")";
-                        count++;
-                    }
-
                     Company company = new Company();
-                    company.setName(name);
+                    company.setName("Công ty chưa đặt tên (" + user.getId().toString().substring(0, 8) + ")");
                     company.setDescription("Chưa có mô tả");
                     company.setStatus("pending");
                     company.setVerificationStatus("unverified");
@@ -1045,6 +1180,12 @@ public class EmployerService {
         return jobService.reopenJobForEmployer(id, employer, newDeadline);
     }
 
+    @Transactional
+    public JobResponse extendJobDeadline(String id, String newDeadline) {
+        Employer employer = getCurrentEmployerOrRegisterPlaceholder();
+        return jobService.extendJobDeadline(id, employer, newDeadline);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<ApplicationResponse> getCompanyApplications(String jobId, String status, String search, int page, int size) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
@@ -1087,6 +1228,22 @@ public class EmployerService {
         return new PageResponse<>(responses, page, size, appPage.getTotalElements(), appPage.getTotalPages(), appPage.isFirst(), appPage.isLast());
     }
 
+    private long getStatusCount(Map<String, Long> map, Application.ApplicationStatus statusEnum) {
+        if (map == null || statusEnum == null) {
+            return 0L;
+        }
+        long sum = 0;
+        for (Map.Entry<String, Long> entry : map.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                String key = entry.getKey().trim();
+                if (key.equalsIgnoreCase(statusEnum.databaseValue()) || key.equalsIgnoreCase(statusEnum.name())) {
+                    sum += entry.getValue();
+                }
+            }
+        }
+        return sum;
+    }
+
     private List<String> parseApplicationStatusFilters(String status) {
         if (status == null || status.isBlank()) {
             return List.of();
@@ -1098,15 +1255,17 @@ public class EmployerService {
                 continue;
             }
             try {
-                values.add(Application.ApplicationStatus.valueOf(token.toUpperCase(Locale.ROOT)).databaseValue());
+                Application.ApplicationStatus appStatus = Application.ApplicationStatus.valueOf(token.toUpperCase(Locale.ROOT));
+                values.add(appStatus.databaseValue());
+                values.add(appStatus.name());
             } catch (IllegalArgumentException ignored) {
-                // Skip unknown tokens so a bad filter does not collapse to SUBMITTED.
+                values.add(token);
             }
         }
         return values;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ApplicationResponse getApplicationDetail(String id) {
         Employer employer = getCurrentEmployerOrRegisterPlaceholder();
         UUID appId;
@@ -1121,6 +1280,11 @@ public class EmployerService {
                 
         if (app.getJob() == null || app.getJob().getCompany() == null || !app.getJob().getCompany().getId().equals(employer.getCompany().getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền xem hồ sơ này");
+        }
+        
+        // Tự động chuyển trạng thái từ Mới nộp (SUBMITTED/applied) sang Đã xem (UNDER_REVIEW/reviewed) khi Nhà tuyển dụng xem chi tiết
+        if ("applied".equalsIgnoreCase(app.getStatus()) || "SUBMITTED".equalsIgnoreCase(app.getStatus())) {
+            applicationService.seedStatus(app, Application.ApplicationStatus.UNDER_REVIEW, "Nhà tuyển dụng đã xem hồ sơ ứng tuyển");
         }
         
         return applicationService.toResponse(app);
@@ -1183,12 +1347,12 @@ public class EmployerService {
     }
 
     @Transactional(readOnly = true)
-    public List<NotificationResponse> getNotifications() {
+    public PageResponse<NotificationResponse> getNotifications(int page, int size) {
         User user = authService.getCurrentUser();
-        return notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
-                .stream()
-                .map(dtoMapper::toNotificationResponse)
-                .toList();
+        int pageIndex = page > 0 ? page - 1 : 0;
+        org.springframework.data.domain.Pageable pageable = PageRequest.of(pageIndex, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        org.springframework.data.domain.Page<Notification> result = notificationRepository.findByRecipientUserId(user.getId(), pageable);
+        return PageResponse.from(result, dtoMapper::toNotificationResponse);
     }
 
     @Transactional

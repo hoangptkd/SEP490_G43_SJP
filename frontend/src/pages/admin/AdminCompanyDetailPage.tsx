@@ -5,6 +5,8 @@ import type { AdminCompanyDetail } from '../../types/admin';
 import type { CompanyDocument } from '../../types/job';
 import { downloadFile, openFileInNewTab } from '../../utils/helpers';
 
+import { FiBuilding } from '../../components/Icons';
+
 function verificationLabel(status?: string) {
   const value = status?.toLowerCase() || 'unverified';
   switch (value) {
@@ -75,7 +77,8 @@ function DocumentRow({
       <div className="admin-company-doc-body">
         <strong>{doc.fileName}</strong>
         <div className="admin-company-doc-meta">
-          <span>{formatDate(doc.uploadedAt)}</span>
+          <span>Tải lên: {formatDate(doc.uploadedAt)}</span>
+          {doc.reviewedAt && <span>Duyệt: {formatDate(doc.reviewedAt)}</span>}
           <span className={`admin-status-badge ${status.className}`}>{status.text}</span>
         </div>
         {doc.rejectReason && (
@@ -341,9 +344,35 @@ export default function AdminCompanyDetailPage() {
       ) : (
         <section className="admin-company-detail-panel admin-readable-detail">
           <div className="admin-company-detail-header">
-            <div>
-              <h2>Thông tin công ty</h2>
-              <p className="muted">Cập nhật lần cuối: {formatDate(detail.updatedAt)}</p>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+              {detail.company.logoUrl ? (
+                <img
+                  src={detail.company.logoUrl}
+                  alt={detail.company.name}
+                  style={{ width: 72, height: 72, borderRadius: 12, objectFit: 'cover', border: '1px solid #e2e8f0' }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 12,
+                    background: '#f1f5f9',
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontWeight: 700,
+                    color: '#64748b',
+                  }}
+                >
+                  <FiBuilding className="w-8 h-8 text-slate-400" />
+                </div>
+              )}
+              <div>
+                <h2>Thông tin công ty</h2>
+                <p className="muted">
+                  Nộp hồ sơ: {formatDate(detail.createdAt)} · Cập nhật lần cuối: {formatDate(detail.updatedAt)}
+                </p>
+              </div>
             </div>
             <span className={`admin-status-badge ${verification.className}`}>{verification.text}</span>
           </div>
@@ -382,8 +411,35 @@ export default function AdminCompanyDetailPage() {
             <div><span>Quy mô</span><strong>{detail.company.companySize ? `${detail.company.companySize} nhân sự` : '—'}</strong></div>
             <div><span>Website</span><strong>{detail.company.website || '—'}</strong></div>
             <div><span>Trụ sở</span><strong>{detail.company.location || '—'}</strong></div>
+            <div><span>Email liên hệ</span><strong>{detail.company.contactEmail || '—'}</strong></div>
+            <div><span>SĐT liên hệ</span><strong>{detail.company.contactPhone || '—'}</strong></div>
             <div><span>Trạng thái hệ thống</span><strong>{detail.company.status || '—'}</strong></div>
           </div>
+
+          {detail.company.locations && detail.company.locations.length > 0 && (
+            <div className="admin-company-section">
+              <h3>Chi nhánh / địa điểm ({detail.company.locations.length})</h3>
+              <div className="admin-review-list">
+                {detail.company.locations.map((loc) => (
+                  <article key={loc.id} className="admin-review-row" style={{ marginBottom: 8 }}>
+                    <div className="admin-review-main">
+                      <strong>
+                        {loc.branchName || 'Chi nhánh'}
+                        {loc.headquarter && (
+                          <span className="admin-status-badge status-verified" style={{ marginLeft: 8 }}>
+                            Trụ sở chính
+                          </span>
+                        )}
+                      </strong>
+                      <p className="muted" style={{ margin: '4px 0 0' }}>
+                        {[loc.address, loc.district, loc.city, loc.country].filter(Boolean).join(', ') || '—'}
+                      </p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
 
           {detail.company.description && (
             <div className="admin-company-section">

@@ -3,7 +3,7 @@ import { employerService } from '../../services/employerService';
 import { jobService } from '../../services/jobService';
 import { customConfirm } from '../../utils/dialog';
 import type { Company, CompanyDocument, Category } from '../../types/job';
-import { FiCheckCircle, FiClock, FiAlertCircle, FiUploadCloud, FiFileText, FiImage, FiDownload, FiTrash2, FiRefreshCw, FiExternalLink, FiChevronDown, FiX, FiSearch } from '../../components/Icons';
+import { FiCheckCircle, FiClock, FiAlertCircle, FiUploadCloud, FiFileText, FiImage, FiDownload, FiTrash2, FiRefreshCw, FiExternalLink, FiChevronDown, FiX, FiSearch, FiCamera, FiBuilding } from '../../components/Icons';
 import { TaxCodeLookupField } from '../../components/employer/TaxCodeLookupField';
 import { isVietnamTaxCodeFormat } from '../../utils/taxCode';
 
@@ -13,6 +13,7 @@ function CompanyVerificationPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [replacingId, setReplacingId] = useState<string | null>(null);
@@ -73,6 +74,36 @@ function CompanyVerificationPage() {
       setLoading(false);
     }
   }
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Vui lòng chọn tệp hình ảnh (PNG, JPG, JPEG)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Dung lượng ảnh tối đa 5MB');
+      return;
+    }
+
+    setUploadingLogo(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const updated = await employerService.uploadLogo(file);
+      setCompany(updated);
+      setSuccess('Đã cập nhật ảnh đại diện/logo công ty thành công (thay đổi logo không cần chờ admin duyệt)!');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Có lỗi xảy ra khi tải lên logo.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
 
   function validateForm() {
     const errors: Record<string, string> = {};
@@ -317,19 +348,16 @@ function CompanyVerificationPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header Banner */}
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500 opacity-10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl pointer-events-none"></div>
-        
-        <div className="relative z-10 text-center md:text-left">
-          <h1 className="text-2xl font-bold mb-2">Xác thực pháp lý doanh nghiệp</h1>
-          <p className="text-slate-300 text-sm">
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="text-center md:text-left">
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Xác thực pháp lý doanh nghiệp</h1>
+          <p className="text-gray-500 text-sm">
             Quản lý thông tin công ty và tài liệu pháp lý định danh tổ chức
           </p>
         </div>
         <button
           onClick={loadData}
-          className="relative z-10 inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors border border-white/10 backdrop-blur-sm"
+          className="inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors border border-gray-200 shadow-sm"
         >
           <FiRefreshCw className="w-4 h-4" /> Làm mới dữ liệu
         </button>
@@ -375,6 +403,39 @@ function CompanyVerificationPage() {
       {company && (
         <form onSubmit={(e) => handleSubmit(e, false)} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-6 md:p-8 space-y-6">
+            {/* Company Logo Section */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+              <div className="w-20 h-20 rounded-2xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-sm relative group">
+                {company.logoUrl ? (
+                  <img src={company.logoUrl} alt={company.name} className="w-full h-full object-cover" />
+                ) : (
+                  <FiBuilding className="w-8 h-8 text-slate-400" />
+                )}
+                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                  <FiCamera className="w-5 h-5 text-white" />
+                  <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} className="hidden" />
+                </label>
+              </div>
+              <div className="flex-1 text-center sm:text-left space-y-1">
+                <div className="flex items-center gap-2 justify-center sm:justify-start">
+                  <h4 className="font-bold text-slate-800 text-base">Ảnh đại diện / Logo công ty</h4>
+                  <span className="bg-emerald-100 text-emerald-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+                    Đổi không cần duyệt
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Hiển thị trên danh sách tuyển dụng, trang chi tiết công ty và tin tuyển dụng. Bạn có thể thay đổi bất cứ lúc nào mà không ảnh hưởng tới trạng thái xác thực.
+                </p>
+                <div className="pt-2">
+                  <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm ${uploadingLogo ? 'bg-slate-200 text-slate-500 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'}`}>
+                    <FiCamera className="w-4 h-4" />
+                    {uploadingLogo ? 'Đang cập nhật logo...' : (company.logoUrl ? 'Thay đổi logo công ty' : 'Tải lên logo công ty')}
+                    <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadingLogo} className="hidden" />
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2 md:col-span-1 relative">
                 <label className="block text-sm font-medium text-gray-700">Tên công ty <span className="text-red-500">*</span></label>

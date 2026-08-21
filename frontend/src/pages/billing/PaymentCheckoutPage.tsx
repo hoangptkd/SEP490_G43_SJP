@@ -26,6 +26,7 @@ export default function PaymentCheckoutPage() {
   const backTo = user?.role === 'EMPLOYER' ? '/employer/subscription/plans' : '/candidate/subscription/plans';
 
   const [plan, setPlan] = useState<PlanCatalogItem | null>(null);
+  const [isCurrentActivePlan, setIsCurrentActivePlan] = useState(false);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
@@ -39,13 +40,26 @@ export default function PaymentCheckoutPage() {
     setLoading(true);
     setError('');
     try {
-      const plans = await billingService.listPlans();
+      const [plans, sub] = await Promise.all([
+        billingService.listPlans(),
+        billingService.getMySubscription().catch(() => null),
+      ]);
       const found = plans.find((item) => item.id === planId) || null;
       if (!found) {
         setError('Không tìm thấy gói hoặc gói không còn bán.');
         setPlan(null);
       } else {
         setPlan(found);
+        const isActive = Boolean(
+          sub &&
+          sub.status?.toLowerCase() === 'active' &&
+          ((sub.planId && sub.planId === found.id) ||
+           (!sub.planId && sub.planName && sub.planName.trim().toLowerCase() === found.name.trim().toLowerCase()))
+        );
+        setIsCurrentActivePlan(isActive);
+        if (isActive) {
+          setError('Bạn đang sử dụng gói dịch vụ này rồi.');
+        }
       }
     } catch (err) {
       setError(readError(err));
@@ -59,7 +73,7 @@ export default function PaymentCheckoutPage() {
   }, [loadPlan]);
 
   async function handlePay() {
-    if (!plan) return;
+    if (!plan || isCurrentActivePlan) return;
     setPaying(true);
     setError('');
     try {
@@ -146,10 +160,10 @@ export default function PaymentCheckoutPage() {
           <button
             type="button"
             style={{ marginTop: 18, width: '100%', padding: '12px 16px', fontSize: '1rem' }}
-            disabled={paying}
+            disabled={paying || isCurrentActivePlan}
             onClick={handlePay}
           >
-            {paying ? 'Đang chuyển đến PayOS...' : 'Thanh toán bằng PayOS'}
+            {isCurrentActivePlan ? '✓ Gói đang sử dụng' : paying ? 'Đang chuyển đến PayOS...' : 'Thanh toán bằng PayOS'}
           </button>
         </article>
       </section>

@@ -1253,7 +1253,15 @@ textarea {
   height: 48px;
   justify-content: center;
   width: 48px;
+  overflow: hidden;
 }
+
+.job-company-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 
 .job-card-info {
   display: grid;
@@ -4362,6 +4370,25 @@ textarea {
 .application-field textarea {
   min-height: 94px;
 }
+
+.application-field select {
+  background-color: var(--surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-sm, 8px);
+  color: var(--on-surface);
+  font-size: 0.92rem;
+  font-weight: 500;
+  padding: 10px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.application-field select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
 
 .application-note {
   border: 1px solid var(--outline-variant);

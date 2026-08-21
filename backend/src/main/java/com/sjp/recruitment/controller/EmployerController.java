@@ -12,6 +12,7 @@ import com.sjp.recruitment.model.dto.response.JobResponse;
 import com.sjp.recruitment.model.dto.response.ApplicationResponse;
 import com.sjp.recruitment.model.dto.response.MessageResponse;
 import com.sjp.recruitment.model.dto.response.NotificationResponse;
+import com.sjp.recruitment.model.dto.response.PageResponse;
 import com.sjp.recruitment.model.dto.response.TaxCodeLookupResponse;
 import com.sjp.recruitment.service.CandidateService;
 import com.sjp.recruitment.service.EmployerService;
@@ -47,8 +48,16 @@ public class EmployerController {
     private final TaxCodeLookupService taxCodeLookupService;
 
     @GetMapping("/dashboard")
-    public ResponseEntity<EmployerDashboardResponse> getDashboardStats() {
-        return ResponseEntity.ok(employerService.getDashboardStats());
+    public ResponseEntity<EmployerDashboardResponse> getDashboardStats(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate) {
+        return ResponseEntity.ok(employerService.getDashboardStats(startDate, endDate));
+    }
+
+    @GetMapping("/interviews")
+    public ResponseEntity<List<com.sjp.recruitment.model.dto.response.EmployerInterviewResponse>> getInterviews(
+            @RequestParam(defaultValue = "all") String range) {
+        return ResponseEntity.ok(employerService.getInterviews(range));
     }
 
     @GetMapping("/company")
@@ -157,15 +166,18 @@ public class EmployerController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/ai-ranking-quota")
+    public ResponseEntity<Map<String, Object>> getAiRankingQuota() {
+        return ResponseEntity.ok(aiRankingService.getAiRankingQuota(authService.getCurrentUser()));
+    }
+
     @PostMapping("/jobs/{id}/ai-rank-bulk")
     public ResponseEntity<MessageResponse> bulkRankApplications(@PathVariable String id) {
-        if (!featureLimitService.hasActivePaidPlan(authService.getCurrentUser())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "PLAN_UPGRADE_REQUIRED", "Tính năng Phân tích AI hàng loạt yêu cầu gói dịch vụ nâng cao.");
-        }
+        com.sjp.recruitment.model.entity.User currentUser = authService.getCurrentUser();
         java.util.UUID jobId = java.util.UUID.fromString(id);
-        aiRankingService.markApplicationsAsProcessing(jobId);
+        int marked = aiRankingService.markApplicationsAsProcessing(jobId, currentUser);
         aiRankingService.rankApplicationsBulkAsync(jobId);
-        return ResponseEntity.accepted().body(new MessageResponse("Đã bắt đầu phân tích AI hàng loạt. Quá trình này sẽ diễn ra trong nền."));
+        return ResponseEntity.accepted().body(new MessageResponse("Đã bắt đầu Xếp hạng ứng viên bằng AI cho " + marked + " hồ sơ. Quá trình này sẽ diễn ra trong nền."));
     }
 
     @PostMapping("/jobs/{id}/close")
@@ -179,6 +191,13 @@ public class EmployerController {
                                                  @RequestBody(required = false) Map<String, String> body) {
         String targetDeadline = body != null && body.get("deadline") != null ? body.get("deadline") : deadline;
         return ResponseEntity.ok(employerService.reopenJob(id, targetDeadline));
+    }
+
+    @PutMapping("/jobs/{id}/extend-deadline")
+    public ResponseEntity<JobResponse> extendJobDeadline(@PathVariable String id,
+                                                         @RequestBody Map<String, String> body) {
+        String deadline = body != null ? body.get("deadline") : null;
+        return ResponseEntity.ok(employerService.extendJobDeadline(id, deadline));
     }
 
     @GetMapping("/applications")
@@ -230,8 +249,10 @@ public class EmployerController {
     }
 
     @GetMapping("/notifications")
-    public ResponseEntity<List<NotificationResponse>> notifications() {
-        return ResponseEntity.ok(employerService.getNotifications());
+    public ResponseEntity<PageResponse<NotificationResponse>> notifications(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(employerService.getNotifications(page, size));
     }
 
     @PatchMapping("/notifications/{id}/read")

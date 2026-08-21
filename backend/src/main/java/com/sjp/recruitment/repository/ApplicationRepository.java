@@ -39,6 +39,7 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     List<Application> findByJobEmployerIdAndStatus(UUID employerId, String status);
     
     Page<Application> findByJobEmployerIdAndStatusOrderBySubmittedAtDesc(UUID employerId, String status, Pageable pageable);
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "job"})
     Page<Application> findByJobEmployerIdAndStatusAndJobStatusOrderBySubmittedAtDesc(UUID employerId, String status, String jobStatus, Pageable pageable);
     
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.submittedAt >= :startDate")
@@ -50,18 +51,34 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     @Query("SELECT a.id, a.submittedAt FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus AND a.submittedAt >= :startDate")
     List<Object[]> findApplicationDatesByEmployerSinceAndJobStatus(@Param("employerId") UUID employerId, @Param("startDate") java.time.LocalDateTime startDate, @Param("jobStatus") String jobStatus);
 
+    @Query("SELECT a.id, a.submittedAt FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus AND a.submittedAt >= :startDate AND a.submittedAt <= :endDate")
+    List<Object[]> findApplicationDatesByEmployerAndJobStatusAndDateRange(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, @Param("startDate") java.time.LocalDateTime startDate, @Param("endDate") java.time.LocalDateTime endDate);
+
     @Query("SELECT a.status, COUNT(a) FROM Application a WHERE a.job.employer.id = :employerId GROUP BY a.status")
     List<Object[]> countApplicationsByStatusForEmployer(@Param("employerId") UUID employerId);
 
     @Query("SELECT a.status, COUNT(a) FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus GROUP BY a.status")
     List<Object[]> countApplicationsByStatusForEmployerAndJobStatus(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus);
 
+    @Query("SELECT a.status, COUNT(a) FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus AND a.submittedAt >= :startDate AND a.submittedAt <= :endDate GROUP BY a.status")
+    List<Object[]> countApplicationsByStatusForEmployerAndJobStatusAndDateRange(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, @Param("startDate") java.time.LocalDateTime startDate, @Param("endDate") java.time.LocalDateTime endDate);
+
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId")
     Page<Application> findByEmployerId(UUID employerId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "job"})
     @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus")
     Page<Application> findByEmployerIdAndJobStatus(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "job"})
+    @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.job.status = :jobStatus AND a.submittedAt >= :startDate AND a.submittedAt <= :endDate")
+    Page<Application> findByEmployerIdAndJobStatusAndDateRange(@Param("employerId") UUID employerId, @Param("jobStatus") String jobStatus, @Param("startDate") java.time.LocalDateTime startDate, @Param("endDate") java.time.LocalDateTime endDate, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "job"})
+    @Query("SELECT a FROM Application a WHERE a.job.employer.id = :employerId AND a.status = :status AND a.job.status = :jobStatus AND a.submittedAt >= :startDate AND a.submittedAt <= :endDate")
+    Page<Application> findByEmployerIdAndStatusAndJobStatusAndDateRange(@Param("employerId") UUID employerId, @Param("status") String status, @Param("jobStatus") String jobStatus, @Param("startDate") java.time.LocalDateTime startDate, @Param("endDate") java.time.LocalDateTime endDate, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"candidate", "candidate.user", "job", "job.company"})
     @Query(
             value = "SELECT a FROM Application a WHERE a.job.company.id = :companyId " +
                     "AND (:jobId IS NULL OR a.job.id = :jobId) " +
@@ -76,7 +93,7 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
                     "WHEN 'accepted' THEN 5 " +
                     "WHEN 'rejected' THEN 6 " +
                     "WHEN 'withdrawn' THEN 7 " +
-                    "ELSE 8 END ASC, a.submittedAt DESC",
+                    "ELSE 8 END ASC, CASE WHEN a.aiMatchScore IS NULL THEN 1 ELSE 0 END ASC, a.aiMatchScore DESC, a.submittedAt DESC",
             countQuery = "SELECT COUNT(a) FROM Application a WHERE a.job.company.id = :companyId " +
                     "AND (:jobId IS NULL OR a.job.id = :jobId) " +
                     "AND a.status IN (:statuses) " +

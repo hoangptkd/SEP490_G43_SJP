@@ -32,6 +32,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.sql.Array;
@@ -40,6 +44,7 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -65,6 +70,9 @@ public class JobService {
     private final FeatureLimitService featureLimitService;
     private final AuthService authService;
     private final CandidateRealtimeEventPublisher realtimeEventPublisher;
+
+    private final Map<String, Long> recentJobViews = new ConcurrentHashMap<>();
+    private static final long VIEW_COOLDOWN_MS = 2 * 60 * 60 * 1000L; // 2 hours view deduplication cooldown
 
     @Transactional(readOnly = true)
     public JobPageResponse search(String search, String location, BigDecimal minSalary, BigDecimal maxSalary,
@@ -158,7 +166,62 @@ public class JobService {
 
     @Transactional
     public JobResponse findJobResponseById(String id) {
-        return findJobResponseById(id, true);
+        boolean shouldIncrement = true;
+        try {
+            User currentUser = authService.getCurrentUser();
+            String viewerKey = null;
+
+            if (currentUser != null) {
+                User.UserRole role = currentUser.getRoleEnum();
+                if (role == User.UserRole.EMPLOYER || role == User.UserRole.ADMIN || isEmployerOwnerOfJob(currentUser.getId(), id)) {
+                    shouldIncrement = false;
+                } else {
+                    viewerKey = "user:" + currentUser.getId() + ":job:" + id;
+                }
+            } else {
+                ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attrs != null) {
+                    HttpServletRequest req = attrs.getRequest();
+                    String ip = req.getHeader("X-Forwarded-For");
+                    if (ip == null || ip.isBlank()) {
+                        ip = req.getRemoteAddr();
+                    }
+                    viewerKey = "ip:" + ip + ":job:" + id;
+                }
+            }
+
+            if (shouldIncrement && viewerKey != null) {
+                long now = System.currentTimeMillis();
+                Long lastViewed = recentJobViews.get(viewerKey);
+                if (lastViewed != null && (now - lastViewed < VIEW_COOLDOWN_MS)) {
+                    shouldIncrement = false;
+                } else {
+                    recentJobViews.put(viewerKey, now);
+                    if (recentJobViews.size() > 10000) {
+                        recentJobViews.entrySet().removeIf(entry -> (now - entry.getValue()) > VIEW_COOLDOWN_MS);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return findJobResponseById(id, shouldIncrement);
+    }
+
+    private boolean isEmployerOwnerOfJob(UUID userId, String jobId) {
+        try {
+            Long count = namedParameterJdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM jobs j
+                JOIN employers e ON e.id = j.created_by_employer_id
+                WHERE j.id = CAST(:jobId AS uuid) AND e.user_id = CAST(:userId AS uuid)
+                """,
+                new MapSqlParameterSource()
+                    .addValue("jobId", jobId)
+                    .addValue("userId", userId.toString()),
+                Long.class);
+            return count != null && count > 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -308,7 +371,20 @@ public class JobService {
         }
         User currentUser = authService.getCurrentUser();
         featureLimitService.requireJobPost(currentUser);
-        Job saved = buildAndSaveJob(new Job(), employer, company, request);
+        Job job = new Job();
+        if (request.getDeadline() != null && !request.getDeadline().isBlank()) {
+            try {
+                LocalDate deadline = LocalDate.parse(request.getDeadline());
+                featureLimitService.requireValidJobDeadline(currentUser, deadline);
+            } catch (ApiException ae) {
+                throw ae;
+            } catch (Exception ignored) {}
+        } else {
+            int maxDays = featureLimitService.resolveMaxJobPostingDays(currentUser);
+            LocalDate defaultDeadline = LocalDate.now().plusDays(maxDays > 0 ? maxDays : 30);
+            request.setDeadline(defaultDeadline.toString());
+        }
+        Job saved = buildAndSaveJob(job, employer, company, request);
         featureLimitService.consumeJobPost(currentUser);
         return saved;
     }
@@ -495,22 +571,10 @@ public class JobService {
 
         String status = job.getStatus();
 
-        // ── 1. Trạng thái KHÔNG cho phép xoá ──
-        if ("pending_review".equalsIgnoreCase(status)) {
-            throw new ApiException(HttpStatus.CONFLICT, "JOB_PENDING_REVIEW",
-                    "Tin đang chờ Admin duyệt. Vui lòng chờ kết quả duyệt hoặc rút lại tin trước khi xóa.");
-        }
-        if ("awaiting_company".equalsIgnoreCase(status)) {
-            throw new ApiException(HttpStatus.CONFLICT, "JOB_AWAITING_COMPANY",
-                    "Tin đang chờ bạn chỉnh sửa theo yêu cầu của Admin. Vui lòng xử lý trước khi xóa.");
-        }
-        if ("removed".equalsIgnoreCase(status)) {
-            throw new ApiException(HttpStatus.CONFLICT, "JOB_REMOVED",
-                    "Tin đã bị Admin gỡ bỏ do vi phạm. Không thể thực hiện thao tác xóa.");
-        }
-        if ("archived".equalsIgnoreCase(status)) {
-            throw new ApiException(HttpStatus.CONFLICT, "JOB_ALREADY_ARCHIVED",
-                    "Tin đã được lưu trữ (archived) trước đó.");
+        // ── 1. Kiểm tra trạng thái được phép xoá: chỉ 'draft' (nháp) và 'pending_review' (chờ duyệt) ──
+        if (!"draft".equalsIgnoreCase(status) && !"pending_review".equalsIgnoreCase(status)) {
+            throw new ApiException(HttpStatus.CONFLICT, "JOB_CANNOT_BE_DELETED",
+                    "Chỉ có thể xóa tin tuyển dụng ở trạng thái Bản nháp hoặc Chờ Admin kiểm duyệt.");
         }
 
         // ── 2. Thu thập applications ──
@@ -639,15 +703,20 @@ public class JobService {
             // Tin đóng/hết hạn không nằm trong quota hiện tại → mở lại phải còn slot
             featureLimitService.requireJobPost(authService.getCurrentUser());
         }
+        User currentUser = authService.getCurrentUser();
         if (newDeadline != null && !newDeadline.isBlank()) {
             try {
-                job.setDeadline(LocalDate.parse(newDeadline));
+                LocalDate parsedDate = LocalDate.parse(newDeadline);
+                featureLimitService.requireValidJobDeadline(currentUser, parsedDate);
+                job.setDeadline(parsedDate);
+            } catch (ApiException ae) {
+                throw ae;
             } catch (Exception e) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_DEADLINE", "Hạn nộp hồ sơ mới không đúng định dạng (YYYY-MM-DD)");
             }
         }
-        if (job.getDeadline() != null && job.getDeadline().isBefore(LocalDate.now())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "DEADLINE_EXPIRED", "Tin tuyển dụng đã hết hạn nộp hồ sơ. Vui lòng cập nhật hạn nộp hồ sơ mới trước khi mở lại tin.");
+        if (job.getDeadline() != null) {
+            featureLimitService.requireValidJobDeadline(currentUser, job.getDeadline());
         }
         long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
         if (job.getVacancies() != null && acceptedCount >= job.getVacancies()) {
@@ -657,6 +726,14 @@ public class JobService {
         job.setClosedAt(null);
         job = jobRepository.save(job);
         return dtoMapper.toJobResponse(job, false, false, null);
+    }
+
+    @Transactional
+    public JobResponse extendJobDeadline(String id, Employer employer, String newDeadline) {
+        if (newDeadline == null || newDeadline.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DEADLINE_REQUIRED", "Hạn nộp hồ sơ mới là bắt buộc.");
+        }
+        return reopenJobForEmployer(id, employer, newDeadline);
     }
 
     @Transactional
@@ -702,11 +779,6 @@ public class JobService {
         job.setWorkMode(request.getWorkMode() != null ? request.getWorkMode() : "onsite");
         job.setExperienceLevel(request.getExperienceLevel() != null ? request.getExperienceLevel() : "fresher");
         
-        if (request.getRankingConfig() != null && request.getRankingConfig().has("enabled") && request.getRankingConfig().get("enabled").asBoolean()) {
-            if (!featureLimitService.hasActivePaidPlan(authService.getCurrentUser())) {
-                throw new ApiException(HttpStatus.FORBIDDEN, "PLAN_UPGRADE_REQUIRED", "Tính năng Smart Ranking yêu cầu gói dịch vụ nâng cao.");
-            }
-        }
         job.setRankingConfig(request.getRankingConfig());
 
         if (request.getDeadline() != null && !request.getDeadline().isBlank()) {

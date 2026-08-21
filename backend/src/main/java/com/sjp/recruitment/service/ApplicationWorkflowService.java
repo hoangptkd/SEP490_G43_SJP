@@ -83,7 +83,8 @@ public class ApplicationWorkflowService {
         schedule.setLocation(request.location());
         schedule.setNote(request.note());
         schedule.setStatus("PENDING_RESPONSE");
-        schedule.setResponseDeadline(null);
+        schedule.setResponseDeadline(calculateResponseDeadline(request.scheduledAt()));
+        schedule.setReminderCount(0);
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
 
@@ -108,6 +109,19 @@ public class ApplicationWorkflowService {
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
 
+    private LocalDateTime calculateResponseDeadline(LocalDateTime scheduledAt) {
+        if (scheduledAt == null) return null;
+        LocalDateTime now = LocalDateTime.now();
+        long hoursDiff = java.time.Duration.between(now, scheduledAt).toHours();
+        if (hoursDiff > 24) {
+            return scheduledAt.minusHours(12);
+        } else if (hoursDiff >= 12) {
+            return scheduledAt.minusHours(6);
+        } else {
+            return scheduledAt;
+        }
+    }
+
     @Transactional
     public InterviewScheduleResponse candidateViewInterview(UUID scheduleId, UUID candidateId) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndCandidateId(scheduleId, candidateId)
@@ -125,6 +139,11 @@ public class ApplicationWorkflowService {
     public InterviewScheduleResponse candidateRespondToInterview(UUID scheduleId, UUID candidateId, InterviewCandidateResponseRequest request) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndCandidateId(scheduleId, candidateId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Không tìm thấy lịch phỏng vấn"));
+
+        if ("NO_RESPONSE".equalsIgnoreCase(schedule.getStatus())
+                || (schedule.getResponseDeadline() != null && LocalDateTime.now().isAfter(schedule.getResponseDeadline()))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_EXPIRED", "Lịch phỏng vấn đã hết hạn phản hồi");
+        }
 
         schedule.setRespondedAt(LocalDateTime.now());
         schedule.setCandidateRescheduleNote(request.rescheduleNote());
@@ -155,6 +174,12 @@ public class ApplicationWorkflowService {
 
         if ("declined".equals(request.response())) {
             applicationService.seedStatus(schedule.getApplication(), Application.ApplicationStatus.REJECTED, "Ứng viên đã từ chối tham gia phỏng vấn");
+        } else if ("request_reschedule".equals(request.response())) {
+            String noteStr = "Ứng viên đã yêu cầu đổi lịch phỏng vấn";
+            if (request.rescheduleNote() != null && !request.rescheduleNote().isBlank()) {
+                noteStr += " (Lý do: " + request.rescheduleNote().trim() + ")";
+            }
+            applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), noteStr);
         } else {
             applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Ứng viên đã " + responseText);
         }
@@ -166,6 +191,14 @@ public class ApplicationWorkflowService {
     public InterviewScheduleResponse employerUpdateInterviewResult(UUID scheduleId, UUID employerId, InterviewResultRequest request) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndEmployerId(scheduleId, employerId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Không tìm thấy lịch phỏng vấn"));
+
+        if (!"ACCEPTED".equalsIgnoreCase(schedule.getStatus()) && !"COMPLETED".equalsIgnoreCase(schedule.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_NOT_ACCEPTED", "Ứng viên chưa xác nhận tham gia phỏng vấn");
+        }
+
+        if (schedule.getScheduledAt() != null && schedule.getScheduledAt().isAfter(LocalDateTime.now())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_NOT_STARTED_YET", "Chưa đến thời gian phỏng vấn. Bạn chỉ có thể đánh giá kết quả sau khi thời gian phỏng vấn bắt đầu.");
+        }
 
         schedule.setStatus("COMPLETED".equalsIgnoreCase(request.result()) ? "COMPLETED" : "NO_SHOW".equalsIgnoreCase(request.result()) ? "NO_SHOW" : request.result());
         schedule.setNote(request.note());
@@ -212,13 +245,14 @@ public class ApplicationWorkflowService {
             if (request.scheduledAt() != null) {
                 schedule.setScheduledAt(request.scheduledAt());
                 
-                schedule.setResponseDeadline(null);
+                schedule.setResponseDeadline(calculateResponseDeadline(request.scheduledAt()));
             }
         }
         
         schedule.setRespondedAt(null);
         schedule.setViewedAt(null);
         schedule.setLastReminderAt(null);
+        schedule.setReminderCount(0);
         schedule.setStatus("PENDING_RESPONSE");
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
@@ -252,12 +286,21 @@ public class ApplicationWorkflowService {
             );
         }
         
-        String actionText = "accept_reschedule".equals(request.response()) ? "Chấp nhận đổi lịch phỏng vấn mới" : "Từ chối đổi lịch phỏng vấn";
-        if ("accept_reschedule".equals(request.response()) && request.scheduledAt() != null) {
-            String newTimeStr = request.scheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
-            actionText += " (Lịch cũ: " + oldTimeStr + " -> Lịch mới: " + newTimeStr + ")";
+        String seedNote;
+        if ("accept_reschedule".equals(request.response())) {
+            if (request.scheduledAt() != null) {
+                String newTimeStr = request.scheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+                seedNote = "Đã đổi lịch phỏng vấn từ " + oldTimeStr + " thành " + newTimeStr;
+            } else {
+                seedNote = "Nhà tuyển dụng đã chấp nhận đổi lịch phỏng vấn";
+            }
+        } else {
+            seedNote = "Nhà tuyển dụng phản hồi đổi lịch: Từ chối đổi lịch phỏng vấn";
+            if (request.note() != null && !request.note().isBlank()) {
+                seedNote += " (Lý do: " + request.note().trim() + ")";
+            }
         }
-        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), "Nhà tuyển dụng phản hồi đổi lịch: " + actionText);
+        applicationService.seedStatus(schedule.getApplication(), schedule.getApplication().getStatusEnum(), seedNote);
 
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
@@ -281,12 +324,12 @@ public class ApplicationWorkflowService {
         offer.setBenefits(request.benefits());
         offer.setWorkingLocation(request.workingLocation());
         offer.setOfferLetterUrl(request.offerLetterUrl());
-        offer.setEmployerNote(request.employerNote());
+        offer.setStatus("accepted");
         offer.setSentAt(LocalDateTime.now());
 
         JobOffer saved = jobOfferRepository.save(offer);
 
-        applicationService.seedStatus(application, Application.ApplicationStatus.ACCEPTED, "Đã gửi Job Offer");
+        applicationService.seedStatus(application, Application.ApplicationStatus.ACCEPTED, "Đã gửi Thư mời nhận việc (Job Offer) thành công");
 
         // Send email
         CandidateProfile candidate = application.getCandidate();

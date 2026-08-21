@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -18,6 +19,7 @@ public class EmailService {
     @Value("${app.mail-from}")
     private String mailFrom;
 
+    @Async
     public void sendVerificationEmail(String email, String verificationLink) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
@@ -41,6 +43,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendPasswordResetEmail(String email, String resetLink) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
@@ -64,6 +67,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendApplicationRejectionEmail(String email, String candidateName, String jobTitle, String companyName) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
@@ -91,6 +95,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendInterviewInvitationEmail(String email, String candidateName, String jobTitle, String companyName, String scheduledAt, String location, String meetingLink, String note) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
@@ -217,7 +222,31 @@ public class EmailService {
             mailSender.send(message);
             log.info("Email báo rớt phỏng vấn đã được gửi tới {}", email);
         } catch (Exception e) {
-            log.error("Không thể gửi email báo rớt phỏng vấn tới {}. Lỗi: {}", email, e.getMessage());
+            log.error("Không thể gửi email kết quả phỏng vấn tới {}. Lỗi: {}", email, e.getMessage());
+        }
+    }
+
+    @Async
+    public void sendInterviewNoResponseNotificationToEmployer(String email, String employerName, String candidateName, String jobTitle, String scheduledAt) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
+        message.setTo(email);
+        message.setSubject("Thông báo: Ứng viên không phản hồi lịch phỏng vấn vị trí " + jobTitle);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("Chào %s,\n\n", employerName != null ? employerName : "Nhà tuyển dụng"));
+        sb.append(String.format("Ứng viên %s đã không phản hồi lịch phỏng vấn cho vị trí %s (Thời gian hẹn: %s) đúng hạn.\n", candidateName, jobTitle, scheduledAt));
+        sb.append("Lịch phỏng vấn này đã tự động chuyển sang trạng thái 'Không phản hồi' (NO_RESPONSE).\n");
+        sb.append("Bạn có thể truy cập hệ thống để xem chi tiết, chọn 'Từ chối hồ sơ' hoặc 'Lên lịch phỏng vấn mới' cho ứng viên này.\n\n");
+        sb.append("Trân trọng,\nSystem Recruitment Portal");
+
+        message.setText(sb.toString());
+
+        try {
+            mailSender.send(message);
+            log.info("Email thông báo NO_RESPONSE đã được gửi tới NTD {}", email);
+        } catch (Exception e) {
+            log.error("Không thể gửi email thông báo NO_RESPONSE tới {}. Lỗi: {}", email, e.getMessage());
         }
     }
 

@@ -1,6 +1,6 @@
 import { api } from './api';
 import type { Company, CompanyLocation, CompanyDocument, Job } from '../types/job';
-import type { CandidateApplication, NotificationItem } from '../types/candidateDomain';
+import type { CandidateApplication, NotificationItem, PageResult } from '../types/candidateDomain';
 
 export interface EmployerDashboardStats {
   totalJobs: number;
@@ -48,14 +48,45 @@ export interface TaxCodeLookupResult {
   status?: string;
 }
 
+export interface EmployerInterview {
+  id: string;
+  applicationId: string;
+  roundNumber: number;
+  status: string;
+  scheduledAt: string;
+  location: string | null;
+  meetingLink: string | null;
+  viewedAt: string | null;
+  candidateRescheduleNote: string | null;
+  candidateName: string;
+  candidatePhone: string | null;
+  candidateEmail: string | null;
+  jobTitle: string;
+  jobId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const employerService = {
   getCompanyProfile: async (): Promise<Company> => {
     const response = await api.get<Company>('/employer/company');
     return response.data;
   },
 
-  getDashboardStats: async (): Promise<EmployerDashboardStats> => {
-    const response = await api.get<EmployerDashboardStats>('/employer/dashboard');
+  getDashboardStats: async (startDate?: string, endDate?: string): Promise<EmployerDashboardStats> => {
+    const params: Record<string, string> = {};
+    if (startDate && endDate) {
+      params.startDate = startDate;
+      params.endDate = endDate;
+    }
+    const response = await api.get<EmployerDashboardStats>('/employer/dashboard', { params });
+    return response.data;
+  },
+
+  getInterviews: async (range?: 'today' | 'week' | 'all'): Promise<EmployerInterview[]> => {
+    const response = await api.get<EmployerInterview[]>('/employer/interviews', {
+      params: range ? { range } : undefined,
+    });
     return response.data;
   },
 
@@ -177,6 +208,11 @@ export const employerService = {
     return response.data;
   },
 
+  extendJobDeadline: async (id: string, deadline: string): Promise<Job> => {
+    const response = await api.put<Job>(`/employer/jobs/${id}/extend-deadline`, { deadline });
+    return response.data;
+  },
+
   getApplications: async (params?: { jobId?: string; status?: string | string[]; search?: string; page?: number; size?: number }): Promise<import('../types/candidateDomain').PageResult<CandidateApplication>> => {
     const response = await api.get<import('../types/candidateDomain').PageResult<CandidateApplication>>('/employer/applications', {
       params,
@@ -212,8 +248,8 @@ export const employerService = {
     return response.data;
   },
 
-  getNotifications: async (): Promise<NotificationItem[]> => {
-    const response = await api.get<NotificationItem[]>('/employer/notifications');
+  getNotifications: async (page = 1, size = 10): Promise<PageResult<NotificationItem>> => {
+    const response = await api.get<PageResult<NotificationItem>>('/employer/notifications', { params: { page, size } });
     return response.data;
   },
 
@@ -257,5 +293,10 @@ export const employerService = {
 
   rejectApplication: async (applicationId: string, note?: string): Promise<void> => {
     await api.post(`/v1/applications/${applicationId}/reject`, null, { params: { note } });
+  },
+
+  getAiRankingQuota: async (): Promise<{ used: number; limit: number; remaining: number; isUnlimited: boolean }> => {
+    const response = await api.get<{ used: number; limit: number; remaining: number; isUnlimited: boolean }>('/employer/ai-ranking-quota');
+    return response.data;
   },
 };

@@ -36,7 +36,7 @@ class ApplicationWorkflowInterviewTest {
     @InjectMocks private ApplicationWorkflowService workflowService;
 
     @Test
-    void newlyScheduledInterviewDefaultsToAttendanceWithoutResponseDeadline() {
+    void newlyScheduledInterviewWaitsForCandidateResponseWithoutDeadline() {
         Application application = application();
         UUID employerId = application.getJob().getEmployer().getId();
         LocalDateTime scheduledAt = LocalDateTime.now().plusDays(2);
@@ -54,8 +54,8 @@ class ApplicationWorkflowInterviewTest {
 
         ArgumentCaptor<InterviewSchedule> captor = ArgumentCaptor.forClass(InterviewSchedule.class);
         verify(interviewScheduleRepository).save(captor.capture());
-        assertEquals("SCHEDULED", captor.getValue().getStatus());
-        assertNull(captor.getValue().getResponseDeadline());
+        assertEquals("PENDING_RESPONSE", captor.getValue().getStatus());
+        org.junit.jupiter.api.Assertions.assertNotNull(captor.getValue().getResponseDeadline());
         assertEquals(expected, actual);
         verify(applicationService).seedStatus(
                 application, Application.ApplicationStatus.INTERVIEW_SCHEDULED, "Đã lên lịch phỏng vấn");
@@ -78,7 +78,7 @@ class ApplicationWorkflowInterviewTest {
         verify(applicationService).seedStatus(
                 eq(schedule.getApplication()),
                 eq(schedule.getApplication().getStatusEnum()),
-                contains("Yêu cầu đổi lịch phỏng vấn"));
+                eq("Ứng viên đã yêu cầu đổi lịch phỏng vấn (Lý do: Xin chuyển sang buổi chiều)"));
     }
 
     @Test

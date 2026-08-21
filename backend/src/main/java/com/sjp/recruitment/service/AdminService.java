@@ -40,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -1273,6 +1274,12 @@ public class AdminService {
                     j.title,
                     j.description,
                     j.requirements,
+                    j.benefits,
+                    j.vacancies,
+                    j.working_time,
+                    j.salary_type,
+                    j.job_type,
+                    j.work_mode,
                     j.location,
                     j.experience_level,
                     j.deadline,
@@ -1289,14 +1296,25 @@ public class AdminService {
                     c.website AS company_website,
                     c.location AS company_location,
                     c.logo_url AS company_logo_url,
+                    c.verification_status AS company_verification_status,
                     u.email AS employer_email,
                     u.full_name AS employer_name,
-                    e.position AS employer_position
+                    e.position AS employer_position,
+                    COALESCE(array_remove(array_agg(DISTINCT s.name), NULL), ARRAY[]::text[]) AS skills
                 FROM jobs j
                 JOIN companies c ON c.id = j.company_id
                 JOIN employers e ON e.id = j.created_by_employer_id
                 JOIN users u ON u.id = e.user_id
+                LEFT JOIN job_skills js ON js.job_id = j.id
+                LEFT JOIN skills s ON s.id = js.skill_id
                 WHERE j.id = CAST(:id AS uuid)
+                GROUP BY
+                    j.id, j.title, j.description, j.requirements, j.benefits, j.vacancies, j.working_time,
+                    j.salary_type, j.job_type, j.work_mode, j.views_count, j.salary_min, j.salary_max,
+                    j.location, j.experience_level, j.deadline, j.status, j.rejection_reason,
+                    j.report_fix_deadline, j.created_at, j.updated_at,
+                    c.id, c.name, c.website, c.location, c.logo_url, c.verification_status,
+                    u.email, u.full_name, e.position
                 """;
         List<AdminJobDetailResponse> jobs = namedParameterJdbcTemplate.query(
                 sql,
@@ -1314,7 +1332,7 @@ public class AdminService {
                 rs.getString("title"),
                 rs.getString("description"),
                 textToList(rs.getString("requirements")),
-                List.<String>of(),
+                textArrayToList(rs.getArray("skills")),
                 rs.getBigDecimal("salary_min"),
                 rs.getBigDecimal("salary_max"),
                 rs.getString("location"),
@@ -1333,12 +1351,12 @@ public class AdminService {
                 false,
                 false,
                 null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                rs.getString("benefits"),
+                readNullableInt(rs, "vacancies"),
+                rs.getString("working_time"),
+                rs.getString("salary_type"),
+                rs.getString("job_type"),
+                rs.getString("work_mode"),
                 rs.getInt("views_count"),
                 rs.getString("rejection_reason"),
                 0L,
@@ -1352,9 +1370,30 @@ public class AdminService {
                 rs.getString("employer_email"),
                 rs.getString("employer_name"),
                 rs.getString("employer_position"),
+                rs.getString("company_verification_status"),
                 toLocalDateTime(rs, "created_at"),
                 toLocalDateTime(rs, "updated_at")
         );
+    }
+
+    private Integer readNullableInt(ResultSet rs, String column) throws SQLException {
+        int value = rs.getInt(column);
+        return rs.wasNull() ? null : value;
+    }
+
+    private List<String> textArrayToList(Array array) throws SQLException {
+        if (array == null) {
+            return List.of();
+        }
+        Object rawArray = array.getArray();
+        if (!(rawArray instanceof Object[] values)) {
+            return List.of();
+        }
+        return Arrays.stream(values)
+                .map(String::valueOf)
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
+                .toList();
     }
 
     private List<String> textToList(String value) {
