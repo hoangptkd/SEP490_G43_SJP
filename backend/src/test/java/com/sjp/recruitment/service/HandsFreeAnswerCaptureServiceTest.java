@@ -51,7 +51,6 @@ class HandsFreeAnswerCaptureServiceTest {
     private final TranscriptCorrectionContextBuilder correctionContextBuilder = mock(TranscriptCorrectionContextBuilder.class);
     private final TranscriptCorrectionService transcriptCorrectionService = mock(TranscriptCorrectionService.class);
     private final GladiaVoiceEvidenceService voiceEvidenceService = mock(GladiaVoiceEvidenceService.class);
-    private final GladiaLiveSessionRegistry liveSessionRegistry = mock(GladiaLiveSessionRegistry.class);
     private final AudioDecoder audioDecoder = mock(AudioDecoder.class);
     private final PcmWaveWriter waveWriter = mock(PcmWaveWriter.class);
     private final SileroVadAnalyzer vadAnalyzer = mock(SileroVadAnalyzer.class);
@@ -139,7 +138,7 @@ class HandsFreeAnswerCaptureServiceTest {
         service = new HandsFreeAnswerCaptureService(properties, candidateService, rateLimiter, sessionRepository,
                 questionRepository, answerRepository, captureRepository, turnRepository, vocabularyBuilder,
                 correctionContextBuilder, transcriptCorrectionService, voiceEvidenceService,
-                liveSessionRegistry, audioDecoder, waveWriter, vadAnalyzer, transactions, new ObjectMapper());
+                audioDecoder, waveWriter, vadAnalyzer, transactions, new ObjectMapper());
     }
 
     @Test
@@ -150,7 +149,7 @@ class HandsFreeAnswerCaptureServiceTest {
         HandsFreeAnswerCaptureResponse result = service.process(sessionId.toString(), questionId.toString(),
                 captureId.toString(), captureId.toString(), 1,
                 List.of(audio("one.webm", "one"), audio("two.webm", "two")), List.of(0, 1),
-                "em dùng spring bút và rét api", "web_speech", null, List.of(1.0, 1.2));
+                "em dùng spring bút và rét api", List.of(1.0, 1.2));
 
         assertThat(result.gladiaTranscript()).isNull();
         assertThat(result.rawTranscript()).isEqualTo("em dùng spring bút và rét api");
@@ -179,28 +178,6 @@ class HandsFreeAnswerCaptureServiceTest {
     }
 
     @Test
-    void acceptsBoundGladiaLiveTranscriptAndSkipsRecordedAudioTranscription() {
-        properties.setAnswerTranscriptionProvider("gladia_live");
-        UUID captureId = UUID.randomUUID();
-        UUID liveSessionToken = UUID.randomUUID();
-
-        HandsFreeAnswerCaptureResponse result = service.process(
-                sessionId.toString(), questionId.toString(), captureId.toString(), captureId.toString(), 1,
-                List.of(audio("answer.webm", "answer")), List.of(0),
-                "Em dùng Spring Boot và REST API.", "gladia_live", liveSessionToken.toString(), List.of(1.0));
-
-        assertThat(result.rawTranscript()).isEqualTo("Em dùng Spring Boot và REST API.");
-        assertThat(result.gladiaTranscript()).isEqualTo(result.rawTranscript());
-        assertThat(result.transcriptStatus()).isEqualTo("standardized");
-        verify(liveSessionRegistry).validateAndBind(
-                liveSessionToken, candidateId, sessionId, "question", questionId, captureId);
-        verify(liveSessionRegistry).markCompleted(liveSessionToken, captureId);
-        assertThat(persistedCapture.get().getVoiceEvidenceStatus()).isEqualTo(VoiceEvidenceStatus.COMPLETED);
-        verifyNoInteractions(voiceEvidenceService);
-        verify(waveWriter, never()).toByteArray(any());
-    }
-
-    @Test
     void conversationCaptureIsBoundToCurrentTurnAndProducesEditableDraft() {
         InterviewConversationTurn turn = new InterviewConversationTurn();
         turn.setId(UUID.randomUUID());
@@ -222,7 +199,7 @@ class HandsFreeAnswerCaptureServiceTest {
                 sessionId.toString(), turn.getId().toString(),
                 captureId.toString(), captureId.toString(), 1,
                 List.of(audio("answer.webm", "answer")), List.of(0),
-                "em dùng spring bút", "web_speech", null, List.of(1.0));
+                "em dùng spring bút", List.of(1.0));
 
         assertThat(result.rawTranscript()).isEqualTo("em dùng spring bút");
         assertThat(persistedCapture.get().getConversationTurn()).isSameAs(turn);
@@ -238,7 +215,7 @@ class HandsFreeAnswerCaptureServiceTest {
 
         HandsFreeAnswerCaptureResponse result = service.process(sessionId.toString(), questionId.toString(),
                 captureId.toString(), captureId.toString(), 1, List.of(audio("one.webm", "one")),
-                List.of(0), "Bản transcript realtime", "web_speech", null, List.of(1.0));
+                List.of(0), "Bản transcript realtime", List.of(1.0));
 
         assertThat(result.rawTranscript()).isEqualTo("Bản transcript realtime");
         assertThat(result.transcriptStatus()).isEqualTo("web_speech");
@@ -258,10 +235,10 @@ class HandsFreeAnswerCaptureServiceTest {
 
         HandsFreeAnswerCaptureResponse first = service.process(sessionId.toString(), questionId.toString(),
                 captureId.toString(), captureId.toString(), 1, List.copyOf(files), List.of(0), "spring bút",
-                "web_speech", null, List.of(1.0));
+                List.of(1.0));
         HandsFreeAnswerCaptureResponse retry = service.process(sessionId.toString(), questionId.toString(),
                 captureId.toString(), captureId.toString(), 1, List.copyOf(files), List.of(0), "spring bút",
-                "web_speech", null, List.of(1.0));
+                List.of(1.0));
 
         assertThat(retry).isEqualTo(first);
         verify(voiceEvidenceService, times(1)).submit(eq(answerId), eq(captureId), eq(1),
@@ -274,12 +251,12 @@ class HandsFreeAnswerCaptureServiceTest {
     void acceptsNextCaptureVersionWithSameCaptureIdAndAllAnswerSegments() {
         UUID captureId = UUID.randomUUID();
         service.process(sessionId.toString(), questionId.toString(), captureId.toString(), captureId.toString(), 1,
-                List.of(audio("one.webm", "one")), List.of(0), "đoạn một", "web_speech", null, List.of(1.0));
+                List.of(audio("one.webm", "one")), List.of(0), "đoạn một", List.of(1.0));
 
         HandsFreeAnswerCaptureResponse continued = service.process(sessionId.toString(), questionId.toString(),
                 captureId.toString(), captureId.toString(), 2,
                 List.of(audio("one.webm", "one"), audio("two.webm", "two")), List.of(0, 1),
-                "đoạn một đoạn hai", "web_speech", null, List.of(1.0, 1.0));
+                "đoạn một đoạn hai", List.of(1.0, 1.0));
 
         assertThat(continued.captureVersion()).isEqualTo(2);
         assertThat(continued.captureId()).isEqualTo(captureId.toString());
@@ -291,11 +268,11 @@ class HandsFreeAnswerCaptureServiceTest {
     void rejectsSameCaptureVersionWithDifferentPayload() {
         UUID captureId = UUID.randomUUID();
         service.process(sessionId.toString(), questionId.toString(), captureId.toString(), captureId.toString(), 1,
-                List.of(audio("one.webm", "one")), List.of(0), "java", "web_speech", null, List.of(1.0));
+                List.of(audio("one.webm", "one")), List.of(0), "java", List.of(1.0));
 
         assertThatThrownBy(() -> service.process(sessionId.toString(), questionId.toString(),
                 captureId.toString(), captureId.toString(), 1, List.of(audio("one.webm", "different")),
-                List.of(0), "java", "web_speech", null, List.of(1.0)))
+                List.of(0), "java", List.of(1.0)))
                 .isInstanceOf(ApiException.class)
                 .extracting(exception -> ((ApiException) exception).getCode())
                 .isEqualTo("IDEMPOTENCY_PAYLOAD_MISMATCH");
@@ -314,7 +291,7 @@ class HandsFreeAnswerCaptureServiceTest {
 
         assertThatThrownBy(() -> service.process(sessionId.toString(), questionId.toString(),
                 captureId.toString(), captureId.toString(), 1, List.of(audio("one.webm", "one")),
-                List.of(0), "answer", "web_speech", null, List.of(1.0)))
+                List.of(0), "answer", List.of(1.0)))
                 .isInstanceOf(ApiException.class)
                 .extracting(exception -> ((ApiException) exception).getCode())
                 .isEqualTo("STALE_QUESTION");
@@ -326,7 +303,7 @@ class HandsFreeAnswerCaptureServiceTest {
         UUID captureId = UUID.randomUUID();
         when(vadAnalyzer.analyze(any(DecodedPcmAudio.class))).thenThrow(new RuntimeException("vad failed"));
         service.process(sessionId.toString(), questionId.toString(), captureId.toString(), captureId.toString(), 1,
-                List.of(audio("valid.webm", "valid")), List.of(0), "fallback", "web_speech", null, List.of(1.0));
+                List.of(audio("valid.webm", "valid")), List.of(0), "fallback", List.of(1.0));
         assertThat(temporaryCaptureDirectoryCount()).isEqualTo(before);
 
         persistedCapture.set(null);
@@ -335,7 +312,7 @@ class HandsFreeAnswerCaptureServiceTest {
         UUID invalidCaptureId = captureId;
         assertThatThrownBy(() -> service.process(sessionId.toString(), questionId.toString(),
                 invalidCaptureId.toString(), invalidCaptureId.toString(), 1, List.of(invalid), List.of(0), "answer",
-                "web_speech", null, List.of(1.0)))
+                List.of(1.0)))
                 .isInstanceOf(ApiException.class)
                 .extracting(exception -> ((ApiException) exception).getCode())
                 .isEqualTo("AUDIO_INVALID_CONTENT");

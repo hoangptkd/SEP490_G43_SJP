@@ -46,7 +46,6 @@ import { candidateService } from './services/candidateService';
 import { jobService } from './services/jobService';
 import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
 import type {
-  AnswerCaptureTranscriptionMetadata,
   AiInterviewConfig,
   AiInterviewCvProfile,
   AiInterviewEligibleApplication,
@@ -1494,16 +1493,7 @@ function HomePage() {
               </div>
             )}
 
-            {showCandidateHome && quickCategories.length > 0 && (
-              <div className="home-quick-search" aria-label="Tìm nhanh theo ngành nghề">
-                <span>Gợi ý nhanh:</span>
-                {quickCategories.slice(0, 6).map((category) => (
-                  <button key={category.id} type="button" onClick={() => openCategory(category)}>
-                    {category.name}
-                  </button>
-                ))}
-              </div>
-            )}
+
           </div>
         </section>
 
@@ -5746,7 +5736,7 @@ function ApplicationDetailPage() {
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.06 }}>
-                
+
                 {i > 0 && application.timeline[i - 1].toStatus === item.toStatus ? (
                   <span style={{ display: 'inline-block', marginBottom: 8, fontSize: '1.2rem', color: 'var(--text-muted)', opacity: 0.6 }}>↳</span>
                 ) : (
@@ -6367,6 +6357,8 @@ function AiInterviewPage() {
   const [message, setMessage] = useState('');
   const [planLimitReached, setPlanLimitReached] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sessionPage, setSessionPage] = useState(0);
+  const SESSION_PAGE_SIZE = 5;
 
   const practiceCvOptions = useMemo(() => [
     ...practiceCvs.map((cv) => ({
@@ -6400,6 +6392,7 @@ function AiInterviewPage() {
       candidateService.getCvVersions(0, 100),
     ]);
     setSessions(sessionData);
+    setSessionPage(0);
     setApplications(applicationData);
     setPracticeCvs(cvData.items);
     setPracticeCvVersions(cvVersionData.items);
@@ -6696,7 +6689,9 @@ function AiInterviewPage() {
               {sessions.length === 0 && (
                 <div className="empty-state">Chưa có phiên phỏng vấn nào.</div>
               )}
-              {sessions.map((session) => (
+              {sessions
+                .slice(sessionPage * SESSION_PAGE_SIZE, (sessionPage + 1) * SESSION_PAGE_SIZE)
+                .map((session) => (
                 <article className="session-row" key={session.id}>
                   <div>
                     <strong>{session.title}</strong>
@@ -6714,6 +6709,29 @@ function AiInterviewPage() {
                 </article>
               ))}
             </div>
+            {sessions.length > SESSION_PAGE_SIZE && (
+              <div className="pagination-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 8 }}>
+                <button
+                  type="button"
+                  className="outline"
+                  disabled={sessionPage === 0}
+                  onClick={() => setSessionPage((p) => p - 1)}
+                >
+                  ← Trước
+                </button>
+                <span className="muted" style={{ fontSize: '0.875rem' }}>
+                  Trang {sessionPage + 1} / {Math.ceil(sessions.length / SESSION_PAGE_SIZE)}
+                </span>
+                <button
+                  type="button"
+                  className="outline"
+                  disabled={(sessionPage + 1) * SESSION_PAGE_SIZE >= sessions.length}
+                  onClick={() => setSessionPage((p) => p + 1)}
+                >
+                  Sau →
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -6831,16 +6849,12 @@ function AiConversationRoom({
     aiInterviewService.createSpeechTicket(session.id, text)
   ), [session.id]);
 
-  const createLiveTranscription = useCallback((sampleRate: number) => (
-    aiInterviewService.createLiveTranscription(session.id, sampleRate)
-  ), [session.id]);
-
   const finalizeCapture = useCallback(async (
     segments: Array<{ sequence: number; file: File; durationSeconds: number }>,
     captureId: string,
     captureVersion: number,
     browserTranscript: string,
-    transcription: AnswerCaptureTranscriptionMetadata,
+    transcriptionProvider: 'web_speech' | 'speechmatics_realtime',
   ) => {
     if (!currentTurn || !conversation.expectsAnswer) {
       throw new Error('Lượt hội thoại hiện tại không còn nhận câu trả lời.');
@@ -6852,7 +6866,7 @@ function AiConversationRoom({
       captureVersion,
       segments,
       browserTranscript,
-      transcription,
+      transcriptionProvider,
     );
   }, [conversation.expectsAnswer, currentTurn, session.id]);
 
@@ -6906,6 +6920,10 @@ function AiConversationRoom({
     recognitionRestartDelayMs: config.voiceRecognitionRestartDelayMs,
     voiceLoadWaitMs: config.voiceLoadWaitMs,
     nextQuestionDelayMs: config.voiceNextQuestionDelayMs,
+    answerTranscriptionProvider: config.answerTranscriptionProvider,
+    onCreateTranscriptionTicket: config.answerTranscriptionProvider === 'speechmatics_realtime'
+      ? () => aiInterviewService.createTranscriptionTicket(session.id)
+      : undefined,
     // UI actions are disabled separately while a command is pending. Keeping the
     // voice lifecycle enabled here lets the newly published CORE question speak
     // as soon as the monotonic backend snapshot arrives.
@@ -6915,10 +6933,6 @@ function AiConversationRoom({
     onConfirm: confirmAnswer,
     onReplayQuestion: replayTurn,
     onSpeechUrl: config.voiceStreamingEnabled ? createSpeechUrl : undefined,
-    answerTranscriptionProvider: config.answerTranscriptionProvider,
-    onCreateLiveTranscription: config.answerTranscriptionProvider === 'gladia_live'
-      ? createLiveTranscription
-      : undefined,
   });
 
   async function skipCurrentTurn() {
@@ -7082,7 +7096,7 @@ function AiConversationRoom({
               Mỗi lần đọc lại trừ 2 điểm giao tiếp; tổng mức trừ tối đa là 10 điểm cho cả phiên.
             </p>
             <p className="voice-status" role="status">
-              Nguồn transcript: {voice.activeTranscriptionSource === 'gladia_live' ? 'Gladia Live' : 'Web Speech'}
+              Nguồn transcript: Web Speech
             </p>
             {voice.transcriptNotice ? <p className="voice-status" role="status">{voice.transcriptNotice}</p> : null}
             {voice.interimTranscript ? <p className="voice-interim">Đang nghe: {voice.interimTranscript}</p> : null}
@@ -7362,16 +7376,12 @@ function LegacyAiInterviewRoom({
     return aiInterviewService.createSpeechTicket(session.id, text);
   }, [config.voiceProvider, session.id]);
 
-  const createLiveTranscription = useCallback((sampleRate: number) => (
-    aiInterviewService.createLiveTranscription(session.id, sampleRate)
-  ), [session.id]);
-
   const finalizeHandsFreeCapture = useCallback(async (
     segments: Array<{ sequence: number; file: File; durationSeconds: number }>,
     captureId: string,
     captureVersion: number,
     browserTranscript: string,
-    transcription: AnswerCaptureTranscriptionMetadata,
+    transcriptionProvider: 'web_speech' | 'speechmatics_realtime',
   ) => {
     if (!currentQuestion) throw new Error('Câu hỏi hiện tại không còn hợp lệ.');
     return aiInterviewService.finalizeHandsFreeCapture(
@@ -7381,7 +7391,7 @@ function LegacyAiInterviewRoom({
       captureVersion,
       segments,
       browserTranscript,
-      transcription,
+      transcriptionProvider,
     );
   }, [currentQuestion, session.id]);
 
@@ -7408,16 +7418,16 @@ function LegacyAiInterviewRoom({
     recognitionRestartDelayMs: config.voiceRecognitionRestartDelayMs,
     voiceLoadWaitMs: config.voiceLoadWaitMs,
     nextQuestionDelayMs: config.voiceNextQuestionDelayMs,
+    answerTranscriptionProvider: config.answerTranscriptionProvider,
+    onCreateTranscriptionTicket: config.answerTranscriptionProvider === 'speechmatics_realtime'
+      ? () => aiInterviewService.createTranscriptionTicket(session.id)
+      : undefined,
     disabled: Boolean(busy),
     onTranscript: setTranscript,
     onFinalizeCapture: finalizeHandsFreeCapture,
     onConfirm: confirmVoiceAnswer,
     onReplayQuestion: recordQuestionReplay,
     onSpeechUrl: config.voiceProvider === 'shopaikey_gemini_stream' ? createSpeechUrl : undefined,
-    answerTranscriptionProvider: config.answerTranscriptionProvider,
-    onCreateLiveTranscription: config.answerTranscriptionProvider === 'gladia_live'
-      ? createLiveTranscription
-      : undefined,
   });
 
   const manualFallback = voice.manualFallback;
@@ -7566,7 +7576,7 @@ function LegacyAiInterviewRoom({
                   Trạng thái: {voicePhaseLabel(voice.phase)}
                 </p>
                 <p className="voice-status" role="status">
-                  Nguồn transcript: {voice.activeTranscriptionSource === 'gladia_live' ? 'Gladia Live' : 'Web Speech'}
+                  Nguồn transcript: Web Speech
                 </p>
                 {voice.transcriptNotice ? (
                   <p className="voice-status" role="status" aria-live="polite">{voice.transcriptNotice}</p>

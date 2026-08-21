@@ -52,7 +52,6 @@ public class HandsFreeAnswerCaptureService {
     private final TranscriptCorrectionContextBuilder correctionContextBuilder;
     private final TranscriptCorrectionService transcriptCorrectionService;
     private final GladiaVoiceEvidenceService voiceEvidenceService;
-    private final GladiaLiveSessionRegistry liveSessionRegistry;
     private final AudioDecoder audioDecoder;
     private final PcmWaveWriter waveWriter;
     private final SileroVadAnalyzer vadAnalyzer;
@@ -72,7 +71,6 @@ public class HandsFreeAnswerCaptureService {
             TranscriptCorrectionContextBuilder correctionContextBuilder,
             TranscriptCorrectionService transcriptCorrectionService,
             GladiaVoiceEvidenceService voiceEvidenceService,
-            GladiaLiveSessionRegistry liveSessionRegistry,
             AudioDecoder audioDecoder,
             PcmWaveWriter waveWriter,
             SileroVadAnalyzer vadAnalyzer,
@@ -90,7 +88,6 @@ public class HandsFreeAnswerCaptureService {
         this.correctionContextBuilder = correctionContextBuilder;
         this.transcriptCorrectionService = transcriptCorrectionService;
         this.voiceEvidenceService = voiceEvidenceService;
-        this.liveSessionRegistry = liveSessionRegistry;
         this.audioDecoder = audioDecoder;
         this.waveWriter = waveWriter;
         this.vadAnalyzer = vadAnalyzer;
@@ -107,8 +104,21 @@ public class HandsFreeAnswerCaptureService {
             List<MultipartFile> audioSegments,
             List<Integer> segmentSequences,
             String browserTranscript,
-            String transcriptionSource,
-            String liveSessionToken,
+            List<Double> durationSeconds) {
+        return process(sessionIdValue, questionIdValue, idempotencyKey, captureIdValue, captureVersion,
+                audioSegments, segmentSequences, browserTranscript, "web_speech", durationSeconds);
+    }
+
+    public HandsFreeAnswerCaptureResponse process(
+            String sessionIdValue,
+            String questionIdValue,
+            String idempotencyKey,
+            String captureIdValue,
+            int captureVersion,
+            List<MultipartFile> audioSegments,
+            List<Integer> segmentSequences,
+            String browserTranscript,
+            String transcriptionProvider,
             List<Double> durationSeconds) {
         UUID sessionId = parseUuid(sessionIdValue, "SESSION_ID_INVALID");
         UUID questionId = parseUuid(questionIdValue, "QUESTION_ID_INVALID");
@@ -122,8 +132,7 @@ public class HandsFreeAnswerCaptureService {
                 audioSegments,
                 segmentSequences,
                 browserTranscript,
-                transcriptionSource,
-                liveSessionToken,
+                transcriptionProvider,
                 durationSeconds
         );
     }
@@ -137,8 +146,21 @@ public class HandsFreeAnswerCaptureService {
             List<MultipartFile> audioSegments,
             List<Integer> segmentSequences,
             String browserTranscript,
-            String transcriptionSource,
-            String liveSessionToken,
+            List<Double> durationSeconds) {
+        return processTurn(sessionIdValue, turnIdValue, idempotencyKey, captureIdValue, captureVersion,
+                audioSegments, segmentSequences, browserTranscript, "web_speech", durationSeconds);
+    }
+
+    public HandsFreeAnswerCaptureResponse processTurn(
+            String sessionIdValue,
+            String turnIdValue,
+            String idempotencyKey,
+            String captureIdValue,
+            int captureVersion,
+            List<MultipartFile> audioSegments,
+            List<Integer> segmentSequences,
+            String browserTranscript,
+            String transcriptionProvider,
             List<Double> durationSeconds) {
         return processInternal(
                 parseUuid(sessionIdValue, "SESSION_ID_INVALID"),
@@ -150,8 +172,7 @@ public class HandsFreeAnswerCaptureService {
                 audioSegments,
                 segmentSequences,
                 browserTranscript,
-                transcriptionSource,
-                liveSessionToken,
+                transcriptionProvider,
                 durationSeconds
         );
     }
@@ -166,8 +187,7 @@ public class HandsFreeAnswerCaptureService {
             List<MultipartFile> audioSegments,
             List<Integer> segmentSequences,
             String browserTranscript,
-            String transcriptionSource,
-            String liveSessionTokenValue,
+            String transcriptionProvider,
             List<Double> durationSeconds) {
         UUID captureId = parseUuid(captureIdValue, "CAPTURE_ID_INVALID");
         if (idempotencyKey == null || !idempotencyKey.equals(captureIdValue)) {
@@ -176,34 +196,16 @@ public class HandsFreeAnswerCaptureService {
         validateRequest(captureVersion, audioSegments, segmentSequences, durationSeconds);
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "hands-free-transcribe");
-        String source = normalizeTranscriptionSource(transcriptionSource);
-        boolean liveTranscription = "gladia_live".equals(source);
-        UUID liveSessionToken = null;
-        if (liveTranscription) {
-            if (!"gladia_live".equalsIgnoreCase(properties.getAnswerTranscriptionProvider())) {
-                throw new ApiException(HttpStatus.CONFLICT, "GLADIA_LIVE_NOT_SELECTED",
-                        "Gladia Live chưa được chọn làm nguồn transcript câu trả lời");
-            }
-            liveSessionToken = parseUuid(liveSessionTokenValue, "GLADIA_LIVE_SESSION_INVALID");
-            liveSessionRegistry.validateAndBind(
-                    liveSessionToken,
-                    candidate.getId(),
-                    sessionId,
-                    turnId == null ? "question" : "turn",
-                    turnId == null ? questionId : turnId,
-                    captureId
-            );
-        }
 
-        try (SpooledCapture spool = spool(audioSegments, segmentSequences, browserTranscript,
-                source, liveSessionTokenValue, captureId, captureVersion, durationSeconds)) {
+        String normalizedProvider = normalizeTranscriptionProvider(transcriptionProvider);
+        try (SpooledCapture spool = spool(audioSegments, segmentSequences, browserTranscript, normalizedProvider,
+                captureId, captureVersion, durationSeconds)) {
             Claim claim = transactions.execute(status -> claim(
                     candidate.getId(), sessionId, questionId, turnId, captureId, captureVersion,
                     spool.payloadHash(), browserTranscript));
             if (claim == null) throw new IllegalStateException("Capture claim was not created");
             if (claim.cachedResponse() != null) {
-                if (!liveTranscription
-                        && TranscriptCorrectionStatus.PENDING.name().equals(
+                if (TranscriptCorrectionStatus.PENDING.name().equals(
                         claim.cachedResponse().correctionStatus())) {
                     TranscriptCorrectionService.CorrectionResult correction =
                             transcriptCorrectionService.correct(
@@ -218,9 +220,8 @@ public class HandsFreeAnswerCaptureService {
             }
 
             GladiaTranscriptionContext context = claim.context();
-            PreparedAudio preparedAudio = prepareAudio(spool, !liveTranscription);
+            PreparedAudio preparedAudio = prepareAudio(spool, true);
             String normalizedBrowser = normalize(browserTranscript);
-            String gladiaTranscript = liveTranscription ? normalizedBrowser : null;
             VadAnalysisResult vadResult = preparedAudio.pcm() == null
                     ? analyzeVad(spool.segments()) : analyzeVad(preparedAudio.pcm());
             logIncompleteVad(vadResult);
@@ -229,35 +230,28 @@ public class HandsFreeAnswerCaptureService {
             if (!hasText(rawTranscript)) {
                 failCapture(claim.answerId(), captureId, captureVersion, "NO_TRANSCRIPT_AVAILABLE");
                 throw new ApiException(HttpStatus.BAD_REQUEST, "NO_TRANSCRIPT_AVAILABLE",
-                        "Web Speech chưa tạo được transcript cho câu trả lời này");
+                        "Nguồn nhận dạng realtime chưa tạo được transcript cho câu trả lời này");
             }
 
-            String transcriptStatus = liveTranscription ? "standardized" : "web_speech";
-            String dataQuality = dataQuality(hasText(gladiaTranscript), vadMetrics != null);
-            VoiceEvidenceStatus voiceEvidenceStatus = liveTranscription
-                    ? VoiceEvidenceStatus.COMPLETED
-                    : preparedAudio.wavAudio().length > 0
+            String transcriptStatus = normalizedProvider;
+            String dataQuality = dataQuality(false, vadMetrics != null);
+            VoiceEvidenceStatus voiceEvidenceStatus = preparedAudio.wavAudio().length > 0
                     ? VoiceEvidenceStatus.PENDING
                     : VoiceEvidenceStatus.FAILED;
             String voiceEvidenceErrorCode = voiceEvidenceStatus == VoiceEvidenceStatus.FAILED
                     ? "VOICE_EVIDENCE_AUDIO_UNAVAILABLE" : null;
-            TranscriptCorrectionStatus correctionStatus = liveTranscription
-                    ? TranscriptCorrectionStatus.NOT_REQUIRED
-                    : TranscriptCorrectionStatus.PENDING;
+            TranscriptCorrectionStatus correctionStatus = TranscriptCorrectionStatus.PENDING;
             HandsFreeAnswerCaptureResponse response = new HandsFreeAnswerCaptureResponse(
                     claim.questionId().toString(), captureId.toString(), captureVersion, normalizedBrowser,
-                    emptyToNull(gladiaTranscript), rawTranscript, rawTranscript,
+                    null, rawTranscript, rawTranscript,
                     correctionStatus.name(), 0, transcriptStatus, dataQuality, vadMetrics);
             HandsFreeAnswerCaptureResponse completed = transactions.execute(
                     status -> complete(claim.answerId(), response, vadResult,
                             voiceEvidenceStatus, voiceEvidenceErrorCode));
-            if (liveTranscription && liveSessionToken != null) {
-                liveSessionRegistry.markCompleted(liveSessionToken, captureId);
-            } else if (voiceEvidenceStatus == VoiceEvidenceStatus.PENDING) {
+            if (voiceEvidenceStatus == VoiceEvidenceStatus.PENDING) {
                 voiceEvidenceService.submit(
                         claim.answerId(), captureId, captureVersion, preparedAudio.wavAudio(), context);
             }
-            if (liveTranscription) return completed;
             TranscriptCorrectionService.CorrectionResult correction = transcriptCorrectionService.correct(
                     sessionId,
                     claim.answerId(),
@@ -596,15 +590,14 @@ public class HandsFreeAnswerCaptureService {
     }
 
     private SpooledCapture spool(List<MultipartFile> files, List<Integer> sequences, String browserTranscript,
-                                 String transcriptionSource, String liveSessionToken,
+                                 String transcriptionProvider,
                                  UUID captureId, int version, List<Double> durations) throws IOException {
         Path directory = Files.createTempDirectory("sjp-handsfree-");
         MessageDigest digest = sha256();
         digest.update(captureId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         digest.update((byte) version);
         digest.update(normalize(browserTranscript).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        digest.update(normalize(transcriptionSource).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        digest.update(normalize(liveSessionToken).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        digest.update(normalize(transcriptionProvider).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         if (durations != null) {
             durations.forEach(duration -> digest.update(String.valueOf(duration).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         }
@@ -700,22 +693,18 @@ public class HandsFreeAnswerCaptureService {
         catch (RuntimeException exception) { throw new ApiException(HttpStatus.BAD_REQUEST, code, "Mã định danh không hợp lệ"); }
     }
 
-    private String normalizeTranscriptionSource(String value) {
-        String normalized = value == null || value.isBlank()
-                ? "web_speech" : value.trim().toLowerCase(Locale.ROOT);
-        if (!"web_speech".equals(normalized) && !"gladia_live".equals(normalized)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "TRANSCRIPTION_SOURCE_INVALID",
-                    "Nguồn transcript không được hỗ trợ");
-        }
-        return normalized;
-    }
-
     private MessageDigest sha256() {
         try { return MessageDigest.getInstance("SHA-256"); }
         catch (NoSuchAlgorithmException exception) { throw new IllegalStateException(exception); }
     }
 
     private String normalize(String value) { return value == null ? "" : value.trim().replaceAll("\\s+", " "); }
+
+    private String normalizeTranscriptionProvider(String value) {
+        return "speechmatics_realtime".equalsIgnoreCase(normalize(value))
+                ? "speechmatics_realtime"
+                : "web_speech";
+    }
     private String emptyToNull(String value) { return hasText(value) ? value.trim() : null; }
     private boolean hasText(String value) { return value != null && !value.isBlank(); }
 

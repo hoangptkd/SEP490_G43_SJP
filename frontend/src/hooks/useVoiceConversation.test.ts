@@ -165,19 +165,6 @@ describe('hands-free transcript source of truth', () => {
     });
   });
 
-  it('retains the Gladia Live display path behind its explicit provider flag', () => {
-    expect(resolveCaptureTranscript('Bản Web Speech', {
-      gladiaTranscript: 'Bản Gladia Live',
-      rawTranscript: 'Bản Gladia Live',
-      transcriptStatus: 'standardized',
-    }, 'gladia_live')).toEqual({
-      rawTranscript: 'Bản Gladia Live',
-      displayedTranscript: 'Bản Gladia Live',
-      gladiaTranscript: 'Bản Gladia Live',
-      notice: 'Đã tạo transcript draft từ Gladia',
-    });
-  });
-
   it('shows the validated correction while retaining raw Web Speech audit text', () => {
     expect(resolveCaptureTranscript('em dùng spring bút', {
       rawTranscript: 'em dùng spring bút',

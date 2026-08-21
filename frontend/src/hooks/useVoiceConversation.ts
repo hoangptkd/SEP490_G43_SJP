@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AiInterviewSpeechTicket,
-  AiInterviewLiveTranscriptionSession,
-  AnswerCaptureTranscriptionMetadata,
+  AiInterviewTranscriptionTicket,
   HandsFreeAnswerCaptureResult,
   HandsFreeAudioSegmentUpload,
   InterviewConversationState,
 } from '../types/aiInterview';
 import { CandidateAudioCapture, type CapturedAudioSegment } from './handsFreeAudioCapture';
 import { PcmAudioStreamPlayer } from './pcmAudioStreamPlayer';
-import type { AnswerTranscriptionProvider, AnswerTranscriptionUpdate } from './answerTranscriptionProvider';
-import { WebSpeechAnswerTranscriptionProvider } from './webSpeechAnswerTranscriptionProvider';
-import { GladiaLiveAnswerTranscriptionProvider } from './gladiaLiveAnswerTranscriptionProvider';
+import type {
+  AnswerTranscriptionProvider,
+  AnswerTranscriptionProviderKind,
+  AnswerTranscriptionUpdate,
+} from './answerTranscriptionProvider';
+import { createAnswerTranscriptionProvider } from './answerTranscriptionProviderFactory';
 
 export type VoicePhase =
   | 'IDLE'
@@ -37,7 +39,8 @@ interface VoiceConversationOptions {
   recognitionRestartDelayMs: number;
   voiceLoadWaitMs: number;
   nextQuestionDelayMs: number;
-  answerTranscriptionProvider: 'web_speech' | 'gladia_live';
+  answerTranscriptionProvider: AnswerTranscriptionProviderKind;
+  onCreateTranscriptionTicket?: () => Promise<AiInterviewTranscriptionTicket>;
   disabled?: boolean;
   onTranscript: (value: string) => void;
   onFinalizeCapture: (
@@ -45,12 +48,11 @@ interface VoiceConversationOptions {
     captureId: string,
     captureVersion: number,
     browserTranscript: string,
-    transcription: AnswerCaptureTranscriptionMetadata,
+    transcriptionProvider: AnswerTranscriptionProviderKind,
   ) => Promise<HandsFreeAnswerCaptureResult>;
   onConfirm: (finalTranscript: string, rawTranscript?: string) => Promise<void>;
   onReplayQuestion: () => Promise<void>;
   onSpeechUrl?: (text: string) => Promise<AiInterviewSpeechTicket | undefined>;
-  onCreateLiveTranscription?: (sampleRate: number) => Promise<AiInterviewLiveTranscriptionSession>;
 }
 
 type RecognitionMode = 'answer' | 'confirmation';
@@ -184,47 +186,29 @@ export function resolveCaptureTranscript(
   result?: Pick<HandsFreeAnswerCaptureResult,
     'rawTranscript' | 'correctedTranscript' | 'correctionStatus' | 'correctionCount'
     | 'gladiaTranscript' | 'transcriptStatus'>,
-  source: 'web_speech' | 'gladia_live' = 'web_speech',
 ) {
-  if (source === 'web_speech') {
-    const rawTranscript = result?.rawTranscript?.trim() || browserTranscript.trim();
-    const correctionSucceeded = result?.correctionStatus === 'CORRECTED'
-      || result?.correctionStatus === 'UNCHANGED';
-    const displayedTranscript = correctionSucceeded
-      ? result?.correctedTranscript?.trim() || rawTranscript
-      : rawTranscript;
-    let notice = 'Đã hoàn tất audio. Transcript Web Speech được giữ nguyên.';
-    if (!result) notice = 'Không thể xử lý audio. Transcript Web Speech vẫn được giữ lại.';
-    else if (result.correctionStatus === 'CORRECTED') {
-      notice = `AI đã sửa ${result.correctionCount || 0} lỗi nhận dạng có độ tin cậy cao. Hãy kiểm tra trước khi xác nhận.`;
-    } else if (result.correctionStatus === 'UNCHANGED') {
-      notice = 'AI đã kiểm tra và không phát hiện lỗi nhận dạng đủ chắc chắn để sửa.';
-    } else if (result.correctionStatus === 'FAILED') {
-      notice = 'Không thể kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.';
-    } else if (result.correctionStatus === 'PENDING') {
-      notice = 'Chưa hoàn tất kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.';
-    }
-    return {
-      rawTranscript,
-      displayedTranscript,
-      gladiaTranscript: '',
-      notice,
-    };
-  }
-  if (result?.rawTranscript?.trim()) {
-    return {
-      rawTranscript: result.rawTranscript.trim(),
-      displayedTranscript: result.rawTranscript.trim(),
-      gladiaTranscript: result.gladiaTranscript?.trim() || '',
-      notice: result.transcriptStatus === 'standardized'
-        ? 'Đã tạo transcript draft từ Gladia' : 'Gladia không khả dụng, đang dùng transcript realtime làm draft',
-    };
+  const rawTranscript = result?.rawTranscript?.trim() || browserTranscript.trim();
+  const correctionSucceeded = result?.correctionStatus === 'CORRECTED'
+    || result?.correctionStatus === 'UNCHANGED';
+  const displayedTranscript = correctionSucceeded
+    ? result?.correctedTranscript?.trim() || rawTranscript
+    : rawTranscript;
+  let notice = 'Đã hoàn tất audio. Transcript Web Speech được giữ nguyên.';
+  if (!result) notice = 'Không thể xử lý audio. Transcript Web Speech vẫn được giữ lại.';
+  else if (result.correctionStatus === 'CORRECTED') {
+    notice = `AI đã sửa ${result.correctionCount || 0} lỗi nhận dạng có độ tin cậy cao. Hãy kiểm tra trước khi xác nhận.`;
+  } else if (result.correctionStatus === 'UNCHANGED') {
+    notice = 'AI đã kiểm tra và không phát hiện lỗi nhận dạng đủ chắc chắn để sửa.';
+  } else if (result.correctionStatus === 'FAILED') {
+    notice = 'Không thể kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.';
+  } else if (result.correctionStatus === 'PENDING') {
+    notice = 'Chưa hoàn tất kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.';
   }
   return {
-    rawTranscript: browserTranscript.trim(),
-    displayedTranscript: browserTranscript.trim(),
+    rawTranscript,
+    displayedTranscript,
     gladiaTranscript: '',
-    notice: 'Không thể xử lý audio, đang dùng transcript realtime làm draft',
+    notice,
   };
 }
 
@@ -252,17 +236,20 @@ export function useVoiceConversation({
   voiceLoadWaitMs,
   nextQuestionDelayMs,
   answerTranscriptionProvider,
+  onCreateTranscriptionTicket,
   disabled = false,
   onTranscript,
   onFinalizeCapture,
   onConfirm,
   onReplayQuestion,
   onSpeechUrl,
-  onCreateLiveTranscription,
 }: VoiceConversationOptions) {
   const canUseBrowserSpeech = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const canUseAnswerRecognition = answerTranscriptionProvider === 'speechmatics_realtime'
+    ? Boolean(onCreateTranscriptionTicket)
+    : Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
   const supported = typeof window !== 'undefined'
-    && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
+    && canUseAnswerRecognition
     && (canUseBrowserSpeech || Boolean(onSpeechUrl));
   const [active, setActive] = useState(false);
   const resumedPhase = resolveResumedVoicePhase(initialConversationState);
@@ -272,9 +259,6 @@ export function useVoiceConversation({
   const [interimTranscript, setInterimTranscript] = useState('');
   const [transcriptNotice, setTranscriptNotice] = useState('');
   const [error, setError] = useState('');
-  const [activeTranscriptionSource, setActiveTranscriptionSource] = useState<'web_speech' | 'gladia_live'>(
-    answerTranscriptionProvider,
-  );
 
   const phaseRef = useRef<VoicePhase>(resumedPhase);
   const activeRef = useRef(false);
@@ -283,6 +267,7 @@ export function useVoiceConversation({
   const savingRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const answerProviderRef = useRef<AnswerTranscriptionProvider | null>(null);
+  const confirmationProviderRef = useRef<AnswerTranscriptionProvider | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pcmPlayerRef = useRef<PcmAudioStreamPlayer | null>(null);
   const audioCaptureRef = useRef(new CandidateAudioCapture());
@@ -315,7 +300,6 @@ export function useVoiceConversation({
   const onConfirmRef = useRef(onConfirm);
   const onReplayQuestionRef = useRef(onReplayQuestion);
   const onSpeechUrlRef = useRef(onSpeechUrl);
-  const onCreateLiveTranscriptionRef = useRef(onCreateLiveTranscription);
   const startAnswerListeningRef = useRef<(schedulePromptWithoutNewResult?: boolean) => void>(() => undefined);
   const startAnswerRecognitionRef = useRef<() => void>(() => undefined);
   const startConfirmationListeningRef = useRef<() => void>(() => undefined);
@@ -339,7 +323,6 @@ export function useVoiceConversation({
   useEffect(() => { onConfirmRef.current = onConfirm; }, [onConfirm]);
   useEffect(() => { onReplayQuestionRef.current = onReplayQuestion; }, [onReplayQuestion]);
   useEffect(() => { onSpeechUrlRef.current = onSpeechUrl; }, [onSpeechUrl]);
-  useEffect(() => { onCreateLiveTranscriptionRef.current = onCreateLiveTranscription; }, [onCreateLiveTranscription]);
   useEffect(() => { disabledRef.current = disabled; }, [disabled]);
   useEffect(() => {
     if (!initialConversationState || activeRef.current) return;
@@ -356,6 +339,9 @@ export function useVoiceConversation({
   }, []);
 
   const stopRecognition = useCallback(() => {
+    const confirmationProvider = confirmationProviderRef.current;
+    confirmationProviderRef.current = null;
+    confirmationProvider?.dispose();
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
     if (!recognition) return;
@@ -579,6 +565,54 @@ export function useVoiceConversation({
   }, [confirmationAutoFinalizeMs]);
 
   const startConfirmationRecognition = useCallback(() => {
+    if (answerTranscriptionProvider === 'speechmatics_realtime') {
+      if (!activeRef.current || modeRef.current !== 'confirmation'
+        || phaseRef.current !== 'WAITING_FOR_CONTINUATION' || confirmationHandledRef.current) return;
+      const stream = audioCaptureRef.current.getMediaStream();
+      if (!stream || !onCreateTranscriptionTicket) {
+        enterManualFallback('Không thể mở Speechmatics để nghe phản hồi xác nhận. Nội dung hiện tại vẫn được giữ.');
+        return;
+      }
+      stopRecognition();
+      const cycle = confirmationCycleRef.current;
+      const provider = createAnswerTranscriptionProvider('speechmatics_realtime', {
+        onUpdate: (update) => {
+          if (confirmationProviderRef.current !== provider || cycle !== confirmationCycleRef.current
+            || confirmationHandledRef.current || modeRef.current !== 'confirmation'
+            || phaseRef.current !== 'WAITING_FOR_CONTINUATION') return;
+          confirmationCommittedRef.current = update.committedTranscript;
+          confirmationDraftRef.current = appendTranscriptPart(
+            update.committedTranscript,
+            update.interimTranscript,
+          );
+          setInterimTranscript(confirmationDraftRef.current);
+          scheduleConfirmationAutoFinalize();
+          if (update.committedTranscript && !update.interimTranscript
+            && shouldSettleConfirmationImmediately(update.committedTranscript)) {
+            settleConfirmationRef.current(
+              resolveConfirmationResponse(update.committedTranscript),
+              update.committedTranscript,
+            );
+          }
+        },
+        onTerminalError: () => {
+          if (confirmationProviderRef.current !== provider || confirmationHandledRef.current) return;
+          const spokenText = confirmationDraftRef.current.trim();
+          settleConfirmationRef.current(resolveConfirmationResponse(spokenText), spokenText);
+        },
+      }, {
+        recognitionRestartDelayMs,
+        createSpeechmaticsTicket: onCreateTranscriptionTicket,
+      });
+      confirmationProviderRef.current = provider;
+      void provider.start(stream, '').catch(() => {
+        if (confirmationProviderRef.current !== provider || cycle !== confirmationCycleRef.current) return;
+        provider.dispose();
+        confirmationProviderRef.current = null;
+        enterManualFallback('Không thể khởi động Speechmatics để nghe phản hồi xác nhận. Nội dung hiện tại vẫn được giữ.');
+      });
+      return;
+    }
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition || !activeRef.current || modeRef.current !== 'confirmation'
       || phaseRef.current !== 'WAITING_FOR_CONTINUATION' || confirmationHandledRef.current) return;
@@ -632,7 +666,8 @@ export function useVoiceConversation({
     try { recognition.start(); } catch {
       enterManualFallback('Không thể nghe phản hồi xác nhận. Nội dung câu trả lời hiện tại vẫn được giữ để bạn nhập tay.');
     }
-  }, [enterManualFallback, restartRecognition, scheduleConfirmationAutoFinalize, stopRecognition]);
+  }, [answerTranscriptionProvider, enterManualFallback, onCreateTranscriptionTicket, recognitionRestartDelayMs,
+    restartRecognition, scheduleConfirmationAutoFinalize, stopRecognition]);
   startConfirmationRecognitionRef.current = startConfirmationRecognition;
 
   const startConfirmationListening = useCallback(() => {
@@ -751,48 +786,27 @@ export function useVoiceConversation({
       if (!activeRef.current || token !== lifecycleTokenRef.current
         || expectedQuestion !== questionIdRef.current) return;
       setError(message);
-      setTranscriptNotice('Gladia Live đã dừng. Đang giữ transcript đã nhận để bạn kiểm tra.');
+      setTranscriptNotice('Nhận dạng giọng nói đã dừng. Đang giữ transcript đã nhận để bạn kiểm tra.');
       if (phaseRef.current === 'LISTENING') finalizeAnswerRef.current();
     };
-    const createWebSpeech = () => new WebSpeechAnswerTranscriptionProvider(
+    const provider = createAnswerTranscriptionProvider(
+      answerTranscriptionProvider,
       { onUpdate: applyUpdate, onTerminalError },
-      recognitionRestartDelayMs,
+      {
+        recognitionRestartDelayMs,
+        createSpeechmaticsTicket: onCreateTranscriptionTicket,
+      },
     );
-    const createConfiguredProvider = () => {
-      const createLive = onCreateLiveTranscriptionRef.current;
-      if (answerTranscriptionProvider === 'gladia_live' && createLive) {
-        return new GladiaLiveAnswerTranscriptionProvider(
-          { onUpdate: applyUpdate, onTerminalError },
-          createLive,
-        );
-      }
-      return createWebSpeech();
-    };
-
-    const provider = createConfiguredProvider();
     answerProviderRef.current = provider;
-    setActiveTranscriptionSource(provider.kind);
     void provider.start(stream, browserCommittedRef.current).catch(() => {
       if (answerProviderRef.current !== provider || token !== lifecycleTokenRef.current
         || expectedQuestion !== questionIdRef.current) return;
       provider.dispose();
       answerProviderRef.current = null;
-      if (provider.kind !== 'gladia_live') {
-        enterManualFallback('Không thể khởi động nhận dạng giọng nói. Hãy nhập transcript thủ công hoặc thử microphone lại.');
-        return;
-      }
-      const fallback = createWebSpeech();
-      answerProviderRef.current = fallback;
-      setActiveTranscriptionSource('web_speech');
-      setTranscriptNotice('Gladia Live không khả dụng, đang dùng Web Speech cho câu này.');
-      void fallback.start(stream, browserCommittedRef.current).catch(() => {
-        if (answerProviderRef.current === fallback) fallback.dispose();
-        answerProviderRef.current = null;
-        enterManualFallback('Không thể khởi động Gladia Live hoặc Web Speech. Hãy nhập transcript thủ công.');
-      });
+      enterManualFallback('Không thể khởi động nhận dạng giọng nói. Hãy nhập transcript thủ công hoặc thử microphone lại.');
     });
   }, [answerTranscriptionProvider, confirmationPromptDelayMs, enterManualFallback,
-    recognitionRestartDelayMs]);
+    onCreateTranscriptionTicket, recognitionRestartDelayMs]);
   startAnswerRecognitionRef.current = startAnswerRecognition;
 
   const startAnswerListening = useCallback((schedulePromptWithoutNewResult = false) => {
@@ -855,11 +869,11 @@ export function useVoiceConversation({
     answerProviderRef.current = null;
     const finishTranscription = provider
       ? provider.finish().catch(() => ({
-        source: 'web_speech' as const,
+        source: answerTranscriptionProvider,
         transcript: browserDraftRef.current.trim(),
       })).finally(() => provider.dispose())
       : Promise.resolve({
-        source: 'web_speech' as const,
+        source: answerTranscriptionProvider,
         transcript: browserDraftRef.current.trim(),
       });
     void Promise.all([
@@ -892,11 +906,7 @@ export function useVoiceConversation({
         expectedCapture,
         captureVersion,
         browserTranscript,
-        {
-          source: transcription.source,
-          liveSessionToken: 'liveSessionToken' in transcription
-            ? transcription.liveSessionToken : undefined,
-        },
+        transcription.source,
       );
       let transcriptResolved = false;
       void upload().catch((firstError) => {
@@ -906,7 +916,7 @@ export function useVoiceConversation({
         return upload();
       }).then((result) => {
         if (!isCurrentCaptureCallback(callbackExpected, currentLifecycle(), result)) return;
-        const resolved = resolveCaptureTranscript(browserTranscript, result, transcription.source);
+        const resolved = resolveCaptureTranscript(browserTranscript, result);
         captureVersionRef.current = result.captureVersion;
         transcriptResolved = true;
         gladiaTranscriptRef.current = resolved.gladiaTranscript;
@@ -917,7 +927,7 @@ export function useVoiceConversation({
         setTranscriptNotice(resolved.notice);
       }).catch(() => {
         if (!isCurrentCaptureCallback(callbackExpected, currentLifecycle())) return;
-        const resolved = resolveCaptureTranscript(browserTranscript, undefined, transcription.source);
+        const resolved = resolveCaptureTranscript(browserTranscript);
         transcriptResolved = true;
         rawTranscriptRef.current = resolved.rawTranscript;
         setRawTranscript(resolved.rawTranscript);
@@ -929,7 +939,7 @@ export function useVoiceConversation({
         setPhase('REVIEWING_TRANSCRIPT');
       });
     });
-  }, [setPhase, stopRecognition]);
+  }, [answerTranscriptionProvider, setPhase, stopRecognition]);
   finalizeAnswerRef.current = finalizeAnswer;
 
   const completeSpokenAnswer = useCallback(() => {
@@ -1164,7 +1174,6 @@ export function useVoiceConversation({
     interimTranscript,
     transcriptNotice,
     error,
-    activeTranscriptionSource,
     start,
     stop,
     replayQuestion,

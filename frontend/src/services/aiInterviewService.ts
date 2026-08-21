@@ -8,11 +8,10 @@ import type {
   AiInterviewQuestionSet,
   AiInterviewSession,
   AiInterviewSpeechTicket,
-  AiInterviewLiveTranscriptionSession,
   AiInterviewTranscript,
+  AiInterviewTranscriptionTicket,
   HandsFreeAnswerCaptureResult,
   HandsFreeAudioSegmentUpload,
-  AnswerCaptureTranscriptionMetadata,
 } from '../types/aiInterview';
 
 export const aiInterviewService = {
@@ -51,6 +50,13 @@ export const aiInterviewService = {
     return response.data;
   },
 
+  createTranscriptionTicket: async (sessionId: string): Promise<AiInterviewTranscriptionTicket> => {
+    const response = await api.post<AiInterviewTranscriptionTicket>(
+      `/candidate/ai-interviews/sessions/${sessionId}/transcription-ticket`,
+    );
+    return response.data;
+  },
+
   createPracticeSession: async (input: AiInterviewPracticeInput): Promise<AiInterviewSession> => {
     const response = await api.post<AiInterviewSession>('/candidate/ai-interviews/sessions/practice', input);
     return response.data;
@@ -72,17 +78,6 @@ export const aiInterviewService = {
     return response.data;
   },
 
-  createLiveTranscription: async (
-    sessionId: string,
-    sampleRate: number,
-  ): Promise<AiInterviewLiveTranscriptionSession> => {
-    const response = await api.post<AiInterviewLiveTranscriptionSession>(
-      `/candidate/ai-interviews/sessions/${sessionId}/live-transcription`,
-      { sampleRate },
-    );
-    return response.data;
-  },
-
   finalizeHandsFreeCapture: async (
     sessionId: string,
     questionId: string,
@@ -90,14 +85,13 @@ export const aiInterviewService = {
     captureVersion: number,
     segments: HandsFreeAudioSegmentUpload[],
     browserTranscript: string,
-    transcription: AnswerCaptureTranscriptionMetadata = { source: 'web_speech' },
+    transcriptionProvider: 'web_speech' | 'speechmatics_realtime' = 'web_speech',
   ): Promise<HandsFreeAnswerCaptureResult> => {
     const form = new FormData();
     form.append('captureId', captureId);
     form.append('captureVersion', String(captureVersion));
     form.append('browserTranscript', browserTranscript);
-    form.append('transcriptionSource', transcription.source);
-    if (transcription.liveSessionToken) form.append('liveSessionToken', transcription.liveSessionToken);
+    form.append('transcriptionProvider', transcriptionProvider);
     segments.forEach((segment) => {
       form.append('audioSegments', segment.file);
       form.append('segmentSequences', String(segment.sequence));
@@ -123,14 +117,13 @@ export const aiInterviewService = {
     captureVersion: number,
     segments: HandsFreeAudioSegmentUpload[],
     browserTranscript: string,
-    transcription: AnswerCaptureTranscriptionMetadata = { source: 'web_speech' },
+    transcriptionProvider: 'web_speech' | 'speechmatics_realtime' = 'web_speech',
   ): Promise<HandsFreeAnswerCaptureResult> => {
     const form = new FormData();
     form.append('captureId', captureId);
     form.append('captureVersion', String(captureVersion));
     form.append('browserTranscript', browserTranscript);
-    form.append('transcriptionSource', transcription.source);
-    if (transcription.liveSessionToken) form.append('liveSessionToken', transcription.liveSessionToken);
+    form.append('transcriptionProvider', transcriptionProvider);
     segments.forEach((segment) => {
       form.append('audioSegments', segment.file);
       form.append('segmentSequences', String(segment.sequence));

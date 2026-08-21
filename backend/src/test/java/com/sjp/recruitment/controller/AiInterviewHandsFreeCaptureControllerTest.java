@@ -5,7 +5,7 @@ import com.sjp.recruitment.service.AiInterviewService;
 import com.sjp.recruitment.service.AiInterviewCvProfileService;
 import com.sjp.recruitment.service.AiInterviewSpeechService;
 import com.sjp.recruitment.service.HandsFreeAnswerCaptureService;
-import com.sjp.recruitment.service.GladiaLiveSessionService;
+import com.sjp.recruitment.service.SpeechmaticsRealtimeTicketService;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -27,19 +27,18 @@ class AiInterviewHandsFreeCaptureControllerTest {
         AiInterviewCvProfileService cvProfileService = mock(AiInterviewCvProfileService.class);
         AiInterviewSpeechService speechService = mock(AiInterviewSpeechService.class);
         HandsFreeAnswerCaptureService captureService = mock(HandsFreeAnswerCaptureService.class);
-        GladiaLiveSessionService liveSessionService = mock(GladiaLiveSessionService.class);
+        SpeechmaticsRealtimeTicketService transcriptionTicketService = mock(SpeechmaticsRealtimeTicketService.class);
         AiInterviewController controller = new AiInterviewController(
-                interviewService, cvProfileService, speechService, captureService, liveSessionService);
+                interviewService, cvProfileService, speechService, captureService, transcriptionTicketService);
         MockMvc mvc = standaloneSetup(controller).build();
         String sessionId = UUID.randomUUID().toString();
         String questionId = UUID.randomUUID().toString();
         String captureId = UUID.randomUUID().toString();
-        String liveSessionToken = UUID.randomUUID().toString();
         HandsFreeAnswerCaptureResponse response = new HandsFreeAnswerCaptureResponse(
-                questionId, captureId, 1, "spring bút", "Spring Boot", "Spring Boot",
-                "Spring Boot", "NOT_REQUIRED", 0, "standardized", "AUDIO_GLADIA", null);
+                questionId, captureId, 1, "spring bút", null, "spring bút",
+                "spring bút", "UNCHANGED", 0, "speechmatics_realtime", "BROWSER_PLUS_VAD", null);
         when(captureService.process(eq(sessionId), eq(questionId), eq(captureId), eq(captureId), eq(1),
-                anyList(), eq(List.of(0)), eq("spring bút"), eq("gladia_live"), eq(liveSessionToken),
+                anyList(), eq(List.of(0)), eq("spring bút"), eq("speechmatics_realtime"),
                 eq(List.of(1.25)))).thenReturn(response);
         MockMultipartFile segment = new MockMultipartFile("audioSegments", "segment.webm",
                 "audio/webm;codecs=opus", new byte[]{0x1a, 0x45, (byte) 0xdf, (byte) 0xa3});
@@ -52,8 +51,7 @@ class AiInterviewHandsFreeCaptureControllerTest {
                         .param("captureVersion", "1")
                         .param("segmentSequences", "0")
                         .param("browserTranscript", "spring bút")
-                        .param("transcriptionSource", "gladia_live")
-                        .param("liveSessionToken", liveSessionToken)
+                        .param("transcriptionProvider", "speechmatics_realtime")
                         .param("durationSeconds", "1.25"))
                 .andExpect(request().asyncStarted())
                 .andReturn();
@@ -62,10 +60,10 @@ class AiInterviewHandsFreeCaptureControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.questionId").value(questionId))
                 .andExpect(jsonPath("$.captureId").value(captureId))
-                .andExpect(jsonPath("$.gladiaTranscript").value("Spring Boot"))
-                .andExpect(jsonPath("$.rawTranscript").value("Spring Boot"));
+                .andExpect(jsonPath("$.gladiaTranscript").doesNotExist())
+                .andExpect(jsonPath("$.rawTranscript").value("spring bút"));
         verify(captureService).process(eq(sessionId), eq(questionId), eq(captureId), eq(captureId), eq(1),
-                anyList(), eq(List.of(0)), eq("spring bút"), eq("gladia_live"), eq(liveSessionToken),
+                anyList(), eq(List.of(0)), eq("spring bút"), eq("speechmatics_realtime"),
                 eq(List.of(1.25)));
     }
 }
