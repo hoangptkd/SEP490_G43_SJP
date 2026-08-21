@@ -571,22 +571,10 @@ public class JobService {
 
         String status = job.getStatus();
 
-        // ── 1. Trạng thái KHÔNG cho phép xoá ──
-        if ("pending_review".equalsIgnoreCase(status)) {
-            throw new ApiException(HttpStatus.CONFLICT, "JOB_PENDING_REVIEW",
-                    "Tin đang chờ Admin duyệt. Vui lòng chờ kết quả duyệt hoặc rút lại tin trước khi xóa.");
-        }
-        if ("awaiting_company".equalsIgnoreCase(status)) {
-            throw new ApiException(HttpStatus.CONFLICT, "JOB_AWAITING_COMPANY",
-                    "Tin đang chờ bạn chỉnh sửa theo yêu cầu của Admin. Vui lòng xử lý trước khi xóa.");
-        }
-        if ("removed".equalsIgnoreCase(status)) {
-            throw new ApiException(HttpStatus.CONFLICT, "JOB_REMOVED",
-                    "Tin đã bị Admin gỡ bỏ do vi phạm. Không thể thực hiện thao tác xóa.");
-        }
-        if ("archived".equalsIgnoreCase(status)) {
-            throw new ApiException(HttpStatus.CONFLICT, "JOB_ALREADY_ARCHIVED",
-                    "Tin đã được lưu trữ (archived) trước đó.");
+        // ── 1. Kiểm tra trạng thái được phép xoá: chỉ 'draft' (nháp) và 'pending_review' (chờ duyệt) ──
+        if (!"draft".equalsIgnoreCase(status) && !"pending_review".equalsIgnoreCase(status)) {
+            throw new ApiException(HttpStatus.CONFLICT, "JOB_CANNOT_BE_DELETED",
+                    "Chỉ có thể xóa tin tuyển dụng ở trạng thái Bản nháp hoặc Chờ Admin kiểm duyệt.");
         }
 
         // ── 2. Thu thập applications ──

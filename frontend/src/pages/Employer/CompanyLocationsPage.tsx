@@ -139,20 +139,17 @@ function CompanyLocationsPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500 opacity-10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl pointer-events-none"></div>
-        
-        <div className="relative z-10 text-center md:text-left">
-          <h1 className="text-2xl font-bold mb-2">Quản lý chi nhánh & Văn phòng</h1>
-          <p className="text-slate-300 text-sm">
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="text-center md:text-left">
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Quản lý chi nhánh & Văn phòng</h1>
+          <p className="text-gray-500 text-sm">
             Danh sách các địa điểm hoạt động và văn phòng làm việc của doanh nghiệp.
           </p>
         </div>
         <button
           type="button"
           onClick={handleOpenAdd}
-          className="relative z-10 inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all"
+          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all"
         >
           <FiPlus className="w-5 h-5" /> Thêm địa điểm mới
         </button>
