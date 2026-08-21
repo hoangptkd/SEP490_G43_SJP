@@ -498,39 +498,65 @@ function ApplyJobModal({
 
   const locationOptions = useMemo(() => {
     const list: { value: string; label: string }[] = [];
-    const addedValues = new Set<string>();
+    const addedKeys = new Set<string>();
 
     list.push({ value: 'Remote', label: 'Làm việc từ xa (Remote)' });
-    addedValues.add('Remote');
-    addedValues.add('Làm việc từ xa');
-    addedValues.add('Remote / Làm việc từ xa');
+    addedKeys.add('remote');
+    addedKeys.add('làm việc từ xa');
+    addedKeys.add('làm việc từ xa (remote)');
 
-    const addLoc = (value?: string, label?: string) => {
-      const val = value?.trim();
-      if (!val || addedValues.has(val)) return;
-      addedValues.add(val);
-      list.push({ value: val, label: label?.trim() || val });
+    const addLoc = (displayLoc?: string) => {
+      const val = displayLoc?.trim();
+      if (!val) return;
+      const key = val.toLowerCase();
+      if (addedKeys.has(key)) return;
+      addedKeys.add(key);
+      list.push({ value: val, label: val });
     };
 
-    if (job.companyLocation) {
-      const fullLoc = [job.companyLocation.branchName, job.companyLocation.address, job.companyLocation.city]
-        .filter(Boolean).join(' - ');
-      if (job.companyLocation.branchName) addLoc(job.companyLocation.branchName, fullLoc || job.companyLocation.branchName);
-      if (fullLoc) addLoc(fullLoc, fullLoc);
+    // 1. Thu thập tất cả các Chi nhánh Công ty chính thức
+    const allBranches = [...(companyLocations || [])];
+    if (job.companyLocation && !allBranches.some((b) => b.id === job.companyLocation?.id)) {
+      allBranches.unshift(job.companyLocation);
     }
 
-    if (job.location) {
-      addLoc(job.location, job.location);
-    }
+    const branchNamesSet = new Set<string>();
 
-    companyLocations.forEach((loc) => {
+    allBranches.forEach((loc) => {
       const fullLoc = [loc.branchName, loc.address, loc.city].filter(Boolean).join(' - ');
-      if (loc.branchName) addLoc(loc.branchName, fullLoc || loc.branchName);
-      if (fullLoc) addLoc(fullLoc, fullLoc);
+      if (fullLoc) {
+        addLoc(fullLoc);
+      }
+      if (loc.branchName) {
+        branchNamesSet.add(loc.branchName.trim().toLowerCase());
+      }
     });
 
-    if (job.company?.location) {
-      addLoc(job.company.location, job.company.location);
+    const isCoveredByBranches = (text?: string) => {
+      if (!text) return true;
+      const norm = text.trim().toLowerCase();
+      if (!norm) return true;
+      if (addedKeys.has(norm)) return true;
+      for (const branchName of branchNamesSet) {
+        if (branchName === norm || branchName.includes(norm) || norm.includes(branchName)) {
+          return true;
+        }
+      }
+      for (const key of addedKeys) {
+        if (key.includes(norm) || norm.includes(key)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // 2. Chỉ thêm job.location hoặc company.location nếu chưa được bao gồm bởi chi nhánh chính thức
+    if (job.location && !isCoveredByBranches(job.location)) {
+      addLoc(job.location);
+    }
+
+    if (job.company?.location && !isCoveredByBranches(job.company.location)) {
+      addLoc(job.company.location);
     }
 
     return list;
@@ -538,7 +564,8 @@ function ApplyJobModal({
 
   useEffect(() => {
     if (!preferredLocation && locationOptions.length > 0) {
-      const match = locationOptions.find((opt) => opt.value === job.location) || locationOptions[0];
+      const locLower = (job.location || '').trim().toLowerCase();
+      const match = locationOptions.find((opt) => opt.value.toLowerCase() === locLower || opt.label.toLowerCase().includes(locLower)) || locationOptions[0];
       if (match) {
         setPreferredLocation(match.value);
       }

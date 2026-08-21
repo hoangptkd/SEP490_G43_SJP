@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -18,6 +19,7 @@ public class EmailService {
     @Value("${app.mail-from}")
     private String mailFrom;
 
+    @Async
     public void sendVerificationEmail(String email, String verificationLink) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
@@ -41,6 +43,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendPasswordResetEmail(String email, String resetLink) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
@@ -64,6 +67,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendApplicationRejectionEmail(String email, String candidateName, String jobTitle, String companyName) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
@@ -91,6 +95,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendInterviewInvitationEmail(String email, String candidateName, String jobTitle, String companyName, String scheduledAt, String location, String meetingLink, String note) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);

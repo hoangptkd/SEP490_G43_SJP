@@ -173,7 +173,31 @@ export default function EmployerDashboardPage() {
                 <span style={{ fontSize: '0.85rem', padding: '4px 10px', borderRadius: '20px', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
                   ✅ Đã xác thực
                 </span>
-              ) : null
+              ) : company.verificationStatus === 'pending' ? (
+                <Link
+                  to="/employer/verification"
+                  style={{ fontSize: '0.85rem', padding: '4px 10px', borderRadius: '20px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500, textDecoration: 'none' }}
+                  title="Hồ sơ xác thực đang chờ Admin duyệt. Bấm để xem chi tiết"
+                >
+                  ⏳ Đang chờ duyệt xác thực ↗
+                </Link>
+              ) : company.verificationStatus === 'rejected' ? (
+                <Link
+                  to="/employer/verification"
+                  style={{ fontSize: '0.85rem', padding: '4px 10px', borderRadius: '20px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500, textDecoration: 'none' }}
+                  title="Yêu cầu xác thực bị từ chối. Bấm để nộp lại"
+                >
+                  ❌ Xác thực bị từ chối — Xác thực lại ↗
+                </Link>
+              ) : (
+                <Link
+                  to="/employer/verification"
+                  style={{ fontSize: '0.85rem', padding: '4px 10px', borderRadius: '20px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500, textDecoration: 'none' }}
+                  title="Công ty chưa xác thực. Bấm để gửi thông tin xác thực doanh nghiệp"
+                >
+                  ⚠️ Chưa xác thực — Xác thực ngay ↗
+                </Link>
+              )
             )}
           </h1>
           <p className="muted" style={{ margin: '4px 0 0 0', fontSize: '0.9rem' }}>
@@ -288,6 +312,21 @@ export default function EmployerDashboardPage() {
                       badgeBg = '#f5f3ff';
                       badgeText = 'Cần phản hồi';
                       btnText = 'Trả lời UV';
+                    } else if (task.taskType === 'interview_today') {
+                      badgeColor = '#059669';
+                      badgeBg = '#ecfdf5';
+                      badgeText = 'PV Hôm nay';
+                      btnText = 'Xem chi tiết';
+                    } else if (task.taskType === 'evaluate_interview') {
+                      badgeColor = '#d97706';
+                      badgeBg = '#fffbeb';
+                      badgeText = 'Đánh giá PV';
+                      btnText = 'Đánh giá';
+                    } else if (task.taskType === 'pending_offer') {
+                      badgeColor = '#0284c7';
+                      badgeBg = '#f0f9ff';
+                      badgeText = 'Tạo Offer';
+                      btnText = 'Gửi Offer';
                     }
 
                     return (

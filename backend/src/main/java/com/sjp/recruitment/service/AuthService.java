@@ -25,6 +25,7 @@ import com.sjp.recruitment.repository.UserRepository;
 import com.sjp.recruitment.service.storage.StorageService;
 import com.sjp.recruitment.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -55,6 +56,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -115,7 +117,7 @@ public class AuthService {
             ensureCandidateProfile(savedUser);
         } else if (savedUser.getRoleEnum() == User.UserRole.EMPLOYER) {
             com.sjp.recruitment.model.entity.Company company = new com.sjp.recruitment.model.entity.Company();
-            company.setName("");
+            company.setName("Công ty chưa đặt tên (" + savedUser.getId().toString().substring(0, 8) + ")");
             company.setDescription("Chưa có mô tả");
             company.setStatus("pending");
             company.setVerificationStatus("unverified");
@@ -127,13 +129,20 @@ public class AuthService {
             if (request.getIndustries() != null && !request.getIndustries().isEmpty()) {
                 for (int i = 0; i < request.getIndustries().size(); i++) {
                     RegisterRequest.IndustryDto ind = request.getIndustries().get(i);
-                    com.sjp.recruitment.model.entity.CompanyIndustry ci = new com.sjp.recruitment.model.entity.CompanyIndustry();
-                    ci.setCompany(company);
-                    com.sjp.recruitment.model.entity.Category category = new com.sjp.recruitment.model.entity.Category();
-                    category.setId(java.util.UUID.fromString(ind.getCategoryId()));
-                    ci.setCategory(category);
-                    ci.setPrimary(i == 0);
-                    companyIndustryRepository.save(ci);
+                    if (ind == null || ind.getCategoryId() == null || ind.getCategoryId().trim().isEmpty()) {
+                        continue;
+                    }
+                    try {
+                        com.sjp.recruitment.model.entity.CompanyIndustry ci = new com.sjp.recruitment.model.entity.CompanyIndustry();
+                        ci.setCompany(company);
+                        com.sjp.recruitment.model.entity.Category category = new com.sjp.recruitment.model.entity.Category();
+                        category.setId(java.util.UUID.fromString(ind.getCategoryId().trim()));
+                        ci.setCategory(category);
+                        ci.setPrimary(i == 0);
+                        companyIndustryRepository.save(ci);
+                    } catch (Exception e) {
+                        log.warn("Không thể lưu ngành nghề công ty khi đăng ký: {}", e.getMessage());
+                    }
                 }
             }
 
@@ -269,7 +278,7 @@ public class AuthService {
             profile.setFullName(token.getFullName());
         } else if (saved.getRoleEnum() == User.UserRole.EMPLOYER) {
             com.sjp.recruitment.model.entity.Company company = new com.sjp.recruitment.model.entity.Company();
-            company.setName("");
+            company.setName("Công ty chưa đặt tên (" + saved.getId().toString().substring(0, 8) + ")");
             company.setDescription("Chưa có mô tả");
             company.setStatus("pending");
             company.setVerificationStatus("unverified");

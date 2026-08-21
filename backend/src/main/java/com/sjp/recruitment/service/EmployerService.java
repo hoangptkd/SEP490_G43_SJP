@@ -293,7 +293,7 @@ public class EmployerService {
                         "Phỏng vấn hôm nay: " + candidateName,
                         "Vị trí " + jobTitle + " lúc " + interview.getScheduledAt().format(DateTimeFormatter.ofPattern("HH:mm")),
                         "interview_today",
-                        "/employer/applications/" + interview.getApplication().getId(),
+                        "/employer/applications?appId=" + interview.getApplication().getId(),
                         interview.getScheduledAt()
                 ));
             } else if ("SCHEDULED".equals(interview.getStatus())
@@ -554,7 +554,7 @@ public class EmployerService {
         return employerRepository.findByUserId(user.getId())
                 .orElseGet(() -> {
                     Company company = new Company();
-                    company.setName("");
+                    company.setName("Công ty chưa đặt tên (" + user.getId().toString().substring(0, 8) + ")");
                     company.setDescription("Chưa có mô tả");
                     company.setStatus("pending");
                     company.setVerificationStatus("unverified");
