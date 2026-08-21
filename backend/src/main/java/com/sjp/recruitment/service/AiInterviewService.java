@@ -82,9 +82,13 @@ public class AiInterviewService {
         boolean enabled = configured && enabledByAdmin;
         String message = null;
         if (!configured) {
-            message = properties.isCoreConfigured() && !properties.isVoiceConfigured()
-                    ? "Chưa cấu hình đầy đủ dịch vụ giọng đọc phỏng vấn."
-                    : "AI Interview chưa được cấu hình API key.";
+            if (!properties.isCoreConfigured()) {
+                message = "AI Interview chưa được cấu hình API key.";
+            } else if (!properties.isVoiceConfigured()) {
+                message = "Chưa cấu hình đầy đủ dịch vụ giọng đọc phỏng vấn.";
+            } else {
+                message = "Chưa cấu hình đầy đủ dịch vụ nhận dạng giọng nói realtime.";
+            }
         } else if (!enabledByAdmin) {
             message = "Phỏng vấn AI đang bị tắt bởi quản trị viên.";
         }
@@ -94,9 +98,10 @@ public class AiInterviewService {
                 properties.effectiveCoreQuestionCount(),
                 properties.getAudioMaxSeconds(),
                 properties.getAudioMaxSizeMb(),
+                properties.getAnswerTranscriptionProvider(),
+                properties.isSpeechmaticsRealtimeEnabled() && properties.isAnswerTranscriptionConfigured(),
                 properties.isVoiceStreamingEnabled(),
                 properties.getVoiceProvider(),
-                properties.getAnswerTranscriptionProvider(),
                 properties.getVoiceConfirmationPromptDelayMs(),
                 properties.getVoiceConfirmationAutoFinalizeMs(),
                 properties.getVoiceRecognitionRestartDelayMs(),

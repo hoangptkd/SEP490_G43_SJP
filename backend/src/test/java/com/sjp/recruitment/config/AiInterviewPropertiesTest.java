@@ -18,18 +18,6 @@ class AiInterviewPropertiesTest {
     }
 
     @Test
-    void supportsOnlyExplicitAnswerTranscriptionProviders() {
-        AiInterviewProperties properties = new AiInterviewProperties();
-
-        assertEquals("web_speech", properties.getAnswerTranscriptionProvider());
-        assertTrue(properties.isAnswerTranscriptionConfigured());
-        properties.setAnswerTranscriptionProvider("gladia_live");
-        assertTrue(properties.isAnswerTranscriptionConfigured());
-        properties.setAnswerTranscriptionProvider("unknown");
-        assertFalse(properties.isAnswerTranscriptionConfigured());
-    }
-
-    @Test
     void usesConservativeTranscriptCorrectionDefaults() {
         AiInterviewProperties properties = new AiInterviewProperties();
 
@@ -42,5 +30,19 @@ class AiInterviewPropertiesTest {
         assertEquals(15_000, properties.getTranscriptCorrectionTimeoutMs());
         assertEquals("browser-transcript-correction-v1",
                 properties.getTranscriptCorrectionPromptVersion());
+    }
+
+    @Test
+    void usesSpeechmaticsRealtimeAsTheDefaultAnswerProvider() {
+        AiInterviewProperties properties = new AiInterviewProperties();
+
+        assertEquals("speechmatics_realtime", properties.getAnswerTranscriptionProvider());
+        assertTrue(properties.isSpeechmaticsRealtimeEnabled());
+        assertEquals("vi", properties.getSpeechmaticsLanguage());
+        assertEquals("standard", properties.getSpeechmaticsOperatingPoint());
+        assertFalse(properties.isAnswerTranscriptionConfigured());
+
+        properties.setSpeechmaticsApiKey("test-key");
+        assertTrue(properties.isAnswerTranscriptionConfigured());
     }
 }

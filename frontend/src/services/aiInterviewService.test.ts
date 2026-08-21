@@ -34,6 +34,7 @@ describe('aiInterviewService.finalizeHandsFreeCapture', () => {
       3,
       [{ sequence: 0, file: audio, durationSeconds: 4.75 }],
       'Tôi dùng Spring Boot.',
+      'speechmatics_realtime',
     );
 
     const [url, body, config] = post.mock.calls[0] as [string, FormData, { headers: Record<string, string> }];
@@ -41,8 +42,7 @@ describe('aiInterviewService.finalizeHandsFreeCapture', () => {
     expect(body.get('captureId')).toBe(captureId);
     expect(body.get('captureVersion')).toBe('3');
     expect(body.get('browserTranscript')).toBe('Tôi dùng Spring Boot.');
-    expect(body.get('transcriptionSource')).toBe('web_speech');
-    expect(body.get('liveSessionToken')).toBeNull();
+    expect(body.get('transcriptionProvider')).toBe('speechmatics_realtime');
     expect(body.getAll('audioSegments')).toEqual([audio]);
     expect(body.getAll('segmentSequences')).toEqual(['0']);
     expect(body.getAll('durationSeconds')).toEqual(['4.75']);
@@ -51,6 +51,21 @@ describe('aiInterviewService.finalizeHandsFreeCapture', () => {
       'Idempotency-Key': captureId,
     });
     expect(result.questionId).toBe('turn-7');
+  });
+
+  it('tạo ticket Speechmatics realtime theo interview session', async () => {
+    const ticket = {
+      provider: 'speechmatics_realtime',
+      websocketPath: '/ws/ai-interview/transcription?ticket=one-time-ticket',
+      expiresAt: Date.now() + 60_000,
+      finalFlushTimeoutMs: 6_000,
+    };
+    post.mockResolvedValueOnce({ data: ticket });
+
+    await expect(aiInterviewService.createTranscriptionTicket('session-1')).resolves.toEqual(ticket);
+    expect(post).toHaveBeenCalledWith(
+      '/candidate/ai-interviews/sessions/session-1/transcription-ticket',
+    );
   });
 
   it('gửi FormData multipart cùng idempotency và metadata của từng audio segment', async () => {
@@ -93,7 +108,7 @@ describe('aiInterviewService.finalizeHandsFreeCapture', () => {
     expect(body.get('captureId')).toBe(captureId);
     expect(body.get('captureVersion')).toBe('2');
     expect(body.get('browserTranscript')).toBe('Câu trả lời realtime');
-    expect(body.get('transcriptionSource')).toBe('web_speech');
+    expect(body.get('transcriptionProvider')).toBe('web_speech');
     expect(body.getAll('audioSegments')).toEqual([first, second]);
     expect(body.getAll('segmentSequences')).toEqual(['0', '1']);
     expect(body.getAll('durationSeconds')).toEqual(['1.25', '2.5']);
@@ -101,49 +116,6 @@ describe('aiInterviewService.finalizeHandsFreeCapture', () => {
       'Content-Type': 'multipart/form-data',
       'Idempotency-Key': captureId,
     });
-  });
-
-  it('khởi tạo Gladia Live bằng sample rate thực của AudioContext', async () => {
-    const liveSession = {
-      provider: 'gladia_live',
-      sessionToken: '9b43e821-239e-437c-a662-7f7c0458eb26',
-      jobId: 'gladia-job-1',
-      websocketUrl: 'wss://api.gladia.io/v2/live?token=temporary',
-      targetType: 'turn',
-      targetId: 'turn-7',
-    };
-    post.mockResolvedValueOnce({ data: liveSession });
-
-    const result = await aiInterviewService.createLiveTranscription('session-1', 48_000);
-
-    expect(post).toHaveBeenCalledWith(
-      '/candidate/ai-interviews/sessions/session-1/live-transcription',
-      { sampleRate: 48_000 },
-    );
-    expect(result).toBe(liveSession);
-  });
-
-  it('gửi token chứng minh transcript Gladia Live khi hoàn tất capture', async () => {
-    const captureId = '766a0891-1ee4-4c38-b52a-b26f32e5c610';
-    const liveSessionToken = '632b4071-8361-4417-9215-e597c5a82e02';
-    const audio = new File([new Blob(['segment'], { type: 'audio/webm' })], 'segment.webm', {
-      type: 'audio/webm',
-    });
-    post.mockResolvedValueOnce({ data: { questionId: 'question-1', captureId, captureVersion: 1 } });
-
-    await aiInterviewService.finalizeHandsFreeCapture(
-      'session-1',
-      'question-1',
-      captureId,
-      1,
-      [{ sequence: 0, file: audio, durationSeconds: 2 }],
-      'Em dùng Spring Boot.',
-      { source: 'gladia_live', liveSessionToken },
-    );
-
-    const body = post.mock.calls[0][1] as FormData;
-    expect(body.get('transcriptionSource')).toBe('gladia_live');
-    expect(body.get('liveSessionToken')).toBe(liveSessionToken);
   });
 
   it('gửi riêng raw transcript và final transcript đã sửa khi xác nhận', async () => {

@@ -38,7 +38,6 @@ public class AiInterviewProperties {
     private int providerReadTimeoutMs = 60_000;
     private boolean voiceStreamingEnabled = true;
     private String voiceProvider = "shopaikey_gemini_stream";
-    private String answerTranscriptionProvider = "web_speech";
     private int voiceConfirmationPromptDelayMs = 2_000;
     private int voiceConfirmationAutoFinalizeMs = 3_000;
     private int voiceRecognitionRestartDelayMs = 250;
@@ -47,6 +46,17 @@ public class AiInterviewProperties {
     private int voiceEvidenceCorePoolSize = 2;
     private int voiceEvidenceQueueCapacity = 4;
     private int voiceEvidenceAwaitTimeoutMs = 5_000;
+    private String answerTranscriptionProvider = "speechmatics_realtime";
+    private boolean speechmaticsRealtimeEnabled = true;
+    private String speechmaticsApiKey;
+    private String speechmaticsRealtimeUrl = "wss://global.rt.speechmatics.com/v2/";
+    private String speechmaticsLanguage = "vi";
+    private String speechmaticsOperatingPoint = "standard";
+    private double speechmaticsMaxDelaySeconds = 1.5;
+    private int speechmaticsTicketTtlSeconds = 60;
+    private int speechmaticsConnectTimeoutMs = 8_000;
+    private int speechmaticsFinalFlushTimeoutMs = 6_000;
+    private int speechmaticsMaxConcurrentSessions = 20;
     private boolean transcriptCorrectionEnabled = true;
     private double transcriptCorrectionMinConfidence = 0.90;
     private int transcriptCorrectionMaxCorrections = 12;
@@ -90,17 +100,26 @@ public class AiInterviewProperties {
     ));
 
     public boolean isEnabled() {
-        return isCoreConfigured() && isVoiceConfigured();
+        return isCoreConfigured() && isVoiceConfigured() && isAnswerTranscriptionConfigured();
     }
 
     public boolean isCoreConfigured() {
         return hasText(gladiaApiKey) && hasText(shopaikeyApiKey);
     }
 
-    public boolean isVoiceConfigured() {
-        if (!isAnswerTranscriptionConfigured()) {
-            return false;
+    public boolean isAnswerTranscriptionConfigured() {
+        if ("web_speech".equalsIgnoreCase(answerTranscriptionProvider)) {
+            return true;
         }
+        return "speechmatics_realtime".equalsIgnoreCase(answerTranscriptionProvider)
+                && speechmaticsRealtimeEnabled
+                && hasText(speechmaticsApiKey)
+                && hasText(speechmaticsRealtimeUrl)
+                && hasText(speechmaticsLanguage)
+                && hasText(speechmaticsOperatingPoint);
+    }
+
+    public boolean isVoiceConfigured() {
         if (!voiceStreamingEnabled) {
             return true;
         }
@@ -117,11 +136,6 @@ public class AiInterviewProperties {
                     && ttsCacheTtlSeconds > 0;
         }
         return false;
-    }
-
-    public boolean isAnswerTranscriptionConfigured() {
-        return "web_speech".equalsIgnoreCase(answerTranscriptionProvider)
-                || "gladia_live".equalsIgnoreCase(answerTranscriptionProvider);
     }
 
     public long audioMaxBytes() {

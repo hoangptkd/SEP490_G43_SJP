@@ -6,14 +6,22 @@ export interface AiInterviewConfig {
   questionCount: number;
   audioMaxSeconds: number;
   audioMaxSizeMb: number;
+  answerTranscriptionProvider: 'web_speech' | 'speechmatics_realtime';
+  speechmaticsRealtimeEnabled: boolean;
   voiceStreamingEnabled: boolean;
   voiceProvider: string;
-  answerTranscriptionProvider: 'web_speech' | 'gladia_live';
   voiceConfirmationPromptDelayMs: number;
   voiceConfirmationAutoFinalizeMs: number;
   voiceRecognitionRestartDelayMs: number;
   voiceLoadWaitMs: number;
   voiceNextQuestionDelayMs: number;
+}
+
+export interface AiInterviewTranscriptionTicket {
+  provider: 'speechmatics_realtime';
+  websocketPath: string;
+  expiresAt: number;
+  finalFlushTimeoutMs: number;
 }
 
 export interface AiInterviewEligibleApplication {
@@ -227,7 +235,7 @@ export interface HandsFreeAnswerCaptureResult {
   correctedTranscript?: string;
   correctionStatus?: 'PENDING' | 'CORRECTED' | 'UNCHANGED' | 'FAILED' | 'NOT_REQUIRED';
   correctionCount?: number;
-  transcriptStatus: 'web_speech' | 'standardized' | 'fallback_browser';
+  transcriptStatus: 'web_speech' | 'speechmatics_realtime' | 'standardized' | 'fallback_browser';
   dataQuality: string;
   vadMetrics?: HandsFreeVadMetrics;
 }
@@ -241,20 +249,6 @@ export interface HandsFreeAudioSegmentUpload {
   sequence: number;
   file: File;
   durationSeconds: number;
-}
-
-export interface AnswerCaptureTranscriptionMetadata {
-  source: 'web_speech' | 'gladia_live';
-  liveSessionToken?: string;
-}
-
-export interface AiInterviewLiveTranscriptionSession {
-  provider: 'gladia_live';
-  sessionToken: string;
-  jobId: string;
-  websocketUrl: string;
-  targetType: 'turn' | 'question';
-  targetId: string;
 }
 
 export interface AiInterviewSpeechTicket {

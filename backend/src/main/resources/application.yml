@@ -113,7 +113,6 @@ app:
     provider-read-timeout-ms: ${AI_INTERVIEW_PROVIDER_READ_TIMEOUT_MS:60000}
     voice-streaming-enabled: ${AI_INTERVIEW_VOICE_STREAMING_ENABLED:true}
     voice-provider: ${AI_INTERVIEW_VOICE_PROVIDER:shopaikey_gemini_stream}
-    answer-transcription-provider: ${AI_INTERVIEW_ANSWER_TRANSCRIPTION_PROVIDER:web_speech}
     voice-confirmation-prompt-delay-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_PROMPT_DELAY_MS:2000}
     voice-confirmation-auto-finalize-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_AUTO_FINALIZE_MS:3000}
     voice-recognition-restart-delay-ms: ${AI_INTERVIEW_VOICE_RECOGNITION_RESTART_DELAY_MS:250}
@@ -122,7 +121,18 @@ app:
     voice-evidence-core-pool-size: ${AI_INTERVIEW_VOICE_EVIDENCE_CORE_POOL_SIZE:2}
     voice-evidence-queue-capacity: ${AI_INTERVIEW_VOICE_EVIDENCE_QUEUE_CAPACITY:4}
     voice-evidence-await-timeout-ms: ${AI_INTERVIEW_VOICE_EVIDENCE_AWAIT_TIMEOUT_MS:5000}
-    transcript-correction-enabled: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_ENABLED:true}
+    answer-transcription-provider: ${AI_INTERVIEW_ANSWER_TRANSCRIPTION_PROVIDER:speechmatics_realtime}
+    speechmatics-realtime-enabled: ${SPEECHMATICS_REALTIME_ENABLED:true}
+    speechmatics-api-key: ${SPEECHMATICS_API_KEY:}
+    speechmatics-realtime-url: ${SPEECHMATICS_REALTIME_URL:wss://global.rt.speechmatics.com/v2/}
+    speechmatics-language: ${SPEECHMATICS_LANGUAGE:vi}
+    speechmatics-operating-point: ${SPEECHMATICS_OPERATING_POINT:standard}
+    speechmatics-max-delay-seconds: ${SPEECHMATICS_MAX_DELAY_SECONDS:1.5}
+    speechmatics-ticket-ttl-seconds: ${SPEECHMATICS_TICKET_TTL_SECONDS:60}
+    speechmatics-connect-timeout-ms: ${SPEECHMATICS_CONNECT_TIMEOUT_MS:8000}
+    speechmatics-final-flush-timeout-ms: ${SPEECHMATICS_FINAL_FLUSH_TIMEOUT_MS:6000}
+    speechmatics-max-concurrent-sessions: ${SPEECHMATICS_MAX_CONCURRENT_SESSIONS:20}
+    transcript-correction-enabled: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_ENABLED:false}
     transcript-correction-min-confidence: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MIN_CONFIDENCE:0.90}
     transcript-correction-max-corrections: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_CORRECTIONS:12}
     transcript-correction-max-evidence-items: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_EVIDENCE_ITEMS:12}

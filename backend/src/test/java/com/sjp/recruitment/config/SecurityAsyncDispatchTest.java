@@ -65,11 +65,11 @@ class SecurityAsyncDispatchTest {
         questionId = UUID.randomUUID().toString();
         captureId = UUID.randomUUID().toString();
         when(captureService.process(eq(sessionId), eq(questionId), eq(captureId), eq(captureId), eq(1),
-                anyList(), eq(java.util.List.of(0)), eq("Spring Boot"), eq(null), eq(null),
+                anyList(), eq(java.util.List.of(0)), eq("Spring Boot"), org.mockito.ArgumentMatchers.isNull(),
                 eq(java.util.List.of(1.25))))
                 .thenReturn(new HandsFreeAnswerCaptureResponse(
-                        questionId, captureId, 1, "Spring Boot", "Spring Boot", "Spring Boot",
-                        "Spring Boot", "NOT_REQUIRED", 0, "standardized", "AUDIO_GLADIA", null));
+                        questionId, captureId, 1, "Spring Boot", null, "Spring Boot",
+                        "Spring Boot", "UNCHANGED", 0, "web_speech", "BROWSER_PLUS_VAD", null));
     }
 
     @Test

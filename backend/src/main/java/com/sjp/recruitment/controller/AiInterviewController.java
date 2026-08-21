@@ -5,7 +5,6 @@ import com.sjp.recruitment.model.dto.request.AiInterviewConfirmAnswerRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewConfirmTurnRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewCvProfileRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewFinishRequest;
-import com.sjp.recruitment.model.dto.request.AiInterviewLiveTranscriptionRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewPracticeSessionRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewSpeechRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewSubmitAnswerRequest;
@@ -13,17 +12,17 @@ import com.sjp.recruitment.model.dto.request.AiInterviewTurnCommandRequest;
 import com.sjp.recruitment.model.dto.response.AiInterviewConfigResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewCvProfileResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewEligibleApplicationResponse;
-import com.sjp.recruitment.model.dto.response.AiInterviewLiveTranscriptionResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewQuestionSetResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewSessionResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewSpeechTicketResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewTranscriptResponse;
+import com.sjp.recruitment.model.dto.response.AiInterviewTranscriptionTicketResponse;
 import com.sjp.recruitment.model.dto.response.HandsFreeAnswerCaptureResponse;
 import com.sjp.recruitment.service.AiInterviewService;
 import com.sjp.recruitment.service.AiInterviewCvProfileService;
 import com.sjp.recruitment.service.AiInterviewSpeechService;
 import com.sjp.recruitment.service.HandsFreeAnswerCaptureService;
-import com.sjp.recruitment.service.GladiaLiveSessionService;
+import com.sjp.recruitment.service.SpeechmaticsRealtimeTicketService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -45,7 +44,7 @@ public class AiInterviewController {
     private final AiInterviewCvProfileService aiInterviewCvProfileService;
     private final AiInterviewSpeechService aiInterviewSpeechService;
     private final HandsFreeAnswerCaptureService handsFreeAnswerCaptureService;
-    private final GladiaLiveSessionService gladiaLiveSessionService;
+    private final SpeechmaticsRealtimeTicketService speechmaticsRealtimeTicketService;
 
     @GetMapping("/config-status")
     public ResponseEntity<AiInterviewConfigResponse> configStatus() {
@@ -60,13 +59,6 @@ public class AiInterviewController {
     @GetMapping("/question-sets")
     public ResponseEntity<List<AiInterviewQuestionSetResponse>> questionSets() {
         return ResponseEntity.ok(aiInterviewService.questionSets());
-    }
-
-    @PostMapping("/sessions/{sessionId}/live-transcription")
-    public ResponseEntity<AiInterviewLiveTranscriptionResponse> createLiveTranscription(
-            @PathVariable String sessionId,
-            @Valid @RequestBody AiInterviewLiveTranscriptionRequest request) {
-        return ResponseEntity.ok(gladiaLiveSessionService.create(sessionId, request.sampleRate()));
     }
 
     @PostMapping("/sessions/application")
@@ -89,6 +81,12 @@ public class AiInterviewController {
     @GetMapping("/sessions/{sessionId}")
     public ResponseEntity<AiInterviewSessionResponse> session(@PathVariable String sessionId) {
         return ResponseEntity.ok(aiInterviewService.session(sessionId));
+    }
+
+    @PostMapping("/sessions/{sessionId}/transcription-ticket")
+    public ResponseEntity<AiInterviewTranscriptionTicketResponse> createTranscriptionTicket(
+            @PathVariable String sessionId) {
+        return ResponseEntity.ok(speechmaticsRealtimeTicketService.create(sessionId));
     }
 
     @DeleteMapping("/sessions/{sessionId}")
@@ -122,13 +120,11 @@ public class AiInterviewController {
             @RequestPart("audioSegments") List<MultipartFile> audioSegments,
             @RequestParam("segmentSequences") List<Integer> segmentSequences,
             @RequestParam(value = "browserTranscript", required = false) String browserTranscript,
-            @RequestParam(value = "transcriptionSource", required = false) String transcriptionSource,
-            @RequestParam(value = "liveSessionToken", required = false) String liveSessionToken,
+            @RequestParam(value = "transcriptionProvider", required = false) String transcriptionProvider,
             @RequestParam(value = "durationSeconds", required = false) List<Double> durationSeconds) {
         return () -> ResponseEntity.ok(handsFreeAnswerCaptureService.process(
                 sessionId, questionId, idempotencyKey, captureId, captureVersion == null ? 1 : captureVersion,
-                audioSegments, segmentSequences, browserTranscript, transcriptionSource, liveSessionToken,
-                durationSeconds));
+                audioSegments, segmentSequences, browserTranscript, transcriptionProvider, durationSeconds));
     }
 
     @PostMapping(value = "/sessions/{sessionId}/turns/{turnId}/answer-capture",
@@ -142,13 +138,11 @@ public class AiInterviewController {
             @RequestPart("audioSegments") List<MultipartFile> audioSegments,
             @RequestParam("segmentSequences") List<Integer> segmentSequences,
             @RequestParam(value = "browserTranscript", required = false) String browserTranscript,
-            @RequestParam(value = "transcriptionSource", required = false) String transcriptionSource,
-            @RequestParam(value = "liveSessionToken", required = false) String liveSessionToken,
+            @RequestParam(value = "transcriptionProvider", required = false) String transcriptionProvider,
             @RequestParam(value = "durationSeconds", required = false) List<Double> durationSeconds) {
         return () -> ResponseEntity.ok(handsFreeAnswerCaptureService.processTurn(
                 sessionId, turnId, idempotencyKey, captureId, captureVersion == null ? 1 : captureVersion,
-                audioSegments, segmentSequences, browserTranscript, transcriptionSource, liveSessionToken,
-                durationSeconds));
+                audioSegments, segmentSequences, browserTranscript, transcriptionProvider, durationSeconds));
     }
 
     @PostMapping("/sessions/{sessionId}/speech")

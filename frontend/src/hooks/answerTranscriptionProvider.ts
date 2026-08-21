@@ -1,6 +1,4 @@
-import type { AiInterviewLiveTranscriptionSession } from '../types/aiInterview';
-
-export type AnswerTranscriptionProviderKind = 'web_speech' | 'gladia_live';
+export type AnswerTranscriptionProviderKind = 'web_speech' | 'speechmatics_realtime';
 
 export interface AnswerTranscriptionUpdate {
   committedTranscript: string;
@@ -15,7 +13,6 @@ export interface AnswerTranscriptionCallbacks {
 export interface AnswerTranscriptionResult {
   source: AnswerTranscriptionProviderKind;
   transcript: string;
-  liveSessionToken?: string;
 }
 
 export interface AnswerTranscriptionProvider {
@@ -28,10 +25,4 @@ export interface AnswerTranscriptionProvider {
   finish(): Promise<AnswerTranscriptionResult>;
   abort(): void;
   dispose(): void;
-}
-
-export interface AnswerTranscriptionProviderDependencies {
-  callbacks: AnswerTranscriptionCallbacks;
-  createLiveSession?: (sampleRate: number) => Promise<AiInterviewLiveTranscriptionSession>;
-  recognitionRestartDelayMs: number;
 }
