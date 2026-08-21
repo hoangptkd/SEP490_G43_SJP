@@ -78,7 +78,7 @@ class ApplicationWorkflowInterviewTest {
         verify(applicationService).seedStatus(
                 eq(schedule.getApplication()),
                 eq(schedule.getApplication().getStatusEnum()),
-                eq("Ứng viên đã yêu cầu đổi lịch phỏng vấn"));
+                eq("Ứng viên đã yêu cầu đổi lịch phỏng vấn (Lý do: Xin chuyển sang buổi chiều)"));
     }
 
     @Test
