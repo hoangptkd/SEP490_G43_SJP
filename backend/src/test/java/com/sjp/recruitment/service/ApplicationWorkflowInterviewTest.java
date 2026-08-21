@@ -55,7 +55,7 @@ class ApplicationWorkflowInterviewTest {
         ArgumentCaptor<InterviewSchedule> captor = ArgumentCaptor.forClass(InterviewSchedule.class);
         verify(interviewScheduleRepository).save(captor.capture());
         assertEquals("PENDING_RESPONSE", captor.getValue().getStatus());
-        assertNull(captor.getValue().getResponseDeadline());
+        org.junit.jupiter.api.Assertions.assertNotNull(captor.getValue().getResponseDeadline());
         assertEquals(expected, actual);
         verify(applicationService).seedStatus(
                 application, Application.ApplicationStatus.INTERVIEW_SCHEDULED, "Đã lên lịch phỏng vấn");

@@ -83,7 +83,8 @@ public class ApplicationWorkflowService {
         schedule.setLocation(request.location());
         schedule.setNote(request.note());
         schedule.setStatus("PENDING_RESPONSE");
-        schedule.setResponseDeadline(null);
+        schedule.setResponseDeadline(calculateResponseDeadline(request.scheduledAt()));
+        schedule.setReminderCount(0);
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);
 
@@ -108,6 +109,19 @@ public class ApplicationWorkflowService {
         return dtoMapper.toInterviewScheduleResponse(saved);
     }
 
+    private LocalDateTime calculateResponseDeadline(LocalDateTime scheduledAt) {
+        if (scheduledAt == null) return null;
+        LocalDateTime now = LocalDateTime.now();
+        long hoursDiff = java.time.Duration.between(now, scheduledAt).toHours();
+        if (hoursDiff > 24) {
+            return scheduledAt.minusHours(12);
+        } else if (hoursDiff >= 12) {
+            return scheduledAt.minusHours(6);
+        } else {
+            return scheduledAt;
+        }
+    }
+
     @Transactional
     public InterviewScheduleResponse candidateViewInterview(UUID scheduleId, UUID candidateId) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndCandidateId(scheduleId, candidateId)
@@ -125,6 +139,11 @@ public class ApplicationWorkflowService {
     public InterviewScheduleResponse candidateRespondToInterview(UUID scheduleId, UUID candidateId, InterviewCandidateResponseRequest request) {
         InterviewSchedule schedule = interviewScheduleRepository.findByIdAndCandidateId(scheduleId, candidateId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND", "Không tìm thấy lịch phỏng vấn"));
+
+        if ("NO_RESPONSE".equalsIgnoreCase(schedule.getStatus())
+                || (schedule.getResponseDeadline() != null && LocalDateTime.now().isAfter(schedule.getResponseDeadline()))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_EXPIRED", "Lịch phỏng vấn đã hết hạn phản hồi");
+        }
 
         schedule.setRespondedAt(LocalDateTime.now());
         schedule.setCandidateRescheduleNote(request.rescheduleNote());
@@ -226,13 +245,14 @@ public class ApplicationWorkflowService {
             if (request.scheduledAt() != null) {
                 schedule.setScheduledAt(request.scheduledAt());
                 
-                schedule.setResponseDeadline(null);
+                schedule.setResponseDeadline(calculateResponseDeadline(request.scheduledAt()));
             }
         }
         
         schedule.setRespondedAt(null);
         schedule.setViewedAt(null);
         schedule.setLastReminderAt(null);
+        schedule.setReminderCount(0);
         schedule.setStatus("PENDING_RESPONSE");
 
         InterviewSchedule saved = interviewScheduleRepository.save(schedule);

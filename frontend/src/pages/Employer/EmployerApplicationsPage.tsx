@@ -484,8 +484,8 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
       if (interview) {
         const iStatus = (interview.status || '').toUpperCase();
         if (iStatus === 'ACCEPTED') return { label: 'Ứng viên đã xác nhận', color: '#0369a1', bg: '#e0f2fe' };
+        if (iStatus === 'NO_RESPONSE' || ((iStatus === 'SCHEDULED' || iStatus === 'PENDING_RESPONSE') && interview.scheduledAt && new Date(interview.scheduledAt).getTime() <= Date.now())) return { label: 'UV không phản hồi', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'SCHEDULED' || iStatus === 'PENDING_RESPONSE') return { label: 'Chờ ứng viên xác nhận', color: '#92400e', bg: '#fef3c7' };
-        if (iStatus === 'NO_RESPONSE') return { label: 'UV không phản hồi', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'RESCHEDULE_REQUESTED') return { label: 'UV xin đổi lịch', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'DECLINED') return { label: 'UV từ chối tham gia', color: '#be123c', bg: '#ffe4e6' };
         if (iStatus === 'COMPLETED') return { label: 'Đạt (Chờ Offer)', color: '#047857', bg: '#d1fae5' };
@@ -2219,13 +2219,14 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                   {manageInterviewApp.interviews.map((iv, idx) => {
                     let statusBg = '#f1f5f9';
                     let statusColor = '#475569';
-                    let statusText = iv.status;
+                    let statusText = iv.status || '';
+                    let isUnrespondedPast = (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') && iv.scheduledAt && new Date(iv.scheduledAt).getTime() <= Date.now();
                     
-                    if (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') { statusBg = '#fef3c7'; statusColor = '#92400e'; statusText = 'Chờ ứng viên xác nhận'; }
+                    if (iv.status === 'NO_RESPONSE' || isUnrespondedPast) { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Không phản hồi'; }
+                    else if (iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') { statusBg = '#fef3c7'; statusColor = '#92400e'; statusText = 'Chờ ứng viên xác nhận'; }
                     else if (iv.status === 'ACCEPTED') { statusBg = '#dcfce7'; statusColor = '#166534'; statusText = 'Ứng viên đã xác nhận tham gia'; }
                     else if (iv.status === 'DECLINED') { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Từ chối'; }
                     else if (iv.status === 'RESCHEDULE_REQUESTED') { statusBg = '#ffedd5'; statusColor = '#c2410c'; statusText = 'UV Xin đổi lịch'; }
-                    else if (iv.status === 'NO_RESPONSE') { statusBg = '#fee2e2'; statusColor = '#991b1b'; statusText = 'UV Không phản hồi'; }
                     else if (iv.status === 'COMPLETED') { statusBg = '#e0e7ff'; statusColor = '#3730a3'; statusText = 'Đã phỏng vấn xong'; }
                     else if (iv.status === 'NO_SHOW') { statusBg = '#f3f4f6'; statusColor = '#374151'; statusText = 'UV Không đến'; }
 
@@ -2355,9 +2356,13 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                         )}
 
                         {/* Check if we should allow evaluation */}
-                        {(iv.status === 'SCHEDULED' || iv.status === 'ACCEPTED' || iv.status === 'PENDING_RESPONSE') && (
+                        {(iv.status === 'SCHEDULED' || iv.status === 'ACCEPTED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'NO_RESPONSE') && (
                           <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #fdba74' }}>
-                            {iv.status !== 'ACCEPTED' ? (
+                            {iv.status === 'NO_RESPONSE' || isUnrespondedPast ? (
+                              <div style={{ color: '#991b1b', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', background: '#fef2f2', padding: '10px', borderRadius: '8px', border: '1px solid #fecaca' }}>
+                                ⚠️ Ứng viên không phản hồi lịch phỏng vấn đúng hạn (Đã qua giờ phỏng vấn).
+                              </div>
+                            ) : iv.status !== 'ACCEPTED' ? (
                               <div style={{ color: '#b45309', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center' }}>
                                 ⏳ Ứng viên chưa xác nhận lịch phỏng vấn...
                               </div>

@@ -5663,6 +5663,7 @@ function ApplicationDetailPage() {
                    : interview.status === 'DECLINED' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
                    : interview.status === 'COMPLETED' ? <span style={{ color: '#4338ca' }}>Đã phỏng vấn xong</span>
                    : interview.status === 'NO_SHOW' ? <span style={{ color: '#b91c1c' }}>Không tham gia</span>
+                   : interview.status === 'NO_RESPONSE' ? <span style={{ color: '#b91c1c', fontWeight: 600 }}>🔴 Đã hết hạn phản hồi</span>
                    : interview.status}
                 </p>
 
