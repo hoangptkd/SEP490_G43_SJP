@@ -109,6 +109,57 @@ class AuthServiceLoginRegisterTest {
 
         ApiException ex = assertThrows(ApiException.class, () -> authService.register(request));
         assertEquals("INVALID_INPUT", ex.getCode());
+        assertEquals("Vui lòng nhập họ và tên", ex.getMessage());
+    }
+
+    @Test
+    void register_rejectsShortEmployerFullName() {
+        RegisterRequest request = candidateRegister();
+        request.setRole(User.UserRole.EMPLOYER);
+        request.setFullName("A");
+        when(userRepository.existsByEmail(request.getEmail())).thenReturn(false);
+
+        ApiException ex = assertThrows(ApiException.class, () -> authService.register(request));
+        assertEquals("INVALID_INPUT", ex.getCode());
+        assertEquals("Họ và tên quá ngắn (tối thiểu 2 ký tự)", ex.getMessage());
+    }
+
+    @Test
+    void register_rejectsLongEmployerFullName() {
+        RegisterRequest request = candidateRegister();
+        request.setRole(User.UserRole.EMPLOYER);
+        request.setFullName("A".repeat(51));
+        when(userRepository.existsByEmail(request.getEmail())).thenReturn(false);
+
+        ApiException ex = assertThrows(ApiException.class, () -> authService.register(request));
+        assertEquals("INVALID_INPUT", ex.getCode());
+        assertEquals("Họ và tên quá dài (tối đa 50 ký tự)", ex.getMessage());
+    }
+
+    @Test
+    void register_rejectsEmployerFullNameWithNumbersOrSpecialChars() {
+        RegisterRequest request = candidateRegister();
+        request.setRole(User.UserRole.EMPLOYER);
+        request.setFullName("Nguyen123");
+        when(userRepository.existsByEmail(request.getEmail())).thenReturn(false);
+
+        ApiException ex = assertThrows(ApiException.class, () -> authService.register(request));
+        assertEquals("INVALID_INPUT", ex.getCode());
+        assertEquals("Họ và tên không hợp lệ (không được chứa số hoặc ký tự đặc biệt)", ex.getMessage());
+    }
+
+    @Test
+    void register_requiresEmployerGender() {
+        RegisterRequest request = candidateRegister();
+        request.setRole(User.UserRole.EMPLOYER);
+        request.setFullName("Nguyen Van A");
+        request.setPhone("0912345678");
+        request.setGender(" ");
+        when(userRepository.existsByEmail(request.getEmail())).thenReturn(false);
+
+        ApiException ex = assertThrows(ApiException.class, () -> authService.register(request));
+        assertEquals("INVALID_INPUT", ex.getCode());
+        assertEquals("Vui lòng chọn giới tính", ex.getMessage());
     }
 
     @Test
