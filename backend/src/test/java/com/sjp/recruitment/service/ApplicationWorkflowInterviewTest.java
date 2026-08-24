@@ -42,6 +42,7 @@ class ApplicationWorkflowInterviewTest {
         LocalDateTime scheduledAt = LocalDateTime.now().plusDays(2);
         InterviewScheduleResponse expected = mock(InterviewScheduleResponse.class);
         when(applicationRepository.findById(application.getId())).thenReturn(Optional.of(application));
+        when(interviewScheduleRepository.findActiveInterviewsByJob(application.getJob().getId())).thenReturn(List.of());
         when(interviewScheduleRepository.findByApplicationId(application.getId())).thenReturn(List.of());
         when(interviewScheduleRepository.save(any(InterviewSchedule.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -95,6 +96,29 @@ class ApplicationWorkflowInterviewTest {
         );
 
         assertEquals("DECLINED", schedule.getStatus());
+    }
+
+    @Test
+    void scheduleInterviewThrowsExceptionWhenTimeConflictWithin30Minutes() {
+        Application application = application();
+        UUID employerId = application.getJob().getEmployer().getId();
+        LocalDateTime baseTime = LocalDateTime.now().plusDays(2).withHour(14).withMinute(0);
+        LocalDateTime requestedTime = baseTime.plusMinutes(15); // only 15 mins apart
+
+        InterviewSchedule existingSchedule = schedule("ACCEPTED");
+        existingSchedule.setScheduledAt(baseTime);
+
+        when(applicationRepository.findById(application.getId())).thenReturn(Optional.of(application));
+        when(interviewScheduleRepository.findActiveInterviewsByJob(application.getJob().getId()))
+                .thenReturn(List.of(existingSchedule));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.sjp.recruitment.exception.ApiException.class,
+                () -> workflowService.scheduleInterview(
+                        application.getId(), employerId,
+                        new InterviewScheduleRequest(requestedTime, "https://meet.example", null, "Vòng 2")
+                )
+        );
     }
 
     private InterviewSchedule schedule(String status) {

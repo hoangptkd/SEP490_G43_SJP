@@ -270,6 +270,10 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
   const [workingLocation, setWorkingLocation] = useState<string>('');
   const [offerLetterUrl, setOfferLetterUrl] = useState<string>('');
 
+  // Occupied Interview Slots for conflict checking
+  const [occupiedSlots, setOccupiedSlots] = useState<import('../../services/employerService').OccupiedInterviewSlot[]>([]);
+  const [loadingOccupiedSlots, setLoadingOccupiedSlots] = useState<boolean>(false);
+  const [slotConflictWarning, setSlotConflictWarning] = useState<string | null>(null);
 
   // Candidate detail modal
   const [selectedAppDetail, setSelectedAppDetail] = useState<CandidateApplication | null>(null);
@@ -305,6 +309,47 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
   useEffect(() => {
     loadJobs();
   }, []);
+
+  useEffect(() => {
+    if (updatingApp && targetStatus === 'INTERVIEW_SCHEDULED') {
+      const jobId = updatingApp.job?.id;
+      const datePart = scheduledAt ? scheduledAt.split('T')[0] : new Date().toISOString().split('T')[0];
+      if (jobId) {
+        setLoadingOccupiedSlots(true);
+        employerService.getOccupiedInterviewSlots(jobId, datePart)
+          .then(slots => setOccupiedSlots(slots))
+          .catch(() => setOccupiedSlots([]))
+          .finally(() => setLoadingOccupiedSlots(false));
+      }
+    } else {
+      setOccupiedSlots([]);
+      setSlotConflictWarning(null);
+    }
+  }, [updatingApp?.id, targetStatus, scheduledAt ? scheduledAt.split('T')[0] : '']);
+
+  useEffect(() => {
+    if (scheduledAt && occupiedSlots.length > 0) {
+      const selectedTime = new Date(scheduledAt).getTime();
+      if (!isNaN(selectedTime)) {
+        const conflictSlot = occupiedSlots.find(slot => {
+          if (updatingApp?.interviews?.some((iv: any) => iv.id === slot.id)) {
+            return false;
+          }
+          const slotTime = new Date(slot.scheduledAt).getTime();
+          const diffMinutes = Math.abs(selectedTime - slotTime) / (1000 * 60);
+          return diffMinutes < 30;
+        });
+        if (conflictSlot) {
+          const timeStr = new Date(conflictSlot.scheduledAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+          setSlotConflictWarning(`⚠️ Cảnh báo: Thời gian này quá gần lịch phỏng vấn của ${conflictSlot.candidateName} lúc ${timeStr} (tối thiểu phải cách nhau 30 phút).`);
+        } else {
+          setSlotConflictWarning(null);
+        }
+      }
+    } else {
+      setSlotConflictWarning(null);
+    }
+  }, [scheduledAt, occupiedSlots, updatingApp?.interviews]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -619,6 +664,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
       if (targetStatus === 'INTERVIEW_SCHEDULED') {
         if (!scheduledAt) throw new Error('Vui lòng chọn ngày giờ phỏng vấn');
         if (new Date(scheduledAt).getTime() < Date.now()) throw new Error('Ngày giờ phỏng vấn không được ở trong quá khứ');
+        if (slotConflictWarning) throw new Error(slotConflictWarning);
         if (!location) throw new Error('Vui lòng chọn hình thức hoặc địa điểm phỏng vấn');
         if (location === 'Trực tuyến' && !meetingLink) throw new Error('Vui lòng nhập link họp cho phỏng vấn trực tuyến');
         if (meetingLink && !/^https?:\/\/.+/.test(meetingLink)) throw new Error('Link họp trực tuyến phải bắt đầu bằng http:// hoặc https://');
@@ -1299,7 +1345,40 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
 
                     <div style={{ marginBottom: '12px' }}>
                       <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Thời gian (*)</label>
-                      <input type="datetime-local" min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                      <input type="datetime-local" min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: slotConflictWarning ? '1px solid #ef4444' : '1px solid #cbd5e1' }} />
+                      
+                      {loadingOccupiedSlots && (
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>⏳ Đang kiểm tra lịch đã bận...</div>
+                      )}
+
+                      {!loadingOccupiedSlots && occupiedSlots.length > 0 && (
+                        <div style={{ marginTop: '8px', padding: '8px 12px', background: '#fff1f2', borderRadius: '6px', border: '1px solid #fecdd3' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#9f1239', marginBottom: '6px' }}>
+                            📌 Khung giờ đã có lịch phỏng vấn trong ngày ({scheduledAt ? scheduledAt.split('T')[0] : new Date().toISOString().split('T')[0]}):
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {occupiedSlots.map((slot) => {
+                              const slotDate = new Date(slot.scheduledAt);
+                              const timeStr = slotDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                              return (
+                                <span key={slot.id} style={{ background: '#fecdd3', color: '#881337', border: '1px solid #fda4af', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>
+                                  🔴 {timeStr} ({slot.candidateName})
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {!loadingOccupiedSlots && occupiedSlots.length === 0 && (
+                        <div style={{ fontSize: '0.8rem', color: '#166534', marginTop: '4px' }}>✅ Chưa có lịch phỏng vấn nào khác trong ngày này.</div>
+                      )}
+
+                      {slotConflictWarning && (
+                        <div style={{ marginTop: '8px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: '8px 12px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+                          {slotConflictWarning}
+                        </div>
+                      )}
                     </div>
                     <div style={{ marginBottom: '12px' }}>
                       <VietnamAddressPicker
