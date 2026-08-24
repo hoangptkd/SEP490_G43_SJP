@@ -554,9 +554,11 @@ export default function EmployerDashboardPage() {
                   <div className="funnel-step">
                     <div className="fs-icon mono-icon"><IconUsers size={22} /></div>
                     <div className="fs-title">3. Kết quả pv</div>
-                    <div className="fs-value" style={{ color: '#8b5cf6' }}>{pipeline.interviewCompletedCount}</div>
+                    <div className="fs-value" style={{ color: '#8b5cf6' }}>
+                      {pipeline.interviewCompletedCount + (pipeline.interviewFailedCount || 0)}
+                    </div>
                     <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', textAlign: 'center' }}>
-                      (Đã phỏng vấn: {pipeline.interviewCompletedCount})
+                      (Đã phỏng vấn: {pipeline.interviewCompletedCount + (pipeline.interviewFailedCount || 0)} | Đạt: <strong style={{ color: '#16a34a' }}>{pipeline.interviewCompletedCount}</strong> | Trượt: <strong style={{ color: '#dc2626' }}>{pipeline.interviewFailedCount || 0}</strong>)
                     </div>
                   </div>
                   <div className="funnel-arrow">→</div>
@@ -639,18 +641,21 @@ export default function EmployerDashboardPage() {
                       <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
                         3. Xác nhận PV → Đã phỏng vấn (Đạt/Trượt)
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
                         <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#8b5cf6' }}>
-                          {pipeline.interviewAcceptedCount > 0 ? ((pipeline.interviewCompletedCount / pipeline.interviewAcceptedCount) * 100).toFixed(1) : 0}%
+                          {pipeline.interviewAcceptedCount > 0 ? (((pipeline.interviewCompletedCount + (pipeline.interviewFailedCount || 0)) / pipeline.interviewAcceptedCount) * 100).toFixed(1) : 0}%
                         </span>
                         <span style={{ fontSize: '0.8rem', color: '#475569' }}>
-                          ({pipeline.interviewAcceptedCount} chốt → {pipeline.interviewCompletedCount} xong PV)
+                          ({pipeline.interviewAcceptedCount} chốt → {pipeline.interviewCompletedCount + (pipeline.interviewFailedCount || 0)} xong PV)
                         </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '8px' }}>
+                        ↳ <span style={{ color: '#16a34a', fontWeight: 600 }}>{pipeline.interviewCompletedCount} Đạt</span> / <span style={{ color: '#dc2626', fontWeight: 600 }}>{pipeline.interviewFailedCount || 0} Trượt</span>
                       </div>
                       <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
                         <div style={{
                           height: '100%',
-                          width: `${Math.min(100, pipeline.interviewAcceptedCount ? (pipeline.interviewCompletedCount / pipeline.interviewAcceptedCount) * 100 : 0)}%`,
+                          width: `${Math.min(100, pipeline.interviewAcceptedCount ? ((pipeline.interviewCompletedCount + (pipeline.interviewFailedCount || 0)) / pipeline.interviewAcceptedCount) * 100 : 0)}%`,
                           background: '#8b5cf6',
                           borderRadius: '3px'
                         }} />

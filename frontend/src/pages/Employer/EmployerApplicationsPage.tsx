@@ -638,22 +638,43 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
     applyStatusFilters(next);
   }
 
+  function closeAllModals() {
+    setUpdatingApp(null);
+    setSelectedAppDetail(null);
+    setManageInterviewApp(null);
+    setManageOfferApp(null);
+  }
+
   function openUpdateModal(app: CandidateApplication, defaultStatus?: string) {
+    closeAllModals();
     setUpdatingApp(app);
-    setTargetStatus(defaultStatus || app.status || 'UNDER_REVIEW');
+    const target = defaultStatus || app.status || 'UNDER_REVIEW';
+    setTargetStatus(target);
     setModalError(null);
     setNote('');
     setScheduledAt('');
     setLocation('');
     setMeetingLink('');
-    setPositionTitle(app.job.title || '');
-    setSalary('');
-    setSalaryCurrency('VND');
-    setSalaryType('monthly');
-    setStartDate('');
-    setBenefits('');
-    setWorkingLocation('');
-    setOfferLetterUrl('');
+
+    if (target === 'UPDATE_OFFER' && app.jobOffer) {
+      setPositionTitle(app.jobOffer.positionTitle || app.job?.title || '');
+      setSalary(app.jobOffer.salary ? String(app.jobOffer.salary) : '');
+      setSalaryCurrency(app.jobOffer.salaryCurrency || 'VND');
+      setSalaryType(app.jobOffer.salaryType || 'monthly');
+      setStartDate(app.jobOffer.startDate || '');
+      setBenefits(app.jobOffer.benefits || '');
+      setWorkingLocation(app.jobOffer.workingLocation || '');
+      setOfferLetterUrl(app.jobOffer.offerLetterUrl || '');
+    } else {
+      setPositionTitle(app.job.title || '');
+      setSalary('');
+      setSalaryCurrency('VND');
+      setSalaryType('monthly');
+      setStartDate('');
+      setBenefits('');
+      setWorkingLocation('');
+      setOfferLetterUrl('');
+    }
   }
 
   async function handleConfirmUpdate() {
@@ -681,17 +702,31 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
         if (new Date(startDate).getTime() < new Date().setHours(0,0,0,0)) throw new Error('Ngày bắt đầu làm việc không được ở trong quá khứ');
         if (offerLetterUrl && !/^https?:\/\/.+/.test(offerLetterUrl)) throw new Error('Link Offer Letter phải bắt đầu bằng http:// hoặc https://');
 
-        await employerService.createJobOffer(updatingApp.id, {
-          positionTitle,
-          salary: salary ? Number(salary) : undefined,
-          salaryCurrency,
-          salaryType,
-          startDate: startDate || undefined,
-          benefits,
-          workingLocation,
-          offerLetterUrl,
-          employerNote: note
-        });
+        if (targetStatus === 'UPDATE_OFFER' && updatingApp.jobOffer?.id) {
+          await employerService.employerRespondToOfferRejection(updatingApp.jobOffer.id, true, {
+            positionTitle,
+            salary: salary ? Number(salary) : undefined,
+            salaryCurrency,
+            salaryType,
+            startDate: startDate || undefined,
+            benefits,
+            workingLocation,
+            offerLetterUrl,
+            employerNote: note
+          });
+        } else {
+          await employerService.createJobOffer(updatingApp.id, {
+            positionTitle,
+            salary: salary ? Number(salary) : undefined,
+            salaryCurrency,
+            salaryType,
+            startDate: startDate || undefined,
+            benefits,
+            workingLocation,
+            offerLetterUrl,
+            employerNote: note
+          });
+        }
       } else if (targetStatus === 'REJECTED') {
         await employerService.rejectApplication(updatingApp.id, note);
       } else if (targetStatus === 'EVALUATE_INTERVIEW') {
@@ -699,20 +734,10 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
         await employerService.employerUpdateInterviewResult(evaluatingInterviewId, interviewResult, note);
         
         if (interviewResult === 'COMPLETED') {
-           showToast('Phỏng vấn đạt! Vui lòng tạo Lời mời làm việc.', 'success');
+           showToast('Đã đánh giá phỏng vấn: ĐẠT thành công! Bạn có thể tạo và gửi Offer cho ứng viên sau.', 'success');
            await loadApplications(); // Ensure background state is updated immediately!
-           setTargetStatus('ACCEPTED');
-           setPositionTitle(updatingApp.job.title || '');
-           setSalary('');
-           setSalaryCurrency('VND');
-           setSalaryType('monthly');
-           setStartDate('');
-           setBenefits('');
-           setWorkingLocation('');
-           setOfferLetterUrl('');
-           setNote('');
-           setUpdating(false);
-           return; // Giữ form mở, chuyển sang bước Offer
+           setUpdatingApp(null);
+           return;
         }
       } else {
         await employerService.updateApplicationStatus(
@@ -1170,7 +1195,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                     )}
                     {app.interviews && app.interviews.length > 0 && !app.interviews?.some((iv: any) => iv.status === 'COMPLETED') && (
                       <button
-                        onClick={() => setManageInterviewApp(app)}
+                        onClick={() => { closeAllModals(); setManageInterviewApp(app); }}
                         style={{ flex: 1, background: '#e0e7ff', color: '#4338ca', border: '1px solid #c7d2fe', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
                       >
                         🎤 Quản lý PV
@@ -1186,15 +1211,15 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                       </button>
                     )}
 
-                    {app.status === 'ACCEPTED' && app.jobOffer && !isInterviewOnly && (
+                    {(app.status === 'ACCEPTED' || app.status === 'HIRED') && app.jobOffer && !isInterviewOnly && (
                       <button
-                        onClick={() => setManageOfferApp(app)}
+                        onClick={() => { closeAllModals(); setManageOfferApp(app); }}
                         style={{ flex: 1, background: '#10b981', color: '#fff', border: '1px solid #059669', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
                       >
                         💼 Quản lý Offer
                       </button>
                     )}
-                    {app.status !== 'REJECTED' && app.status !== 'ACCEPTED' && !isInterviewOnly && (
+                    {app.status !== 'REJECTED' && app.status !== 'ACCEPTED' && app.status !== 'HIRED' && !isInterviewOnly && (
                       <button
                         onClick={() => openUpdateModal(app, 'REJECTED')}
                         style={{ flex: 1, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '6px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -1403,9 +1428,11 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
               })()
             )}
 
-            {targetStatus === 'ACCEPTED' && (
+            {(targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') && (
               <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px', maxHeight: '300px', overflowY: 'auto' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>Thông tin Job Offer</h4>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#0f172a' }}>
+                  {targetStatus === 'UPDATE_OFFER' ? '✏️ Chỉnh sửa & Cập nhật Job Offer mới' : 'Thông tin Job Offer'}
+                </h4>
 
                 <div style={{ marginBottom: '12px' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Chức danh (*)</label>
@@ -1484,16 +1511,16 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
               >
                 Hủy
               </button>
-              {targetStatus === 'ACCEPTED' && (
+              {(targetStatus === 'ACCEPTED' || targetStatus === 'UPDATE_OFFER') && (
                 <button
                   type="button"
                   onClick={() => {
                     setUpdatingApp(null);
-                    showToast('Đã lưu nháp. Bạn có thể gửi Offer sau.', 'info');
+                    showToast('Đã bỏ qua. Bạn có thể tạo và gửi Offer cho ứng viên sau.', 'info');
                   }}
-                  style={{ background: '#fef3c7', color: '#92400e', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+                  style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '10px 18px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
                 >
-                  Để sau (Lưu nháp)
+                  ⏳ Để sau (Tạo offer sau)
                 </button>
               )}
               <button
@@ -1502,7 +1529,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                 onClick={handleConfirmUpdate}
                 style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: updating ? 'wait' : 'pointer' }}
               >
-                {updating ? 'Đang lưu...' : (targetStatus === 'ACCEPTED' ? 'Gửi Job Offer' : 'Xác nhận & Gửi thông báo')}
+                {updating ? 'Đang lưu...' : (targetStatus === 'ACCEPTED' ? 'Gửi Job Offer' : targetStatus === 'UPDATE_OFFER' ? 'Gửi Offer mới' : 'Xác nhận & Gửi thông báo')}
               </button>
             </div>
           </div>
@@ -2169,7 +2196,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                 {selectedAppDetail.interviews && selectedAppDetail.interviews.length > 0 && !selectedAppDetail.interviews?.some((iv: any) => iv.status === 'COMPLETED') && (
                   <button
                     type="button"
-                    onClick={() => { setManageInterviewApp(selectedAppDetail); setSelectedAppDetail(null); }}
+                    onClick={() => { const app = selectedAppDetail; closeAllModals(); setManageInterviewApp(app); }}
                     style={{ background: '#e0e7ff', color: '#4338ca', border: '1px solid #c7d2fe', padding: '10px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
                   >
                     🎤 Quản lý Phỏng vấn
@@ -2186,17 +2213,17 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                   </button>
                 )}
 
-                {selectedAppDetail.status === 'ACCEPTED' && selectedAppDetail.jobOffer && (
+                {(selectedAppDetail.status === 'ACCEPTED' || selectedAppDetail.status === 'HIRED') && selectedAppDetail.jobOffer && (
                   <button
                     type="button"
-                    onClick={() => { setManageOfferApp(selectedAppDetail); setSelectedAppDetail(null); }}
+                    onClick={() => { const app = selectedAppDetail; closeAllModals(); setManageOfferApp(app); }}
                     style={{ background: '#10b981', color: '#fff', border: '1px solid #059669', padding: '10px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
                   >
                     💼 Quản lý Offer
                   </button>
                 )}
 
-                {selectedAppDetail.status !== 'REJECTED' && selectedAppDetail.status !== 'ACCEPTED' && (
+                {selectedAppDetail.status !== 'REJECTED' && selectedAppDetail.status !== 'ACCEPTED' && selectedAppDetail.status !== 'HIRED' && (
                   <button
                     type="button"
                     onClick={() => openUpdateModal(selectedAppDetail, 'REJECTED')}
@@ -2219,67 +2246,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
         </div>
       )}
 
-      {/* Job Offer Management Modal */}
-      {manageOfferApp && manageOfferApp.jobOffer && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '0', width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
 
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderRadius: '12px 12px 0 0' }}>
-              <div>
-                <h2 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem' }}>💼 Quản lý Lời mời làm việc</h2>
-                <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '4px' }}>Ứng viên: <strong>{manageOfferApp.candidate?.fullName}</strong></div>
-              </div>
-              <button onClick={() => setManageOfferApp(null)} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
-            </div>
-
-            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
-              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h4 style={{ margin: 0, color: '#b45309' }}>Chi tiết Offer</h4>
-                  <span style={{ fontSize: '0.8rem', background: manageOfferApp.jobOffer.status === 'accepted' ? '#dcfce7' : manageOfferApp.jobOffer.status === 'rejected' ? '#fee2e2' : '#fef3c7', color: manageOfferApp.jobOffer.status === 'accepted' ? '#166534' : manageOfferApp.jobOffer.status === 'rejected' ? '#b91c1c' : '#b45309', padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>
-                    {manageOfferApp.jobOffer.status === 'accepted' ? 'Hoàn tất (Đã gửi Offer)' : manageOfferApp.jobOffer.status === 'rejected' ? 'Bị từ chối' : 'Chờ phản hồi'}
-                  </span>
-                </div>
-
-                <div className="responsive-two-col" style={{ fontSize: '0.9rem', color: '#334155' }}>
-                  <div><strong>Vị trí:</strong> {manageOfferApp.jobOffer.positionTitle}</div>
-                  <div><strong>Mức lương:</strong> {manageOfferApp.jobOffer.salary ? `${manageOfferApp.jobOffer.salary.toLocaleString()} ${manageOfferApp.jobOffer.salaryCurrency}` : 'Thỏa thuận'}</div>
-                  <div><strong>Ngày bắt đầu:</strong> {manageOfferApp.jobOffer.startDate || 'Chưa rõ'}</div>
-                  <div><strong>Nơi làm việc:</strong> {manageOfferApp.jobOffer.workingLocation || 'Theo công ty'}</div>
-                </div>
-                {manageOfferApp.jobOffer.offerLetterUrl && (
-                  <div style={{ marginTop: '12px', fontSize: '0.9rem' }}>
-                    <strong>Link thư mời:</strong> <a href={manageOfferApp.jobOffer.offerLetterUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Xem thư mời</a>
-                  </div>
-                )}
-              </div>
-
-              {manageOfferApp.jobOffer.candidateNote && (
-                <div style={{ background: manageOfferApp.jobOffer.status === 'accepted' ? '#f0fdf4' : '#fef2f2', padding: '16px', borderRadius: '8px', border: `1px solid ${manageOfferApp.jobOffer.status === 'accepted' ? '#bbf7d0' : '#fecaca'}` }}>
-                  <h4 style={{ margin: '0 0 8px 0', color: manageOfferApp.jobOffer.status === 'accepted' ? '#166534' : '#991b1b', fontSize: '0.95rem' }}>
-                    Phản hồi từ ứng viên
-                  </h4>
-                  <div style={{ fontSize: '0.9rem', color: '#475569' }}>
-                    {manageOfferApp.jobOffer.candidateNote}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                {manageOfferApp.jobOffer.status === 'rejected' && (
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => { openUpdateModal(manageOfferApp, 'UPDATE_OFFER'); setManageOfferApp(null); }} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Sửa Offer</button>
-                    <button onClick={() => { openUpdateModal(manageOfferApp, 'DECLINE_OFFER_NEGOTIATION'); setManageOfferApp(null); }} style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Từ chối (Giữ nguyên)</button>
-                  </div>
-                )}
-              </div>
-              <button onClick={() => setManageOfferApp(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Đóng</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Interview Management Modal */}
       {manageInterviewApp && (
@@ -2496,6 +2463,140 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
             {/* Footer */}
             <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '0 0 12px 12px', textAlign: 'right' }}>
               <button onClick={() => setManageInterviewApp(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Job Offer Modal */}
+      {manageOfferApp && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', zIndex: 1050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justify: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a', fontWeight: 700 }}>💼 Quản lý Job Offer</h3>
+              <button onClick={() => setManageOfferApp(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
+            </div>
+
+            <div style={{ padding: '24px' }}>
+              <div style={{ marginBottom: '16px', fontSize: '0.95rem' }}>
+                <strong>Ứng viên:</strong> {manageOfferApp.candidate?.fullName} ({manageOfferApp.candidate?.phone || 'Chưa có SĐT'})
+              </div>
+
+              {manageOfferApp.jobOffer ? (
+                <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: '4px 0' }}><strong>Chức danh:</strong> {manageOfferApp.jobOffer.positionTitle}</p>
+                  <p style={{ margin: '4px 0' }}><strong>Mức lương:</strong> {manageOfferApp.jobOffer.salary ? `${manageOfferApp.jobOffer.salary.toLocaleString()} ${manageOfferApp.jobOffer.salaryCurrency} (${manageOfferApp.jobOffer.salaryType})` : 'Thỏa thuận'}</p>
+                  {manageOfferApp.jobOffer.startDate && <p style={{ margin: '4px 0' }}><strong>Ngày bắt đầu:</strong> {manageOfferApp.jobOffer.startDate}</p>}
+                  {manageOfferApp.jobOffer.workingLocation && <p style={{ margin: '4px 0' }}><strong>Nơi làm việc:</strong> {manageOfferApp.jobOffer.workingLocation}</p>}
+                  {manageOfferApp.jobOffer.benefits && <p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}><strong>Phúc lợi:</strong> {manageOfferApp.jobOffer.benefits}</p>}
+                  {manageOfferApp.jobOffer.offerLetterUrl && <p style={{ margin: '4px 0' }}><strong>Link Offer Letter:</strong> <a href={manageOfferApp.jobOffer.offerLetterUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Xem chi tiết</a></p>}
+
+                  <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #cbd5e1' }}>
+                    {manageOfferApp.jobOffer.status === 'sent' && (
+                      <div style={{ background: '#eff6ff', color: '#1e40af', padding: '12px', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.9rem', textAlign: 'center' }}>
+                        ⏳ <strong>Đã gửi Thư mời nhận việc</strong> — Đang chờ ứng viên xem và phản hồi...
+                      </div>
+                    )}
+
+                    {manageOfferApp.jobOffer.status === 'negotiation_requested' && (
+                      <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: '16px', borderRadius: '8px' }}>
+                        <div style={{ fontWeight: 700, color: '#c2410c', fontSize: '0.95rem', marginBottom: '8px' }}>
+                          ⚠️ Ứng viên đề xuất thương lượng / thay đổi Job Offer
+                        </div>
+                        <div style={{ color: '#9a3412', fontSize: '0.9rem', marginBottom: '12px', background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #ffedd5' }}>
+                          <strong>Đề xuất / Lý do từ Ứng viên:</strong> {manageOfferApp.jobOffer.candidateNote || 'Không có ghi chú'}
+                        </div>
+
+                        {rejectInterviewId === 'OFFER_NEGOTIATION_DECLINE' ? (
+                          <div style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fecaca' }}>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#991b1b', marginBottom: '6px' }}>
+                              Nhập lời nhắn lý do giữ nguyên Offer cũ:
+                            </label>
+                            <input
+                              type="text"
+                              value={rejectReason}
+                              onChange={(e) => setRejectReason(e.target.value)}
+                              placeholder="VD: Mức lương đề xuất vượt quá ngân sách vị trí..."
+                              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', marginBottom: '8px' }}
+                            />
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await employerService.employerRespondToOfferRejection(manageOfferApp.jobOffer.id, false, { employerNote: rejectReason } as any);
+                                    showToast('Đã ghi nhận từ chối thương lượng', 'success');
+                                    setRejectInterviewId(null);
+                                    setRejectReason('');
+                                    setManageOfferApp(null);
+                                    await loadApplications();
+                                  } catch (err: any) {
+                                    showToast(err.response?.data?.message || err.message, 'error');
+                                  }
+                                }}
+                                style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}
+                              >
+                                Xác nhận từ chối thương lượng
+                              </button>
+                              <button
+                                onClick={() => { setRejectInterviewId(null); setRejectReason(''); }}
+                                style={{ background: '#e5e7eb', color: '#4b5563', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}
+                              >
+                                Hủy
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => {
+                                const app = manageOfferApp;
+                                setManageOfferApp(null);
+                                openUpdateModal(app, 'UPDATE_OFFER');
+                              }}
+                              style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                            >
+                              ✏️ Cập nhật Offer mới
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRejectInterviewId('OFFER_NEGOTIATION_DECLINE');
+                                setRejectReason('');
+                              }}
+                              style={{ background: '#64748b', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                            >
+                              🚫 Từ chối thương lượng (Giữ Offer cũ)
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {manageOfferApp.jobOffer.status === 'employer_declined_negotiation' && (
+                      <div style={{ background: '#fffbeb', color: '#b45309', padding: '12px', borderRadius: '8px', border: '1px solid #fde68a', fontSize: '0.9rem', textAlign: 'center' }}>
+                        ⏳ <strong>Đã từ chối thương lượng</strong> — Đang chờ ứng viên chốt phản hồi lần cuối với Offer ban đầu...
+                      </div>
+                    )}
+
+                    {manageOfferApp.jobOffer.status === 'accepted' && (
+                      <div style={{ background: '#f0fdf4', color: '#166534', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0', fontSize: '0.95rem', textAlign: 'center', fontWeight: 600 }}>
+                        🎉 Ứng viên đã chấp nhận Job Offer (Trạng thái: Đã tuyển dụng)
+                      </div>
+                    )}
+
+                    {manageOfferApp.jobOffer.status === 'declined' && (
+                      <div style={{ background: '#fef2f2', color: '#991b1b', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca', fontSize: '0.9rem', textAlign: 'center', fontWeight: 600 }}>
+                        🔴 Ứng viên đã từ chối Job Offer này
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>Chưa có Job Offer nào</div>
+              )}
+            </div>
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '0 0 12px 12px', textAlign: 'right' }}>
+              <button onClick={() => setManageOfferApp(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Đóng</button>
             </div>
           </div>
         </div>
