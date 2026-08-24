@@ -67,6 +67,7 @@ function EmployerJobsPage() {
   }, [statusFilter, searchTerm]);
   const [skillsInput, setSkillsInput] = useState('');
   const [reqsInput, setReqsInput] = useState('');
+  const [mandatorySkillsInput, setMandatorySkillsInput] = useState('');
   const [hasApplications, setHasApplications] = useState(false);
   const [showAiConfig, setShowAiConfig] = useState(false);
   const [formOpenedFromParams, setFormOpenedFromParams] = useState(false);
@@ -163,6 +164,7 @@ function EmployerJobsPage() {
     setEditingId(null);
     setSkillsInput('');
     setReqsInput('');
+    setMandatorySkillsInput('');
     setHasApplications(false);
     setShowAiConfig(false);
     const defaultLoc = locations.find((l) => l.headquarter) || locations[0];
@@ -205,6 +207,7 @@ function EmployerJobsPage() {
     setEditingId(job.id);
     setSkillsInput((job.skills || []).join(', '));
     setReqsInput((job.requirements || []).join('\n'));
+    setMandatorySkillsInput((job.rankingConfig?.mandatory?.skills || []).join(', '));
     setHasApplications(job.applicationsCount ? job.applicationsCount > 0 : false);
     setShowAiConfig(false);
     setEditingId(job.id);
@@ -1110,21 +1113,22 @@ function EmployerJobsPage() {
                         <p className="m-0 mb-2 text-xs text-gray-400">Cách nhau bằng dấu phẩy (,)</p>
                         <input
                           type="text"
-                          value={formData.rankingConfig?.mandatory?.skills?.join(', ') || ''}
+                          value={mandatorySkillsInput}
                           onChange={(e) => {
-                            const skillsStr = e.target.value;
+                            const val = e.target.value;
+                            setMandatorySkillsInput(val);
+                            const parsedSkills = val ? val.split(',').map(s => s.trim()).filter(s => s.length > 0) : [];
                             setFormData({
                               ...formData,
                               rankingConfig: {
                                 ...formData.rankingConfig,
                                 mandatory: {
                                   ...formData.rankingConfig?.mandatory,
-                                  skills: skillsStr ? skillsStr.split(',').map(s => s.trim()).filter(s => s.length > 0) : []
+                                  skills: parsedSkills
                                 }
                               }
                             });
                           }}
-                          onInput={(e: any) => { e.target.dataset.raw = e.target.value; }}
                           placeholder="VD: Java, Spring Boot, MySQL..."
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[15px] shadow-sm transition-colors"
                         />

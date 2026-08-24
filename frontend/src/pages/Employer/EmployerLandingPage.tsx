@@ -13,11 +13,6 @@ export default function EmployerLandingPage() {
               <span className="bg-emerald-600 text-white p-1.5 rounded-lg">SRP</span>
               Smart Recruitment
             </Link>
-            <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-              <Link to="#" className="hover:text-emerald-600 transition-colors">Giới thiệu</Link>
-              <Link to="#" className="hover:text-emerald-600 transition-colors">Dịch vụ</Link>
-              <Link to="#" className="hover:text-emerald-600 transition-colors">Báo giá</Link>
-            </nav>
           </div>
           
           <div className="flex items-center gap-3">
