@@ -518,7 +518,7 @@ public class ApplicationWorkflowService {
             if (currentScheduleId != null && existing.getId().equals(currentScheduleId)) {
                 continue;
             }
-            if (existing.getScheduledAt() != null) {
+            if (existing.getScheduledAt() != null && existing.getScheduledAt().isAfter(LocalDateTime.now())) {
                 long minutesDiff = Math.abs(java.time.Duration.between(existing.getScheduledAt(), proposedTime).toMinutes());
                 if (minutesDiff < 30) {
                     String formattedExistingTime = existing.getScheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
@@ -538,10 +538,10 @@ public class ApplicationWorkflowService {
         }
 
         LocalDate targetDate = date != null ? date : LocalDate.now();
-        LocalDateTime startOfDay = targetDate.atStartOfDay();
+        LocalDateTime fromTime = targetDate.isEqual(LocalDate.now()) ? LocalDateTime.now() : targetDate.atStartOfDay();
         LocalDateTime endOfDay = targetDate.atTime(23, 59, 59);
 
-        List<InterviewSchedule> activeSchedules = interviewScheduleRepository.findActiveInterviewsByJobAndDate(jobId, startOfDay, endOfDay);
+        List<InterviewSchedule> activeSchedules = interviewScheduleRepository.findActiveInterviewsByJobAndDate(jobId, fromTime, endOfDay);
 
         return activeSchedules.stream().map(s -> new com.sjp.recruitment.model.dto.response.OccupiedInterviewSlotResponse(
                 s.getId(),

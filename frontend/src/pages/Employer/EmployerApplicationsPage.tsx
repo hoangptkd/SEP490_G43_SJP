@@ -317,7 +317,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
       if (jobId) {
         setLoadingOccupiedSlots(true);
         employerService.getOccupiedInterviewSlots(jobId, datePart)
-          .then(slots => setOccupiedSlots(slots))
+          .then(slots => setOccupiedSlots(slots.filter(s => new Date(s.scheduledAt).getTime() > Date.now())))
           .catch(() => setOccupiedSlots([]))
           .finally(() => setLoadingOccupiedSlots(false));
       }
@@ -1326,9 +1326,13 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
 
             {targetStatus === 'INTERVIEW_SCHEDULED' && (
               (() => {
-                const hasActiveInterview = updatingApp?.interviews?.some((iv: any) =>
-                  ['SCHEDULED', 'PENDING_RESPONSE', 'ACCEPTED', 'RESCHEDULE_REQUESTED'].includes(iv.status)
-                );
+                const hasActiveInterview = updatingApp?.interviews?.some((iv: any) => {
+                  if (iv.status === 'ACCEPTED' || iv.status === 'RESCHEDULE_REQUESTED') return true;
+                  if ((iv.status === 'SCHEDULED' || iv.status === 'PENDING_RESPONSE') && iv.scheduledAt) {
+                    return new Date(iv.scheduledAt).getTime() > Date.now();
+                  }
+                  return false;
+                });
 
                 if (hasActiveInterview) {
                   return (
@@ -2438,8 +2442,18 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                         {(iv.status === 'SCHEDULED' || iv.status === 'ACCEPTED' || iv.status === 'PENDING_RESPONSE' || iv.status === 'NO_RESPONSE') && (
                           <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #fdba74' }}>
                             {iv.status === 'NO_RESPONSE' || isUnrespondedPast ? (
-                              <div style={{ color: '#991b1b', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', background: '#fef2f2', padding: '10px', borderRadius: '8px', border: '1px solid #fecaca' }}>
-                                ⚠️ Ứng viên không phản hồi lịch phỏng vấn đúng hạn (Đã qua giờ phỏng vấn).
+                              <div style={{ color: '#991b1b', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', background: '#fef2f2', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                <span>⚠️ Ứng viên không phản hồi lịch phỏng vấn đúng hạn (Đã qua giờ phỏng vấn).</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    openUpdateModal(manageInterviewApp, 'INTERVIEW_SCHEDULED');
+                                    setManageInterviewApp(null);
+                                  }}
+                                  style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontStyle: 'normal' }}
+                                >
+                                  📅 Lên lịch phỏng vấn mới
+                                </button>
                               </div>
                             ) : iv.status !== 'ACCEPTED' ? (
                               <div style={{ color: '#b45309', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center' }}>
