@@ -5681,49 +5681,86 @@ function ApplicationDetailPage() {
       {application.interviews && application.interviews.length > 0 && (
         <div className="card" style={{ marginBottom: 20, borderLeft: '4px solid #b45309' }}>
           <h2 style={{ marginBottom: 12 }}>Lịch Phỏng Vấn</h2>
-          {application.interviews.map(interview => (
-            <div key={interview.id} style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 8 }}>
-              <p style={{ margin: '4px 0' }}><strong>Thời gian:</strong> {formatDateTime(interview.scheduledAt)}</p>
-              <p style={{ margin: '4px 0' }}><strong>Địa điểm:</strong> {interview.location || 'Chưa cập nhật'}</p>
-              {interview.meetingLink && <p style={{ margin: '4px 0' }}><strong>Link họp:</strong> <a href={interview.meetingLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>{interview.meetingLink}</a></p>}
-              {interview.note && <p style={{ margin: '4px 0' }}><strong>Ghi chú:</strong> {interview.note}</p>}
+          {application.interviews.map(interview => {
+            const isUnrespondedPast = interview.status === 'NO_RESPONSE' ||
+              ((interview.status === 'SCHEDULED' || interview.status === 'PENDING_RESPONSE') &&
+               ((interview.scheduledAt && new Date(interview.scheduledAt).getTime() <= Date.now()) ||
+                (interview.responseDeadline && new Date(interview.responseDeadline).getTime() <= Date.now())));
 
-              {interview.employerRescheduleResponse === 'reject_reschedule' && interview.status === 'PENDING_RESPONSE' && (
-                <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, marginBottom: 12, marginTop: 12 }}>
-                  <p style={{ margin: '0 0 4px 0', color: '#991b1b', fontWeight: 600 }}>⚠️ Nhà tuyển dụng từ chối yêu cầu đổi lịch</p>
-                  <p style={{ margin: 0, color: '#7f1d1d', fontSize: '0.9rem' }}><strong>Lý do:</strong> {interview.employerRescheduleNote}</p>
-                  <p style={{ margin: '8px 0 0 0', color: '#991b1b', fontSize: '0.85rem' }}>Vui lòng xác nhận bạn có thể tham gia theo lịch cũ hay không.</p>
-                </div>
-              )}
-
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-                <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
-                  <strong>Phản hồi của bạn:</strong>{' '}
-                  {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status)
-                    ? <span style={{ color: '#9a3412', fontWeight: 700 }}>Đang chờ bạn xác nhận lịch phỏng vấn</span>
-                   : interview.status === 'ACCEPTED' ? <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
-                   : interview.status === 'RESCHEDULE_REQUESTED' ? <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
-                   : interview.status === 'DECLINED' ? <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
-                   : interview.status === 'COMPLETED' ? <span style={{ color: '#4338ca' }}>Đã phỏng vấn xong</span>
-                   : interview.status === 'NO_SHOW' ? <span style={{ color: '#b91c1c' }}>Không tham gia</span>
-                   : interview.status === 'NO_RESPONSE' ? <span style={{ color: '#b91c1c', fontWeight: 600 }}>🔴 Đã hết hạn phản hồi</span>
-                   : interview.status}
+            return (
+              <div
+                key={interview.id}
+                style={{
+                  marginBottom: 16,
+                  padding: 14,
+                  background: isUnrespondedPast ? '#f1f5f9' : '#f8fafc',
+                  borderRadius: 8,
+                  border: isUnrespondedPast ? '1px solid #cbd5e1' : '1px solid #e2e8f0',
+                  opacity: isUnrespondedPast ? 0.75 : 1,
+                }}
+              >
+                <p style={{ margin: '4px 0', color: isUnrespondedPast ? '#64748b' : undefined }}>
+                  <strong>Thời gian:</strong> {formatDateTime(interview.scheduledAt)}
                 </p>
+                <p style={{ margin: '4px 0', color: isUnrespondedPast ? '#64748b' : undefined }}>
+                  <strong>Địa điểm:</strong> {interview.location || 'Chưa cập nhật'}
+                </p>
+                {interview.meetingLink && (
+                  <p style={{ margin: '4px 0', color: isUnrespondedPast ? '#64748b' : undefined }}>
+                    <strong>Link họp:</strong> <a href={interview.meetingLink} target="_blank" rel="noreferrer" style={{ color: isUnrespondedPast ? '#64748b' : '#2563eb' }}>{interview.meetingLink}</a>
+                  </p>
+                )}
+                {interview.note && <p style={{ margin: '4px 0', color: isUnrespondedPast ? '#64748b' : undefined }}><strong>Ghi chú:</strong> {interview.note}</p>}
 
-                {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
-                  <div className="button-row" style={{ marginTop: 12 }}>
-                    {['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
-                      <button type="button" className="success sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận</button>
-                    )}
-                    {interview.employerRescheduleResponse !== 'reject_reschedule' && (
-                      <button className="outline sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
-                    )}
-                    <button className="danger sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
+                {interview.employerRescheduleResponse === 'reject_reschedule' && interview.status === 'PENDING_RESPONSE' && !isUnrespondedPast && (
+                  <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, marginBottom: 12, marginTop: 12 }}>
+                    <p style={{ margin: '0 0 4px 0', color: '#991b1b', fontWeight: 600 }}>⚠️ Nhà tuyển dụng từ chối yêu cầu đổi lịch</p>
+                    <p style={{ margin: 0, color: '#7f1d1d', fontSize: '0.9rem' }}><strong>Lý do:</strong> {interview.employerRescheduleNote}</p>
+                    <p style={{ margin: '8px 0 0 0', color: '#991b1b', fontSize: '0.85rem' }}>Vui lòng xác nhận bạn có thể tham gia theo lịch cũ hay không.</p>
                   </div>
                 )}
+
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: '4px 0', fontSize: '0.9rem' }}>
+                    <strong>Phản hồi của bạn:</strong>{' '}
+                    {isUnrespondedPast ? (
+                      <span style={{ color: '#64748b', fontWeight: 600, fontStyle: 'italic' }}>🔴 Lịch phỏng vấn đã hết hạn phản hồi (Quá giờ)</span>
+                    ) : ['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) ? (
+                      <span style={{ color: '#9a3412', fontWeight: 700 }}>Đang chờ bạn xác nhận lịch phỏng vấn</span>
+                    ) : interview.status === 'ACCEPTED' ? (
+                      <span style={{ color: '#047857' }}>Đã xác nhận tham gia</span>
+                    ) : interview.status === 'RESCHEDULE_REQUESTED' ? (
+                      <span style={{ color: '#b45309' }}>Đã yêu cầu đổi lịch</span>
+                    ) : interview.status === 'DECLINED' ? (
+                      <span style={{ color: '#b91c1c' }}>Từ chối tham gia</span>
+                    ) : interview.status === 'COMPLETED' ? (
+                      <span style={{ color: '#4338ca' }}>Đã phỏng vấn xong</span>
+                    ) : interview.status === 'NO_SHOW' ? (
+                      <span style={{ color: '#b91c1c' }}>Không tham gia</span>
+                    ) : interview.status === 'NO_RESPONSE' ? (
+                      <span style={{ color: '#64748b', fontWeight: 600, fontStyle: 'italic' }}>🔴 Đã hết hạn phản hồi</span>
+                    ) : (
+                      interview.status
+                    )}
+                  </p>
+
+                  {isUnrespondedPast ? (
+                    <div style={{ marginTop: 10, padding: '6px 12px', background: '#e2e8f0', color: '#64748b', borderRadius: 6, fontSize: '0.85rem', fontStyle: 'italic', display: 'inline-block' }}>
+                      🔒 Đã quá hạn phản hồi phỏng vấn
+                    </div>
+                  ) : ['SCHEDULED', 'PENDING_RESPONSE'].includes(interview.status) && (
+                    <div className="button-row" style={{ marginTop: 12 }}>
+                      <button type="button" className="success sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => respondToInterview(interview.id, 'confirmed')}>Xác nhận</button>
+                      {interview.employerRescheduleResponse !== 'reject_reschedule' && (
+                        <button className="outline sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setRescheduleInterviewId(interview.id)}>Xin đổi lịch</button>
+                      )}
+                      <button className="danger sm" disabled={actionBusy || ['archived', 'removed', 'closed'].includes(application.job?.status?.toLowerCase() || '')} onClick={() => setDeclineInterviewId(interview.id)}>Từ chối tham gia</button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
