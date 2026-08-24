@@ -204,17 +204,23 @@ public class EmployerService {
 
         // 3. Pending Evaluations (ACCEPTED interviews that have passed - limit 5)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> acceptedInterviews = interviewScheduleRepository
-                .findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(employerId, "ACCEPTED", "published", PageRequest.of(0, 5))
+                .findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(employerId, "ACCEPTED", "published", PageRequest.of(0, 10))
                 .getContent();
         for (var iv : acceptedInterviews) {
-            if (iv.getScheduledAt().isBefore(startOfDay)) {
+            Application a = iv.getApplication();
+            if (a == null || a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.REJECTED || 
+                a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.HIRED || 
+                a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.ACCEPTED) {
+                continue;
+            }
+            if (iv.getScheduledAt() != null && iv.getScheduledAt().isBefore(startOfDay)) {
                 String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null ? iv.getCandidate().getFullName() : "Ứng viên";
                 pendingTasks.add(new EmployerDashboardResponse.PendingTask(
                         UUID.randomUUID(),
                         "Đánh giá phỏng vấn: " + candidateName,
                         "Phỏng vấn ngày " + iv.getScheduledAt().toLocalDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
                         "evaluate_interview",
-                        "/employer/applications?appId=" + iv.getApplication().getId(),
+                        "/employer/applications?appId=" + a.getId(),
                         now
                 ));
             }
@@ -227,44 +233,66 @@ public class EmployerService {
         
         for (var iv : interviewApps) {
             Application a = iv.getApplication();
+            if (a == null || a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.REJECTED || 
+                a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.HIRED || 
+                a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.ACCEPTED) {
+                continue;
+            }
             String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
             pendingTasks.add(new EmployerDashboardResponse.PendingTask(
                     UUID.randomUUID(),
                     "Đạt PV, chờ gửi Offer: " + candidateName,
-                    "Vị trí: " + a.getJob().getTitle(),
+                    "Vị trí: " + (a.getJob() != null ? a.getJob().getTitle() : ""),
                     "pending_offer",
                     "/employer/applications?appId=" + a.getId(),
                     iv.getScheduledAt() != null ? iv.getScheduledAt() : now
             ));
         }
 
-        // 5. Employer Response Needed (Reschedule requests & Rejected offers)
+        // 5. Employer Response Needed (Reschedule requests & Negotiation requests)
         List<com.sjp.recruitment.model.entity.InterviewSchedule> rescheduleRequests = interviewScheduleRepository
                 .findByEmployerIdAndStatusAndJobStatusOrderByScheduledAtDesc(employerId, "RESCHEDULE_REQUESTED", "published", PageRequest.of(0, 5))
                 .getContent();
         for (var iv : rescheduleRequests) {
+            Application a = iv.getApplication();
+            if (a == null || a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.REJECTED || 
+                a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.HIRED) {
+                continue;
+            }
             String candidateName = iv.getCandidate() != null && iv.getCandidate().getFullName() != null ? iv.getCandidate().getFullName() : "Ứng viên";
             pendingTasks.add(new EmployerDashboardResponse.PendingTask(
                     UUID.randomUUID(),
                     "Xin đổi lịch phỏng vấn: " + candidateName,
-                    "Vị trí: " + iv.getApplication().getJob().getTitle(),
+                    "Vị trí: " + (a.getJob() != null ? a.getJob().getTitle() : ""),
                     "employer_response_needed",
-                    "/employer/applications?appId=" + iv.getApplication().getId(),
+                    "/employer/applications?appId=" + a.getId(),
                     iv.getScheduledAt() != null ? iv.getScheduledAt() : now
             ));
         }
 
         List<com.sjp.recruitment.model.entity.JobOffer> rejectedOffers = jobOfferRepository
-                .findByApplicationJobEmployerIdAndStatusAndJobStatusOrderByCreatedAtDesc(employerId, "rejected", "published", PageRequest.of(0, 5))
+                .findByApplicationJobEmployerIdAndStatusAndJobStatusOrderByCreatedAtDesc(employerId, "rejected", "published", PageRequest.of(0, 10))
                 .getContent();
         for (var offer : rejectedOffers) {
-            String candidateName = offer.getApplication().getCandidate() != null && offer.getApplication().getCandidate().getFullName() != null ? offer.getApplication().getCandidate().getFullName() : "Ứng viên";
+            Application a = offer.getApplication();
+            if (a == null || a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.REJECTED || 
+                a.getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.HIRED) {
+                continue;
+            }
+            // Skip if employer ALREADY responded to negotiation or if candidate outright rejected (no candidate note for negotiation)
+            if (offer.getEmployerNote() != null && !offer.getEmployerNote().isBlank()) {
+                continue;
+            }
+            if (offer.getCandidateNote() == null || offer.getCandidateNote().isBlank()) {
+                continue;
+            }
+            String candidateName = a.getCandidate() != null && a.getCandidate().getFullName() != null ? a.getCandidate().getFullName() : "Ứng viên";
             pendingTasks.add(new EmployerDashboardResponse.PendingTask(
                     UUID.randomUUID(),
                     "Từ chối/Thương lượng Offer: " + candidateName,
                     "Vị trí: " + offer.getPositionTitle(),
                     "employer_response_needed",
-                    "/employer/applications?appId=" + offer.getApplication().getId(),
+                    "/employer/applications?appId=" + a.getId(),
                     offer.getCreatedAt() != null ? offer.getCreatedAt() : now
             ));
         }
@@ -278,7 +306,18 @@ public class EmployerService {
         }
 
         for (var interview : futureInterviews) {
-            if ("COMPLETED".equals(interview.getStatus()) || "NO_SHOW".equals(interview.getStatus()) || "CANCELLED".equals(interview.getStatus())) {
+            if (interview.getApplication() == null || 
+                interview.getApplication().getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.REJECTED || 
+                interview.getApplication().getStatusEnum() == com.sjp.recruitment.model.entity.Application.ApplicationStatus.HIRED) {
+                continue;
+            }
+            if ("COMPLETED".equalsIgnoreCase(interview.getStatus()) || 
+                "NO_SHOW".equalsIgnoreCase(interview.getStatus()) || 
+                "CANCELLED".equalsIgnoreCase(interview.getStatus()) || 
+                "FAIL".equalsIgnoreCase(interview.getStatus()) || 
+                "FAILED".equalsIgnoreCase(interview.getStatus()) || 
+                "DECLINED".equalsIgnoreCase(interview.getStatus()) || 
+                "REJECTED".equalsIgnoreCase(interview.getStatus())) {
                 continue;
             }
             
@@ -296,9 +335,9 @@ public class EmployerService {
                         "/employer/applications?appId=" + interview.getApplication().getId(),
                         interview.getScheduledAt()
                 ));
-            } else if ("SCHEDULED".equals(interview.getStatus())
-                    || "ACCEPTED".equals(interview.getStatus())
-                    || "PENDING_RESPONSE".equals(interview.getStatus())) {
+            } else if ("SCHEDULED".equalsIgnoreCase(interview.getStatus())
+                    || "ACCEPTED".equalsIgnoreCase(interview.getStatus())
+                    || "PENDING_RESPONSE".equalsIgnoreCase(interview.getStatus())) {
                 upcomingInterviews.add(new EmployerDashboardResponse.UpcomingInterview(
                         interview.getId(),
                         candidateName,
@@ -339,6 +378,7 @@ public class EmployerService {
         long interviewPendingResponseCount;
         long interviewAcceptedCount;
         long interviewCompletedCount;
+        long interviewFailedCount;
         long rescheduleRequestedCount;
         long offerPendingResponseCount;
         long offerAcceptedCount;
@@ -351,6 +391,8 @@ public class EmployerService {
                     employerId, List.of("ACCEPTED"), "published", startDateTime, endDateTime);
             interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatusAndDateRange(
                     employerId, List.of("COMPLETED"), "published", startDateTime, endDateTime);
+            interviewFailedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatusAndDateRange(
+                    employerId, List.of("NO_SHOW", "FAIL", "FAILED", "REJECTED"), "published", startDateTime, endDateTime);
             rescheduleRequestedCount = interviewScheduleRepository.countByEmployerIdAndStatusAndScheduledAtBetween(
                     employerId, "RESCHEDULE_REQUESTED", startDateTime, endDateTime);
 
@@ -377,6 +419,8 @@ public class EmployerService {
                     employerId, List.of("ACCEPTED"), "published");
             interviewCompletedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(
                     employerId, List.of("COMPLETED"), "published");
+            interviewFailedCount = interviewScheduleRepository.countActiveInterviewsByStatusesAndJobStatus(
+                    employerId, List.of("NO_SHOW", "FAIL", "FAILED", "REJECTED"), "published");
             rescheduleRequestedCount = interviewScheduleRepository.countByEmployerIdAndStatusAndJobStatus(
                     employerId, "RESCHEDULE_REQUESTED", "published");
 
@@ -406,6 +450,7 @@ public class EmployerService {
                 interviewAcceptedCount,
                 rescheduleRequestedCount,
                 interviewCompletedCount,
+                interviewFailedCount,
                 offerPendingResponseCount,
                 offerAcceptedCount,
                 offerRejectedCount,

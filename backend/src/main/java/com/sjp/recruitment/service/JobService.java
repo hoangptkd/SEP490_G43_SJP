@@ -718,9 +718,9 @@ public class JobService {
         if (job.getDeadline() != null) {
             featureLimitService.requireValidJobDeadline(currentUser, job.getDeadline());
         }
-        long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
-        if (job.getVacancies() != null && acceptedCount >= job.getVacancies()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "VACANCIES_FILLED", "Tin tuyển dụng đã tuyển đủ số lượng chỉ tiêu (" + acceptedCount + "/" + job.getVacancies() + "). Vui lòng tăng số lượng tuyển dụng trước khi mở lại tin.");
+        long hiredCount = applicationRepository.countByJobIdAndStatus(job.getId(), "hired");
+        if (job.getVacancies() != null && hiredCount >= job.getVacancies()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VACANCIES_FILLED", "Tin tuyển dụng đã tuyển đủ số lượng chỉ tiêu (" + hiredCount + "/" + job.getVacancies() + "). Vui lòng tăng số lượng tuyển dụng trước khi mở lại tin.");
         }
         job.setStatus("published");
         job.setClosedAt(null);

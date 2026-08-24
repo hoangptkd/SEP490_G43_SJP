@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -312,13 +313,18 @@ public class ApplicationWorkflowService {
     public JobOfferResponse createJobOffer(UUID applicationId, UUID employerId, JobOfferRequest request) {
         Application application = getApplicationAndVerifyEmployer(applicationId, employerId);
 
-        if (jobOfferRepository.existsByApplicationId(applicationId)) {
-            throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXISTS", "Ứng viên này đã có Job Offer");
-        }
+        Optional<JobOffer> existingOpt = jobOfferRepository.findByApplicationId(applicationId);
+        boolean isUpdate = existingOpt.isPresent();
+        JobOffer offer = existingOpt.orElseGet(() -> {
+            JobOffer newOffer = new JobOffer();
+            newOffer.setApplication(application);
+            newOffer.setEmployer(application.getJob().getEmployer());
+            return newOffer;
+        });
 
-        JobOffer offer = new JobOffer();
-        offer.setApplication(application);
-        offer.setEmployer(application.getJob().getEmployer());
+        String oldSalaryStr = isUpdate && offer.getSalary() != null ? String.format("%,.0f %s", offer.getSalary().doubleValue(), offer.getSalaryCurrency() != null ? offer.getSalaryCurrency() : "VND") : "Thỏa thuận";
+        String oldDateStr = isUpdate && offer.getStartDate() != null ? offer.getStartDate().toString() : "Chưa xác định";
+
         offer.setPositionTitle(request.positionTitle());
         offer.setSalary(request.salary());
         offer.setSalaryCurrency(request.salaryCurrency() != null ? request.salaryCurrency() : "VND");
@@ -327,12 +333,23 @@ public class ApplicationWorkflowService {
         offer.setBenefits(request.benefits());
         offer.setWorkingLocation(request.workingLocation());
         offer.setOfferLetterUrl(request.offerLetterUrl());
-        offer.setStatus("accepted");
-        offer.setSentAt(LocalDateTime.now());
+        offer.setEmployerNote(request.employerNote());
+        offer.setStatus("sent");
+        offer.setSentAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
 
         JobOffer saved = jobOfferRepository.save(offer);
 
-        applicationService.seedStatus(application, Application.ApplicationStatus.ACCEPTED, "Đã gửi Thư mời nhận việc (Job Offer) thành công");
+        if (isUpdate) {
+            String newSalaryStr = request.salary() != null ? String.format("%,.0f %s", request.salary().doubleValue(), request.salaryCurrency() != null ? request.salaryCurrency() : "VND") : "Thỏa thuận";
+            String newDateStr = request.startDate() != null ? request.startDate().toString() : "Chưa xác định";
+            applicationService.seedStatus(application, Application.ApplicationStatus.ACCEPTED,
+                    "Nhà tuyển dụng đã cập nhật lại Job Offer (Offer cũ: Lương " + oldSalaryStr + ", Ngày BĐ: " + oldDateStr + " -> Offer mới: Lương " + newSalaryStr + ", Ngày BĐ: " + newDateStr + ")");
+        } else {
+            String salaryStr = request.salary() != null ? String.format("%,.0f %s", request.salary().doubleValue(), request.salaryCurrency() != null ? request.salaryCurrency() : "VND") : "Thỏa thuận";
+            String startDateStr = request.startDate() != null ? request.startDate().toString() : "Chưa xác định";
+            applicationService.seedStatus(application, Application.ApplicationStatus.ACCEPTED,
+                    "Đã gửi Thư mời nhận việc (Job Offer): " + request.positionTitle() + " (Mức lương: " + salaryStr + ", Ngày bắt đầu: " + startDateStr + ") - Đang chờ ứng viên phản hồi");
+        }
 
         // Send email
         CandidateProfile candidate = application.getCandidate();
@@ -363,28 +380,32 @@ public class ApplicationWorkflowService {
         if (!"sent".equalsIgnoreCase(offer.getStatus())) {
             throw new ApiException(HttpStatus.CONFLICT, "OFFER_ALREADY_RESPONDED", "Job Offer không còn chờ phản hồi");
         }
-        if (offer.getExpiresAt() != null && offer.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (offer.getExpiresAt() != null && offer.getExpiresAt().isBefore(LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")))) {
             throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXPIRED", "Job Offer đã hết hạn");
         }
 
         boolean accepted = request.accepted();
-        offer.setStatus(accepted ? "accepted" : "rejected");
         offer.setCandidateNote(request.note());
-        offer.setRespondedAt(LocalDateTime.now());
+        offer.setRespondedAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        String noteLower = request.note() != null ? request.note().toLowerCase() : "";
+        boolean isNegotiation = !accepted && (noteLower.contains("thương lượng") || noteLower.contains("đề xuất") || noteLower.contains("lương") || noteLower.contains("ngày") || (request.note() != null && !request.note().isBlank()));
+
+        if (accepted) {
+            offer.setStatus("accepted");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Thư mời nhận việc (Job Offer)");
+        } else if (isNegotiation) {
+            offer.setStatus("rejected");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đề xuất thương lượng Job Offer (Lý do / Đề xuất: " + request.note() + ")");
+        } else {
+            offer.setStatus("rejected");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.REJECTED, "Ứng viên đã từ chối Thư mời nhận việc (Job Offer)");
+        }
 
         JobOffer saved = jobOfferRepository.saveAndFlush(offer);
 
-        if (accepted) {
-            // Application is now HIRED
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Job Offer");
-        } else {
-            // Do NOT change Application status to REJECTED yet, to allow negotiation.
-            String currentSalaryStr = offer.getSalary() != null ? offer.getSalary().toString() + " " + offer.getSalaryCurrency() : "Chưa có";
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đã từ chối Job Offer - Mức lương: " + currentSalaryStr + " (Chờ phản hồi): " + request.note());
-        }
-
         // Notify employer
-        String responseText = accepted ? "đã chấp nhận Job Offer" : "đã từ chối và đề xuất thay đổi Job Offer";
+        String responseText = accepted ? "đã chấp nhận Job Offer" : isNegotiation ? "đã gửi đề xuất thương lượng Job Offer" : "đã từ chối Job Offer";
         employerRepository.findByCompanyId(offer.getApplication().getJob().getCompany().getId()).forEach(employer -> {
             if (employer.getUser() != null) {
                 createNotification(employer.getUser(), "CANDIDATE_RESPONDED_OFFER", "Ứng viên phản hồi Job Offer",
@@ -400,8 +421,6 @@ public class ApplicationWorkflowService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APPLICATION_NOT_FOUND", "Không tìm thấy hồ sơ ứng tuyển"));
 
         if (!application.getJob().getEmployer().getId().equals(employerId)) {
-            // Note: In real app, we should check if employer belongs to the same company as the job creator
-            // Simple check for now based on exact employer id or employer's company matching job's company
             if (!application.getJob().getCompany().getId().equals(application.getJob().getEmployer().getCompany().getId())) {
                 throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền xử lý hồ sơ này");
             }
@@ -416,14 +435,17 @@ public class ApplicationWorkflowService {
 
         getApplicationAndVerifyEmployer(offer.getApplication().getId(), employerId);
 
-        if (!"rejected".equals(offer.getStatus())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer chưa bị từ chối, không thể phản hồi");
+        if (!"negotiation_requested".equalsIgnoreCase(offer.getStatus()) && !"rejected".equalsIgnoreCase(offer.getStatus()) && !"declined".equalsIgnoreCase(offer.getStatus()) && !"sent".equalsIgnoreCase(offer.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer không ở trạng thái chờ nhà tuyển dụng xử lý thương lượng");
         }
 
         if (isUpdating && updateRequest != null) {
-            String oldSalaryStr = offer.getSalary() != null ? offer.getSalary().toString() + " " + offer.getSalaryCurrency() : "Chưa có";
-            String newSalaryStr = updateRequest.salary() != null ? updateRequest.salary().toString() + " " + (updateRequest.salaryCurrency() != null ? updateRequest.salaryCurrency() : "VND") : "Chưa có";
-            
+            String oldSalaryStr = offer.getSalary() != null ? String.format("%,.0f %s", offer.getSalary().doubleValue(), offer.getSalaryCurrency() != null ? offer.getSalaryCurrency() : "VND") : "Thỏa thuận";
+            String oldDateStr = offer.getStartDate() != null ? offer.getStartDate().toString() : "Chưa xác định";
+
+            String newSalaryStr = updateRequest.salary() != null ? String.format("%,.0f %s", updateRequest.salary().doubleValue(), updateRequest.salaryCurrency() != null ? updateRequest.salaryCurrency() : "VND") : "Thỏa thuận";
+            String newDateStr = updateRequest.startDate() != null ? updateRequest.startDate().toString() : "Chưa xác định";
+
             offer.setPositionTitle(updateRequest.positionTitle());
             offer.setSalary(updateRequest.salary());
             offer.setSalaryCurrency(updateRequest.salaryCurrency() != null ? updateRequest.salaryCurrency() : "VND");
@@ -433,11 +455,11 @@ public class ApplicationWorkflowService {
             offer.setWorkingLocation(updateRequest.workingLocation());
             offer.setOfferLetterUrl(updateRequest.offerLetterUrl());
             offer.setEmployerNote(updateRequest.employerNote());
-            offer.setStatus("sent"); // Reset status back to sent
+            offer.setStatus("sent");
 
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Nhà tuyển dụng đã cập nhật lại Job Offer (Mức lương: " + oldSalaryStr + " -> " + newSalaryStr + ")");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED,
+                    "Nhà tuyển dụng đã cập nhật lại Job Offer (Offer cũ: Lương " + oldSalaryStr + ", Ngày BĐ: " + oldDateStr + " -> Offer mới: Lương " + newSalaryStr + ", Ngày BĐ: " + newDateStr + ")");
 
-            // Send email again
             CandidateProfile candidate = offer.getApplication().getCandidate();
             Job job = offer.getApplication().getJob();
             Company company = job.getCompany();
@@ -452,19 +474,11 @@ public class ApplicationWorkflowService {
                     updateRequest
             );
         } else {
-            offer.setStatus("employer_declined_negotiation");
+            offer.setStatus("sent");
             offer.setEmployerNote(updateRequest != null ? updateRequest.employerNote() : "");
 
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Nhà tuyển dụng từ chối cập nhật Job Offer (Giữ nguyên offer cũ)");
-
-            // Send simple email notifying the candidate
-            CandidateProfile candidate = offer.getApplication().getCandidate();
-            Job job = offer.getApplication().getJob();
-            Company company = job.getCompany();
-
-            // Re-using the sendJobOfferEmail template for simplicity, but maybe a custom one is better.
-            // Let's just use the note. We don't have a specific method in emailService, so we'll just skip sending a specific email or use a simple fallback.
-            // For now, no separate email because the frontend note will be visible in the portal, but we can try to send it if needed.
+            String noteText = (updateRequest != null && updateRequest.employerNote() != null && !updateRequest.employerNote().isBlank()) ? " (Lời nhắn: " + updateRequest.employerNote() + ")" : "";
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Nhà tuyển dụng từ chối thương lượng Job Offer (Giữ nguyên Offer cũ" + noteText + ")");
         }
 
         JobOffer saved = jobOfferRepository.save(offer);
@@ -480,19 +494,18 @@ public class ApplicationWorkflowService {
              throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền truy cập");
         }
 
-        if (!"employer_declined_negotiation".equals(offer.getStatus())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer không ở trạng thái từ chối thương lượng");
+        if (!"employer_declined_negotiation".equalsIgnoreCase(offer.getStatus()) && !"rejected".equalsIgnoreCase(offer.getStatus()) && !"declined".equalsIgnoreCase(offer.getStatus()) && !"sent".equalsIgnoreCase(offer.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATE", "Job Offer không ở trạng thái chờ chốt phản hồi");
         }
 
         boolean accepted = request.accepted();
+        offer.setRespondedAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
         if (accepted) {
             offer.setStatus("accepted");
-            offer.setRespondedAt(LocalDateTime.now());
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Job Offer cũ");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Job Offer ban đầu");
         } else {
-            offer.setStatus("withdrawn_by_candidate"); // or just rejected
-            offer.setRespondedAt(LocalDateTime.now());
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.REJECTED, "Ứng viên quyết định hủy bỏ Job Offer");
+            offer.setStatus("rejected");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.REJECTED, "Ứng viên đã từ chối Job Offer ban đầu");
         }
 
         JobOffer saved = jobOfferRepository.saveAndFlush(offer);

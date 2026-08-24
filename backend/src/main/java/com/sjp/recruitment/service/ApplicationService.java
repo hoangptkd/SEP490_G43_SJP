@@ -200,12 +200,10 @@ public class ApplicationService {
                 "Trạng thái ứng tuyển đã cập nhật", note, application.getId());
         realtimeEventPublisher.publishAfterCommit(
                 application.getCandidate().getUser(), "APPLICATION_UPDATED", application.getId());
-        if ((toStatus == Application.ApplicationStatus.HIRED || toStatus == Application.ApplicationStatus.ACCEPTED) && application.getJob() != null) {
+        if (toStatus == Application.ApplicationStatus.HIRED && application.getJob() != null) {
             Job job = application.getJob();
             long hiredCount = applicationRepository.countByJobIdAndStatus(job.getId(), "hired");
-            long acceptedCount = applicationRepository.countByJobIdAndStatus(job.getId(), "accepted");
-            long total = hiredCount + acceptedCount;
-            if (job.getVacancies() != null && total >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
+            if (job.getVacancies() != null && hiredCount >= job.getVacancies() && !"closed".equalsIgnoreCase(job.getStatus())) {
                 job.setStatus("closed");
                 job.setClosedAt(LocalDateTime.now());
                 jobRepository.save(job);
