@@ -19,6 +19,7 @@ class AiInterviewConversationPolicyTest {
         AiInterviewProperties properties = new AiInterviewProperties();
         properties.setMaxProbesPerCore(1);
         properties.setMaxClarifiesPerCore(1);
+        properties.setMaxFollowUpsPerCore(1);
         properties.setMaxTotalAssessmentTurns(10);
         policy = new AiInterviewConversationPolicy(properties);
     }
@@ -34,6 +35,8 @@ class AiInterviewConversationPolicyTest {
     void forcesNextWhenPerCoreOrTotalFollowUpLimitIsReached() {
         assertThat(policy.resolveAction("PROBE", 1, 0, 5)).isEqualTo(AnswerAnalysisAction.NEXT);
         assertThat(policy.resolveAction("CLARIFY", 0, 1, 5)).isEqualTo(AnswerAnalysisAction.NEXT);
+        assertThat(policy.resolveAction("CLARIFY", 1, 0, 5)).isEqualTo(AnswerAnalysisAction.NEXT);
+        assertThat(policy.resolveAction("PROBE", 0, 1, 5)).isEqualTo(AnswerAnalysisAction.NEXT);
         assertThat(policy.resolveAction("PROBE", 0, 0, 10)).isEqualTo(AnswerAnalysisAction.NEXT);
         assertThat(policy.resolveAction("CLARIFY", 0, 0, 10)).isEqualTo(AnswerAnalysisAction.NEXT);
     }
@@ -73,6 +76,10 @@ class AiInterviewConversationPolicyTest {
                 InterviewDialogueState.ASK_CLARIFY)).isTrue();
         assertThat(policy.canTransition(InterviewDialogueState.ANALYZE_ANSWER,
                 InterviewDialogueState.ACK_TRANSITION)).isTrue();
+        assertThat(policy.canTransition(InterviewDialogueState.ACK_TRANSITION,
+                InterviewDialogueState.REVIEW_TRANSCRIPTS)).isTrue();
+        assertThat(policy.canTransition(InterviewDialogueState.REVIEW_TRANSCRIPTS,
+                InterviewDialogueState.CLOSING)).isTrue();
         assertThat(policy.canTransition(InterviewDialogueState.WAITING_ANSWER,
                 InterviewDialogueState.COMPLETED)).isFalse();
     }

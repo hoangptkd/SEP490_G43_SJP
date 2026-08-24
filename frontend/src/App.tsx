@@ -47,6 +47,7 @@ import { jobService } from './services/jobService';
 import { publicSettingsService, type PublicSettings } from './services/publicSettingsService';
 import type {
   AiInterviewConfig,
+  AiInterviewConversationTurn,
   AiInterviewCvProfile,
   AiInterviewEligibleApplication,
   AiInterviewQuestion,
@@ -6782,7 +6783,9 @@ function AiConversationRoom({
   );
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [reviewPendingTimedOut, setReviewPendingTimedOut] = useState(false);
   const commandIdsRef = useRef(new Map<string, string>());
+  const correctionPollInFlightRef = useRef(false);
   const latestSnapshotRef = useRef({
     sessionId: session.id,
     version: conversation.version,
@@ -6817,6 +6820,11 @@ function AiConversationRoom({
     return refreshed;
   }, [applySnapshot, session.id]);
 
+  const hasPendingCorrections = useMemo(() => conversation.timeline.some(
+    (turn) => turn.transcriptCorrection?.status === 'PENDING',
+  ), [conversation.timeline]);
+  const reviewingTranscripts = conversation.dialogueState === 'REVIEW_TRANSCRIPTS';
+
   useEffect(() => {
     setTranscript(currentTurn?.finalTranscript || currentTurn?.rawTranscript || '');
     setError('');
@@ -6835,6 +6843,25 @@ function AiConversationRoom({
     return () => window.clearTimeout(timer);
   }, [conversation.dialogueState, conversation.errorCode, conversation.version,
     currentTurn?.answerStatus, refreshSession, session.status]);
+
+  useEffect(() => {
+    if (!hasPendingCorrections || session.status === 'completed') return undefined;
+    const timer = window.setTimeout(() => {
+      if (correctionPollInFlightRef.current) return;
+      correctionPollInFlightRef.current = true;
+      void refreshSession()
+        .catch(() => undefined)
+        .finally(() => { correctionPollInFlightRef.current = false; });
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [conversation.timeline, hasPendingCorrections, refreshSession, session.status]);
+
+  useEffect(() => {
+    setReviewPendingTimedOut(false);
+    if (!reviewingTranscripts || !hasPendingCorrections) return undefined;
+    const timer = window.setTimeout(() => setReviewPendingTimedOut(true), 30_000);
+    return () => window.clearTimeout(timer);
+  }, [hasPendingCorrections, reviewingTranscripts, session.id]);
 
   const commandId = useCallback((kind: string, turnId: string) => {
     const key = `${kind}:${turnId}`;
@@ -6870,9 +6897,16 @@ function AiConversationRoom({
     );
   }, [conversation.expectsAnswer, currentTurn, session.id]);
 
+  const getCaptureStatus = useCallback(async (captureId: string, captureVersion: number) => {
+    if (!currentTurn) throw new Error('Lượt hội thoại hiện tại không còn hợp lệ.');
+    return aiInterviewService.getHandsFreeTurnCaptureStatus(
+      session.id, currentTurn.id, captureId, captureVersion,
+    );
+  }, [currentTurn, session.id]);
+
   const confirmAnswer = useCallback(async (finalTranscript: string, rawTranscript?: string) => {
     if (!currentTurn || !finalTranscript.trim()) return;
-    setBusy('AI đang phân tích bằng chứng trong câu trả lời...');
+    setBusy('AI đang chọn câu hỏi tiếp theo...');
     setError('');
     try {
       const next = await aiInterviewService.confirmTurn(
@@ -6892,6 +6926,42 @@ function AiConversationRoom({
       setBusy('');
     }
   }, [applySnapshot, commandId, conversation.version, currentTurn, refreshSession, session.id]);
+
+  const reviewTurnTranscript = useCallback(async (
+    turn: AiInterviewConversationTurn,
+    action: 'ACCEPT_AI' | 'KEEP_CURRENT' | 'MANUAL_EDIT',
+    editedTranscript?: string,
+  ) => {
+    try {
+      const correction = turn.transcriptCorrection;
+      const next = await aiInterviewService.reviewConversationTranscript(session.id, turn.id, {
+        action,
+        captureId: correction?.captureId,
+        captureVersion: correction?.captureVersion,
+        transcript: editedTranscript,
+        expectedEditCount: turn.editCount,
+      });
+      applySnapshot(next);
+    } catch (reviewError) {
+      if (parseApiError(reviewError).code === 'TRANSCRIPT_EDIT_CONFLICT') {
+        await refreshSession().catch(() => undefined);
+      }
+      throw reviewError;
+    }
+  }, [applySnapshot, refreshSession, session.id]);
+
+  const completeTranscriptReview = useCallback(async () => {
+    setBusy('AI đang chấm điểm và tạo nhận xét cuối cùng...');
+    setError('');
+    try {
+      applySnapshot(await aiInterviewService.completeConversationTranscriptReview(session.id));
+    } catch (completeError) {
+      setError(readError(completeError));
+      await refreshSession().catch(() => undefined);
+    } finally {
+      setBusy('');
+    }
+  }, [applySnapshot, refreshSession, session.id]);
 
   const replayTurn = useCallback(async () => {
     if (!currentTurn) throw new Error('Lượt hội thoại hiện tại không còn hợp lệ.');
@@ -6921,6 +6991,7 @@ function AiConversationRoom({
     voiceLoadWaitMs: config.voiceLoadWaitMs,
     nextQuestionDelayMs: config.voiceNextQuestionDelayMs,
     answerTranscriptionProvider: config.answerTranscriptionProvider,
+    autoSubmitVoiceAnswer: true,
     onCreateTranscriptionTicket: config.answerTranscriptionProvider === 'speechmatics_realtime'
       ? () => aiInterviewService.createTranscriptionTicket(session.id)
       : undefined,
@@ -6930,6 +7001,7 @@ function AiConversationRoom({
     disabled: !conversation.expectsAnswer,
     onTranscript: setTranscript,
     onFinalizeCapture: finalizeCapture,
+    onGetCaptureStatus: getCaptureStatus,
     onConfirm: confirmAnswer,
     onReplayQuestion: replayTurn,
     onSpeechUrl: config.voiceStreamingEnabled ? createSpeechUrl : undefined,
@@ -7028,7 +7100,13 @@ function AiConversationRoom({
           <span style={{ width: `${Math.min(100, (conversation.completedCoreQuestions / conversation.totalCoreQuestions) * 100)}%` }} />
         </div>
 
-        <ConversationTimeline turns={conversation.timeline} compact />
+        <ConversationTimeline
+          turns={conversation.timeline}
+          compact
+          reviewMode={reviewingTranscripts}
+          disabled={Boolean(busy)}
+          onReviewTranscript={reviewTurnTranscript}
+        />
 
         {conversation.errorCode ? (
           <div className="conversation-retry-panel" role="alert">
@@ -7096,44 +7174,36 @@ function AiConversationRoom({
               Mỗi lần đọc lại trừ 2 điểm giao tiếp; tổng mức trừ tối đa là 10 điểm cho cả phiên.
             </p>
             <p className="voice-status" role="status">
-              Nguồn transcript: Web Speech
+              Nguồn transcript: {config.answerTranscriptionProvider === 'speechmatics_realtime'
+                ? 'Speechmatics Realtime' : 'Web Speech'}
             </p>
             {voice.transcriptNotice ? <p className="voice-status" role="status">{voice.transcriptNotice}</p> : null}
             {voice.interimTranscript ? <p className="voice-interim">Đang nghe: {voice.interimTranscript}</p> : null}
 
             <label className="transcript-editor">
-              {['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || voice.manualFallback
-                ? 'Kiểm tra và chỉnh sửa transcript trước khi xác nhận'
-                : 'Transcript draft trong lúc bạn nói'}
+              {voice.manualFallback ? 'Nhập câu trả lời' : 'Transcript realtime trong lúc bạn nói'}
               <textarea
                 value={transcript}
-                readOnly={!['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) && !voice.manualFallback}
-                onChange={['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || voice.manualFallback
-                  ? (event) => setTranscript(event.target.value) : undefined}
+                readOnly={!voice.manualFallback}
+                onChange={voice.manualFallback ? (event) => setTranscript(event.target.value) : undefined}
                 placeholder={voice.manualFallback
                   ? 'Nhập câu trả lời của bạn tại đây...'
                   : 'Nội dung sẽ xuất hiện khi bạn nói...'}
               />
             </label>
             <p className="muted conversation-transcript-note">
-              Nội dung đã sửa không bị trừ điểm. Điểm nói vẫn lấy từ audio/VAD gốc, điểm nội dung chỉ dùng transcript bạn xác nhận.
+              Sau khi bạn xác nhận đã nói xong, câu trả lời được gửi tự động. AI kiểm tra transcript ở nền và hiển thị đề xuất ngay dưới message của bạn.
             </p>
 
             {voice.error ? <div className="error-panel" role="alert">{voice.error}</div> : null}
             {error ? <div className="error-panel" role="alert">{error}</div> : null}
-            {['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || voice.manualFallback ? (
+            {voice.manualFallback || voice.phase === 'ERROR_RECOVERABLE' ? (
               <div className="manual-fallback-actions">
-                {voice.phase === 'REVIEWING_TRANSCRIPT' && !voice.manualFallback ? (
-                  <button type="button" className="outline" disabled={Boolean(busy)}
-                    onClick={() => voice.continueAnswer(transcript)}>
-                    Tiếp tục trả lời
-                  </button>
-                ) : null}
                 <button type="button"
                   disabled={!transcript.trim() || Boolean(busy)
                     || ['PROCESSING_AUDIO', 'ANSWER_CONFIRMED', 'NEXT_QUESTION'].includes(voice.phase)}
                   onClick={() => voice.confirmTranscript(transcript)}>
-                  Xác nhận câu trả lời
+                  {voice.manualFallback ? 'Gửi câu trả lời' : 'Thử gửi lại câu trả lời'}
                 </button>
                 <button type="button" className="outline" disabled={Boolean(busy)}
                   onClick={() => void skipCurrentTurn()}>
@@ -7141,6 +7211,33 @@ function AiConversationRoom({
                 </button>
               </div>
             ) : null}
+          </section>
+        ) : null}
+
+        {reviewingTranscripts ? (
+          <section className="conversation-review-panel" aria-labelledby="transcript-review-title">
+            <div>
+              <p className="eyebrow">Bước cuối trước khi chấm điểm</p>
+              <h3 id="transcript-review-title">Kiểm tra lại toàn bộ hội thoại</h3>
+              <p className="muted">
+                Bạn có thể sửa trực tiếp từng câu trả lời hoặc áp dụng đề xuất của AI. Evidence đã được trích xuất từ transcript gốc và không chạy lại khi bạn sửa.
+              </p>
+              {hasPendingCorrections ? (
+                <p className="voice-status" role="status">
+                  {reviewPendingTimedOut
+                    ? 'Một số đề xuất vẫn đang xử lý. Bạn có thể tiếp tục chấm điểm và hệ thống sẽ giữ transcript hiện tại cho các lượt đó.'
+                    : 'Đang chờ AI hoàn tất các đề xuất sửa transcript (tối đa 30 giây)...'}
+                </p>
+              ) : null}
+              {error ? <div className="error-panel" role="alert">{error}</div> : null}
+            </div>
+            <button
+              type="button"
+              disabled={Boolean(busy) || (hasPendingCorrections && !reviewPendingTimedOut)}
+              onClick={() => void completeTranscriptReview()}
+            >
+              Hoàn tất kiểm tra và chấm điểm
+            </button>
           </section>
         ) : null}
 
@@ -7157,10 +7254,47 @@ function AiConversationRoom({
 function ConversationTimeline({
   turns,
   compact = false,
+  reviewMode = false,
+  disabled = false,
+  onReviewTranscript,
 }: {
   turns: NonNullable<AiInterviewSession['conversation']>['timeline'];
   compact?: boolean;
+  reviewMode?: boolean;
+  disabled?: boolean;
+  onReviewTranscript?: (
+    turn: AiInterviewConversationTurn,
+    action: 'ACCEPT_AI' | 'KEEP_CURRENT' | 'MANUAL_EDIT',
+    transcript?: string,
+  ) => Promise<void>;
 }) {
+  const [editingTurnId, setEditingTurnId] = useState<string>();
+  const [editDraft, setEditDraft] = useState('');
+  const [savingTurnId, setSavingTurnId] = useState<string>();
+  const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
+
+  async function reviewTranscript(
+    turn: AiInterviewConversationTurn,
+    action: 'ACCEPT_AI' | 'KEEP_CURRENT' | 'MANUAL_EDIT',
+    transcript?: string,
+  ) {
+    if (!onReviewTranscript) return;
+    setSavingTurnId(turn.id);
+    setActionErrors((current) => ({ ...current, [turn.id]: '' }));
+    try {
+      await onReviewTranscript(turn, action, transcript);
+      if (action === 'MANUAL_EDIT') setEditingTurnId(undefined);
+    } catch (reviewError) {
+      const parsedError = parseApiError(reviewError);
+      const message = parsedError.code === 'TRANSCRIPT_EDIT_CONFLICT'
+        ? 'Đã tải transcript mới nhất. Nội dung bạn đang sửa vẫn được giữ; hãy kiểm tra rồi lưu lại.'
+        : parsedError.message;
+      setActionErrors((current) => ({ ...current, [turn.id]: message }));
+    } finally {
+      setSavingTurnId(undefined);
+    }
+  }
+
   return (
     <section className={`conversation-timeline${compact ? ' compact' : ''}`} aria-label="Nội dung hội thoại đã diễn ra">
       {turns.map((turn) => {
@@ -7174,10 +7308,65 @@ function ConversationTimeline({
             {candidateText || turn.answerStatus === 'SKIPPED' ? (
               <article className="conversation-bubble candidate">
                 <span className="conversation-speaker">Bạn</span>
-                <p>{turn.answerStatus === 'SKIPPED' ? 'Đã bỏ qua nội dung này.' : candidateText}</p>
+                {editingTurnId === turn.id ? (
+                  <label className="conversation-inline-editor">
+                    Chỉnh sửa câu trả lời
+                    <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} />
+                  </label>
+                ) : <p>{turn.answerStatus === 'SKIPPED' ? 'Đã bỏ qua nội dung này.' : candidateText}</p>}
                 {turn.transcriptEdited ? <small>Transcript đã được bạn chỉnh sửa</small> : null}
+                {reviewMode && turn.answerStatus === 'CONFIRMED' && editingTurnId !== turn.id ? (
+                  <button
+                    type="button"
+                    className="conversation-text-action"
+                    disabled={disabled || Boolean(savingTurnId)}
+                    onClick={() => {
+                      setEditingTurnId(turn.id);
+                      setEditDraft(candidateText || '');
+                    }}
+                  >
+                    Sửa câu trả lời
+                  </button>
+                ) : null}
+                {editingTurnId === turn.id ? (
+                  <div className="conversation-correction-actions">
+                    <button type="button" disabled={disabled || savingTurnId === turn.id || !editDraft.trim()}
+                      onClick={() => void reviewTranscript(turn, 'MANUAL_EDIT', editDraft)}>
+                      Lưu chỉnh sửa
+                    </button>
+                    <button type="button" className="outline" disabled={savingTurnId === turn.id}
+                      onClick={() => setEditingTurnId(undefined)}>
+                      Hủy
+                    </button>
+                  </div>
+                ) : null}
               </article>
             ) : null}
+            {turn.transcriptCorrection?.status === 'PENDING' ? (
+              <div className="conversation-correction-message" role="status">
+                <strong>AI đang kiểm tra transcript...</strong>
+              </div>
+            ) : null}
+            {turn.transcriptCorrection?.status === 'CORRECTED'
+              && turn.transcriptCorrection.proposedTranscript
+              && turn.transcriptCorrection.candidateDecision === 'PENDING'
+              && onReviewTranscript ? (
+                <div className="conversation-correction-message">
+                  <strong>AI đề xuất sửa transcript</strong>
+                  <p>{turn.transcriptCorrection.proposedTranscript}</p>
+                  <div className="conversation-correction-actions">
+                    <button type="button" disabled={disabled || savingTurnId === turn.id}
+                      onClick={() => void reviewTranscript(turn, 'ACCEPT_AI')}>
+                      Áp dụng bản sửa
+                    </button>
+                    <button type="button" className="outline" disabled={disabled || savingTurnId === turn.id}
+                      onClick={() => void reviewTranscript(turn, 'KEEP_CURRENT')}>
+                      Giữ bản hiện tại
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            {actionErrors[turn.id] ? <div className="error-panel" role="alert">{actionErrors[turn.id]}</div> : null}
           </div>
         );
       })}
@@ -7395,6 +7584,13 @@ function LegacyAiInterviewRoom({
     );
   }, [currentQuestion, session.id]);
 
+  const getHandsFreeCaptureStatus = useCallback(async (captureId: string, captureVersion: number) => {
+    if (!currentQuestion) throw new Error('Câu hỏi hiện tại không còn hợp lệ.');
+    return aiInterviewService.getHandsFreeQuestionCaptureStatus(
+      session.id, currentQuestion.id, captureId, captureVersion,
+    );
+  }, [currentQuestion, session.id]);
+
   const recordQuestionReplay = useCallback(async () => {
     if (!currentQuestion) throw new Error('Câu hỏi hiện tại không còn hợp lệ.');
     try {
@@ -7425,6 +7621,7 @@ function LegacyAiInterviewRoom({
     disabled: Boolean(busy),
     onTranscript: setTranscript,
     onFinalizeCapture: finalizeHandsFreeCapture,
+    onGetCaptureStatus: getHandsFreeCaptureStatus,
     onConfirm: confirmVoiceAnswer,
     onReplayQuestion: recordQuestionReplay,
     onSpeechUrl: config.voiceProvider === 'shopaikey_gemini_stream' ? createSpeechUrl : undefined,
@@ -7576,7 +7773,8 @@ function LegacyAiInterviewRoom({
                   Trạng thái: {voicePhaseLabel(voice.phase)}
                 </p>
                 <p className="voice-status" role="status">
-                  Nguồn transcript: Web Speech
+                  Nguồn transcript: {config.answerTranscriptionProvider === 'speechmatics_realtime'
+                    ? 'Speechmatics Realtime' : 'Web Speech'}
                 </p>
                 {voice.transcriptNotice ? (
                   <p className="voice-status" role="status" aria-live="polite">{voice.transcriptNotice}</p>
@@ -7604,6 +7802,21 @@ function LegacyAiInterviewRoom({
                     ? 'Câu nhập thủ công vẫn được chấm nội dung nhưng không dùng để tính tốc độ nói và khoảng nghỉ.'
                     : 'Nội dung đã sửa không bị trừ điểm; chỉ transcript đã xác nhận mới dùng để chấm nội dung.'}
                 </p>
+                {voice.transcriptSuggestion ? (
+                  <div className="notice-panel" role="status">
+                    <strong>AI đề xuất sửa transcript</strong>
+                    <p>{voice.transcriptSuggestion.transcript}</p>
+                    <div className="manual-fallback-actions">
+                      <button type="button" disabled={Boolean(busy)} onClick={voice.acceptTranscriptSuggestion}>
+                        Dùng bản AI đề xuất
+                      </button>
+                      <button type="button" className="outline" disabled={Boolean(busy)}
+                        onClick={voice.rejectTranscriptSuggestion}>
+                        Giữ transcript hiện tại
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {voice.error ? <div className="error-panel" role="alert">{voice.error}</div> : null}
                 {['REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE'].includes(voice.phase) || manualFallback ? (
                   <div className="manual-fallback-actions">

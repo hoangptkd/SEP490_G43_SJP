@@ -12,6 +12,7 @@ import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.InterviewAnswer;
 import com.sjp.recruitment.model.entity.InterviewQuestion;
 import com.sjp.recruitment.model.entity.InterviewSession;
+import com.sjp.recruitment.model.enums.AnswerAnalysisAction;
 import com.sjp.recruitment.repository.AiAnswerFeedbackRepository;
 import com.sjp.recruitment.repository.AiQuestionBankRepository;
 import com.sjp.recruitment.repository.AiQuestionSetRepository;
@@ -47,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -89,6 +91,11 @@ class AiInterviewDeferredEvaluationTest {
     @Mock private AiInterviewSpeechPrefetchService speechPrefetchService;
     @Mock private AiInterviewResponseAssembler responseAssembler;
     @Mock private AiInterviewConversationService conversationService;
+    @Mock private AiInterviewConversationTemplateBank conversationTemplates;
+    @Mock private AiInterviewAdaptivePrefetchCoordinator adaptivePrefetchCoordinator;
+    @Mock private AiInterviewTurnEvidenceCoordinator turnEvidenceCoordinator;
+    @Mock private AiInterviewTranscriptCorrectionCoordinator transcriptCorrectionCoordinator;
+    @Mock private AiInterviewTranscriptReviewService transcriptReviewService;
     @Spy private AiInterviewFallbackFactory fallbackFactory = new AiInterviewFallbackFactory();
     @Mock private InterviewConversationTurnRepository conversationTurnRepository;
     @Mock private TransactionTemplate transactions;
@@ -130,6 +137,8 @@ class AiInterviewDeferredEvaluationTest {
         lenient().when(properties.isEnabled()).thenReturn(true);
         lenient().when(properties.getQuestionCount()).thenReturn(5);
         lenient().when(properties.effectiveCoreQuestionCount()).thenReturn(5);
+        lenient().when(properties.getTtsPrefetchInitialWaitMs()).thenReturn(20_000);
+        lenient().when(properties.getTextAi()).thenReturn(new AiInterviewProperties.TextAi());
         lenient().when(candidateService.getCurrentCandidateProfile()).thenReturn(candidate);
         lenient().when(shopAiKeyClient.generateInitialInterviewPackage(any(), any()))
                 .thenReturn(initialPackage());
@@ -171,6 +180,53 @@ class AiInterviewDeferredEvaluationTest {
     }
 
     @Test
+    void confirmingFollowUpReturnsWithoutWaitingForBackgroundEvidence() {
+        when(properties.isTranscriptCorrectionEnabled()).thenReturn(true);
+        UUID turnId = UUID.randomUUID();
+        UUID idempotencyKey = UUID.randomUUID();
+        UUID answerClientId = UUID.randomUUID();
+        CompletableFuture<Void> pendingEvidence = new CompletableFuture<>();
+        AiInterviewConversationService.ConversationResult result =
+                new AiInterviewConversationService.ConversationResult(
+                        false,
+                        AnswerAnalysisAction.PROBE,
+                        question.getId(),
+                        1,
+                        false,
+                        turnId,
+                        answerClientId,
+                        true);
+        when(conversationService.confirmTurn(
+                session.getId(), turnId, idempotencyKey, 1,
+                "Tôi đã kiểm tra log.", "Tôi đã kiểm tra log."))
+                .thenReturn(result);
+        when(turnEvidenceCoordinator.submit(session.getId(), turnId, answerClientId))
+                .thenReturn(pendingEvidence);
+
+        service.confirmConversationTurn(
+                session.getId().toString(),
+                turnId.toString(),
+                idempotencyKey.toString(),
+                "Tôi đã kiểm tra log.",
+                "Tôi đã kiểm tra log.",
+                1);
+
+        assertFalse(pendingEvidence.isDone());
+        InOrder postDecisionOrder = inOrder(
+                conversationService,
+                transcriptCorrectionCoordinator,
+                turnEvidenceCoordinator);
+        postDecisionOrder.verify(conversationService).confirmTurn(
+                session.getId(), turnId, idempotencyKey, 1,
+                "Tôi đã kiểm tra log.", "Tôi đã kiểm tra log.");
+        postDecisionOrder.verify(transcriptCorrectionCoordinator)
+                .submitAfterDecision(session.getId(), turnId);
+        postDecisionOrder.verify(turnEvidenceCoordinator)
+                .submit(session.getId(), turnId, answerClientId);
+        verifyNoInteractions(adaptivePrefetchCoordinator);
+    }
+
+    @Test
     void creatingPracticeUsesSelectedCvProfileAndIgnoresQuestionBankMode() {
         when(questionRepository.findBySessionIdOrderByOrderIndexAsc(any())).thenReturn(List.of());
         when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(any())).thenReturn(List.of());
@@ -189,6 +245,24 @@ class AiInterviewDeferredEvaluationTest {
     }
 
     @Test
+    void creatingPracticeWaitsForExactOpeningAndFirstQuestionSpeechCache() {
+        when(questionRepository.findBySessionIdOrderByOrderIndexAsc(any())).thenReturn(List.of());
+        when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(any())).thenReturn(List.of());
+        when(responseAssembler.currentConversationSpeech(any()))
+                .thenReturn("Chào bạn.\nBạn hãy giới thiệu kinh nghiệm Java.");
+        when(conversationTemplates.initialPriorityPhrases(List.of()))
+                .thenReturn(List.of("Được rồi."));
+
+        service.createPracticeSession(new AiInterviewPracticeSessionRequest(
+                cvId.toString(), "Backend Developer", "junior", List.of("Java")));
+
+        verify(speechPrefetchService).prefetchSegmentsAndAwait(
+                "Chào bạn.\nBạn hãy giới thiệu kinh nghiệm Java.", 20_000);
+        verify(conversationTemplates).initialPriorityPhrases(List.of());
+        verify(speechPrefetchService).prefetch(List.of("Được rồi."));
+    }
+
+    @Test
     void replayQuestionAtomicallyIncrementsOnlyTheCurrentOpenQuestion() {
         when(questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId()))
                 .thenReturn(List.of(question));
@@ -202,25 +276,21 @@ class AiInterviewDeferredEvaluationTest {
     }
 
     @Test
-    void aiQuestionGenerationFailureStartsSessionWithFallbackQuestions() {
+    void aiQuestionGenerationFailureDoesNotCreateFallbackQuestions() {
         when(questionRepository.findBySessionIdOrderByOrderIndexAsc(any())).thenReturn(List.of());
         when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(any())).thenReturn(List.of());
         when(shopAiKeyClient.generateInitialInterviewPackage(any(), any()))
                 .thenThrow(new AiProviderException("AI_PROVIDER_FAILED", "Provider unavailable"));
 
-        service.createPracticeSession(
+        assertThrows(AiProviderException.class, () -> service.createPracticeSession(
                 new AiInterviewPracticeSessionRequest(
                         cvId.toString(), "Backend Developer", "junior", List.of("Java")
                 )
-        );
+        ));
 
-        ArgumentCaptor<InterviewQuestion> questionCaptor = ArgumentCaptor.forClass(InterviewQuestion.class);
-        verify(questionRepository, times(3)).save(questionCaptor.capture());
-        assertTrue(questionCaptor.getAllValues().stream()
-                .allMatch(item -> AiInterviewFallbackFactory.FALLBACK_PROMPT_VERSION
-                        .equals(item.getPromptVersion())));
-        verify(conversationService).initialize(any(InterviewSession.class));
-        verify(responseAssembler).assemble(any(InterviewSession.class));
+        verify(questionRepository, never()).save(any(InterviewQuestion.class));
+        verify(conversationService, never()).initialize(any(InterviewSession.class));
+        verify(responseAssembler, never()).assemble(any(InterviewSession.class));
     }
 
     @Test

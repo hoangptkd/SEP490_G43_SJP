@@ -4,7 +4,6 @@ import com.sjp.recruitment.config.AiInterviewProperties;
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.InterviewAnswer;
-import com.sjp.recruitment.model.entity.InterviewAnswerCapture;
 import com.sjp.recruitment.model.entity.InterviewConversationTurn;
 import com.sjp.recruitment.model.entity.InterviewQuestion;
 import com.sjp.recruitment.model.entity.InterviewSession;
@@ -12,8 +11,6 @@ import com.sjp.recruitment.model.enums.AnswerAnalysisAction;
 import com.sjp.recruitment.model.enums.InterviewDialogueState;
 import com.sjp.recruitment.model.enums.InterviewTurnAnswerStatus;
 import com.sjp.recruitment.model.enums.InterviewTurnType;
-import com.sjp.recruitment.model.enums.TranscriptCorrectionStatus;
-import com.sjp.recruitment.repository.InterviewAnswerCaptureRepository;
 import com.sjp.recruitment.repository.InterviewAnswerRepository;
 import com.sjp.recruitment.repository.InterviewConversationTurnRepository;
 import com.sjp.recruitment.repository.InterviewQuestionRepository;
@@ -29,12 +26,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -54,10 +49,8 @@ public class AiInterviewConversationService {
     private final InterviewSessionRepository sessionRepository;
     private final InterviewQuestionRepository questionRepository;
     private final InterviewAnswerRepository answerRepository;
-    private final InterviewAnswerCaptureRepository captureRepository;
     private final InterviewConversationTurnRepository turnRepository;
     private final ShopAiKeyClient shopAiKeyClient;
-    private final AiInterviewFallbackFactory fallbackFactory;
     private final AiInterviewConversationPolicy policy;
     private final AiInterviewConversationTemplateBank templates;
     private final TransactionTemplate transactions;
@@ -171,7 +164,8 @@ public class AiInterviewConversationService {
             bumpVersion(session);
             sessionRepository.save(session);
             return new ConversationResult(false, AnswerAnalysisAction.NEXT,
-                    turn.getAssessmentItem().getId(), turn.getAssessmentItem().getOrderIndex(), true);
+                    turn.getAssessmentItem().getId(), turn.getAssessmentItem().getOrderIndex(), true,
+                    turn.getId(), turn.getAnswerClientId(), false);
         });
     }
 
@@ -204,6 +198,9 @@ public class AiInterviewConversationService {
             }
             if (session.getDialogueState() == InterviewDialogueState.WAITING_ANSWER) {
                 return AdvanceResult.NEXT_CORE_READY;
+            }
+            if (session.getDialogueState() == InterviewDialogueState.REVIEW_TRANSCRIPTS) {
+                return AdvanceResult.NEEDS_TRANSCRIPT_REVIEW;
             }
             if (session.getDialogueState() == InterviewDialogueState.CLOSING) {
                 return AdvanceResult.READY_TO_EVALUATE;
@@ -264,12 +261,12 @@ public class AiInterviewConversationService {
                     templates.closing(),
                     InterviewTurnAnswerStatus.NOT_REQUIRED
             );
-            transition(session, InterviewDialogueState.CLOSING);
+            transition(session, InterviewDialogueState.REVIEW_TRANSCRIPTS);
             session.setCurrentTurn(closing);
             clearError(session);
             bumpVersion(session);
             sessionRepository.save(session);
-            return AdvanceResult.READY_TO_EVALUATE;
+            return AdvanceResult.NEEDS_TRANSCRIPT_REVIEW;
         });
     }
 
@@ -291,29 +288,29 @@ public class AiInterviewConversationService {
     }
 
     private ConversationResult analyzeAndApply(AnalysisClaim claim) {
-        ShopAiKeyClient.AnswerAnalysisDraft analysis;
-        try {
-            analysis = claim.correctionEvidenceDraft().isEmpty()
-                    ? shopAiKeyClient.analyzeAssessmentTurn(
-                            claim.session(),
-                            claim.question(),
-                            claim.currentAnswer(),
-                            claim.itemEvidenceSummary(),
-                            claim.counters())
-                    : shopAiKeyClient.analyzeAssessmentTurn(
-                            claim.session(),
-                            claim.question(),
-                            claim.currentAnswer(),
-                            claim.itemEvidenceSummary(),
-                            claim.correctionEvidenceDraft(),
-                            claim.counters());
-        } catch (AiProviderException exception) {
-            log.warn("AI assessment analysis fallback applied: sessionId={}, turnId={}, code={}, detail=\"{}\"",
-                    claim.session().getId(), claim.turnId(), exception.getCode(), exception.getMessage());
-            analysis = fallbackFactory.answerAnalysis(claim.question(), claim.itemEvidenceSummary());
+        ShopAiKeyClient.AnswerDecisionDraft decision;
+        if (claim.counters().probeCount() + claim.counters().clarifyCount()
+                >= properties.getMaxFollowUpsPerCore()) {
+            decision = new ShopAiKeyClient.AnswerDecisionDraft(
+                    ShopAiKeyClient.AnswerAnalysisAction.NEXT, null);
+        } else {
+            try {
+                decision = shopAiKeyClient.analyzeAssessmentTurnDecision(
+                        claim.session(),
+                        claim.question(),
+                        claim.currentAnswer(),
+                        claim.counters());
+            } catch (AiProviderException exception) {
+                log.warn("AI assessment decision fallback NEXT applied: "
+                                + "sessionId={}, turnId={}, "
+                                + "code={}, detail=\"{}\"",
+                        claim.session().getId(), claim.turnId(), exception.getCode(), exception.getMessage());
+                decision = new ShopAiKeyClient.AnswerDecisionDraft(
+                        ShopAiKeyClient.AnswerAnalysisAction.NEXT, null);
+            }
         }
-        ShopAiKeyClient.AnswerAnalysisDraft resolvedAnalysis = analysis;
-        return inTransaction(() -> applyAnalysis(claim, resolvedAnalysis));
+        ShopAiKeyClient.AnswerDecisionDraft resolvedDecision = decision;
+        return inTransaction(() -> applyDecision(claim, resolvedDecision));
     }
 
     private AnalysisClaim claimAnswer(
@@ -354,8 +351,6 @@ public class AiInterviewConversationService {
         InterviewAnswer aggregate = answerRepository
                 .findBySessionIdAndQuestionId(session.getId(), turn.getAssessmentItem().getId())
                 .orElse(null);
-        requireTranscriptCorrectionReady(aggregate);
-
         String reviewDraft = hasText(turn.getCandidateFinalAnswer())
                 ? turn.getCandidateFinalAnswer()
                 : normalizedRaw;
@@ -415,13 +410,6 @@ public class AiInterviewConversationService {
         int clarifies = (int) itemTurns.stream()
                 .filter(item -> item.getTurnType() == InterviewTurnType.CLARIFY)
                 .count();
-        InterviewAnswer aggregate = answerRepository
-                .findBySessionIdAndQuestionId(session.getId(), question.getId())
-                .orElse(null);
-        Map<String, Object> summary = aggregate == null || aggregate.getEvidenceSummaryJson() == null
-                ? Map.of()
-                : new LinkedHashMap<>(aggregate.getEvidenceSummaryJson());
-        Map<String, Object> correctionEvidenceDraft = correctionEvidenceDraft(aggregate, turn.getId());
         int remainingCore = Math.max(0,
                 properties.effectiveCoreQuestionCount() - question.getOrderIndex());
         ShopAiKeyClient.AssessmentTurnCounters counters =
@@ -438,68 +426,14 @@ public class AiInterviewConversationService {
                 question,
                 turn.getId(),
                 turn.getCandidateFinalAnswer(),
-                summary,
-                correctionEvidenceDraft,
                 counters,
                 claimedDialogueVersion
         );
     }
 
-    private Map<String, Object> correctionEvidenceDraft(InterviewAnswer aggregate, UUID turnId) {
-        if (aggregate == null || aggregate.getActiveCaptureId() == null
-                || aggregate.getActiveCaptureVersion() == null) {
-            return Map.of();
-        }
-        InterviewAnswerCapture capture = captureRepository
-                .findByAnswerIdAndCaptureIdAndCaptureVersion(
-                        aggregate.getId(),
-                        aggregate.getActiveCaptureId(),
-                        aggregate.getActiveCaptureVersion())
-                .orElse(null);
-        if (capture == null || capture.getConversationTurn() == null
-                || !turnId.equals(capture.getConversationTurn().getId())
-                || (capture.getTranscriptCorrectionStatus() != TranscriptCorrectionStatus.CORRECTED
-                && capture.getTranscriptCorrectionStatus() != TranscriptCorrectionStatus.UNCHANGED)) {
-            return Map.of();
-        }
-        Map<String, Object> metadata = capture.getTranscriptCorrectionJson();
-        if (metadata == null || metadata.isEmpty()) return Map.of();
-        Map<String, Object> draft = new LinkedHashMap<>();
-        copyCorrectionEvidence(metadata, draft, "evidence");
-        copyCorrectionEvidence(metadata, draft, "answerSummary");
-        copyCorrectionEvidence(metadata, draft, "followUpNeeded");
-        copyCorrectionEvidence(metadata, draft, "followUpReason");
-        return Map.copyOf(draft);
-    }
-
-    private void requireTranscriptCorrectionReady(InterviewAnswer answer) {
-        if (answer == null || answer.getActiveCaptureId() == null
-                || answer.getActiveCaptureVersion() == null) {
-            return;
-        }
-        boolean pending = captureRepository.findByAnswerIdAndCaptureIdAndCaptureVersion(
-                        answer.getId(), answer.getActiveCaptureId(), answer.getActiveCaptureVersion())
-                .map(InterviewAnswerCapture::getTranscriptCorrectionStatus)
-                .filter(status -> status == TranscriptCorrectionStatus.PENDING)
-                .isPresent();
-        if (pending) {
-            throw conflict("TRANSCRIPT_CORRECTION_PENDING",
-                    "Transcript đang được kiểm tra lỗi nhận dạng, vui lòng chờ trong giây lát.");
-        }
-    }
-
-    private void copyCorrectionEvidence(
-            Map<String, Object> source,
-            Map<String, Object> target,
-            String key
-    ) {
-        Object value = source.get(key);
-        if (value != null) target.put(key, value);
-    }
-
-    private ConversationResult applyAnalysis(
+    private ConversationResult applyDecision(
             AnalysisClaim claim,
-            ShopAiKeyClient.AnswerAnalysisDraft analysis
+            ShopAiKeyClient.AnswerDecisionDraft decision
     ) {
         InterviewSession session = lockOwnedSession(claim.session().getId());
         if (session.getDialogueState() != InterviewDialogueState.ANALYZE_ANSWER
@@ -515,22 +449,14 @@ public class AiInterviewConversationService {
                         "Không tìm thấy lượt hội thoại đang phân tích."));
         InterviewQuestion question = turn.getAssessmentItem();
         AnswerAnalysisAction resolved = policy.resolveAction(
-                analysis.action().name(),
+                decision.action().name(),
                 claim.counters().probeCount(),
                 claim.counters().clarifyCount(),
                 claim.counters().totalAssessmentTurns(),
                 claim.counters().remainingCoreQuestions()
         );
-        turn.setAnalysisJson(analysisMap(analysis, resolved));
+        turn.setAnalysisJson(decisionMap(decision, resolved));
         turnRepository.save(turn);
-
-        InterviewAnswer aggregate = answerRepository
-                .findBySessionIdAndQuestionId(session.getId(), question.getId())
-                .orElseGet(() -> draftAnswer(session, question));
-        aggregate.setEvidenceSummaryJson(itemEvidenceSummary(analysis));
-        answerRepository.save(aggregate);
-        session.setEvidenceSummaryJson(mergeGlobalEvidence(
-                session.getEvidenceSummaryJson(), question.getCompetencyId(), analysis));
 
         if (resolved == AnswerAnalysisAction.PROBE || resolved == AnswerAnalysisAction.CLARIFY) {
             InterviewTurnType followUpType = resolved == AnswerAnalysisAction.PROBE
@@ -545,7 +471,7 @@ public class AiInterviewConversationService {
                     question,
                     turn,
                     followUpType,
-                    analysis.followUp(),
+                    decision.followUp(),
                     InterviewTurnAnswerStatus.WAITING
             );
             transition(session, InterviewDialogueState.WAITING_ANSWER);
@@ -555,7 +481,8 @@ public class AiInterviewConversationService {
             bumpVersion(session);
             sessionRepository.save(session);
             return new ConversationResult(false, resolved, question.getId(),
-                    question.getOrderIndex(), false);
+                    question.getOrderIndex(), false, turn.getId(), turn.getAnswerClientId(),
+                    requiresAdaptiveEvidence(turn, question));
         }
 
         finalizeAssessmentItem(session, question);
@@ -564,7 +491,17 @@ public class AiInterviewConversationService {
         bumpVersion(session);
         sessionRepository.save(session);
         return new ConversationResult(false, AnswerAnalysisAction.NEXT, question.getId(),
-                question.getOrderIndex(), true);
+                question.getOrderIndex(), true, turn.getId(), turn.getAnswerClientId(),
+                requiresAdaptiveEvidence(turn, question));
+    }
+
+    private boolean requiresAdaptiveEvidence(
+            InterviewConversationTurn turn,
+            InterviewQuestion question
+    ) {
+        if (question.getOrderIndex() <= 2) return true;
+        return question.getOrderIndex() == 3
+                && turn.getTurnType() == InterviewTurnType.CORE_QUESTION;
     }
 
     private void finalizeAssessmentItem(InterviewSession session, InterviewQuestion question) {
@@ -734,67 +671,16 @@ public class AiInterviewConversationService {
         return answerRepository.save(answer);
     }
 
-    private Map<String, Object> analysisMap(
-            ShopAiKeyClient.AnswerAnalysisDraft analysis,
+    private Map<String, Object> decisionMap(
+            ShopAiKeyClient.AnswerDecisionDraft decision,
             AnswerAnalysisAction resolved
     ) {
         Map<String, Object> value = new LinkedHashMap<>();
-        value.put("requestedAction", analysis.action().name());
+        value.put("requestedAction", decision.action().name());
         value.put("resolvedAction", resolved.name());
-        value.put("keyClaims", analysis.keyClaims());
-        value.put("evidenceCoverage", analysis.evidenceCoverage());
-        value.put("missingEvidence", analysis.missingEvidence());
-        value.put("followUp", resolved == AnswerAnalysisAction.NEXT ? null : analysis.followUp());
-        value.put("updatedItemSummary", analysis.updatedItemSummary());
+        value.put("followUp", resolved == AnswerAnalysisAction.NEXT ? null : decision.followUp());
+        value.put("evidenceStatus", "PENDING");
         return value;
-    }
-
-    private Map<String, Object> itemEvidenceSummary(ShopAiKeyClient.AnswerAnalysisDraft analysis) {
-        Map<String, Object> value = new LinkedHashMap<>();
-        value.put("summary", analysis.updatedItemSummary());
-        value.put("keyClaims", analysis.keyClaims());
-        value.put("evidenceCoverage", analysis.evidenceCoverage());
-        value.put("missingEvidence", analysis.missingEvidence());
-        return value;
-    }
-
-    private Map<String, Object> mergeGlobalEvidence(
-            Map<String, Object> current,
-            String competencyId,
-            ShopAiKeyClient.AnswerAnalysisDraft analysis
-    ) {
-        Map<String, Object> merged = new LinkedHashMap<>();
-        if (current != null) {
-            merged.putAll(current);
-        }
-        ShopAiKeyClient.GlobalEvidenceDeltaDraft delta = analysis.globalEvidenceDelta();
-        merged.put("demonstratedCompetencies", mergeList(
-                merged.get("demonstratedCompetencies"), delta.demonstratedCompetencyIds(), 12));
-        merged.put("weakEvidence", mergeList(
-                merged.get("weakEvidence"), delta.weakEvidence(), 20));
-        merged.put("interestingClaims", mergeList(
-                merged.get("interestingClaims"), delta.interestingClaims(), 20));
-        merged.put("unverifiedClaims", mergeList(
-                merged.get("unverifiedClaims"), delta.unverifiedClaims(), 20));
-        List<String> insufficient = analysis.missingEvidence().isEmpty()
-                ? List.of()
-                : List.of(competencyId);
-        merged.put("insufficientlyCoveredCompetencies", mergeList(
-                merged.get("insufficientlyCoveredCompetencies"), insufficient, 12));
-        return merged;
-    }
-
-    private List<String> mergeList(Object current, Collection<String> additions, int limit) {
-        LinkedHashSet<String> values = new LinkedHashSet<>();
-        if (current instanceof Collection<?> existing) {
-            existing.stream().map(String::valueOf).map(this::normalize)
-                    .filter(this::hasText).forEach(values::add);
-        }
-        if (additions != null) {
-            additions.stream().filter(Objects::nonNull).map(this::normalize)
-                    .filter(this::hasText).forEach(values::add);
-        }
-        return values.stream().limit(limit).toList();
     }
 
     private String joinAnswers(List<InterviewConversationTurn> turns, boolean raw) {
@@ -858,6 +744,7 @@ public class AiInterviewConversationService {
     public enum AdvanceResult {
         NEXT_CORE_READY,
         NEEDS_ADAPTIVE_QUESTIONS,
+        NEEDS_TRANSCRIPT_REVIEW,
         READY_TO_EVALUATE,
         COMPLETED
     }
@@ -867,10 +754,14 @@ public class AiInterviewConversationService {
             AnswerAnalysisAction action,
             UUID assessmentItemId,
             int assessmentItemOrder,
-            boolean itemCompleted
+            boolean itemCompleted,
+            UUID confirmedTurnId,
+            UUID answerClientId,
+            boolean evidenceEnrichmentRequired
     ) {
         static ConversationResult idempotentResult(boolean advancePending) {
-            return new ConversationResult(true, null, null, 0, advancePending);
+            return new ConversationResult(
+                    true, null, null, 0, advancePending, null, null, false);
         }
     }
 
@@ -881,14 +772,12 @@ public class AiInterviewConversationService {
             InterviewQuestion question,
             UUID turnId,
             String currentAnswer,
-            Map<String, Object> itemEvidenceSummary,
-            Map<String, Object> correctionEvidenceDraft,
             ShopAiKeyClient.AssessmentTurnCounters counters,
             int claimedDialogueVersion
     ) {
         static AnalysisClaim idempotentClaim(boolean advancePending) {
-            return new AnalysisClaim(true, advancePending, null, null, null, null,
-                    Map.of(), Map.of(), null, 0);
+            return new AnalysisClaim(
+                    true, advancePending, null, null, null, null, null, 0);
         }
     }
 }

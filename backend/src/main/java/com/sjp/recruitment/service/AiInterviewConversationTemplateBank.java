@@ -2,10 +2,13 @@ package com.sjp.recruitment.service;
 
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
 public class AiInterviewConversationTemplateBank {
+
+    private static final String CONFIRMATION_PROMPT = "Bạn đã trả lời xong chưa?";
 
     private static final List<String> ACKNOWLEDGEMENTS = List.of(
             "Được rồi.",
@@ -38,6 +41,31 @@ public class AiInterviewConversationTemplateBank {
 
     public String closing() {
         return "Cảm ơn bạn. Mình đã có đủ thông tin cho buổi phỏng vấn hôm nay.";
+    }
+
+    public String confirmationPrompt() {
+        return CONFIRMATION_PROMPT;
+    }
+
+    public List<String> initialPriorityPhrases(List<String> coreQuestions) {
+        List<String> phrases = new ArrayList<>();
+        phrases.add(confirmationPrompt());
+        phrases.add(acknowledgement(2));
+        addQuestionTransition(phrases, coreQuestions, 2);
+        addQuestionTransition(phrases, coreQuestions, 3);
+        return List.copyOf(phrases);
+    }
+
+    private void addQuestionTransition(
+            List<String> phrases,
+            List<String> coreQuestions,
+            int orderIndex
+    ) {
+        if (coreQuestions == null || coreQuestions.size() < orderIndex) return;
+        String question = normalize(coreQuestions.get(orderIndex - 1));
+        if (question.isBlank()) return;
+        phrases.add(transition(null, orderIndex));
+        phrases.add(question);
     }
 
     private String pick(List<String> templates, long seed) {

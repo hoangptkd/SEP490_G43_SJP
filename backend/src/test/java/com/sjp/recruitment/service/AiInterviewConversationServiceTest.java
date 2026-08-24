@@ -36,11 +36,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -76,10 +74,8 @@ class AiInterviewConversationServiceTest {
                 sessionRepository,
                 questionRepository,
                 answerRepository,
-                captureRepository,
                 turnRepository,
                 shopAiKeyClient,
-                new AiInterviewFallbackFactory(),
                 new AiInterviewConversationPolicy(properties),
                 new AiInterviewConversationTemplateBank(),
                 transactions
@@ -157,8 +153,8 @@ class AiInterviewConversationServiceTest {
 
     @Test
     void probeKeepsAggregateOpenAndCreatesOneAnswerableFollowUp() {
-        when(shopAiKeyClient.analyzeAssessmentTurn(any(), any(), any(), any(), any()))
-                .thenReturn(analysis(ShopAiKeyClient.AnswerAnalysisAction.PROBE,
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
+                .thenReturn(decision(ShopAiKeyClient.AnswerAnalysisAction.PROBE,
                         "Bạn đã trực tiếp làm gì để xử lý bất đồng?"));
 
         AiInterviewConversationService.ConversationResult result = service.confirmTurn(
@@ -177,8 +173,8 @@ class AiInterviewConversationServiceTest {
 
     @Test
     void nextGroupsConfirmedEvidenceAndAddsNeutralAcknowledgement() {
-        when(shopAiKeyClient.analyzeAssessmentTurn(any(), any(), any(), any(), any()))
-                .thenReturn(analysis(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
+                .thenReturn(decision(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
 
         AiInterviewConversationService.ConversationResult result = service.confirmTurn(
                 session.getId(), coreTurn.getId(), UUID.randomUUID(), 1,
@@ -200,8 +196,8 @@ class AiInterviewConversationServiceTest {
     @Test
     void deterministicLimitOverridesProviderProbeAndStillCompletesItem() {
         session.setAssessmentTurnCount(6);
-        when(shopAiKeyClient.analyzeAssessmentTurn(any(), any(), any(), any(), any()))
-                .thenReturn(analysis(ShopAiKeyClient.AnswerAnalysisAction.PROBE,
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
+                .thenReturn(decision(ShopAiKeyClient.AnswerAnalysisAction.PROBE,
                         "Bạn có thể nói thêm không?"));
 
         AiInterviewConversationService.ConversationResult result = service.confirmTurn(
@@ -215,12 +211,84 @@ class AiInterviewConversationServiceTest {
     }
 
     @Test
+    void confirmedSingleFollowUpTransitionsToNextWithoutDecisionProviderCall() {
+        InterviewConversationTurn followUp = new InterviewConversationTurn();
+        followUp.setId(UUID.randomUUID());
+        followUp.setSession(session);
+        followUp.setAssessmentItem(question);
+        followUp.setReplyToTurn(coreTurn);
+        followUp.setSequenceNo(3);
+        followUp.setTurnType(InterviewTurnType.PROBE);
+        followUp.setText("Bạn đã trực tiếp làm gì để xử lý bất đồng?");
+        followUp.setAnswerStatus(InterviewTurnAnswerStatus.WAITING);
+        session.setCurrentTurn(followUp);
+        when(turnRepository.findByIdAndSessionId(followUp.getId(), session.getId()))
+                .thenReturn(Optional.of(followUp));
+        when(turnRepository.findBySessionIdAndAssessmentItemIdOrderBySequenceNoAsc(
+                session.getId(), question.getId())).thenReturn(List.of(coreTurn, followUp));
+
+        AiInterviewConversationService.ConversationResult result = service.confirmTurn(
+                session.getId(), followUp.getId(), UUID.randomUUID(), 1,
+                "Tôi tổ chức một buổi trao đổi riêng.",
+                "Tôi tổ chức một buổi trao đổi riêng."
+        );
+
+        assertThat(result.action()).isEqualTo(AnswerAnalysisAction.NEXT);
+        assertThat(result.itemCompleted()).isTrue();
+        assertThat(result.evidenceEnrichmentRequired()).isTrue();
+        verify(shopAiKeyClient, never())
+                .analyzeAssessmentTurnDecision(any(), any(), any(), any());
+    }
+
+    @Test
+    void thirdCoreFollowUpDoesNotRunEvidenceAgain() {
+        question.setOrderIndex(3);
+        InterviewConversationTurn followUp = new InterviewConversationTurn();
+        followUp.setId(UUID.randomUUID());
+        followUp.setSession(session);
+        followUp.setAssessmentItem(question);
+        followUp.setReplyToTurn(coreTurn);
+        followUp.setSequenceNo(3);
+        followUp.setTurnType(InterviewTurnType.PROBE);
+        followUp.setText("Bạn có thể nêu kết quả cụ thể không?");
+        followUp.setAnswerStatus(InterviewTurnAnswerStatus.WAITING);
+        session.setCurrentTurn(followUp);
+        when(turnRepository.findByIdAndSessionId(followUp.getId(), session.getId()))
+                .thenReturn(Optional.of(followUp));
+        when(turnRepository.findBySessionIdAndAssessmentItemIdOrderBySequenceNoAsc(
+                session.getId(), question.getId())).thenReturn(List.of(coreTurn, followUp));
+
+        AiInterviewConversationService.ConversationResult result = service.confirmTurn(
+                session.getId(), followUp.getId(), UUID.randomUUID(), 1,
+                "Kết quả là thời gian phản hồi giảm 20%.",
+                "Kết quả là thời gian phản hồi giảm 20%."
+        );
+
+        assertThat(result.evidenceEnrichmentRequired()).isFalse();
+    }
+
+    @Test
+    void fourthAndFifthCoreAnswersDoNotStartBackgroundEvidence() {
+        question.setOrderIndex(4);
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
+                .thenReturn(decision(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
+
+        AiInterviewConversationService.ConversationResult result = service.confirmTurn(
+                session.getId(), coreTurn.getId(), UUID.randomUUID(), 1,
+                "Tôi theo dõi log và tối ưu truy vấn.",
+                "Tôi theo dõi log và tối ưu truy vấn."
+        );
+
+        assertThat(result.evidenceEnrichmentRequired()).isFalse();
+    }
+
+    @Test
     void confirmingAiCorrectedDraftDoesNotCountAsCandidateEdit() {
         coreTurn.setCandidateRawAnswer("em dùng spring bút");
         coreTurn.setCandidateFinalAnswer("em dùng Spring Boot");
         coreTurn.setAnswerStatus(InterviewTurnAnswerStatus.REVIEWING);
-        when(shopAiKeyClient.analyzeAssessmentTurn(any(), any(), any(), any(), any()))
-                .thenReturn(analysis(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
+                .thenReturn(decision(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
 
         service.confirmTurn(
                 session.getId(), coreTurn.getId(), UUID.randomUUID(), 1,
@@ -238,8 +306,8 @@ class AiInterviewConversationServiceTest {
         coreTurn.setCandidateRawAnswer("em dùng spring bút");
         coreTurn.setCandidateFinalAnswer("em dùng Spring Boot");
         coreTurn.setAnswerStatus(InterviewTurnAnswerStatus.REVIEWING);
-        when(shopAiKeyClient.analyzeAssessmentTurn(any(), any(), any(), any(), any()))
-                .thenReturn(analysis(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
+                .thenReturn(decision(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
 
         service.confirmTurn(
                 session.getId(), coreTurn.getId(), UUID.randomUUID(), 1,
@@ -253,7 +321,7 @@ class AiInterviewConversationServiceTest {
     }
 
     @Test
-    void passesCorrectionEvidenceAsUntrustedDraftOnlyAfterConfirmation() {
+    void analyzesOnlyTheCandidateConfirmedTranscriptWithoutBackgroundCorrectionMetadata() {
         UUID captureId = UUID.randomUUID();
         aggregate.setActiveCaptureId(captureId);
         aggregate.setActiveCaptureVersion(1);
@@ -273,29 +341,23 @@ class AiInterviewConversationServiceTest {
                 "followUpReason", "Chưa nêu kết quả."));
         when(captureRepository.findByAnswerIdAndCaptureIdAndCaptureVersion(
                 aggregate.getId(), captureId, 1)).thenReturn(Optional.of(capture));
-        when(shopAiKeyClient.analyzeAssessmentTurn(
-                any(), any(), any(), any(), any(), any()))
-                .thenReturn(analysis(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(
+                any(), any(), any(), any()))
+                .thenReturn(decision(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
 
         service.confirmTurn(
                 session.getId(), coreTurn.getId(), UUID.randomUUID(), 1,
                 "em dùng spring bút", "em dùng Spring Boot"
         );
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, Object>> evidenceCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(shopAiKeyClient).analyzeAssessmentTurn(
+        verify(shopAiKeyClient).analyzeAssessmentTurnDecision(
                 eq(session), eq(question), eq("em dùng Spring Boot"),
-                any(), evidenceCaptor.capture(), any());
-        assertThat(evidenceCaptor.getValue())
-                .containsEntry("answerSummary", "Ứng viên dùng Spring Boot.")
-                .containsEntry("followUpNeeded", true)
-                .containsKey("evidence");
+                any());
     }
 
     @Test
-    void providerFailureUsesNextFallbackAndDoesNotBlockConversation() {
-        when(shopAiKeyClient.analyzeAssessmentTurn(any(), any(), any(), any(), any()))
+    void providerFailureFallsBackToNextWithoutSessionError() {
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
                 .thenThrow(new AiProviderException("AI_PROVIDER_FAILED", "Provider unavailable"));
 
         AiInterviewConversationService.ConversationResult result = service.confirmTurn(
@@ -309,18 +371,20 @@ class AiInterviewConversationServiceTest {
         assertThat(coreTurn.getCandidateFinalAnswer()).isEqualTo("Câu trả lời gốc.");
         assertThat(aggregate.getAnsweredAt()).isNotNull();
         assertThat(session.getDialogueState()).isEqualTo(InterviewDialogueState.ACK_TRANSITION);
-        assertThat(session.getCurrentTurn().getTurnType()).isEqualTo(InterviewTurnType.ACKNOWLEDGEMENT);
+        assertThat(session.getCurrentTurn().getTurnType())
+                .isEqualTo(InterviewTurnType.ACKNOWLEDGEMENT);
         assertThat(session.getLastErrorStage()).isNull();
         assertThat(session.getLastErrorCode()).isNull();
+        assertThat(session.getLastErrorMessage()).isNull();
     }
 
     @Test
-    void schemaFailurePreservesPreviousSummaryAndContinuesWithoutRetry() {
+    void invalidProviderResponseAlsoFallsBackToNextWithoutRetry() {
         aggregate.setEvidenceSummaryJson(Map.of("summary", "Đã ghi nhận evidence trước đó."));
-        when(shopAiKeyClient.analyzeAssessmentTurn(any(), any(), any(), any(), any()))
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
                 .thenThrow(new AiProviderException(
                         "AI_INVALID_ANALYSIS_SCHEMA",
-                        "AI phải trả array hợp lệ cho trường weakEvidence"));
+                        "AI phải trả response hợp lệ"));
 
         AiInterviewConversationService.ConversationResult result = service.confirmTurn(
                 session.getId(), coreTurn.getId(), UUID.randomUUID(), 1,
@@ -328,13 +392,17 @@ class AiInterviewConversationServiceTest {
         );
 
         assertThat(result.action()).isEqualTo(AnswerAnalysisAction.NEXT);
+        assertThat(result.itemCompleted()).isTrue();
         assertThat(aggregate.getEvidenceSummaryJson())
                 .containsEntry("summary", "Đã ghi nhận evidence trước đó.");
-        verify(shopAiKeyClient).analyzeAssessmentTurn(any(), any(), any(), any(), any());
+        assertThat(session.getLastErrorStage()).isNull();
+        assertThat(session.getLastErrorCode()).isNull();
+        verify(shopAiKeyClient)
+                .analyzeAssessmentTurnDecision(any(), any(), any(), any());
     }
 
     @Test
-    void cannotConfirmWhileTranscriptCorrectionIsPending() {
+    void canConfirmWhileTranscriptCorrectionIsPending() {
         UUID captureId = UUID.randomUUID();
         aggregate.setActiveCaptureId(captureId);
         aggregate.setActiveCaptureVersion(1);
@@ -346,15 +414,17 @@ class AiInterviewConversationServiceTest {
         capture.setTranscriptCorrectionStatus(TranscriptCorrectionStatus.PENDING);
         when(captureRepository.findByAnswerIdAndCaptureIdAndCaptureVersion(
                 aggregate.getId(), captureId, 1)).thenReturn(Optional.of(capture));
+        when(shopAiKeyClient.analyzeAssessmentTurnDecision(any(), any(), any(), any()))
+                .thenReturn(decision(ShopAiKeyClient.AnswerAnalysisAction.NEXT, null));
 
-        assertThatThrownBy(() -> service.confirmTurn(
+        AiInterviewConversationService.ConversationResult result = service.confirmTurn(
                 session.getId(), coreTurn.getId(), UUID.randomUUID(), 1,
                 "em dùng spring bút", "em dùng spring bút"
-        )).isInstanceOf(com.sjp.recruitment.exception.ApiException.class)
-                .extracting(exception -> ((com.sjp.recruitment.exception.ApiException) exception).getCode())
-                .isEqualTo("TRANSCRIPT_CORRECTION_PENDING");
-        assertThat(coreTurn.getAnswerStatus()).isEqualTo(InterviewTurnAnswerStatus.WAITING);
-        verify(shopAiKeyClient, never()).analyzeAssessmentTurn(any(), any(), any(), any(), any());
+        );
+
+        assertThat(result.itemCompleted()).isTrue();
+        assertThat(coreTurn.getAnswerStatus()).isEqualTo(InterviewTurnAnswerStatus.CONFIRMED);
+        verify(shopAiKeyClient).analyzeAssessmentTurnDecision(any(), any(), any(), any());
     }
 
     @Test
@@ -373,7 +443,8 @@ class AiInterviewConversationServiceTest {
         );
 
         assertThat(result.idempotent()).isTrue();
-        verify(shopAiKeyClient, never()).analyzeAssessmentTurn(any(), any(), any(), any(), any());
+        verify(shopAiKeyClient, never())
+                .analyzeAssessmentTurnDecision(any(), any(), any(), any());
     }
 
     @Test
@@ -431,19 +502,54 @@ class AiInterviewConversationServiceTest {
         assertThat(session.getAssessmentTurnCount()).isEqualTo(2);
     }
 
-    private ShopAiKeyClient.AnswerAnalysisDraft analysis(
+    @Test
+    void finalCoreCompletionEntersTranscriptReviewInsteadOfEvaluatingImmediately() {
+        InterviewConversationTurn acknowledgement = new InterviewConversationTurn();
+        acknowledgement.setId(UUID.randomUUID());
+        acknowledgement.setSession(session);
+        acknowledgement.setSequenceNo(12);
+        acknowledgement.setTurnType(InterviewTurnType.ACKNOWLEDGEMENT);
+        acknowledgement.setText("Cảm ơn bạn.");
+        acknowledgement.setAnswerStatus(InterviewTurnAnswerStatus.NOT_REQUIRED);
+        session.setDialogueState(InterviewDialogueState.ACK_TRANSITION);
+        session.setCurrentTurn(acknowledgement);
+
+        List<InterviewQuestion> questions = java.util.stream.IntStream.rangeClosed(1, 5)
+                .mapToObj(index -> {
+                    InterviewQuestion item = new InterviewQuestion();
+                    item.setId(UUID.randomUUID());
+                    item.setSession(session);
+                    item.setOrderIndex(index);
+                    item.setContent("Câu hỏi " + index);
+                    return item;
+                })
+                .toList();
+        List<InterviewAnswer> answers = questions.stream().map(item -> {
+            InterviewAnswer completed = new InterviewAnswer();
+            completed.setId(UUID.randomUUID());
+            completed.setSession(session);
+            completed.setQuestionId(item.getId());
+            completed.setAnsweredAt(java.time.LocalDateTime.now());
+            return completed;
+        }).toList();
+        when(questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId()))
+                .thenReturn(questions);
+        when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(session.getId()))
+                .thenReturn(answers);
+
+        AiInterviewConversationService.AdvanceResult result =
+                service.advanceAfterCompletedItem(session.getId());
+
+        assertThat(result).isEqualTo(
+                AiInterviewConversationService.AdvanceResult.NEEDS_TRANSCRIPT_REVIEW);
+        assertThat(session.getDialogueState()).isEqualTo(InterviewDialogueState.REVIEW_TRANSCRIPTS);
+        assertThat(session.getCurrentTurn().getTurnType()).isEqualTo(InterviewTurnType.CLOSING);
+    }
+
+    private ShopAiKeyClient.AnswerDecisionDraft decision(
             ShopAiKeyClient.AnswerAnalysisAction action,
             String followUp
     ) {
-        return new ShopAiKeyClient.AnswerAnalysisDraft(
-                action,
-                List.of("đã nêu hành động"),
-                Map.of("situation", true, "task", true, "action", true, "result", true),
-                List.of(),
-                followUp,
-                "Ứng viên đã nêu hành động và kết quả.",
-                new ShopAiKeyClient.GlobalEvidenceDeltaDraft(
-                        List.of("teamwork"), List.of(), List.of(), List.of())
-        );
+        return new ShopAiKeyClient.AnswerDecisionDraft(action, followUp);
     }
 }

@@ -41,6 +41,7 @@ interface VoiceConversationOptions {
   nextQuestionDelayMs: number;
   answerTranscriptionProvider: AnswerTranscriptionProviderKind;
   onCreateTranscriptionTicket?: () => Promise<AiInterviewTranscriptionTicket>;
+  autoSubmitVoiceAnswer?: boolean;
   disabled?: boolean;
   onTranscript: (value: string) => void;
   onFinalizeCapture: (
@@ -49,6 +50,10 @@ interface VoiceConversationOptions {
     captureVersion: number,
     browserTranscript: string,
     transcriptionProvider: AnswerTranscriptionProviderKind,
+  ) => Promise<HandsFreeAnswerCaptureResult>;
+  onGetCaptureStatus?: (
+    captureId: string,
+    captureVersion: number,
   ) => Promise<HandsFreeAnswerCaptureResult>;
   onConfirm: (finalTranscript: string, rawTranscript?: string) => Promise<void>;
   onReplayQuestion: () => Promise<void>;
@@ -188,21 +193,18 @@ export function resolveCaptureTranscript(
     | 'gladiaTranscript' | 'transcriptStatus'>,
 ) {
   const rawTranscript = result?.rawTranscript?.trim() || browserTranscript.trim();
-  const correctionSucceeded = result?.correctionStatus === 'CORRECTED'
-    || result?.correctionStatus === 'UNCHANGED';
-  const displayedTranscript = correctionSucceeded
-    ? result?.correctedTranscript?.trim() || rawTranscript
-    : rawTranscript;
-  let notice = 'Đã hoàn tất audio. Transcript Web Speech được giữ nguyên.';
-  if (!result) notice = 'Không thể xử lý audio. Transcript Web Speech vẫn được giữ lại.';
+  const displayedTranscript = rawTranscript;
+  const source = transcriptSourceLabel(result?.transcriptStatus);
+  let notice = `Đã nhận transcript ${source}. Audio và VAD đang được xử lý nền.`;
+  if (!result) notice = 'Không thể xử lý audio. Transcript realtime vẫn được giữ lại.';
   else if (result.correctionStatus === 'CORRECTED') {
-    notice = `AI đã sửa ${result.correctionCount || 0} lỗi nhận dạng có độ tin cậy cao. Hãy kiểm tra trước khi xác nhận.`;
+    notice = `AI đề xuất sửa ${result.correctionCount || 0} lỗi nhận dạng. Bạn có thể dùng bản đề xuất hoặc giữ transcript hiện tại.`;
   } else if (result.correctionStatus === 'UNCHANGED') {
     notice = 'AI đã kiểm tra và không phát hiện lỗi nhận dạng đủ chắc chắn để sửa.';
   } else if (result.correctionStatus === 'FAILED') {
-    notice = 'Không thể kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.';
+    notice = `Không thể kiểm tra lỗi nhận dạng. Transcript ${source} vẫn được giữ nguyên.`;
   } else if (result.correctionStatus === 'PENDING') {
-    notice = 'Chưa hoàn tất kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.';
+    notice = `Transcript ${source} đã sẵn sàng. AI đang kiểm tra lỗi nhận dạng trong nền.`;
   }
   return {
     rawTranscript,
@@ -210,6 +212,10 @@ export function resolveCaptureTranscript(
     gladiaTranscript: '',
     notice,
   };
+}
+
+export function transcriptSourceLabel(provider?: string) {
+  return provider === 'speechmatics_realtime' ? 'Speechmatics Realtime' : 'Web Speech';
 }
 
 export function canSubmitConfirmation(saving: boolean, transcript: string) {
@@ -237,9 +243,11 @@ export function useVoiceConversation({
   nextQuestionDelayMs,
   answerTranscriptionProvider,
   onCreateTranscriptionTicket,
+  autoSubmitVoiceAnswer = false,
   disabled = false,
   onTranscript,
   onFinalizeCapture,
+  onGetCaptureStatus,
   onConfirm,
   onReplayQuestion,
   onSpeechUrl,
@@ -258,6 +266,10 @@ export function useVoiceConversation({
   const [rawTranscript, setRawTranscript] = useState(initialRawTranscript?.trim() || '');
   const [interimTranscript, setInterimTranscript] = useState('');
   const [transcriptNotice, setTranscriptNotice] = useState('');
+  const [transcriptSuggestion, setTranscriptSuggestion] = useState<{
+    transcript: string;
+    correctionCount: number;
+  } | null>(null);
   const [error, setError] = useState('');
 
   const phaseRef = useRef<VoicePhase>(resumedPhase);
@@ -294,9 +306,11 @@ export function useVoiceConversation({
   const confirmationAutoFinalizeTimerRef = useRef<number>();
   const restartTimerRef = useRef<number>();
   const voiceLoadTimerRef = useRef<number>();
+  const correctionPollTimerRef = useRef<number>();
   const voiceLoadCleanupRef = useRef<() => void>(() => undefined);
   const onTranscriptRef = useRef(onTranscript);
   const onFinalizeCaptureRef = useRef(onFinalizeCapture);
+  const onGetCaptureStatusRef = useRef(onGetCaptureStatus);
   const onConfirmRef = useRef(onConfirm);
   const onReplayQuestionRef = useRef(onReplayQuestion);
   const onSpeechUrlRef = useRef(onSpeechUrl);
@@ -320,6 +334,7 @@ export function useVoiceConversation({
 
   useEffect(() => { onTranscriptRef.current = onTranscript; }, [onTranscript]);
   useEffect(() => { onFinalizeCaptureRef.current = onFinalizeCapture; }, [onFinalizeCapture]);
+  useEffect(() => { onGetCaptureStatusRef.current = onGetCaptureStatus; }, [onGetCaptureStatus]);
   useEffect(() => { onConfirmRef.current = onConfirm; }, [onConfirm]);
   useEffect(() => { onReplayQuestionRef.current = onReplayQuestion; }, [onReplayQuestion]);
   useEffect(() => { onSpeechUrlRef.current = onSpeechUrl; }, [onSpeechUrl]);
@@ -334,6 +349,7 @@ export function useVoiceConversation({
     window.clearTimeout(confirmationAutoFinalizeTimerRef.current);
     window.clearTimeout(restartTimerRef.current);
     window.clearTimeout(voiceLoadTimerRef.current);
+    window.clearTimeout(correctionPollTimerRef.current);
     voiceLoadCleanupRef.current();
     voiceLoadCleanupRef.current = () => undefined;
   }, []);
@@ -449,6 +465,11 @@ export function useVoiceConversation({
     if (resolver) {
       const providerSpeechFailed = () => {
         if (speechTokenRef.current !== speechToken || finished) return;
+        if (shouldFallbackToBrowserSpeech(started, canUseBrowserSpeech)) {
+          setError('Giọng Gemini chưa sẵn sàng. Đã chuyển sang giọng đọc của trình duyệt.');
+          browserSpeech();
+          return;
+        }
         setError('Không thể phát trọn vẹn giọng đọc. Hãy đọc câu hỏi trên màn hình và tiếp tục trả lời.');
         finish();
       };
@@ -853,6 +874,24 @@ export function useVoiceConversation({
   }, [confirmationPromptDelayMs, enterManualFallback, setPhase, startAnswerRecognition, supported]);
   startAnswerListeningRef.current = startAnswerListening;
 
+  const submitConfirmedAnswer = useCallback((answer: string, rawTranscript?: string) => {
+    const normalized = answer.trim();
+    if (!canSubmitConfirmation(savingRef.current, normalized)) return false;
+    savingRef.current = true;
+    confirmedTranscriptRef.current = normalized;
+    setPhase('ANSWER_CONFIRMED');
+    void onConfirmRef.current(normalized, rawTranscript).then(() => {
+      setPhase('NEXT_QUESTION');
+      setTranscriptNotice('Được rồi. Câu trả lời đã được lưu.');
+    }).catch((confirmError) => {
+      setPhase('ERROR_RECOVERABLE');
+      setError(confirmError instanceof Error
+        ? confirmError.message
+        : 'Không thể lưu câu trả lời. Nội dung vẫn được giữ để thử lại.');
+    }).finally(() => { savingRef.current = false; });
+    return true;
+  }, [setPhase]);
+
   const finalizeAnswer = useCallback(() => {
     if (!activeRef.current || !canFinalizeSpokenAnswer(phaseRef.current, savingRef.current)) return;
     const token = lifecycleTokenRef.current;
@@ -895,7 +934,13 @@ export function useVoiceConversation({
         confirmedTranscriptRef.current = browserTranscript;
         setTranscriptNotice('Không thể xử lý audio. Transcript realtime vẫn được giữ lại.');
         onTranscriptRef.current(browserTranscript);
-        setPhase('REVIEWING_TRANSCRIPT');
+        if (autoSubmitVoiceAnswer) {
+          if (!submitConfirmedAnswer(browserTranscript, browserTranscript)) {
+            enterManualFallback('Không nhận được transcript từ câu trả lời. Hãy nhập nội dung thủ công hoặc thử microphone lại.');
+          }
+        } else {
+          setPhase('REVIEWING_TRANSCRIPT');
+        }
         return;
       }
       const captureVersion = captureVersionRef.current + 1;
@@ -925,6 +970,45 @@ export function useVoiceConversation({
         confirmedTranscriptRef.current = resolved.displayedTranscript;
         onTranscriptRef.current(resolved.displayedTranscript);
         setTranscriptNotice(resolved.notice);
+        if (autoSubmitVoiceAnswer) {
+          if (!submitConfirmedAnswer(resolved.displayedTranscript, resolved.rawTranscript)) {
+            enterManualFallback('Không nhận được transcript từ câu trả lời. Hãy nhập nội dung thủ công hoặc thử microphone lại.');
+          }
+          return;
+        }
+        const applyCorrectionResult = (correction: HandsFreeAnswerCaptureResult) => {
+          if (!isCurrentCaptureCallback(callbackExpected, currentLifecycle())
+            || !['PROCESSING_AUDIO', 'REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE']
+              .includes(phaseRef.current)) return;
+          const correctionResolved = resolveCaptureTranscript(browserTranscript, correction);
+          setTranscriptNotice(correctionResolved.notice);
+          if (correction.correctionStatus === 'CORRECTED'
+            && correction.correctedTranscript?.trim()
+            && correction.correctedTranscript.trim() !== correctionResolved.rawTranscript) {
+            setTranscriptSuggestion({
+              transcript: correction.correctedTranscript.trim(),
+              correctionCount: correction.correctionCount || 0,
+            });
+          }
+        };
+        if (result.correctionStatus === 'CORRECTED') {
+          applyCorrectionResult(result);
+        } else if (result.correctionStatus === 'PENDING' && onGetCaptureStatusRef.current) {
+          const poll = (attempt: number) => {
+            if (attempt >= 30 || !isCurrentCaptureCallback(callbackExpected, currentLifecycle())
+              || !['PROCESSING_AUDIO', 'REVIEWING_TRANSCRIPT', 'ERROR_RECOVERABLE']
+                .includes(phaseRef.current)) return;
+            correctionPollTimerRef.current = window.setTimeout(() => {
+              void onGetCaptureStatusRef.current?.(expectedCapture, result.captureVersion)
+                .then((status) => {
+                  if (status.correctionStatus === 'PENDING') poll(attempt + 1);
+                  else applyCorrectionResult(status);
+                })
+                .catch(() => poll(attempt + 1));
+            }, 500);
+          };
+          poll(0);
+        }
       }).catch(() => {
         if (!isCurrentCaptureCallback(callbackExpected, currentLifecycle())) return;
         const resolved = resolveCaptureTranscript(browserTranscript);
@@ -934,12 +1018,18 @@ export function useVoiceConversation({
         confirmedTranscriptRef.current = resolved.displayedTranscript;
         onTranscriptRef.current(resolved.displayedTranscript);
         setTranscriptNotice(resolved.notice);
+        if (autoSubmitVoiceAnswer) {
+          if (!submitConfirmedAnswer(resolved.displayedTranscript, resolved.rawTranscript)) {
+            enterManualFallback('Không nhận được transcript từ câu trả lời. Hãy nhập nội dung thủ công hoặc thử microphone lại.');
+          }
+        }
       }).finally(() => {
         if (!transcriptResolved || !isCurrentCaptureCallback(callbackExpected, currentLifecycle())) return;
-        setPhase('REVIEWING_TRANSCRIPT');
+        if (!autoSubmitVoiceAnswer) setPhase('REVIEWING_TRANSCRIPT');
       });
     });
-  }, [answerTranscriptionProvider, setPhase, stopRecognition]);
+  }, [answerTranscriptionProvider, autoSubmitVoiceAnswer, enterManualFallback, setPhase,
+    stopRecognition, submitConfirmedAnswer]);
   finalizeAnswerRef.current = finalizeAnswer;
 
   const completeSpokenAnswer = useCallback(() => {
@@ -971,18 +1061,22 @@ export function useVoiceConversation({
     const canConfirm = phaseRef.current === 'REVIEWING_TRANSCRIPT'
       || phaseRef.current === 'ERROR_RECOVERABLE'
       || (manualFallback && phaseRef.current === 'LISTENING');
-    if (!canConfirm || !canSubmitConfirmation(savingRef.current, answer)) return;
-    savingRef.current = true;
-    confirmedTranscriptRef.current = answer;
-    setPhase('ANSWER_CONFIRMED');
-    void onConfirmRef.current(answer, rawTranscriptRef.current || undefined).then(() => {
-      setPhase('NEXT_QUESTION');
-      setTranscriptNotice('Được rồi. Câu trả lời đã được lưu.');
-    }).catch((confirmError) => {
-      setPhase('ERROR_RECOVERABLE');
-      setError(confirmError instanceof Error ? confirmError.message : 'Không thể lưu câu trả lời. Nội dung vẫn được giữ để thử lại.');
-    }).finally(() => { savingRef.current = false; });
-  }, [manualFallback, setPhase]);
+    if (!canConfirm) return;
+    submitConfirmedAnswer(answer, rawTranscriptRef.current || undefined);
+  }, [manualFallback, submitConfirmedAnswer]);
+
+  const acceptTranscriptSuggestion = useCallback(() => {
+    if (!transcriptSuggestion) return;
+    confirmedTranscriptRef.current = transcriptSuggestion.transcript;
+    onTranscriptRef.current(transcriptSuggestion.transcript);
+    setTranscriptNotice(`Đã áp dụng ${transcriptSuggestion.correctionCount} sửa đổi do AI đề xuất.`);
+    setTranscriptSuggestion(null);
+  }, [transcriptSuggestion]);
+
+  const rejectTranscriptSuggestion = useCallback(() => {
+    setTranscriptSuggestion(null);
+    setTranscriptNotice('Đã giữ transcript hiện tại theo lựa chọn của bạn.');
+  }, []);
 
   const speakQuestion = useCallback(() => {
     const text = questionTextRef.current;
@@ -1130,6 +1224,7 @@ export function useVoiceConversation({
     gladiaTranscriptRef.current = '';
     setInterimTranscript('');
     setTranscriptNotice('');
+    setTranscriptSuggestion(null);
     onTranscriptRef.current(initialTranscript.trim());
     window.speechSynthesis?.cancel();
     setPhase('NEXT_QUESTION');
@@ -1173,6 +1268,7 @@ export function useVoiceConversation({
     rawTranscript,
     interimTranscript,
     transcriptNotice,
+    transcriptSuggestion,
     error,
     start,
     stop,
@@ -1180,7 +1276,13 @@ export function useVoiceConversation({
     done: completeSpokenAnswer,
     continueAnswer,
     confirmTranscript,
+    acceptTranscriptSuggestion,
+    rejectTranscriptSuggestion,
     retryVoice,
     useManualFallback,
   };
+}
+
+export function shouldFallbackToBrowserSpeech(providerStarted: boolean, browserSpeechAvailable: boolean) {
+  return !providerStarted && browserSpeechAvailable;
 }

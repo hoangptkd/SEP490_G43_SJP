@@ -1,6 +1,7 @@
 package com.sjp.recruitment.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sjp.recruitment.config.AiInterviewBackgroundConfiguration;
 import com.sjp.recruitment.config.AiInterviewProperties;
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.response.HandsFreeAnswerCaptureResponse;
@@ -20,8 +21,11 @@ import com.sjp.recruitment.service.vad.SileroVadAnalyzer;
 import com.sjp.recruitment.service.vad.VadAnalysisException;
 import com.sjp.recruitment.service.vad.VadAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -57,6 +61,7 @@ public class HandsFreeAnswerCaptureService {
     private final SileroVadAnalyzer vadAnalyzer;
     private final TransactionTemplate transactions;
     private final ObjectMapper objectMapper;
+    private final TaskExecutor backgroundExecutor;
 
     public HandsFreeAnswerCaptureService(
             AiInterviewProperties properties,
@@ -75,7 +80,8 @@ public class HandsFreeAnswerCaptureService {
             PcmWaveWriter waveWriter,
             SileroVadAnalyzer vadAnalyzer,
             TransactionTemplate transactions,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @Qualifier(AiInterviewBackgroundConfiguration.EXECUTOR_BEAN) TaskExecutor backgroundExecutor) {
         this.properties = properties;
         this.candidateService = candidateService;
         this.rateLimiter = rateLimiter;
@@ -93,6 +99,7 @@ public class HandsFreeAnswerCaptureService {
         this.vadAnalyzer = vadAnalyzer;
         this.transactions = transactions;
         this.objectMapper = objectMapper;
+        this.backgroundExecutor = backgroundExecutor;
     }
 
     public HandsFreeAnswerCaptureResponse process(
@@ -198,34 +205,29 @@ public class HandsFreeAnswerCaptureService {
         rateLimiter.check(candidate.getId(), "hands-free-transcribe");
 
         String normalizedProvider = normalizeTranscriptionProvider(transcriptionProvider);
-        try (SpooledCapture spool = spool(audioSegments, segmentSequences, browserTranscript, normalizedProvider,
-                captureId, captureVersion, durationSeconds)) {
+        SpooledCapture spool = null;
+        boolean audioJobOwnsSpool = false;
+        try {
+            spool = spool(audioSegments, segmentSequences, browserTranscript, normalizedProvider,
+                    captureId, captureVersion, durationSeconds);
+            SpooledCapture claimedSpool = spool;
             Claim claim = transactions.execute(status -> claim(
                     candidate.getId(), sessionId, questionId, turnId, captureId, captureVersion,
-                    spool.payloadHash(), browserTranscript));
+                    claimedSpool.payloadHash(), browserTranscript));
             if (claim == null) throw new IllegalStateException("Capture claim was not created");
             if (claim.cachedResponse() != null) {
-                if (TranscriptCorrectionStatus.PENDING.name().equals(
+                if (properties.isTranscriptCorrectionEnabled()
+                        && turnId == null
+                        && TranscriptCorrectionStatus.PENDING.name().equals(
                         claim.cachedResponse().correctionStatus())) {
-                    TranscriptCorrectionService.CorrectionResult correction =
-                            transcriptCorrectionService.correct(
-                                    sessionId,
-                                    claim.answerId(),
-                                    captureId,
-                                    captureVersion,
-                                    claim.correctionContext());
-                    return withCorrection(claim.cachedResponse(), correction);
+                    transcriptCorrectionService.submit(
+                            sessionId, claim.answerId(), captureId, captureVersion,
+                            claim.correctionContext());
                 }
                 return claim.cachedResponse();
             }
 
-            GladiaTranscriptionContext context = claim.context();
-            PreparedAudio preparedAudio = prepareAudio(spool, true);
             String normalizedBrowser = normalize(browserTranscript);
-            VadAnalysisResult vadResult = preparedAudio.pcm() == null
-                    ? analyzeVad(spool.segments()) : analyzeVad(preparedAudio.pcm());
-            logIncompleteVad(vadResult);
-            HandsFreeVadMetricsResponse vadMetrics = HandsFreeVadMetricsResponse.from(vadResult);
             String rawTranscript = normalizedBrowser;
             if (!hasText(rawTranscript)) {
                 failCapture(claim.answerId(), captureId, captureVersion, "NO_TRANSCRIPT_AVAILABLE");
@@ -234,34 +236,175 @@ public class HandsFreeAnswerCaptureService {
             }
 
             String transcriptStatus = normalizedProvider;
-            String dataQuality = dataQuality(false, vadMetrics != null);
-            VoiceEvidenceStatus voiceEvidenceStatus = preparedAudio.wavAudio().length > 0
-                    ? VoiceEvidenceStatus.PENDING
-                    : VoiceEvidenceStatus.FAILED;
-            String voiceEvidenceErrorCode = voiceEvidenceStatus == VoiceEvidenceStatus.FAILED
-                    ? "VOICE_EVIDENCE_AUDIO_UNAVAILABLE" : null;
-            TranscriptCorrectionStatus correctionStatus = TranscriptCorrectionStatus.PENDING;
+            TranscriptCorrectionStatus correctionStatus = properties.isTranscriptCorrectionEnabled()
+                    ? TranscriptCorrectionStatus.PENDING
+                    : TranscriptCorrectionStatus.NOT_REQUIRED;
             HandsFreeAnswerCaptureResponse response = new HandsFreeAnswerCaptureResponse(
                     claim.questionId().toString(), captureId.toString(), captureVersion, normalizedBrowser,
                     null, rawTranscript, rawTranscript,
-                    correctionStatus.name(), 0, transcriptStatus, dataQuality, vadMetrics);
+                    correctionStatus.name(), 0, transcriptStatus, dataQuality(false, false), null);
             HandsFreeAnswerCaptureResponse completed = transactions.execute(
-                    status -> complete(claim.answerId(), response, vadResult,
-                            voiceEvidenceStatus, voiceEvidenceErrorCode));
-            if (voiceEvidenceStatus == VoiceEvidenceStatus.PENDING) {
-                voiceEvidenceService.submit(
-                        claim.answerId(), captureId, captureVersion, preparedAudio.wavAudio(), context);
+                    status -> complete(claim.answerId(), response, null,
+                            VoiceEvidenceStatus.PENDING, null));
+            if (properties.isTranscriptCorrectionEnabled() && turnId == null) {
+                transcriptCorrectionService.submit(
+                        sessionId, claim.answerId(), captureId, captureVersion,
+                        claim.correctionContext());
             }
-            TranscriptCorrectionService.CorrectionResult correction = transcriptCorrectionService.correct(
-                    sessionId,
-                    claim.answerId(),
-                    captureId,
-                    captureVersion,
-                    claim.correctionContext());
-            return withCorrection(completed, correction);
+            audioJobOwnsSpool = submitAudioProcessing(
+                    claim.answerId(), captureId, captureVersion, spool, claim.context());
+            return completed;
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "AUDIO_UNREADABLE", "Không thể đọc audio đã tải lên");
+        } finally {
+            if (spool != null && !audioJobOwnsSpool) spool.close();
         }
+    }
+
+    @Transactional(readOnly = true)
+    public HandsFreeAnswerCaptureResponse turnCaptureStatus(
+            String sessionIdValue,
+            String turnIdValue,
+            String captureIdValue,
+            int captureVersion
+    ) {
+        UUID sessionId = parseUuid(sessionIdValue, "SESSION_ID_INVALID");
+        UUID turnId = parseUuid(turnIdValue, "TURN_ID_INVALID");
+        UUID captureId = parseUuid(captureIdValue, "CAPTURE_ID_INVALID");
+        CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "SESSION_NOT_FOUND", "Không tìm thấy phiên phỏng vấn"));
+        InterviewConversationTurn turn = turnRepository.findByIdAndSessionId(turnId, session.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "INTERVIEW_TURN_NOT_FOUND", "Không tìm thấy lượt hội thoại"));
+        InterviewAnswer answer = answerRepository.findBySessionIdAndQuestionId(
+                        sessionId, turn.getAssessmentItem().getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "ANSWER_NOT_FOUND", "Không tìm thấy câu trả lời"));
+        InterviewAnswerCapture capture = captureRepository
+                .findByAnswerIdAndCaptureIdAndCaptureVersion(
+                        answer.getId(), captureId, Math.max(1, captureVersion))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "CAPTURE_NOT_FOUND", "Không tìm thấy kết quả audio"));
+        HandsFreeAnswerCaptureResponse response = toResponse(turn.getAssessmentItem().getId(), capture);
+        return new HandsFreeAnswerCaptureResponse(
+                turnId.toString(), response.captureId(), response.captureVersion(),
+                response.browserTranscript(), response.gladiaTranscript(), response.rawTranscript(),
+                response.correctedTranscript(), response.correctionStatus(), response.correctionCount(),
+                response.transcriptStatus(), response.dataQuality(), response.vadMetrics());
+    }
+
+    @Transactional(readOnly = true)
+    public HandsFreeAnswerCaptureResponse questionCaptureStatus(
+            String sessionIdValue,
+            String questionIdValue,
+            String captureIdValue,
+            int captureVersion
+    ) {
+        UUID sessionId = parseUuid(sessionIdValue, "SESSION_ID_INVALID");
+        UUID questionId = parseUuid(questionIdValue, "QUESTION_ID_INVALID");
+        UUID captureId = parseUuid(captureIdValue, "CAPTURE_ID_INVALID");
+        CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .filter(item -> item.getCandidate().getId().equals(candidate.getId()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "SESSION_NOT_FOUND", "Không tìm thấy phiên phỏng vấn"));
+        questionRepository.findByIdAndSessionId(questionId, session.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "QUESTION_NOT_FOUND", "Không tìm thấy câu hỏi"));
+        InterviewAnswer answer = answerRepository.findBySessionIdAndQuestionId(sessionId, questionId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "ANSWER_NOT_FOUND", "Không tìm thấy câu trả lời"));
+        InterviewAnswerCapture capture = captureRepository
+                .findByAnswerIdAndCaptureIdAndCaptureVersion(
+                        answer.getId(), captureId, Math.max(1, captureVersion))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "CAPTURE_NOT_FOUND", "Không tìm thấy kết quả audio"));
+        return toResponse(questionId, capture);
+    }
+
+    private boolean submitAudioProcessing(
+            UUID answerId,
+            UUID captureId,
+            int captureVersion,
+            SpooledCapture spool,
+            GladiaTranscriptionContext context
+    ) {
+        try {
+            backgroundExecutor.execute(() -> processAudioEvidence(
+                    answerId, captureId, captureVersion, spool, context));
+            return true;
+        } catch (RuntimeException exception) {
+            log.warn("Audio evidence executor rejected captureId={}, version={}", captureId, captureVersion);
+            markAudioEvidenceFailed(answerId, captureId, captureVersion, "VOICE_EVIDENCE_CAPACITY");
+            return false;
+        }
+    }
+
+    private void processAudioEvidence(
+            UUID answerId,
+            UUID captureId,
+            int captureVersion,
+            SpooledCapture spool,
+            GladiaTranscriptionContext context
+    ) {
+        try (spool) {
+            PreparedAudio preparedAudio = prepareAudio(spool, true);
+            VadAnalysisResult vadResult = preparedAudio.pcm() == null
+                    ? analyzeVad(spool.segments()) : analyzeVad(preparedAudio.pcm());
+            logIncompleteVad(vadResult);
+            HandsFreeVadMetricsResponse vadMetrics = HandsFreeVadMetricsResponse.from(vadResult);
+            transactions.executeWithoutResult(status -> updateAudioAnalysis(
+                    answerId, captureId, captureVersion, vadResult, vadMetrics));
+            voiceEvidenceService.submit(
+                    answerId, captureId, captureVersion, preparedAudio.wavAudio(), context);
+        } catch (RuntimeException exception) {
+            log.warn("Background audio processing failed: captureId={}, version={}, code={}",
+                    captureId, captureVersion, exception.getClass().getSimpleName());
+            markAudioEvidenceFailed(answerId, captureId, captureVersion, "VOICE_EVIDENCE_FAILED");
+        }
+    }
+
+    private void updateAudioAnalysis(
+            UUID answerId,
+            UUID captureId,
+            int captureVersion,
+            VadAnalysisResult vadResult,
+            HandsFreeVadMetricsResponse vadMetrics
+    ) {
+        captureRepository.findByAnswerIdAndCaptureIdAndCaptureVersion(
+                        answerId, captureId, captureVersion)
+                .ifPresent(capture -> {
+                    capture.setVadMetricsJson(vadMetrics == null
+                            ? Map.of() : objectMapper.convertValue(vadMetrics, Map.class));
+                    capture.setDataQuality(dataQuality(false, vadMetrics != null));
+                    captureRepository.save(capture);
+                    InterviewAnswer answer = capture.getAnswer();
+                    HandsFreeAnswerCaptureResponse response = toResponse(answer.getQuestionId(), capture);
+                    answer.setSpeechAnalysisJson(analysisJson(response, vadResult));
+                    if (vadResult != null && vadResult.audioDurationSeconds() > 0) {
+                        answer.setDurationSeconds(Math.max(1,
+                                (int) Math.ceil(vadResult.audioDurationSeconds())));
+                    }
+                    answerRepository.save(answer);
+                });
+    }
+
+    private void markAudioEvidenceFailed(
+            UUID answerId,
+            UUID captureId,
+            int captureVersion,
+            String errorCode
+    ) {
+        transactions.executeWithoutResult(status -> captureRepository
+                .findByAnswerIdAndCaptureIdAndCaptureVersion(answerId, captureId, captureVersion)
+                .ifPresent(capture -> {
+                    capture.setVoiceEvidenceStatus(VoiceEvidenceStatus.FAILED);
+                    capture.setVoiceEvidenceErrorCode(errorCode);
+                    captureRepository.save(capture);
+                }));
     }
 
     private Claim claim(UUID candidateId, UUID sessionId, UUID questionId, UUID turnId,
@@ -407,15 +550,15 @@ public class HandsFreeAnswerCaptureService {
         if (capture.getConversationTurn() != null) {
             InterviewConversationTurn turn = capture.getConversationTurn();
             turn.setCandidateRawAnswer(response.rawTranscript());
-            turn.setCandidateFinalAnswer(response.correctedTranscript());
+            turn.setCandidateFinalAnswer(response.rawTranscript());
             turn.setAnswerStatus(InterviewTurnAnswerStatus.REVIEWING);
             turnRepository.save(turn);
         }
 
         if (hasText(response.gladiaTranscript())) answer.setOriginalSpeechTranscript(response.gladiaTranscript());
         answer.setRawTranscript(response.rawTranscript());
-        answer.setFinalTranscript(response.correctedTranscript());
-        answer.setTranscriptText(response.correctedTranscript());
+        answer.setFinalTranscript(response.rawTranscript());
+        answer.setTranscriptText(response.rawTranscript());
         answer.setSpeechAnalysisJson(analysisJson(response, vadResult));
         answer.setTranscriptStatus("completed");
         answer.setConversationState("REVIEWING_TRANSCRIPT");

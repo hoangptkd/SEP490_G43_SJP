@@ -2,6 +2,7 @@ package com.sjp.recruitment.service.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sjp.recruitment.config.AiInterviewProperties;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.InterviewSession;
@@ -53,9 +54,11 @@ class ShopAiKeyClientTimeoutTest {
     }
 
     @Test
-    void sendsReducedInitialQuestionTokenLimit() throws Exception {
+    void sendsLargeInitialQuestionTokenBudget() throws Exception {
         AtomicReference<JsonNode> requestBody = new AtomicReference<>();
+        AtomicReference<String> requestPath = new AtomicReference<>();
         startServer(exchange -> {
+            requestPath.set(exchange.getRequestURI().getPath());
             requestBody.set(objectMapper.readTree(exchange.getRequestBody()));
             respondJson(exchange, successfulInterviewPackageResponse());
         });
@@ -67,8 +70,243 @@ class ShopAiKeyClientTimeoutTest {
 
         assertEquals(ShopAiKeyClient.INITIAL_QUESTION_MAX_TOKENS,
                 requestBody.get().path("max_tokens").asInt());
-        assertEquals(1_800, requestBody.get().path("max_tokens").asInt());
+        assertEquals(8_000, requestBody.get().path("max_tokens").asInt());
+        assertEquals("gemini-3.5-flash", requestBody.get().path("model").asText());
+        assertTrue(!requestBody.get().has("reasoning"));
+        assertEquals("/chat/completions", requestPath.get());
+        assertEquals("system", requestBody.get().path("messages").path(0).path("role").asText());
+        assertEquals("user", requestBody.get().path("messages").path(1).path("role").asText());
         assertEquals(3, result.questions().size());
+    }
+
+    @Test
+    void retriesTruncatedInitialQuestionsWithLargeBudgetAndSameModel() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        List<Integer> tokenBudgets = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<String> models = new java.util.concurrent.CopyOnWriteArrayList<>();
+        startServer(exchange -> {
+            JsonNode request = objectMapper.readTree(exchange.getRequestBody());
+            tokenBudgets.add(request.path("max_tokens").asInt());
+            models.add(request.path("model").asText());
+            if (requestCount.incrementAndGet() == 1) {
+                respondJson(exchange, chatResponse(
+                        "The requested JSON contains evaluationProfile and questions",
+                        "length"));
+                return;
+            }
+            respondJson(exchange, successfulInterviewPackageResponse());
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        ShopAiKeyClient.InterviewPackageDraft result = client.generateInitialInterviewPackage(
+                practiceSession(), new CandidateProfile());
+
+        assertEquals(3, result.questions().size());
+        assertEquals(2, requestCount.get());
+        assertEquals(List.of(8_000, 8_000), tokenBudgets);
+        assertEquals(List.of("gemini-3.5-flash", "gemini-3.5-flash"), models);
+    }
+
+    @Test
+    void acceptsUsableInitialQuestionAbovePromptTargetButBelowHardLimit() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        String question = "Bạn hãy mô tả cách bạn phân tích, triển khai và kiểm chứng một thay đổi backend "
+                + "trong dự án gần đây, bao gồm bối cảnh kỹ thuật, phần việc bạn trực tiếp phụ trách, "
+                + "cách phối hợp với thành viên khác, tiêu chí lựa chọn giải pháp và kết quả đo được "
+                + "sau khi đưa thay đổi vào sử dụng thực tế?";
+        assertTrue(question.length() > ShopAiKeyClient.QUESTION_TARGET_MAX_LENGTH);
+        assertTrue(question.length() <= ShopAiKeyClient.QUESTION_HARD_MAX_LENGTH);
+        startServer(exchange -> {
+            requestCount.incrementAndGet();
+            respondJson(exchange, interviewPackageResponseWithFirstQuestion(question));
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        ShopAiKeyClient.InterviewPackageDraft result = client.generateInitialInterviewPackage(
+                practiceSession(), new CandidateProfile());
+
+        assertEquals(1, requestCount.get());
+        assertEquals(question, result.questions().get(0).question());
+    }
+
+    @Test
+    void retriesRejectedInitialQuestionWithValidationFeedbackAndSameModel() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        List<String> models = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<String> prompts = new java.util.concurrent.CopyOnWriteArrayList<>();
+        String oversizedQuestion = "A".repeat(ShopAiKeyClient.QUESTION_HARD_MAX_LENGTH + 1) + "?";
+        startServer(exchange -> {
+            JsonNode request = objectMapper.readTree(exchange.getRequestBody());
+            models.add(request.path("model").asText());
+            prompts.add(request.path("messages").path(1).path("content").asText());
+            if (requestCount.incrementAndGet() == 1) {
+                respondJson(exchange, interviewPackageResponseWithFirstQuestion(oversizedQuestion));
+                return;
+            }
+            respondJson(exchange, successfulInterviewPackageResponse());
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        ShopAiKeyClient.InterviewPackageDraft result = client.generateInitialInterviewPackage(
+                practiceSession(), new CandidateProfile());
+
+        assertEquals(3, result.questions().size());
+        assertEquals(2, requestCount.get());
+        assertEquals(List.of("gemini-3.5-flash", "gemini-3.5-flash"), models);
+        assertTrue(!prompts.get(0).contains("response trước đã bị backend từ chối"));
+        assertTrue(prompts.get(1).contains("AI_QUESTION_TOO_LONG"));
+        assertTrue(prompts.get(1).contains("tối đa 240 ký tự"));
+    }
+
+    @Test
+    void failsWithoutFallbackAfterInitialQuestionContractRetriesAreExhausted() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        String multipleQuestions = "Bạn đã làm phần nào? Kết quả của phần đó là gì?";
+        startServer(exchange -> {
+            requestCount.incrementAndGet();
+            respondJson(exchange, interviewPackageResponseWithFirstQuestion(multipleQuestions));
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        AiProviderException exception = assertThrows(AiProviderException.class,
+                () -> client.generateInitialInterviewPackage(practiceSession(), new CandidateProfile()));
+
+        assertEquals("AI_QUESTION_TOO_LONG", exception.getCode());
+        assertEquals(ShopAiKeyClient.PROVIDER_MAX_ATTEMPTS, requestCount.get());
+    }
+
+    @Test
+    void sendsCvAnalysisThroughGeminiChatCompletionsWithoutReasoningParameter() throws Exception {
+        AtomicReference<JsonNode> requestBody = new AtomicReference<>();
+        startServer(exchange -> {
+            requestBody.set(objectMapper.readTree(exchange.getRequestBody()));
+            respondJson(exchange, chatResponse("""
+                    {
+                      "summary":"Ứng viên có kinh nghiệm Java backend.",
+                      "experienceLevel":"junior",
+                      "skills":["Java","Spring Boot"],
+                      "suggestedRoles":[{
+                        "title":"Java Backend Developer",
+                        "reason":"Phù hợp với kinh nghiệm hiện tại"
+                      }],
+                      "evidenceClaims":[]
+                    }
+                    """));
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        ShopAiKeyClient.CvInterviewProfileDraft result = client.analyzeCvInterviewProfile(
+                Map.of("skills", List.of("Java", "Spring Boot")));
+
+        assertEquals("junior", result.experienceLevel());
+        assertEquals("gemini-2.5-pro", requestBody.get().path("model").asText());
+        assertEquals(ShopAiKeyClient.CV_PROFILE_MAX_TOKENS,
+                requestBody.get().path("max_tokens").asInt());
+        assertTrue(!requestBody.get().has("reasoning"));
+    }
+
+    @Test
+    void acceptsMarkdownWrappedCvProfileJson() throws Exception {
+        startServer(exchange -> respondJson(exchange, chatResponse("""
+                ```json
+                {
+                  "summary":"Ứng viên có kinh nghiệm Java backend.",
+                  "experienceLevel":"junior",
+                  "skills":["Java","Spring Boot"],
+                  "suggestedRoles":[{
+                    "title":"Java Backend Developer",
+                    "reason":"Phù hợp với kinh nghiệm hiện tại"
+                  }],
+                  "evidenceClaims":[]
+                }
+                ```
+                """)));
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        ShopAiKeyClient.CvInterviewProfileDraft result = client.analyzeCvInterviewProfile(
+                Map.of("skills", List.of("Java", "Spring Boot")));
+
+        assertEquals("junior", result.experienceLevel());
+    }
+
+    @Test
+    void retriesTruncatedCvJsonWithExpandedBudgetAndSameModel() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        List<Integer> tokenBudgets = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<String> models = new java.util.concurrent.CopyOnWriteArrayList<>();
+        startServer(exchange -> {
+            JsonNode request = objectMapper.readTree(exchange.getRequestBody());
+            tokenBudgets.add(request.path("max_tokens").asInt());
+            models.add(request.path("model").asText());
+            if (requestCount.incrementAndGet() == 1) {
+                respondJson(exchange, chatResponse(
+                        "{\"summary\":\"Ứng viên có kinh nghiệm Java backend.",
+                        "length"));
+                return;
+            }
+            respondJson(exchange, chatResponse("""
+                    {
+                      "summary":"Ứng viên có kinh nghiệm Java backend.",
+                      "experienceLevel":"junior",
+                      "skills":["Java","Spring Boot"],
+                      "suggestedRoles":[{
+                        "title":"Java Backend Developer",
+                        "reason":"Phù hợp với kinh nghiệm hiện tại"
+                      }],
+                      "evidenceClaims":[]
+                    }
+                    """));
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        ShopAiKeyClient.CvInterviewProfileDraft result = client.analyzeCvInterviewProfile(
+                Map.of("skills", List.of("Java", "Spring Boot")));
+
+        assertEquals("junior", result.experienceLevel());
+        assertEquals(2, requestCount.get());
+        assertEquals(List.of(
+                ShopAiKeyClient.CV_PROFILE_MAX_TOKENS,
+                ShopAiKeyClient.CV_PROFILE_RETRY_MAX_TOKENS
+        ), tokenBudgets);
+        assertEquals(List.of("gemini-2.5-pro", "gemini-2.5-pro"), models);
+    }
+
+    @Test
+    void retriesIncompleteCvJsonWhenProviderOmitsFinishReason() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        List<Integer> tokenBudgets = new java.util.concurrent.CopyOnWriteArrayList<>();
+        startServer(exchange -> {
+            JsonNode request = objectMapper.readTree(exchange.getRequestBody());
+            tokenBudgets.add(request.path("max_tokens").asInt());
+            if (requestCount.incrementAndGet() == 1) {
+                respondJson(exchange, chatResponse(
+                        "{\"summary\":\"Ứng viên có kinh nghiệm Java backend."));
+                return;
+            }
+            respondJson(exchange, chatResponse("""
+                    {
+                      "summary":"Ứng viên có kinh nghiệm Java backend.",
+                      "experienceLevel":"junior",
+                      "skills":["Java","Spring Boot"],
+                      "suggestedRoles":[{
+                        "title":"Java Backend Developer",
+                        "reason":"Phù hợp với kinh nghiệm hiện tại"
+                      }],
+                      "evidenceClaims":[]
+                    }
+                    """));
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        ShopAiKeyClient.CvInterviewProfileDraft result = client.analyzeCvInterviewProfile(
+                Map.of("skills", List.of("Java", "Spring Boot")));
+
+        assertEquals("junior", result.experienceLevel());
+        assertEquals(2, requestCount.get());
+        assertEquals(List.of(
+                ShopAiKeyClient.CV_PROFILE_MAX_TOKENS,
+                ShopAiKeyClient.CV_PROFILE_RETRY_MAX_TOKENS
+        ), tokenBudgets);
     }
 
     @Test
@@ -93,7 +331,7 @@ class ShopAiKeyClientTimeoutTest {
         assertEquals("AI_PROVIDER_TIMEOUT", exception.getCode());
         assertTrue(exception.getMessage().contains("quá thời gian"));
         verify(telemetry, times(ShopAiKeyClient.PROVIDER_MAX_ATTEMPTS)).record(
-                eq(session.getId()), eq("initial_questions"), eq("gpt-4.1-mini"),
+                eq(session.getId()), eq("initial_questions"), eq("gemini-3.5-flash"),
                 eq("ai-question-initial-v2"), isNull(), isNull(), anyLong(),
                 eq(false), eq("AI_PROVIDER_TIMEOUT")
         );
@@ -131,6 +369,25 @@ class ShopAiKeyClientTimeoutTest {
     }
 
     @Test
+    void doesNotRetryUnsupportedProviderRequestConversion() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        startServer(exchange -> {
+            requestCount.incrementAndGet();
+            respondJson(exchange, 500, """
+                    {"error":{"message":"not implemented","code":"convert_request_failed"}}
+                    """.getBytes(StandardCharsets.UTF_8));
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        AiProviderException exception = assertThrows(AiProviderException.class,
+                () -> client.generateInitialInterviewPackage(
+                        practiceSession(), new CandidateProfile()));
+
+        assertEquals("AI_PROVIDER_UNSUPPORTED_REQUEST", exception.getCode());
+        assertEquals(1, requestCount.get());
+    }
+
+    @Test
     void classifiesUnexpectedProviderShapeSeparately() {
         AiProviderException exception = ShopAiKeyClient.mapProviderException(
                 new ClassCastException("choices must be an array"));
@@ -147,30 +404,14 @@ class ShopAiKeyClientTimeoutTest {
     }
 
     @Test
-    void analyzesOneTurnWithTypeSpecificEvidenceAndCompactTokenBudget() throws Exception {
+    void makesMinimalTurnDecisionWithoutReasoning() throws Exception {
         AtomicReference<JsonNode> requestBody = new AtomicReference<>();
         startServer(exchange -> {
             requestBody.set(objectMapper.readTree(exchange.getRequestBody()));
             respondJson(exchange, chatResponse("""
                     {
                       "action":"PROBE",
-                      "keyClaims":["đã kiểm tra execution plan"],
-                      "evidenceCoverage":{
-                        "accuracy":true,
-                        "reasoning":true,
-                        "tradeOffs":false,
-                        "implementationDetail":true,
-                        "realWorldApplication":true
-                      },
-                      "missingEvidence":["trade-off của index"],
-                      "followUp":"Bạn đã cân nhắc trade-off nào khi thêm index?",
-                      "updatedItemSummary":"Ứng viên đã kiểm tra execution plan và thêm index.",
-                      "globalEvidenceDelta":{
-                        "demonstratedCompetencyIds":["problem-solving"],
-                        "weakEvidence":["chưa nêu trade-off"],
-                        "interestingClaims":["đã dùng execution plan"],
-                        "unverifiedClaims":[]
-                      }
+                      "followUp":"Bạn đã cân nhắc trade-off nào khi thêm index?"
                     }
                     """));
         });
@@ -178,38 +419,212 @@ class ShopAiKeyClientTimeoutTest {
         InterviewSession session = practiceSessionWithProfile();
         InterviewQuestion question = technicalQuestion(session, 1, "problem-solving");
 
-        ShopAiKeyClient.AnswerAnalysisDraft result = client.analyzeAssessmentTurn(
+        ShopAiKeyClient.AnswerDecisionDraft result = client.analyzeAssessmentTurnDecision(
                 session,
                 question,
                 "Tôi kiểm tra execution plan rồi thêm index.",
-                Map.of("summary", "Chưa có evidence trước đó"),
                 new ShopAiKeyClient.AssessmentTurnCounters(0, 0, 1, 4)
         );
 
         assertEquals(ShopAiKeyClient.AnswerAnalysisAction.PROBE, result.action());
-        assertEquals(800, requestBody.get().path("max_tokens").asInt());
+        assertEquals(256, requestBody.get().path("max_tokens").asInt());
+        assertEquals("gemini-3.5-flash-lite", requestBody.get().path("model").asText());
+        assertTrue(!requestBody.get().has("reasoning"));
         String serializedRequest = requestBody.get().toString();
         assertTrue(serializedRequest.contains("remainingCoreQuestions"));
-        assertTrue(serializedRequest.contains("implementationDetail"));
-        assertTrue(serializedRequest.contains("tradeOffs"));
-        assertTrue(serializedRequest.contains("dài tối đa 1200"));
-        assertTrue(serializedRequest.contains(ShopAiKeyClient.EMPTY_ITEM_SUMMARY));
-        assertTrue(serializedRequest.contains("weakEvidence"));
-        assertTrue(serializedRequest.contains("tối đa 4 phần tử"));
+        assertTrue(serializedRequest.contains("expectedEvidence"));
+        assertTrue(!serializedRequest.contains("updatedItemSummary"));
+        assertTrue(!serializedRequest.contains("globalEvidenceDelta"));
+    }
+
+    @Test
+    void sanitizesOptionalTurnEvidenceFields() throws Exception {
+        AtomicReference<JsonNode> requestBody = new AtomicReference<>();
+        startServer(exchange -> {
+            requestBody.set(objectMapper.readTree(exchange.getRequestBody()));
+            respondJson(exchange, chatResponse("""
+                {
+                  "keyClaims":["đã phát triển API gửi mail",42,"đã phát triển API gửi mail"],
+                  "evidenceCoverage":{"accuracy":true,"reasoning":"yes","unknown":true},
+                  "missingEvidence":"không phải array",
+                  "globalEvidenceDelta":{
+                    "demonstratedCompetencyIds":["unknown","problem-solving"],
+                    "weakEvidence":["chưa nêu luồng xử lý"],
+                    "interestingClaims":[],
+                    "unverifiedClaims":[],
+                    "unknownNestedField":"ignored"
+                  },
+                  "unknownTopLevelField":"ignored"
+                }
+                """));
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+        InterviewSession session = practiceSessionWithProfile();
+
+        ShopAiKeyClient.AnswerEvidenceDraft result = client.analyzeAssessmentTurnEvidence(
+                session,
+                technicalQuestion(session, 1, "problem-solving"),
+                "Tôi đã phát triển API gửi mail.",
+                Map.of("summary", "Evidence đã ghi nhận trước đó.")
+        );
+
+        assertEquals(List.of("đã phát triển API gửi mail"), result.keyClaims());
+        assertEquals(List.of(), result.missingEvidence());
+        assertEquals(true, result.evidenceCoverage().get("accuracy"));
+        assertEquals(false, result.evidenceCoverage().get("reasoning"));
+        assertEquals("Evidence đã ghi nhận trước đó.", result.updatedItemSummary());
+        assertEquals(
+                List.of("problem-solving"),
+                result.globalEvidenceDelta().demonstratedCompetencyIds());
+        assertEquals(4_000, requestBody.get().path("max_tokens").asInt());
+        assertEquals("gemini-3.1-flash-lite", requestBody.get().path("model").asText());
+        assertTrue(!requestBody.get().has("reasoning"));
+    }
+
+    @Test
+    void normalizesPeriodTerminatedDecisionFollowUp() throws Exception {
+        startServer(exchange -> respondJson(exchange, chatResponse("""
+                {
+                  "action":"CLARIFY",
+                  "followUp":"Bạn hãy nêu phần việc bạn trực tiếp phụ trách."
+                }
+                """)));
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+        InterviewSession session = practiceSessionWithProfile();
+
+        ShopAiKeyClient.AnswerDecisionDraft result = client.analyzeAssessmentTurnDecision(
+                session,
+                technicalQuestion(session, 1, "problem-solving"),
+                "Tôi tham gia phát triển backend.",
+                new ShopAiKeyClient.AssessmentTurnCounters(0, 0, 1, 4));
+
+        assertEquals(ShopAiKeyClient.AnswerAnalysisAction.CLARIFY, result.action());
+        assertEquals("Bạn hãy nêu phần việc bạn trực tiếp phụ trách?", result.followUp());
+    }
+
+    @Test
+    void decisionStageDoesNotRetryTransientProviderFailure() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        startServer(exchange -> {
+            calls.incrementAndGet();
+            respondJson(exchange, 503, "{\"error\":\"overloaded\"}".getBytes(StandardCharsets.UTF_8));
+        });
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+        InterviewSession session = practiceSessionWithProfile();
+
+        assertThrows(AiProviderException.class, () -> client.analyzeAssessmentTurnDecision(
+                session,
+                technicalQuestion(session, 1, "problem-solving"),
+                "Tôi đã trả lời.",
+                new ShopAiKeyClient.AssessmentTurnCounters(0, 0, 1, 4)));
+
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void decisionStageTimesOutOnceWithoutAutomaticRetry() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        startServer(exchange -> {
+            calls.incrementAndGet();
+            try {
+                Thread.sleep(300);
+                respondJson(exchange, chatResponse("{\"action\":\"NEXT\",\"followUp\":null}"));
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } catch (IOException ignored) {
+                // The client closes the timed-out connection before the delayed response is written.
+            }
+        });
+        AiInterviewTelemetryService telemetry = mock(AiInterviewTelemetryService.class);
+        ShopAiKeyClient client = client(telemetry, 50);
+        InterviewSession session = practiceSessionWithProfile();
+
+        AiProviderException exception = assertThrows(AiProviderException.class,
+                () -> client.analyzeAssessmentTurnDecision(
+                        session,
+                        technicalQuestion(session, 1, "problem-solving"),
+                        "Tôi đã trả lời.",
+                        new ShopAiKeyClient.AssessmentTurnCounters(0, 0, 1, 4)));
+
+        assertEquals("AI_PROVIDER_TIMEOUT", exception.getCode());
+        assertEquals(1, calls.get());
+        verify(telemetry).record(
+                eq(session.getId()), eq("assessment_turn_decision"), eq("gemini-3.5-flash-lite"),
+                eq("assessment-turn-decision-v2"), isNull(), isNull(), anyLong(),
+                eq(false), eq("AI_PROVIDER_TIMEOUT"));
+    }
+
+    @Test
+    void trustsNextActionAndIgnoresUnexpectedFollowUp() throws Exception {
+        startServer(exchange -> respondJson(exchange, chatResponse("""
+                {
+                  "action":"NEXT",
+                  "followUp":"Bạn có thể nói thêm không?"
+                }
+                """)));
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+        InterviewSession session = practiceSessionWithProfile();
+
+        ShopAiKeyClient.AnswerDecisionDraft result = client.analyzeAssessmentTurnDecision(
+                session,
+                technicalQuestion(session, 1, "problem-solving"),
+                "Tôi đã mô tả đầy đủ phần việc.",
+                new ShopAiKeyClient.AssessmentTurnCounters(0, 0, 1, 4)
+        );
+
+        assertEquals(ShopAiKeyClient.AnswerAnalysisAction.NEXT, result.action());
+        assertEquals(null, result.followUp());
+    }
+
+    @Test
+    void rejectsClarifyWithoutUsableFollowUp() throws Exception {
+        startServer(exchange -> respondJson(exchange, chatResponse("""
+                {"action":"CLARIFY","followUp":"   "}
+                """)));
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+        InterviewSession session = practiceSessionWithProfile();
+
+        AiProviderException exception = assertThrows(AiProviderException.class,
+                () -> client.analyzeAssessmentTurnDecision(
+                        session,
+                        technicalQuestion(session, 1, "problem-solving"),
+                        "Tôi chưa nhớ rõ.",
+                        new ShopAiKeyClient.AssessmentTurnCounters(0, 0, 1, 4)
+                ));
+
+        assertEquals("AI_INVALID_FOLLOW_UP", exception.getCode());
+    }
+
+    @Test
+    void rejectsUnknownAssessmentAction() throws Exception {
+        startServer(exchange -> respondJson(exchange, chatResponse("""
+                {"action":"SKIP","followUp":null}
+                """)));
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+        InterviewSession session = practiceSessionWithProfile();
+
+        AiProviderException exception = assertThrows(AiProviderException.class,
+                () -> client.analyzeAssessmentTurnDecision(
+                        session,
+                        technicalQuestion(session, 1, "problem-solving"),
+                        "Tôi đã trả lời.",
+                        new ShopAiKeyClient.AssessmentTurnCounters(0, 0, 1, 4)
+                ));
+
+        assertEquals("AI_INVALID_ANALYSIS_ACTION", exception.getCode());
     }
 
     @Test
     void usesNeutralSummaryWhenShortAnswerProducesEmptySummary(CapturedOutput output) throws Exception {
-        startServer(exchange -> respondJson(exchange, answerAnalysisResponse("", List.of())));
+        startServer(exchange -> respondJson(exchange, answerEvidenceResponse("", List.of())));
         ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
         InterviewSession session = practiceSessionWithProfile();
 
-        ShopAiKeyClient.AnswerAnalysisDraft result = client.analyzeAssessmentTurn(
+        ShopAiKeyClient.AnswerEvidenceDraft result = client.analyzeAssessmentTurnEvidence(
                 session,
                 technicalQuestion(session, 1, "problem-solving"),
                 "ok",
-                Map.of(),
-                new ShopAiKeyClient.AssessmentTurnCounters(0, 1, 3, 2)
+                Map.of()
         );
 
         assertEquals(ShopAiKeyClient.EMPTY_ITEM_SUMMARY, result.updatedItemSummary());
@@ -218,17 +633,16 @@ class ShopAiKeyClientTimeoutTest {
 
     @Test
     void preservesPreviousEvidenceSummaryWhenProviderReturnsEmptySummary() throws Exception {
-        startServer(exchange -> respondJson(exchange, answerAnalysisResponse("", List.of())));
+        startServer(exchange -> respondJson(exchange, answerEvidenceResponse("", List.of())));
         ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
         InterviewSession session = practiceSessionWithProfile();
         String previousSummary = "Ứng viên đã nêu cách kiểm tra execution plan.";
 
-        ShopAiKeyClient.AnswerAnalysisDraft result = client.analyzeAssessmentTurn(
+        ShopAiKeyClient.AnswerEvidenceDraft result = client.analyzeAssessmentTurnEvidence(
                 session,
                 technicalQuestion(session, 1, "problem-solving"),
                 "ok",
-                Map.of("summary", previousSummary),
-                new ShopAiKeyClient.AssessmentTurnCounters(1, 0, 2, 3)
+                Map.of("summary", previousSummary)
         );
 
         assertEquals(previousSummary, result.updatedItemSummary());
@@ -239,16 +653,15 @@ class ShopAiKeyClientTimeoutTest {
         String oversizedSummary = "Evidence kỹ thuật được mô tả chi tiết. ".repeat(50);
         startServer(exchange -> respondJson(
                 exchange,
-                answerAnalysisResponse(oversizedSummary, List.of("có evidence kỹ thuật"))));
+                answerEvidenceResponse(oversizedSummary, List.of("có evidence kỹ thuật"))));
         ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
         InterviewSession session = practiceSessionWithProfile();
 
-        ShopAiKeyClient.AnswerAnalysisDraft result = client.analyzeAssessmentTurn(
+        ShopAiKeyClient.AnswerEvidenceDraft result = client.analyzeAssessmentTurnEvidence(
                 session,
                 technicalQuestion(session, 1, "problem-solving"),
                 "Tôi kiểm tra execution plan.",
-                Map.of(),
-                new ShopAiKeyClient.AssessmentTurnCounters(0, 0, 1, 4)
+                Map.of()
         );
 
         assertTrue(result.updatedItemSummary().length()
@@ -295,10 +708,12 @@ class ShopAiKeyClientTimeoutTest {
         assertTrue(result.followUpNeeded());
         assertEquals(ShopAiKeyClient.TRANSCRIPT_CORRECTION_MAX_TOKENS,
                 requestBody.get().path("max_tokens").asInt());
-        assertEquals(0.0, requestBody.get().path("temperature").asDouble());
+        assertEquals("gemini-2.5-flash-lite", requestBody.get().path("model").asText());
+        assertTrue(!requestBody.get().has("reasoning"));
         String serializedRequest = requestBody.get().toString();
         assertTrue(serializedRequest.contains("cvTechnicalTerms"));
         assertTrue(serializedRequest.contains("relevantTechnicalVocabulary"));
+        assertTrue(serializedRequest.contains("chỉ xuất hiện đúng một lần"));
         assertTrue(serializedRequest.contains("False correction"));
     }
 
@@ -337,7 +752,7 @@ class ShopAiKeyClientTimeoutTest {
     }
 
     @Test
-    void rejectsMarkdownWrappedTranscriptCorrectionResponse() throws Exception {
+    void acceptsMarkdownWrappedTranscriptCorrectionResponse() throws Exception {
         startServer(exchange -> respondJson(exchange, chatResponse("""
                 ```json
                 {
@@ -352,18 +767,17 @@ class ShopAiKeyClientTimeoutTest {
                 """)));
         ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
 
-        AiProviderException exception = assertThrows(AiProviderException.class,
-                () -> client.correctBrowserTranscript(
-                        UUID.randomUUID(),
-                        new TranscriptCorrectionContext(
-                                "Bạn dùng Spring Boot như thế nào?",
-                                "em dùng spring bút",
-                                List.of("Spring Boot"),
-                                List.of(),
-                                List.of(),
-                                "")));
+        ShopAiKeyClient.TranscriptCorrectionDraft result = client.correctBrowserTranscript(
+                UUID.randomUUID(),
+                new TranscriptCorrectionContext(
+                        "Bạn dùng Spring Boot như thế nào?",
+                        "em dùng spring bút",
+                        List.of("Spring Boot"),
+                        List.of(),
+                        List.of(),
+                        ""));
 
-        assertEquals("AI_INVALID_JSON", exception.getCode());
+        assertEquals("em dùng Spring Boot", result.correctedTranscript());
     }
 
     @Test
@@ -396,6 +810,10 @@ class ShopAiKeyClientTimeoutTest {
                 client.generateAdaptiveInterviewQuestions(session, questions, List.of(answer));
 
         assertEquals(2, drafts.size());
+        assertEquals("gemini-3.5-flash", requestBody.get().path("model").asText());
+        assertEquals(ShopAiKeyClient.ADAPTIVE_QUESTION_MAX_TOKENS,
+                requestBody.get().path("max_tokens").asInt());
+        assertTrue(!requestBody.get().has("reasoning"));
         String serializedRequest = requestBody.get().toString();
         assertTrue(serializedRequest.contains("SQL indexing chưa có số đo"));
         assertTrue(!serializedRequest.contains("FULL_TRANSCRIPT_SHOULD_NOT_LEAK"));
@@ -447,6 +865,10 @@ class ShopAiKeyClientTimeoutTest {
         assertEquals(4, result.questionRatings().get(0).barsLevel());
         assertEquals(List.of("Trong 7 ngày, luyện giải thích trade-off bằng số đo cho 5 tình huống"),
                 result.actionPlan());
+        assertEquals("gemini-2.5-pro", requestBody.get().path("model").asText());
+        assertEquals(ShopAiKeyClient.FINAL_EVALUATION_MAX_TOKENS,
+                requestBody.get().path("max_tokens").asInt());
+        assertTrue(!requestBody.get().has("reasoning"));
         String serializedRequest = requestBody.get().toString();
         assertTrue(serializedRequest.contains("CORE_QUESTION"));
         assertTrue(serializedRequest.contains("PROBE"));
@@ -454,11 +876,11 @@ class ShopAiKeyClientTimeoutTest {
 
     private ShopAiKeyClient client(AiInterviewTelemetryService telemetry, int readTimeoutMs) {
         AiInterviewProperties properties = new AiInterviewProperties();
-        properties.setShopaikeyApiKey("test-key");
-        properties.setShopaikeyBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
-        properties.setShopaikeyModel("gpt-4.1-mini");
+        properties.getTextAi().setApiKey("test-key");
+        properties.getTextAi().setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
         properties.setProviderConnectTimeoutMs(1_000);
         properties.setProviderReadTimeoutMs(readTimeoutMs);
+        properties.getTextAi().getTurnDecision().setReadTimeoutMs(readTimeoutMs);
         return new ShopAiKeyClient(
                 properties,
                 objectMapper,
@@ -511,6 +933,7 @@ class ShopAiKeyClientTimeoutTest {
 
     private void startServer(ExchangeHandler handler) throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/responses", exchange -> handler.handle(exchange));
         server.createContext("/chat/completions", exchange -> handler.handle(exchange));
         server.start();
     }
@@ -536,25 +959,40 @@ class ShopAiKeyClientTimeoutTest {
                   ]
                 }
                 """;
-        return objectMapper.writeValueAsBytes(objectMapper.createObjectNode()
-                .set("choices", objectMapper.createArrayNode().add(
-                        objectMapper.createObjectNode().set("message",
-                                objectMapper.createObjectNode().put("content", content)))));
+        return chatResponse(content);
+    }
+
+    private byte[] interviewPackageResponseWithFirstQuestion(String question) throws IOException {
+        JsonNode wrappedResponse = objectMapper.readTree(successfulInterviewPackageResponse());
+        String content = wrappedResponse.path("choices").path(0).path("message").path("content").asText();
+        ObjectNode interviewPackage = (ObjectNode) objectMapper.readTree(content);
+        ObjectNode firstQuestion = (ObjectNode) interviewPackage.path("questions").path(0);
+        firstQuestion.put("question", question);
+        return chatResponse(interviewPackage.toString());
     }
 
     private byte[] chatResponse(String content) throws IOException {
-        return objectMapper.writeValueAsBytes(objectMapper.createObjectNode()
-                .set("choices", objectMapper.createArrayNode().add(
-                        objectMapper.createObjectNode().set("message",
-                                 objectMapper.createObjectNode().put("content", content)))));
+        return chatResponse(content, null);
     }
 
-    private byte[] answerAnalysisResponse(
+    private byte[] chatResponse(String content, String finishReason) throws IOException {
+        var message = objectMapper.createObjectNode()
+                .put("role", "assistant")
+                .put("content", content);
+        var choice = objectMapper.createObjectNode();
+        choice.set("message", message);
+        if (finishReason != null) {
+            choice.put("finish_reason", finishReason);
+        }
+        return objectMapper.writeValueAsBytes(objectMapper.createObjectNode()
+                .set("choices", objectMapper.createArrayNode().add(choice)));
+    }
+
+    private byte[] answerEvidenceResponse(
             String updatedItemSummary,
             List<String> keyClaims
     ) throws IOException {
         var content = objectMapper.createObjectNode();
-        content.put("action", "NEXT");
         content.set("keyClaims", objectMapper.valueToTree(keyClaims));
         var coverage = content.putObject("evidenceCoverage");
         coverage.put("accuracy", false);
@@ -563,7 +1001,6 @@ class ShopAiKeyClientTimeoutTest {
         coverage.put("implementationDetail", false);
         coverage.put("realWorldApplication", false);
         content.set("missingEvidence", objectMapper.valueToTree(List.of("Chưa có evidence cụ thể")));
-        content.putNull("followUp");
         content.put("updatedItemSummary", updatedItemSummary);
         var delta = content.putObject("globalEvidenceDelta");
         delta.set("demonstratedCompetencyIds", objectMapper.valueToTree(List.of()));

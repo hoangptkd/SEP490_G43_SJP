@@ -37,6 +37,10 @@ public class AiInterviewConversationPolicy {
             int remainingCoreQuestions
     ) {
         AnswerAnalysisAction requested = parseAction(requestedAction);
+        if (requested != AnswerAnalysisAction.NEXT
+                && probeCount + clarifyCount >= properties.getMaxFollowUpsPerCore()) {
+            return AnswerAnalysisAction.NEXT;
+        }
         if (requested == AnswerAnalysisAction.PROBE
                 && probeCount >= properties.getMaxProbesPerCore()) {
             return AnswerAnalysisAction.NEXT;
@@ -92,6 +96,8 @@ public class AiInterviewConversationPolicy {
         values.put(InterviewDialogueState.ASK_CLARIFY, EnumSet.of(InterviewDialogueState.WAITING_ANSWER));
         values.put(InterviewDialogueState.ACK_TRANSITION, EnumSet.of(
                 InterviewDialogueState.ASK_CORE,
+                InterviewDialogueState.REVIEW_TRANSCRIPTS));
+        values.put(InterviewDialogueState.REVIEW_TRANSCRIPTS, EnumSet.of(
                 InterviewDialogueState.CLOSING));
         values.put(InterviewDialogueState.CLOSING, EnumSet.of(InterviewDialogueState.COMPLETED));
         values.put(InterviewDialogueState.COMPLETED, EnumSet.noneOf(InterviewDialogueState.class));

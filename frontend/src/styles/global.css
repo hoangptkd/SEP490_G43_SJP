@@ -5281,12 +5281,94 @@ textarea {
   margin-top: 8px;
 }
 
+.conversation-text-action {
+  background: transparent;
+  border: 0;
+  color: white;
+  font-size: 0.78rem;
+  margin-top: 10px;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.conversation-text-action:hover:not(:disabled) {
+  background: transparent;
+}
+
+.conversation-inline-editor {
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 700;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.conversation-inline-editor textarea {
+  background: white;
+  color: var(--on-surface);
+  min-height: 112px;
+  resize: vertical;
+  width: min(66vw, 680px);
+}
+
+.conversation-correction-message {
+  background: #fffdf5;
+  border: 1px solid #ead9a6;
+  border-radius: 12px;
+  justify-self: end;
+  max-width: min(78%, 760px);
+  padding: 12px 14px;
+}
+
+.conversation-correction-message p {
+  line-height: 1.55;
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+.conversation-correction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.conversation-correction-actions button {
+  min-height: 36px;
+  padding: 7px 12px;
+}
+
 .conversation-answer-dock {
   background: rgb(239 246 255 / 0.78);
   border: 1px solid #b8d6f1;
   border-radius: 14px;
   margin-top: 8px;
   padding: clamp(16px, 2.5vw, 24px);
+}
+
+.conversation-review-panel {
+  align-items: center;
+  background: var(--surface-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 14px;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-top: 22px;
+  padding: clamp(16px, 2.5vw, 24px);
+}
+
+.conversation-review-panel h3 {
+  margin: 4px 0 6px;
+}
+
+.conversation-review-panel p:last-child {
+  margin-bottom: 0;
+}
+
+.conversation-review-panel > button {
+  flex: 0 0 auto;
 }
 
 .conversation-answer-heading {
@@ -5370,7 +5452,8 @@ textarea {
 @media (max-width: 720px) {
   .conversation-stage-header,
   .conversation-answer-heading,
-  .conversation-retry-panel {
+  .conversation-retry-panel,
+  .conversation-review-panel {
     align-items: stretch;
     flex-direction: column;
   }
@@ -5385,6 +5468,14 @@ textarea {
 
   .conversation-bubble {
     max-width: 94%;
+  }
+
+  .conversation-correction-message {
+    max-width: 94%;
+  }
+
+  .conversation-inline-editor textarea {
+    width: min(82vw, 680px);
   }
 
   .conversation-live-status {

@@ -24,6 +24,22 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
 
     List<InterviewSchedule> findByApplicationIdIn(List<UUID> applicationIds);
 
+    @Query("SELECT i.id FROM InterviewSchedule i " +
+           "WHERE i.status IN :statuses " +
+           "AND ((i.responseDeadline IS NOT NULL AND i.responseDeadline <= :now) " +
+           "OR (i.scheduledAt IS NOT NULL AND i.scheduledAt <= :now))")
+    List<UUID> findExpiredWorkflowIds(
+            @Param("statuses") List<String> statuses,
+            @Param("now") java.time.LocalDateTime now);
+
+    @Query("SELECT i.id FROM InterviewSchedule i " +
+           "WHERE i.status IN :statuses " +
+           "AND i.scheduledAt IS NOT NULL AND i.scheduledAt > :now " +
+           "AND COALESCE(i.reminderCount, 0) < 2")
+    List<UUID> findReminderWorkflowIds(
+            @Param("statuses") List<String> statuses,
+            @Param("now") java.time.LocalDateTime now);
+
     Page<InterviewSchedule> findByEmployerId(UUID employerId, Pageable pageable);
 
     List<InterviewSchedule> findByEmployerIdAndStatus(UUID employerId, String status);

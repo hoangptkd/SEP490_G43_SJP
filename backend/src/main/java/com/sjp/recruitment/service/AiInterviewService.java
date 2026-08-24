@@ -3,6 +3,7 @@ package com.sjp.recruitment.service;
 import com.sjp.recruitment.config.AiInterviewProperties;
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.AiInterviewPracticeSessionRequest;
+import com.sjp.recruitment.model.dto.request.AiInterviewTranscriptReviewRequest;
 import com.sjp.recruitment.model.dto.response.*;
 import com.sjp.recruitment.model.entity.*;
 import com.sjp.recruitment.repository.*;
@@ -14,7 +15,6 @@ import com.sjp.recruitment.service.ai.ShopAiKeyClient;
 import com.sjp.recruitment.model.enums.InterviewDialogueState;
 import com.sjp.recruitment.model.enums.InterviewTurnAnswerStatus;
 import com.sjp.recruitment.model.enums.InterviewTurnType;
-import com.sjp.recruitment.model.enums.TranscriptCorrectionStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -57,7 +58,6 @@ public class AiInterviewService {
     private final InterviewSessionRepository sessionRepository;
     private final InterviewQuestionRepository questionRepository;
     private final InterviewAnswerRepository answerRepository;
-    private final InterviewAnswerCaptureRepository answerCaptureRepository;
     private final AiAnswerFeedbackRepository answerFeedbackRepository;
     private final AiSessionFeedbackRepository sessionFeedbackRepository;
     private final AiQuestionSetRepository questionSetRepository;
@@ -69,6 +69,11 @@ public class AiInterviewService {
     private final AiInterviewSpeechPrefetchService speechPrefetchService;
     private final AiInterviewResponseAssembler responseAssembler;
     private final AiInterviewConversationService conversationService;
+    private final AiInterviewConversationTemplateBank conversationTemplates;
+    private final AiInterviewAdaptivePrefetchCoordinator adaptivePrefetchCoordinator;
+    private final AiInterviewTurnEvidenceCoordinator turnEvidenceCoordinator;
+    private final AiInterviewTranscriptCorrectionCoordinator transcriptCorrectionCoordinator;
+    private final AiInterviewTranscriptReviewService transcriptReviewService;
     private final AiInterviewFallbackFactory fallbackFactory;
     private final InterviewConversationTurnRepository conversationTurnRepository;
     private final FeatureLimitService featureLimitService;
@@ -175,6 +180,7 @@ public class AiInterviewService {
         conversationService.initialize(session);
         session.setStatus("in_progress");
         session = sessionRepository.save(session);
+        prefetchInitialConversationSpeech(session);
         consumeAiSession(candidate.getUser());
         return responseAssembler.assemble(session);
     }
@@ -221,6 +227,7 @@ public class AiInterviewService {
         conversationService.initialize(session);
         session.setStatus("in_progress");
         session = sessionRepository.save(session);
+        prefetchInitialConversationSpeech(session);
         consumeAiSession(candidate.getUser());
         return responseAssembler.assemble(session);
     }
@@ -348,9 +355,16 @@ public class AiInterviewService {
         } catch (AiProviderException exception) {
             throw providerApiException(exception, "phân tích câu trả lời phỏng vấn");
         }
+        if (properties.isTranscriptCorrectionEnabled()) {
+            transcriptCorrectionCoordinator.submitAfterDecision(
+                    parsedSessionId, result.confirmedTurnId());
+        }
+        CompletableFuture<Void> evidenceJob = submitTurnEvidence(parsedSessionId, result);
+        startAdaptivePrefetchAfterThirdCoreAnswer(parsedSessionId, result, evidenceJob);
         if (result.itemCompleted()) {
             continueConversation(parsedSessionId);
         }
+        prefetchCurrentConversationSpeech(parsedSessionId);
         return responseAssembler.assemble(requireSession(sessionId));
     }
 
@@ -373,6 +387,7 @@ public class AiInterviewService {
         if (result.itemCompleted()) {
             continueConversation(parsedSessionId);
         }
+        prefetchCurrentConversationSpeech(parsedSessionId);
         return responseAssembler.assemble(requireSession(sessionId));
     }
 
@@ -406,6 +421,12 @@ public class AiInterviewService {
             } catch (AiProviderException exception) {
                 throw providerApiException(exception, "phân tích lại câu trả lời phỏng vấn");
             }
+            if (properties.isTranscriptCorrectionEnabled()) {
+                transcriptCorrectionCoordinator.submitAfterDecision(
+                        parsedSessionId, result.confirmedTurnId());
+            }
+            CompletableFuture<Void> evidenceJob = submitTurnEvidence(parsedSessionId, result);
+            startAdaptivePrefetchAfterThirdCoreAnswer(parsedSessionId, result, evidenceJob);
             if (result.itemCompleted()) {
                 continueConversation(parsedSessionId);
             }
@@ -418,6 +439,39 @@ public class AiInterviewService {
             throw new ApiException(HttpStatus.CONFLICT, "INTERVIEW_RETRY_NOT_AVAILABLE",
                     "Không có thao tác hội thoại nào đang chờ thử lại.");
         }
+        prefetchCurrentConversationSpeech(parsedSessionId);
+        return responseAssembler.assemble(requireSession(sessionId));
+    }
+
+    @Transactional
+    public AiInterviewSessionResponse reviewConversationTranscript(
+            String sessionId,
+            String turnId,
+            AiInterviewTranscriptReviewRequest request
+    ) {
+        ensureEnabled();
+        CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
+        rateLimiter.check(candidate.getId(), "answer");
+        transcriptReviewService.review(
+                parseUuid(sessionId, "SESSION_ID_INVALID"),
+                parseUuid(turnId, "TURN_ID_INVALID"),
+                request.action(),
+                request.captureId() == null
+                        ? null
+                        : parseUuid(request.captureId(), "CAPTURE_ID_INVALID"),
+                request.captureVersion(),
+                request.transcript(),
+                request.expectedEditCount());
+        return responseAssembler.assemble(requireSession(sessionId));
+    }
+
+    public AiInterviewSessionResponse completeConversationTranscriptReview(String sessionId) {
+        ensureEnabled();
+        CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
+        rateLimiter.check(candidate.getId(), "summary");
+        UUID parsedSessionId = parseUuid(sessionId, "SESSION_ID_INVALID");
+        transcriptReviewService.completeReview(parsedSessionId);
+        evaluateConversation(parsedSessionId);
         return responseAssembler.assemble(requireSession(sessionId));
     }
 
@@ -494,7 +548,6 @@ public class AiInterviewService {
             }
             throw new ApiException(HttpStatus.CONFLICT, "QUESTION_ALREADY_ANSWERED", "Câu hỏi này đã được chốt câu trả lời");
         }
-        requireTranscriptCorrectionReady(answer);
         String persistedRaw = hasText(answer.getRawTranscript())
                 ? answer.getRawTranscript().trim()
                 : rawTranscript == null ? null : rawTranscript.trim();
@@ -522,19 +575,6 @@ public class AiInterviewService {
 
         if (advanceToNextQuestion && !hasOpenQuestion(session)) {
             createNextQuestion(session);
-        }
-    }
-
-    private void requireTranscriptCorrectionReady(InterviewAnswer answer) {
-        if (answer.getActiveCaptureId() == null || answer.getActiveCaptureVersion() == null) return;
-        boolean pending = answerCaptureRepository.findByAnswerIdAndCaptureIdAndCaptureVersion(
-                        answer.getId(), answer.getActiveCaptureId(), answer.getActiveCaptureVersion())
-                .map(InterviewAnswerCapture::getTranscriptCorrectionStatus)
-                .filter(status -> status == TranscriptCorrectionStatus.PENDING)
-                .isPresent();
-        if (pending) {
-            throw new ApiException(HttpStatus.CONFLICT, "TRANSCRIPT_CORRECTION_PENDING",
-                    "Transcript đang được kiểm tra lỗi nhận dạng, vui lòng chờ trong giây lát.");
         }
     }
 
@@ -616,12 +656,39 @@ public class AiInterviewService {
         AiInterviewConversationService.AdvanceResult advance =
                 conversationService.advanceAfterCompletedItem(sessionId);
         if (advance == AiInterviewConversationService.AdvanceResult.NEEDS_ADAPTIVE_QUESTIONS) {
-            generateAdaptiveForConversation(sessionId);
+            adaptivePrefetchCoordinator.await(sessionId, properties.getProviderReadTimeoutMs());
             advance = conversationService.advanceAfterCompletedItem(sessionId);
+            if (advance == AiInterviewConversationService.AdvanceResult.NEEDS_ADAPTIVE_QUESTIONS) {
+                generateAdaptiveForConversation(sessionId);
+                advance = conversationService.advanceAfterCompletedItem(sessionId);
+            }
+            adaptivePrefetchCoordinator.forget(sessionId);
         }
         if (advance == AiInterviewConversationService.AdvanceResult.READY_TO_EVALUATE) {
             evaluateConversation(sessionId);
         }
+    }
+
+    private void startAdaptivePrefetchAfterThirdCoreAnswer(
+            UUID sessionId,
+            AiInterviewConversationService.ConversationResult result,
+            CompletableFuture<Void> evidenceJob
+    ) {
+        if (result == null || result.idempotent() || result.assessmentItemOrder() != 3) return;
+        adaptivePrefetchCoordinator.startAfter(sessionId, evidenceJob,
+                () -> generateAdaptiveForConversation(sessionId));
+    }
+
+    private CompletableFuture<Void> submitTurnEvidence(
+            UUID sessionId,
+            AiInterviewConversationService.ConversationResult result
+    ) {
+        if (result == null || result.idempotent() || !result.evidenceEnrichmentRequired()
+                || result.confirmedTurnId() == null || result.answerClientId() == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return turnEvidenceCoordinator.submit(
+                sessionId, result.confirmedTurnId(), result.answerClientId());
     }
 
     private void advanceConversation(UUID sessionId) {
@@ -634,15 +701,29 @@ public class AiInterviewService {
 
     private void generateAdaptiveForConversation(UUID sessionId) {
         try {
-            InterviewSession session = requireSession(sessionId.toString());
+            InterviewSession session = sessionRepository.findById(sessionId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND",
+                            "Không tìm thấy phiên phỏng vấn"));
             List<InterviewQuestion> questions = questionRepository
                     .findBySessionIdOrderByOrderIndexAsc(sessionId);
             List<InterviewAnswer> answers = answerRepository
                     .findBySessionIdOrderByAnsweredAtAsc(sessionId);
-            if (questions.size() != 3
-                    || answers.stream().filter(answer -> answer.getAnsweredAt() != null).count() < 3) {
+            long completedAnswers = answers.stream()
+                    .filter(answer -> answer.getAnsweredAt() != null)
+                    .count();
+            boolean thirdCoreHasConfirmedTurn = questions.size() == 3
+                    && conversationTurnRepository
+                    .findBySessionIdAndAssessmentItemIdOrderBySequenceNoAsc(
+                            sessionId, questions.get(2).getId())
+                    .stream()
+                    .anyMatch(turn -> turn.getAnswerStatus() == InterviewTurnAnswerStatus.CONFIRMED
+                            && hasText(turn.getCandidateFinalAnswer()));
+            boolean ready = session.getDialogueState() == null
+                    ? completedAnswers >= 3
+                    : completedAnswers >= 2 && thirdCoreHasConfirmedTurn;
+            if (questions.size() != 3 || !ready) {
                 throw new ApiException(HttpStatus.CONFLICT, "ADAPTIVE_QUESTIONS_NOT_READY",
-                        "Ba assessment item đầu chưa hoàn tất để tạo batch thích ứng.");
+                        "Chưa có đủ evidence từ ba assessment item đầu để tạo batch thích ứng.");
             }
             createAdaptiveQuestionBatch(session, questions, answers);
         } catch (ApiException exception) {
@@ -798,7 +879,8 @@ public class AiInterviewService {
                     feedback.setStrengths(joinLines(rating.evidence()));
                     feedback.setWeaknesses(joinLines(rating.missingEvidence()));
                     feedback.setSuggestions(joinLines(rating.missingEvidence()));
-                    feedback.setModelUsed(usedEvaluationFallback ? null : properties.getShopaikeyModel());
+                    feedback.setModelUsed(usedEvaluationFallback ? null
+                            : properties.getTextAi().getFinalEvaluation().getModel());
                 }
                 answerFeedbackRepository.save(feedback);
                 answer.setFeedbackStatus("completed");
@@ -831,7 +913,8 @@ public class AiInterviewService {
             summary.setStrengths(joinLines(resolvedEvaluation.strengths()));
             summary.setWeaknesses(joinLines(resolvedEvaluation.improvements()));
             summary.setSuggestions(joinLines(resolvedEvaluation.actionPlan()));
-            summary.setModelUsed(usedEvaluationFallback ? null : properties.getShopaikeyModel());
+            summary.setModelUsed(usedEvaluationFallback ? null
+                    : properties.getTextAi().getFinalEvaluation().getModel());
             summary.setEvaluationSource(usedEvaluationFallback ? "fallback" : "provider");
             summary.setEvaluationFallback(usedEvaluationFallback);
             sessionFeedbackRepository.save(summary);
@@ -945,30 +1028,11 @@ public class AiInterviewService {
     }
 
     private void createInitialQuestionBatch(InterviewSession session) {
-        try {
-            persistInitialPackage(
-                    session,
-                    shopAiKeyClient.generateInitialInterviewPackage(session, session.getCandidate()),
-                    INITIAL_QUESTION_PROMPT_VERSION
-            );
-        } catch (AiProviderException exception) {
-            log.warn("AI initial question fallback applied: sessionId={}, code={}, detail=\"{}\"",
-                    session.getId(), exception.getCode(), exception.getMessage());
-            persistInitialPackage(
-                    session,
-                    fallbackFactory.initialPackage(session),
-                    AiInterviewFallbackFactory.FALLBACK_PROMPT_VERSION
-            );
-        } catch (ApiException exception) {
-            if (!isRecoverableAiFailure(exception)) throw exception;
-            log.warn("AI initial question contract fallback applied: sessionId={}, code={}, detail=\"{}\"",
-                    session.getId(), exception.getCode(), exception.getMessage());
-            persistInitialPackage(
-                    session,
-                    fallbackFactory.initialPackage(session),
-                    AiInterviewFallbackFactory.FALLBACK_PROMPT_VERSION
-            );
-        }
+        persistInitialPackage(
+                session,
+                shopAiKeyClient.generateInitialInterviewPackage(session, session.getCandidate()),
+                INITIAL_QUESTION_PROMPT_VERSION
+        );
     }
 
     private void persistInitialPackage(
@@ -985,7 +1049,6 @@ public class AiInterviewService {
                 promptVersion,
                 evaluationProfile
         );
-        prefetchQuestions(interviewPackage.questions().stream().skip(1).limit(2).toList());
     }
 
     private void createAdaptiveQuestionBatch(InterviewSession session,
@@ -1099,6 +1162,43 @@ public class AiInterviewService {
         } catch (RuntimeException exception) {
             log.warn("AI interview speech prefetch skipped: exceptionType={}, detail=\"{}\"",
                     exception.getClass().getSimpleName(), exception.getMessage());
+        }
+    }
+
+    private void prefetchInitialConversationSpeech(InterviewSession session) {
+        try {
+            String speechText = responseAssembler.currentConversationSpeech(session);
+            speechPrefetchService.prefetchSegmentsAndAwait(
+                    speechText,
+                    properties.getTtsPrefetchInitialWaitMs());
+            List<String> coreQuestions = questionRepository
+                    .findBySessionIdOrderByOrderIndexAsc(session.getId())
+                    .stream()
+                    .map(InterviewQuestion::getContent)
+                    .toList();
+            speechPrefetchService.prefetch(
+                    conversationTemplates.initialPriorityPhrases(coreQuestions));
+        } catch (RuntimeException exception) {
+            log.warn("AI interview initial speech prefetch skipped: sessionId={}, exceptionType={}, detail=\"{}\"",
+                    session.getId(),
+                    exception.getClass().getSimpleName(), exception.getMessage());
+        }
+    }
+
+    private void prefetchCurrentConversationSpeech(UUID sessionId) {
+        try {
+            InterviewSession session = sessionRepository.findById(sessionId).orElse(null);
+            if (session == null) return;
+            String speechText = responseAssembler.currentConversationSpeech(session);
+            if (speechText != null && !speechText.isBlank()) {
+                speechPrefetchService.prefetch(List.of(
+                        speechText,
+                        conversationTemplates.confirmationPrompt()
+                ));
+            }
+        } catch (RuntimeException exception) {
+            log.warn("AI interview current speech prefetch skipped: sessionId={}, exceptionType={}, detail=\"{}\"",
+                    sessionId, exception.getClass().getSimpleName(), exception.getMessage());
         }
     }
 

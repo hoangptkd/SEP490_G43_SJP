@@ -59,7 +59,7 @@ public class AiInterviewSpeechService {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "GEMINI_TTS_NOT_CONFIGURED",
                     "Chưa cấu hình đầy đủ ShopAIKey Gemini TTS.");
         }
-        String normalizedInput = input == null ? "" : input.replaceAll("\\s+", " ").trim();
+        String normalizedInput = AiInterviewSpeechCache.normalizeSpeech(input);
         if (normalizedInput.isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "TTS_INPUT_REQUIRED", "Nội dung đọc không được để trống.");
         }
@@ -90,10 +90,10 @@ public class AiInterviewSpeechService {
         boolean cacheHit = false;
         try {
             SpeechTicket ticket = requireTicket(token);
-            String cacheKey = speechCache.key(ticket.input());
-            byte[] cached = speechCache.get(cacheKey);
+            byte[] cached = speechCache.getSpeech(ticket.input());
             if (cached == null) {
-                cached = speechPrefetchService.awaitReady(cacheKey, 150);
+                cached = speechPrefetchService.prefetchAndAwait(
+                        ticket.input(), properties.getTtsPrefetchPlaybackWaitMs());
             }
             cacheHit = cached != null;
             if (cached != null) {
@@ -114,11 +114,20 @@ public class AiInterviewSpeechService {
                 try {
                     writer.audio(pcm, mimeType);
                 } catch (IOException exception) {
-                    throw new AiProviderException("GEMINI_TTS_CLIENT_DISCONNECTED",
-                            "Trình duyệt đã ngắt kết nối khỏi luồng audio");
+                    throw new AiProviderException(
+                            "GEMINI_TTS_CLIENT_DISCONNECTED",
+                            "Trình duyệt đã ngắt kết nối khỏi luồng audio"
+                    );
                 }
             });
-            speechCache.put(cacheKey, captured.toByteArray());
+            byte[] generatedAudio = captured.toByteArray();
+            if (generatedAudio.length == 0 || (generatedAudio.length & 1) != 0) {
+                throw new AiProviderException(
+                        "GEMINI_TTS_INVALID_AUDIO",
+                        "Gemini TTS không trả PCM audio hợp lệ"
+                );
+            }
+            speechCache.put(speechCache.key(ticket.input()), generatedAudio);
             writer.done();
         } catch (ApiException exception) {
             log.warn("Gemini TTS ticket failed during async stream: code={}", exception.getCode());

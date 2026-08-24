@@ -37,4 +37,20 @@ class AiInterviewSpeechCacheTest {
 
         assertThat(cache.key("Câu hỏi Java")).isNotEqualTo(first);
     }
+
+    @Test
+    void composesExactConversationSpeechFromCachedSegments() {
+        AiInterviewProperties properties = new AiInterviewProperties();
+        AiInterviewSpeechCache cache = new AiInterviewSpeechCache(properties);
+        cache.put(cache.key("Chào bạn."), new byte[]{1, 0});
+        cache.put(cache.key("Bạn hãy giới thiệu kinh nghiệm Java."), new byte[]{2, 0});
+
+        byte[] speech = cache.getSpeech(
+                "  Chào   bạn. \r\n\r\n Bạn hãy giới thiệu kinh nghiệm Java.  ");
+
+        assertThat(speech).containsExactly(1, 0, 2, 0);
+        assertThat(cache.get(cache.key(
+                "Chào bạn.\nBạn hãy giới thiệu kinh nghiệm Java.")))
+                .containsExactly(1, 0, 2, 0);
+    }
 }

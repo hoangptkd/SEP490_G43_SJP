@@ -11,6 +11,7 @@ public record AiInterviewConversationTurnResponse(
         String answerStatus,
         boolean current,
         String answeredAt,
-        String createdAt
+        String createdAt,
+        AiInterviewTranscriptCorrectionResponse transcriptCorrection
 ) {
 }

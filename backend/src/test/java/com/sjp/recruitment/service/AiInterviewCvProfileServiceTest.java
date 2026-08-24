@@ -68,7 +68,9 @@ class AiInterviewCvProfileServiceTest {
         when(candidateService.getCurrentCandidateProfile()).thenReturn(candidate);
         when(contextBuilder.build(candidate, cv.getId())).thenReturn(context);
         when(properties.getCvProfilePromptVersion()).thenReturn("cv-interview-profile-v1");
-        when(properties.getShopaikeyModel()).thenReturn("gpt-test");
+        AiInterviewProperties.TextAi textAi = new AiInterviewProperties.TextAi();
+        textAi.getCvAnalysis().setModel("gpt-test");
+        when(properties.getTextAi()).thenReturn(textAi);
     }
 
     @Test

@@ -8,6 +8,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Comparator;
+import java.io.ByteArrayOutputStream;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,6 +50,29 @@ public class AiInterviewSpeechCache {
         return entry.audio().clone();
     }
 
+    public byte[] getSpeech(String speechText) {
+        String normalized = normalizeSpeech(speechText);
+        if (normalized.isBlank()) return null;
+        String fullKey = key(normalized);
+        byte[] full = get(fullKey);
+        if (full != null) return full;
+
+        String[] segments = Arrays.stream(normalized.split("\\R"))
+                .map(String::trim)
+                .filter(segment -> !segment.isBlank())
+                .toArray(String[]::new);
+        if (segments.length < 2) return null;
+        ByteArrayOutputStream composed = new ByteArrayOutputStream();
+        for (String segment : segments) {
+            byte[] audio = get(key(segment));
+            if (audio == null) return null;
+            composed.writeBytes(audio);
+        }
+        byte[] audio = composed.toByteArray();
+        put(fullKey, audio);
+        return audio;
+    }
+
     public void put(String key, byte[] audio) {
         if (audio == null || audio.length == 0) {
             return;
@@ -69,6 +94,15 @@ public class AiInterviewSpeechCache {
     int size() {
         cleanup();
         return entries.size();
+    }
+
+    public static String normalizeSpeech(String value) {
+        if (value == null) return "";
+        return Arrays.stream(value.replace("\r\n", "\n").replace('\r', '\n').split("\n"))
+                .map(line -> line.replaceAll("\\s+", " ").trim())
+                .filter(line -> !line.isBlank())
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
     }
 
     private void cleanup() {

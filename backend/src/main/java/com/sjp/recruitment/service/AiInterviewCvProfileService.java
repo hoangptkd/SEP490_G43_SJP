@@ -51,7 +51,7 @@ public class AiInterviewCvProfileService {
 
         String contentHash = sha256(context.cvText());
         String promptVersion = properties.getCvProfilePromptVersion();
-        String model = properties.getShopaikeyModel();
+        String model = properties.getTextAi().getCvAnalysis().getModel();
         AiInterviewCvProfile cached = profileRepository
                 .findFirstByCandidateIdAndCvIdAndContentHashAndPromptVersionAndModelUsedOrderByCreatedAtDesc(
                         candidate.getId(), cv.getId(), contentHash, promptVersion, model)

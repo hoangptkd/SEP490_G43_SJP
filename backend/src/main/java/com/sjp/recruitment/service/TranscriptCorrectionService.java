@@ -1,16 +1,16 @@
 package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.config.AiInterviewProperties;
-import com.sjp.recruitment.model.entity.InterviewAnswer;
+import com.sjp.recruitment.config.AiInterviewBackgroundConfiguration;
 import com.sjp.recruitment.model.entity.InterviewAnswerCapture;
-import com.sjp.recruitment.model.entity.InterviewConversationTurn;
-import com.sjp.recruitment.model.enums.InterviewTurnAnswerStatus;
 import com.sjp.recruitment.model.enums.TranscriptCorrectionStatus;
 import com.sjp.recruitment.repository.InterviewAnswerCaptureRepository;
 import com.sjp.recruitment.service.ai.AiProviderException;
 import com.sjp.recruitment.service.ai.ShopAiKeyClient;
 import com.sjp.recruitment.service.ai.TranscriptCorrectionContext;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -18,8 +18,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Service
 @Slf4j
@@ -34,17 +35,49 @@ public class TranscriptCorrectionService {
     private final ShopAiKeyClient aiClient;
     private final InterviewAnswerCaptureRepository captureRepository;
     private final TransactionTemplate transactions;
+    private final TaskExecutor executor;
+    private final ConcurrentMap<String, Boolean> inFlight = new ConcurrentHashMap<>();
 
     public TranscriptCorrectionService(
             AiInterviewProperties properties,
             ShopAiKeyClient aiClient,
             InterviewAnswerCaptureRepository captureRepository,
-            TransactionTemplate transactions
+            TransactionTemplate transactions,
+            @Qualifier(AiInterviewBackgroundConfiguration.EXECUTOR_BEAN) TaskExecutor executor
     ) {
         this.properties = properties;
         this.aiClient = aiClient;
         this.captureRepository = captureRepository;
         this.transactions = transactions;
+        this.executor = executor;
+    }
+
+    public void submit(
+            UUID sessionId,
+            UUID answerId,
+            UUID captureId,
+            int captureVersion,
+            TranscriptCorrectionContext context
+    ) {
+        String jobKey = answerId + ":" + captureId + ":" + captureVersion;
+        if (inFlight.putIfAbsent(jobKey, Boolean.TRUE) != null) return;
+        try {
+            executor.execute(() -> {
+                try {
+                    correct(sessionId, answerId, captureId, captureVersion, context);
+                } finally {
+                    inFlight.remove(jobKey);
+                }
+            });
+        } catch (RuntimeException exception) {
+            inFlight.remove(jobKey);
+            log.warn("Transcript correction executor rejected captureId={}, version={}",
+                    captureId, captureVersion);
+            persist(answerId, captureId, captureVersion,
+                    normalize(context == null ? null : context.rawTranscript()),
+                    TranscriptCorrectionStatus.FAILED, List.of(), Map.of(),
+                    "TRANSCRIPT_CORRECTION_CAPACITY");
+        }
     }
 
     public CorrectionResult correct(
@@ -110,7 +143,7 @@ public class TranscriptCorrectionService {
 
     private Attempt beginAttempt(UUID answerId, UUID captureId, int captureVersion, String rawTranscript) {
         InterviewAnswerCapture capture = captureRepository
-                .findByAnswerIdAndCaptureIdAndCaptureVersion(answerId, captureId, captureVersion)
+                .findForUpdate(answerId, captureId, captureVersion)
                 .orElse(null);
         if (capture == null) return null;
         TranscriptCorrectionStatus current = capture.getTranscriptCorrectionStatus();
@@ -253,7 +286,7 @@ public class TranscriptCorrectionService {
     ) {
         CorrectionResult result = transactions.execute(transactionStatus -> {
             InterviewAnswerCapture capture = captureRepository
-                    .findByAnswerIdAndCaptureIdAndCaptureVersion(answerId, captureId, captureVersion)
+                    .findForUpdate(answerId, captureId, captureVersion)
                     .orElse(null);
             if (capture == null) {
                 return new CorrectionResult(safeDraft, TranscriptCorrectionStatus.FAILED, 0);
@@ -261,26 +294,12 @@ public class TranscriptCorrectionService {
             capture.setCorrectedTranscript(safeDraft);
             capture.setTranscriptCorrectionStatus(status);
             capture.setTranscriptCorrectionErrorCode(safeCode(errorCode));
-            capture.setTranscriptCorrectionJson(metadata == null ? Map.of() : metadata);
+            Map<String, Object> mergedMetadata = new LinkedHashMap<>(
+                    safeMap(capture.getTranscriptCorrectionJson()));
+            if (metadata != null) mergedMetadata.putAll(metadata);
+            capture.setTranscriptCorrectionJson(mergedMetadata);
             captureRepository.save(capture);
 
-            InterviewAnswer answer = capture.getAnswer();
-            InterviewConversationTurn turn = capture.getConversationTurn();
-            boolean turnStillReviewing = turn == null
-                    || turn.getAnswerStatus() == InterviewTurnAnswerStatus.REVIEWING
-                    || turn.getAnswerStatus() == InterviewTurnAnswerStatus.PROCESSING;
-            boolean active = answer != null
-                    && answer.getAnsweredAt() == null
-                    && Objects.equals(answer.getActiveCaptureId(), captureId)
-                    && Objects.equals(answer.getActiveCaptureVersion(), captureVersion)
-                    && turnStillReviewing;
-            if (active) {
-                answer.setFinalTranscript(safeDraft);
-                answer.setTranscriptText(safeDraft);
-                if (turn != null) {
-                    turn.setCandidateFinalAnswer(safeDraft);
-                }
-            }
             return new CorrectionResult(safeDraft, status, acceptedCorrections.size());
         });
         return result == null

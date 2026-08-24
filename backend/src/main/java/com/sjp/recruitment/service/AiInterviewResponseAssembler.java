@@ -25,6 +25,7 @@ public class AiInterviewResponseAssembler {
     private final AiAnswerFeedbackRepository answerFeedbackRepository;
     private final AiSessionFeedbackRepository sessionFeedbackRepository;
     private final InterviewConversationTurnRepository conversationTurnRepository;
+    private final InterviewAnswerCaptureRepository answerCaptureRepository;
     private final JobService jobService;
 
     @Transactional(readOnly = true)
@@ -43,6 +44,19 @@ public class AiInterviewResponseAssembler {
                 .collect(Collectors.groupingBy(question -> question.getSession().getId()));
         List<InterviewAnswer> allAnswers = answerRepository
                 .findBySessionIdInOrderBySessionIdAscAnsweredAtAsc(sessionIds);
+        Map<UUID, InterviewAnswerCapture> capturesByTurn = allAnswers.isEmpty()
+                ? Map.of()
+                : answerCaptureRepository.findByAnswerIdIn(
+                                allAnswers.stream().map(InterviewAnswer::getId).toList())
+                        .stream()
+                        .filter(capture -> capture.getConversationTurn() != null
+                                && capture.getConversationTurn().getId() != null)
+                        .collect(Collectors.toMap(
+                                capture -> capture.getConversationTurn().getId(),
+                                capture -> capture,
+                                this::newerCapture,
+                                LinkedHashMap::new
+                        ));
         Map<UUID, Map<UUID, InterviewAnswer>> answersBySession = allAnswers.stream()
                 .collect(Collectors.groupingBy(
                         answer -> answer.getSession().getId(),
@@ -68,9 +82,18 @@ public class AiInterviewResponseAssembler {
                         answersBySession.getOrDefault(session.getId(), Map.of()),
                         feedbackByAnswer,
                         summaryBySession.get(session.getId()),
-                        turnsBySession.getOrDefault(session.getId(), List.of())
+                        turnsBySession.getOrDefault(session.getId(), List.of()),
+                        capturesByTurn
                 ))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public String currentConversationSpeech(InterviewSession session) {
+        List<InterviewConversationTurn> turns = conversationTurnRepository
+                .findBySessionIdOrderBySequenceNoAsc(session.getId());
+        InterviewConversationTurn currentTurn = resolveCurrentTurn(session, turns);
+        return speechText(publishedTurns(currentTurn, turns));
     }
 
     private AiInterviewSessionResponse buildResponse(InterviewSession session,
@@ -78,7 +101,8 @@ public class AiInterviewResponseAssembler {
                                                       Map<UUID, InterviewAnswer> answers,
                                                       Map<UUID, AiAnswerFeedback> feedbackByAnswer,
                                                       AiSessionFeedback sessionFeedback,
-                                                      List<InterviewConversationTurn> conversationTurns) {
+                                                      List<InterviewConversationTurn> conversationTurns,
+                                                      Map<UUID, InterviewAnswerCapture> capturesByTurn) {
         List<AiInterviewQuestionResponse> questionResponses = session.getDialogueState() == null
                 ? questions.stream()
                 .map(question -> toQuestionResponse(
@@ -105,20 +129,24 @@ public class AiInterviewResponseAssembler {
                 asString(session.getUpdatedAt()),
                 questionResponses,
                 !session.isCompleted() || sessionFeedback == null ? null : toSummaryResponse(sessionFeedback),
-                toConversationResponse(session, answers, conversationTurns)
+                toConversationResponse(session, answers, conversationTurns, capturesByTurn)
         );
     }
 
     private AiInterviewConversationResponse toConversationResponse(InterviewSession session,
                                                                     Map<UUID, InterviewAnswer> answers,
-                                                                    List<InterviewConversationTurn> turns) {
+                                                                    List<InterviewConversationTurn> turns,
+                                                                    Map<UUID, InterviewAnswerCapture> capturesByTurn) {
         if (session.getDialogueState() == null && turns.isEmpty()) return null;
 
         InterviewConversationTurn currentTurn = resolveCurrentTurn(session, turns);
         List<InterviewConversationTurn> publishedTurns = publishedTurns(currentTurn, turns);
         UUID currentTurnId = currentTurn == null ? null : currentTurn.getId();
         List<AiInterviewConversationTurnResponse> timeline = publishedTurns.stream()
-                .map(turn -> toConversationTurnResponse(turn, Objects.equals(turn.getId(), currentTurnId)))
+                .map(turn -> toConversationTurnResponse(
+                        turn,
+                        Objects.equals(turn.getId(), currentTurnId),
+                        capturesByTurn.get(turn.getId())))
                 .toList();
         long completedCoreQuestions = answers.values().stream()
                 .filter(answer -> answer.getAnsweredAt() != null)
@@ -168,7 +196,8 @@ public class AiInterviewResponseAssembler {
     }
 
     private AiInterviewConversationTurnResponse toConversationTurnResponse(InterviewConversationTurn turn,
-                                                                            boolean current) {
+                                                                            boolean current,
+                                                                            InterviewAnswerCapture capture) {
         return new AiInterviewConversationTurnResponse(
                 turn.getId().toString(),
                 turn.getSequenceNo(),
@@ -180,8 +209,65 @@ public class AiInterviewResponseAssembler {
                 turn.getAnswerStatus().name(),
                 current,
                 asString(turn.getAnsweredAt()),
-                asString(turn.getCreatedAt())
+                asString(turn.getCreatedAt()),
+                toTranscriptCorrection(capture)
         );
+    }
+
+    private InterviewAnswerCapture newerCapture(
+            InterviewAnswerCapture left,
+            InterviewAnswerCapture right
+    ) {
+        return right.getCaptureVersion() >= left.getCaptureVersion() ? right : left;
+    }
+
+    private AiInterviewTranscriptCorrectionResponse toTranscriptCorrection(
+            InterviewAnswerCapture capture
+    ) {
+        if (capture == null || capture.getTranscriptCorrectionStatus() == null) return null;
+        Map<String, Object> metadata = capture.getTranscriptCorrectionJson() == null
+                ? Map.of()
+                : capture.getTranscriptCorrectionJson();
+        List<AiInterviewTranscriptCorrectionItemResponse> corrections = correctionItems(
+                metadata.get("corrections"));
+        String decision = normalizedMetadataText(metadata.get("candidateDecision"));
+        if (decision == null && capture.getTranscriptCorrectionStatus()
+                == com.sjp.recruitment.model.enums.TranscriptCorrectionStatus.CORRECTED) {
+            decision = "PENDING";
+        }
+        return new AiInterviewTranscriptCorrectionResponse(
+                capture.getCaptureId().toString(),
+                capture.getCaptureVersion(),
+                capture.getTranscriptCorrectionStatus().name(),
+                capture.getCorrectedTranscript(),
+                corrections.size(),
+                corrections,
+                decision
+        );
+    }
+
+    private List<AiInterviewTranscriptCorrectionItemResponse> correctionItems(Object raw) {
+        if (!(raw instanceof Collection<?> values)) return List.of();
+        List<AiInterviewTranscriptCorrectionItemResponse> result = new ArrayList<>();
+        for (Object value : values) {
+            if (!(value instanceof Map<?, ?> item)) continue;
+            String original = normalizedMetadataText(item.get("original"));
+            String replacement = normalizedMetadataText(item.get("replacement"));
+            String reason = normalizedMetadataText(item.get("reason"));
+            Object confidenceValue = item.get("confidence");
+            if (original == null || replacement == null || reason == null
+                    || !(confidenceValue instanceof Number confidence)) {
+                continue;
+            }
+            result.add(new AiInterviewTranscriptCorrectionItemResponse(
+                    original, replacement, confidence.doubleValue(), reason));
+        }
+        return List.copyOf(result);
+    }
+
+    private String normalizedMetadataText(Object raw) {
+        if (!(raw instanceof String value) || value.isBlank()) return null;
+        return value.replaceAll("\\s+", " ").trim();
     }
 
     private boolean expectsAnswer(InterviewConversationTurn currentTurn) {

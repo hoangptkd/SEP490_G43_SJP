@@ -15,11 +15,35 @@ import java.util.UUID;
 import org.springframework.data.domain.Pageable;
 
 public interface InterviewSessionRepository extends JpaRepository<InterviewSession, UUID> {
-    @EntityGraph(attributePaths = {"candidate", "job", "application"})
+    @EntityGraph(attributePaths = {
+            "candidate",
+            "job",
+            "job.company",
+            "job.employer",
+            "job.employer.user",
+            "job.companyLocation",
+            "application"
+    })
     List<InterviewSession> findByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(UUID candidateId);
-    @EntityGraph(attributePaths = {"candidate", "job", "application"})
+    @EntityGraph(attributePaths = {
+            "candidate",
+            "job",
+            "job.company",
+            "job.employer",
+            "job.employer.user",
+            "job.companyLocation",
+            "application"
+    })
     List<InterviewSession> findByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(UUID candidateId, Pageable pageable);
-    @EntityGraph(attributePaths = {"candidate", "job", "application"})
+    @EntityGraph(attributePaths = {
+            "candidate",
+            "job",
+            "job.company",
+            "job.employer",
+            "job.employer.user",
+            "job.companyLocation",
+            "application"
+    })
     Optional<InterviewSession> findByIdAndCandidateIdAndDeletedAtIsNull(UUID id, UUID candidateId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

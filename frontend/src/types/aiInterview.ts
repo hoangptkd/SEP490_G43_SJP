@@ -168,6 +168,7 @@ export type AiInterviewDialogueState =
   | 'ASK_PROBE'
   | 'ASK_CLARIFY'
   | 'ACK_TRANSITION'
+  | 'REVIEW_TRANSCRIPTS'
   | 'CLOSING'
   | 'COMPLETED';
 
@@ -191,6 +192,46 @@ export interface AiInterviewConversationTurn {
   current: boolean;
   answeredAt?: string;
   createdAt?: string;
+  transcriptCorrection?: AiInterviewTranscriptCorrection;
+}
+
+export type AiInterviewTranscriptCorrectionStatus =
+  | 'PENDING'
+  | 'CORRECTED'
+  | 'UNCHANGED'
+  | 'FAILED'
+  | 'NOT_REQUIRED';
+
+export type AiInterviewTranscriptCandidateDecision =
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'MANUAL_EDIT'
+  | 'AUTO_KEPT';
+
+export interface AiInterviewTranscriptCorrectionItem {
+  original: string;
+  replacement: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface AiInterviewTranscriptCorrection {
+  captureId: string;
+  captureVersion: number;
+  status: AiInterviewTranscriptCorrectionStatus;
+  proposedTranscript?: string;
+  correctionCount: number;
+  corrections: AiInterviewTranscriptCorrectionItem[];
+  candidateDecision?: AiInterviewTranscriptCandidateDecision;
+}
+
+export interface AiInterviewTranscriptReviewRequest {
+  action: 'ACCEPT_AI' | 'KEEP_CURRENT' | 'MANUAL_EDIT';
+  captureId?: string;
+  captureVersion?: number;
+  transcript?: string;
+  expectedEditCount: number;
 }
 
 export interface AiInterviewConversation {

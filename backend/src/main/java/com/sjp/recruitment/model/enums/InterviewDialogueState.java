@@ -9,6 +9,7 @@ public enum InterviewDialogueState {
     ASK_PROBE,
     ASK_CLARIFY,
     ACK_TRANSITION,
+    REVIEW_TRANSCRIPTS,
     CLOSING,
     COMPLETED
 }

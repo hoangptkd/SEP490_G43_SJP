@@ -96,7 +96,10 @@ public class SpeechmaticsRealtimeWebSocketHandler extends AbstractWebSocketHandl
             closeBoth(state, UPSTREAM_FAILURE);
             return;
         }
-        send(upstream, new BinaryMessage(message.getPayload().slice(), true));
+        if (!send(upstream, new BinaryMessage(message.getPayload().slice(), true))) {
+            closeBoth(state, UPSTREAM_FAILURE);
+            return;
+        }
         state.audioChunks.incrementAndGet();
     }
 
@@ -125,10 +128,12 @@ public class SpeechmaticsRealtimeWebSocketHandler extends AbstractWebSocketHandl
             return;
         }
         int lastSeqNo = Math.max(0, state.audioChunks.get() - 1);
-        send(upstream, new TextMessage(objectMapper.writeValueAsString(Map.of(
+        if (!send(upstream, new TextMessage(objectMapper.writeValueAsString(Map.of(
                 "message", "EndOfStream",
                 "last_seq_no", lastSeqNo
-        ))));
+        ))))) {
+            closeBoth(state, UPSTREAM_FAILURE);
+        }
     }
 
     @Override
@@ -214,8 +219,16 @@ public class SpeechmaticsRealtimeWebSocketHandler extends AbstractWebSocketHandl
         }
     }
 
-    private void send(WebSocketSession session, WebSocketMessage<?> message) throws IOException {
-        if (session != null && session.isOpen()) session.sendMessage(message);
+    private boolean send(WebSocketSession session, WebSocketMessage<?> message) throws IOException {
+        if (session == null || !session.isOpen()) return false;
+        try {
+            session.sendMessage(message);
+            return true;
+        } catch (IllegalStateException exception) {
+            log.debug("WebSocket closed before queued message could be sent: sessionId={}, messageType={}",
+                    session.getId(), message.getClass().getSimpleName());
+            return false;
+        }
     }
 
     private void closeBrowser(ProxyState state, CloseStatus status) {
@@ -266,7 +279,9 @@ public class SpeechmaticsRealtimeWebSocketHandler extends AbstractWebSocketHandl
             }
             state.upstream = new ConcurrentWebSocketSessionDecorator(
                     session, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES);
-            send(state.upstream, startRecognitionMessage());
+            if (!send(state.upstream, startRecognitionMessage())) {
+                closeBoth(state, UPSTREAM_FAILURE);
+            }
         }
 
         @Override
@@ -274,9 +289,17 @@ public class SpeechmaticsRealtimeWebSocketHandler extends AbstractWebSocketHandl
             JsonNode payload = objectMapper.readTree(message.getPayload());
             String type = payload.path("message").asText();
             if ("RecognitionStarted".equals(type)) state.recognitionStarted.set(true);
-            send(state.browser, new TextMessage(message.getPayload()));
-            if ("EndOfTranscript".equals(type) || "Error".equals(type)) {
-                closeBoth(state, "EndOfTranscript".equals(type) ? CloseStatus.NORMAL : UPSTREAM_FAILURE);
+            if (state.browserClosing.get()
+                    || !send(state.browser, new TextMessage(message.getPayload()))) {
+                closeUpstream(state, CloseStatus.NORMAL);
+                return;
+            }
+            if ("EndOfTranscript".equals(type)) {
+                // The browser owns the final close after consuming this message. Keeping its side
+                // open here avoids racing the final transcript delivery with a server-side close.
+                closeUpstream(state, CloseStatus.NORMAL);
+            } else if ("Error".equals(type)) {
+                closeBoth(state, UPSTREAM_FAILURE);
             }
         }
 

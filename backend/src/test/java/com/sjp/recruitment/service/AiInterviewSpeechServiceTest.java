@@ -7,7 +7,6 @@ import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.service.ai.AiInterviewRateLimiter;
 import com.sjp.recruitment.service.ai.AiInterviewSpeechCache;
 import com.sjp.recruitment.service.ai.AiInterviewSpeechPrefetchService;
-import com.sjp.recruitment.service.ai.AiProviderException;
 import com.sjp.recruitment.service.ai.ShopAiKeyGeminiTtsClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,9 +19,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,6 +44,7 @@ class AiInterviewSpeechServiceTest {
 
         AiInterviewProperties properties = new AiInterviewProperties();
         properties.setGladiaApiKey("gladia-test-key");
+        properties.getTextAi().setApiKey("text-ai-test-key");
         properties.setShopaikeyApiKey("shopaikey-test-key");
         properties.setVoiceProvider("shopaikey_gemini_stream");
 
@@ -66,14 +67,9 @@ class AiInterviewSpeechServiceTest {
     }
 
     @Test
-    void wrapsSuccessfulProviderStreamWithAudioAndDoneEvents() throws Exception {
+    void waitsBrieflyForSharedPrefetchThenStreamsAudioAndDoneEvents() {
         byte[] pcm = new byte[]{0, 0, 1, 0};
-        doAnswer(invocation -> {
-            ShopAiKeyGeminiTtsClient.AudioChunkConsumer consumer = invocation.getArgument(1);
-            consumer.accept(pcm, ShopAiKeyGeminiTtsClient.CONTENT_TYPE);
-            return new ShopAiKeyGeminiTtsClient.StreamMetrics(pcm.length, 20, 30,
-                    ShopAiKeyGeminiTtsClient.CONTENT_TYPE);
-        }).when(ttsClient).streamSpeech(eq("Câu hỏi Java"), any(ShopAiKeyGeminiTtsClient.AudioChunkConsumer.class));
+        when(prefetchService.prefetchAndAwait("Câu hỏi Java", 1_200)).thenReturn(pcm);
 
         AiInterviewSpeechTicketResponse ticket = service.createTicket("Câu hỏi Java");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -83,33 +79,55 @@ class AiInterviewSpeechServiceTest {
         assertThat(ticket.contentType()).startsWith("text/event-stream");
         assertThat(sse).contains("event: audio", "\"sequence\":0", "event: done")
                 .doesNotContain("event: error");
-        verify(cache).put("cache-key", pcm);
+        verify(prefetchService).prefetchAndAwait("Câu hỏi Java", 1_200);
     }
 
     @Test
-    void convertsPartialProviderTimeoutToErrorEventWithoutThrowing() throws Exception {
-        byte[] pcm = new byte[]{0, 0};
+    void streamsGeminiDirectlyAndCachesAudioWhenPrefetchIsNotReady() {
+        byte[] pcm = new byte[]{2, 0, 3, 0};
+        when(prefetchService.prefetchAndAwait("Câu hỏi Java", 1_200)).thenReturn(null);
         doAnswer(invocation -> {
             ShopAiKeyGeminiTtsClient.AudioChunkConsumer consumer = invocation.getArgument(1);
             consumer.accept(pcm, ShopAiKeyGeminiTtsClient.CONTENT_TYPE);
-            throw new AiProviderException("GEMINI_TTS_IDLE_TIMEOUT", "provider detail");
-        }).when(ttsClient).streamSpeech(eq("Câu hỏi Java"), any(ShopAiKeyGeminiTtsClient.AudioChunkConsumer.class));
+            return new ShopAiKeyGeminiTtsClient.StreamMetrics(
+                    pcm.length, 20, 40, ShopAiKeyGeminiTtsClient.CONTENT_TYPE);
+        }).when(ttsClient).streamSpeech(anyString(),
+                any(ShopAiKeyGeminiTtsClient.AudioChunkConsumer.class));
 
         AiInterviewSpeechTicketResponse ticket = service.createTicket("Câu hỏi Java");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         service.streamSpeech(token(ticket), output);
 
         String sse = output.toString(StandardCharsets.UTF_8);
-        assertThat(sse).contains("event: audio", "event: error", "GEMINI_TTS_IDLE_TIMEOUT",
-                        "Không thể phát trọn vẹn giọng đọc")
-                .doesNotContain("event: done", "provider detail");
-        verify(cache, never()).put(any(), any());
+        assertThat(sse).contains("event: audio", "event: done", "\"audioBytes\":4")
+                .doesNotContain("event: error", "GEMINI_TTS_CACHE_NOT_READY");
+        verify(ttsClient).streamSpeech(eq("Câu hỏi Java"),
+                any(ShopAiKeyGeminiTtsClient.AudioChunkConsumer.class));
+        verify(cache).put("cache-key", pcm);
+    }
+
+    @Test
+    void reportsProviderFailureOnlyWhenDirectGeminiStreamActuallyFails() {
+        when(prefetchService.prefetchAndAwait("Câu hỏi Java", 1_200)).thenReturn(null);
+        doThrow(new com.sjp.recruitment.service.ai.AiProviderException(
+                "GEMINI_TTS_FIRST_AUDIO_TIMEOUT", "Gemini TTS timeout"))
+                .when(ttsClient).streamSpeech(anyString(),
+                        any(ShopAiKeyGeminiTtsClient.AudioChunkConsumer.class));
+
+        AiInterviewSpeechTicketResponse ticket = service.createTicket("Câu hỏi Java");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        service.streamSpeech(token(ticket), output);
+
+        String sse = output.toString(StandardCharsets.UTF_8);
+        assertThat(sse).contains("event: error", "GEMINI_TTS_FIRST_AUDIO_TIMEOUT")
+                .doesNotContain("GEMINI_TTS_CACHE_NOT_READY", "event: audio", "event: done");
+        verify(cache, never()).put(anyString(), any(byte[].class));
     }
 
     @Test
     void wrapsCachedPcmWithAudioAndDoneWithoutCallingProvider() {
         byte[] pcm = new byte[]{0, 0, 1, 0};
-        when(cache.get("cache-key")).thenReturn(pcm);
+        when(cache.getSpeech("Câu hỏi Java")).thenReturn(pcm);
 
         AiInterviewSpeechTicketResponse ticket = service.createTicket("Câu hỏi Java");
         ByteArrayOutputStream output = new ByteArrayOutputStream();

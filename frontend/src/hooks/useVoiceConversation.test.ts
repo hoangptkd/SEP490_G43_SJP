@@ -15,8 +15,17 @@ import {
   resolveResumedVoicePhase,
   shouldSettleConfirmationImmediately,
   shouldEnterManualFallbackForRecognitionError,
+  shouldFallbackToBrowserSpeech,
   shouldScheduleConfirmationPrompt,
 } from './useVoiceConversation';
+
+describe('Gemini TTS fallback', () => {
+  it('uses browser speech only when Gemini has not started playing', () => {
+    expect(shouldFallbackToBrowserSpeech(false, true)).toBe(true);
+    expect(shouldFallbackToBrowserSpeech(true, true)).toBe(false);
+    expect(shouldFallbackToBrowserSpeech(false, false)).toBe(false);
+  });
+});
 
 describe('classifyConfirmation', () => {
   it.each([
@@ -153,7 +162,7 @@ describe('hands-free transcript source of truth', () => {
     expect(completed.displayedTranscript).toBe('em dùng spring bút và rét api');
     expect(completed.rawTranscript).toBe('em dùng spring bút và rét api');
     expect(completed.gladiaTranscript).toBe('');
-    expect(completed.notice).toBe('Đã hoàn tất audio. Transcript Web Speech được giữ nguyên.');
+    expect(completed.notice).toBe('Đã nhận transcript Web Speech. Audio và VAD đang được xử lý nền.');
   });
 
   it('keeps Web Speech when background audio processing is unavailable', () => {
@@ -161,11 +170,11 @@ describe('hands-free transcript source of truth', () => {
       rawTranscript: 'Bản realtime',
       displayedTranscript: 'Bản realtime',
       gladiaTranscript: '',
-      notice: 'Không thể xử lý audio. Transcript Web Speech vẫn được giữ lại.',
+      notice: 'Không thể xử lý audio. Transcript realtime vẫn được giữ lại.',
     });
   });
 
-  it('shows the validated correction while retaining raw Web Speech audit text', () => {
+  it('keeps the current transcript until the candidate accepts the AI suggestion', () => {
     expect(resolveCaptureTranscript('em dùng spring bút', {
       rawTranscript: 'em dùng spring bút',
       correctedTranscript: 'em dùng Spring Boot',
@@ -174,9 +183,9 @@ describe('hands-free transcript source of truth', () => {
       transcriptStatus: 'web_speech',
     })).toEqual({
       rawTranscript: 'em dùng spring bút',
-      displayedTranscript: 'em dùng Spring Boot',
+      displayedTranscript: 'em dùng spring bút',
       gladiaTranscript: '',
-      notice: 'AI đã sửa 1 lỗi nhận dạng có độ tin cậy cao. Hãy kiểm tra trước khi xác nhận.',
+      notice: 'AI đề xuất sửa 1 lỗi nhận dạng. Bạn có thể dùng bản đề xuất hoặc giữ transcript hiện tại.',
     });
   });
 
@@ -193,6 +202,19 @@ describe('hands-free transcript source of truth', () => {
     expect(resolved.rawTranscript).toBe('em dùng spring bút');
     expect(resolved.notice).toBe(
       'Không thể kiểm tra lỗi nhận dạng. Transcript Web Speech vẫn được giữ nguyên.',
+    );
+  });
+
+  it('labels Speechmatics as the authoritative realtime transcript source', () => {
+    const resolved = resolveCaptureTranscript('Tôi dùng Spring Boot', {
+      rawTranscript: 'Tôi dùng Spring Boot',
+      correctionStatus: 'PENDING',
+      correctionCount: 0,
+      transcriptStatus: 'speechmatics_realtime',
+    });
+
+    expect(resolved.notice).toBe(
+      'Transcript Speechmatics Realtime đã sẵn sàng. AI đang kiểm tra lỗi nhận dạng trong nền.',
     );
   });
 });

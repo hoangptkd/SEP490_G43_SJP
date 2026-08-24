@@ -42,6 +42,18 @@ class SpeechmaticsRealtimeWebSocketHandlerTest {
     }
 
     @Test
+    void reportsSendAsClosedWhenSessionClosesBetweenCheckAndSend() throws Exception {
+        WebSocketSession browser = mock(WebSocketSession.class);
+        when(browser.isOpen()).thenReturn(true);
+        when(browser.getId()).thenReturn("browser-1");
+        doThrow(new IllegalStateException("WebSocket session has been closed"))
+                .when(browser).sendMessage(any());
+        SpeechmaticsRealtimeWebSocketHandler handler = handler();
+
+        assertFalse(invokeSend(handler, browser, new TextMessage("{}")));
+    }
+
+    @Test
     void doesNotSendProviderErrorAfterBrowserStartsClosing() throws Exception {
         WebSocketSession browser = mock(WebSocketSession.class);
         SpeechmaticsRealtimeWebSocketHandler handler = handler();
@@ -53,6 +65,27 @@ class SpeechmaticsRealtimeWebSocketHandlerTest {
         invokeSendProviderError(handler, state);
 
         verify(browser, never()).sendMessage(any());
+    }
+
+    @Test
+    void keepsBrowserOpenUntilItConsumesEndOfTranscript() throws Exception {
+        WebSocketSession browser = mock(WebSocketSession.class);
+        WebSocketSession upstream = mock(WebSocketSession.class);
+        when(browser.isOpen()).thenReturn(true);
+        when(upstream.isOpen()).thenReturn(true);
+        SpeechmaticsRealtimeWebSocketHandler handler = handler();
+        Object state = newProxyState(browser);
+        Field upstreamField = state.getClass().getDeclaredField("upstream");
+        upstreamField.setAccessible(true);
+        upstreamField.set(state, upstream);
+        Object upstreamHandler = newUpstreamHandler(handler, state);
+
+        invokeUpstreamTextMessage(upstreamHandler, upstream,
+                new TextMessage("{\"message\":\"EndOfTranscript\"}"));
+
+        verify(browser).sendMessage(any(TextMessage.class));
+        verify(browser, never()).close(any(CloseStatus.class));
+        verify(upstream).close(CloseStatus.NORMAL);
     }
 
     @Test
@@ -111,5 +144,40 @@ class SpeechmaticsRealtimeWebSocketHandlerTest {
                 .getDeclaredMethod("sendProviderError", state.getClass());
         method.setAccessible(true);
         method.invoke(handler, state);
+    }
+
+    private boolean invokeSend(
+            SpeechmaticsRealtimeWebSocketHandler handler,
+            WebSocketSession session,
+            TextMessage message
+    ) throws Exception {
+        Method method = SpeechmaticsRealtimeWebSocketHandler.class
+                .getDeclaredMethod("send", WebSocketSession.class,
+                        org.springframework.web.socket.WebSocketMessage.class);
+        method.setAccessible(true);
+        return (boolean) method.invoke(handler, session, message);
+    }
+
+    private Object newUpstreamHandler(
+            SpeechmaticsRealtimeWebSocketHandler handler,
+            Object state
+    ) throws Exception {
+        Class<?> handlerClass = Class.forName(
+                SpeechmaticsRealtimeWebSocketHandler.class.getName() + "$UpstreamHandler");
+        Constructor<?> constructor = handlerClass.getDeclaredConstructor(
+                SpeechmaticsRealtimeWebSocketHandler.class, String.class, state.getClass());
+        constructor.setAccessible(true);
+        return constructor.newInstance(handler, "browser-1", state);
+    }
+
+    private void invokeUpstreamTextMessage(
+            Object upstreamHandler,
+            WebSocketSession upstream,
+            TextMessage message
+    ) throws Exception {
+        Method method = upstreamHandler.getClass().getDeclaredMethod(
+                "handleTextMessage", WebSocketSession.class, TextMessage.class);
+        method.setAccessible(true);
+        method.invoke(upstreamHandler, upstream, message);
     }
 }

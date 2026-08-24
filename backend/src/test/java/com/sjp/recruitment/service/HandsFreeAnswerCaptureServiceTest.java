@@ -23,6 +23,7 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.core.task.SyncTaskExecutor;
 
 import java.math.BigDecimal;
 import java.nio.file.Path;
@@ -64,6 +65,7 @@ class HandsFreeAnswerCaptureServiceTest {
 
     @BeforeEach
     void setUp() {
+        properties.setTranscriptCorrectionEnabled(true);
         persistedAnswerStatuses.clear();
         CandidateProfile candidate = new CandidateProfile();
         candidate.setId(candidateId);
@@ -117,17 +119,6 @@ class HandsFreeAnswerCaptureServiceTest {
         when(correctionContextBuilder.build(eq(session), eq(question), anyString(), any()))
                 .thenAnswer(invocation -> new TranscriptCorrectionContext(
                         question.getContent(), invocation.getArgument(2), List.of(), List.of(), List.of(), ""));
-        when(transcriptCorrectionService.correct(eq(sessionId), eq(answerId), any(), anyInt(), any()))
-                .thenAnswer(invocation -> {
-                    TranscriptCorrectionContext context = invocation.getArgument(4);
-                    InterviewAnswerCapture capture = persistedCapture.get();
-                    if (capture != null) {
-                        capture.setCorrectedTranscript(context.rawTranscript());
-                        capture.setTranscriptCorrectionStatus(TranscriptCorrectionStatus.UNCHANGED);
-                    }
-                    return new TranscriptCorrectionService.CorrectionResult(
-                            context.rawTranscript(), TranscriptCorrectionStatus.UNCHANGED, 0);
-                });
         when(audioDecoder.decode(anyList())).thenReturn(new DecodedPcmAudio(new short[16_000], 16_000));
         when(waveWriter.toByteArray(any())).thenReturn(new byte[]{'R', 'I', 'F', 'F'});
         when(vadAnalyzer.analyze(any(DecodedPcmAudio.class))).thenReturn(completedVad());
@@ -138,7 +129,8 @@ class HandsFreeAnswerCaptureServiceTest {
         service = new HandsFreeAnswerCaptureService(properties, candidateService, rateLimiter, sessionRepository,
                 questionRepository, answerRepository, captureRepository, turnRepository, vocabularyBuilder,
                 correctionContextBuilder, transcriptCorrectionService, voiceEvidenceService,
-                audioDecoder, waveWriter, vadAnalyzer, transactions, new ObjectMapper());
+                audioDecoder, waveWriter, vadAnalyzer, transactions, new ObjectMapper(),
+                new SyncTaskExecutor());
     }
 
     @Test
@@ -154,11 +146,11 @@ class HandsFreeAnswerCaptureServiceTest {
         assertThat(result.gladiaTranscript()).isNull();
         assertThat(result.rawTranscript()).isEqualTo("em dùng spring bút và rét api");
         assertThat(result.correctedTranscript()).isEqualTo(result.rawTranscript());
-        assertThat(result.correctionStatus()).isEqualTo("UNCHANGED");
+        assertThat(result.correctionStatus()).isEqualTo("PENDING");
         assertThat(result.correctionCount()).isZero();
         assertThat(result.transcriptStatus()).isEqualTo("web_speech");
-        assertThat(result.dataQuality()).isEqualTo("BROWSER_PLUS_VAD");
-        assertThat(result.vadMetrics()).isNotNull();
+        assertThat(result.dataQuality()).isEqualTo("BROWSER_TRANSCRIPT_ONLY");
+        assertThat(result.vadMetrics()).isNull();
         assertThat(answer.getTranscriptText()).isEqualTo(result.rawTranscript());
         assertThat(answer.getRawTranscript()).isEqualTo(result.rawTranscript());
         assertThat(answer.getFinalTranscript()).isEqualTo(result.rawTranscript());
@@ -172,9 +164,8 @@ class HandsFreeAnswerCaptureServiceTest {
         verify(audioDecoder).decode(argThat(segments -> segments.size() == 2));
         verify(voiceEvidenceService).submit(eq(answerId), eq(captureId), eq(1), any(byte[].class),
                 eq(new GladiaTranscriptionContext(List.of("Spring Boot", "REST API"))));
-        var order = inOrder(voiceEvidenceService, transcriptCorrectionService);
-        order.verify(voiceEvidenceService).submit(eq(answerId), eq(captureId), eq(1), any(byte[].class), any());
-        order.verify(transcriptCorrectionService).correct(eq(sessionId), eq(answerId), eq(captureId), eq(1), any());
+        verify(transcriptCorrectionService).submit(
+                eq(sessionId), eq(answerId), eq(captureId), eq(1), any());
     }
 
     @Test
@@ -206,6 +197,7 @@ class HandsFreeAnswerCaptureServiceTest {
         assertThat(turn.getAnswerStatus()).isEqualTo(InterviewTurnAnswerStatus.REVIEWING);
         assertThat(turn.getCandidateRawAnswer()).isEqualTo(result.rawTranscript());
         assertThat(turn.getCandidateFinalAnswer()).isEqualTo(result.rawTranscript());
+        verifyNoInteractions(transcriptCorrectionService);
     }
 
     @Test
@@ -243,8 +235,8 @@ class HandsFreeAnswerCaptureServiceTest {
         assertThat(retry).isEqualTo(first);
         verify(voiceEvidenceService, times(1)).submit(eq(answerId), eq(captureId), eq(1),
                 any(byte[].class), any());
-        verify(transcriptCorrectionService, times(1))
-                .correct(eq(sessionId), eq(answerId), eq(captureId), eq(1), any());
+        verify(transcriptCorrectionService, times(2))
+                .submit(eq(sessionId), eq(answerId), eq(captureId), eq(1), any());
     }
 
     @Test

@@ -93,19 +93,63 @@ app:
     gladia-base-url: ${GLADIA_BASE_URL:https://api.gladia.io}
     shopaikey-api-key: ${SHOPAIKEY_API_KEY:}
     shopaikey-base-url: ${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}
-    shopaikey-model: ${SHOPAIKEY_MODEL:gpt-4.1-mini}
+    text-ai:
+      provider: ${AI_INTERVIEW_TEXT_PROVIDER:shopaikey}
+      base-url: ${AI_INTERVIEW_TEXT_BASE_URL:${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}}
+      api-key: ${AI_INTERVIEW_TEXT_API_KEY:${SHOPAIKEY_API_KEY:}}
+      cv-analysis:
+        model: ${AI_INTERVIEW_CV_MODEL:gemini-2.5-pro}
+        effort: ${AI_INTERVIEW_CV_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_CV_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_CV_MAX_ATTEMPTS:3}
+      initial-questions:
+        model: ${AI_INTERVIEW_INITIAL_MODEL:gemini-3.5-flash}
+        effort: ${AI_INTERVIEW_INITIAL_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_INITIAL_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_INITIAL_MAX_ATTEMPTS:3}
+      turn-decision:
+        model: ${AI_INTERVIEW_TURN_DECISION_MODEL:gemini-3.5-flash-lite}
+        effort: ${AI_INTERVIEW_TURN_DECISION_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_TURN_DECISION_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_TURN_DECISION_MAX_ATTEMPTS:1}
+        read-timeout-ms: ${AI_INTERVIEW_TURN_DECISION_TIMEOUT_MS:15000}
+      turn-evidence:
+        model: ${AI_INTERVIEW_TURN_EVIDENCE_MODEL:gemini-3.1-flash-lite}
+        effort: ${AI_INTERVIEW_TURN_EVIDENCE_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_TURN_EVIDENCE_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_TURN_EVIDENCE_MAX_ATTEMPTS:3}
+        read-timeout-ms: ${AI_INTERVIEW_TURN_EVIDENCE_TIMEOUT_MS:60000}
+      adaptive-questions:
+        model: ${AI_INTERVIEW_ADAPTIVE_MODEL:gemini-3.5-flash}
+        effort: ${AI_INTERVIEW_ADAPTIVE_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_ADAPTIVE_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_ADAPTIVE_MAX_ATTEMPTS:3}
+      transcript-correction:
+        model: ${AI_INTERVIEW_TRANSCRIPT_MODEL:gemini-2.5-flash-lite}
+        effort: ${AI_INTERVIEW_TRANSCRIPT_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_TRANSCRIPT_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_TRANSCRIPT_MAX_ATTEMPTS:3}
+      final-evaluation:
+        model: ${AI_INTERVIEW_FINAL_MODEL:gemini-2.5-pro}
+        effort: ${AI_INTERVIEW_FINAL_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_FINAL_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_FINAL_MAX_ATTEMPTS:3}
     tts-base-url: ${AI_INTERVIEW_TTS_BASE_URL:https://api.shopaikey.com}
     tts-model: ${AI_INTERVIEW_TTS_MODEL:gemini-3.1-flash-tts-preview}
     tts-voice: ${AI_INTERVIEW_TTS_VOICE:Kore}
     tts-voice-instruction: ${AI_INTERVIEW_TTS_VOICE_INSTRUCTION:Speak naturally as a professional Vietnamese interviewer. Use a warm, conversational tone and moderate pace. Pronounce English technical terms naturally in English. Do not add or remove words.}
     tts-connect-timeout-ms: ${AI_INTERVIEW_TTS_CONNECT_TIMEOUT_MS:2000}
-    tts-first-audio-timeout-ms: ${AI_INTERVIEW_TTS_FIRST_AUDIO_TIMEOUT_MS:8000}
+    tts-first-audio-timeout-ms: ${AI_INTERVIEW_TTS_FIRST_AUDIO_TIMEOUT_MS:12000}
     tts-idle-timeout-ms: ${AI_INTERVIEW_TTS_IDLE_TIMEOUT_MS:3000}
     tts-cache-max-entries: ${AI_INTERVIEW_TTS_CACHE_MAX_ENTRIES:100}
     tts-cache-ttl-seconds: ${AI_INTERVIEW_TTS_CACHE_TTL_SECONDS:1800}
+    tts-prefetch-initial-wait-ms: ${AI_INTERVIEW_TTS_PREFETCH_INITIAL_WAIT_MS:20000}
+    tts-prefetch-playback-wait-ms: ${AI_INTERVIEW_TTS_PREFETCH_PLAYBACK_WAIT_MS:1200}
+    tts-prefetch-cooldown-ms: ${AI_INTERVIEW_TTS_PREFETCH_COOLDOWN_MS:30000}
     audio-max-seconds: ${AI_INTERVIEW_AUDIO_MAX_SECONDS:180}
     audio-max-size-mb: ${AI_INTERVIEW_AUDIO_MAX_SIZE_MB:25}
     question-count: ${AI_INTERVIEW_QUESTION_COUNT:5}
+    max-follow-ups-per-core: ${AI_INTERVIEW_MAX_FOLLOW_UPS_PER_CORE:1}
     max-probes-per-core: ${AI_INTERVIEW_MAX_PROBES_PER_CORE:1}
     max-clarifies-per-core: ${AI_INTERVIEW_MAX_CLARIFIES_PER_CORE:1}
     max-total-assessment-turns: ${AI_INTERVIEW_MAX_TOTAL_ASSESSMENT_TURNS:10}
@@ -117,7 +161,9 @@ app:
     voice-confirmation-auto-finalize-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_AUTO_FINALIZE_MS:3000}
     voice-recognition-restart-delay-ms: ${AI_INTERVIEW_VOICE_RECOGNITION_RESTART_DELAY_MS:250}
     voice-load-wait-ms: ${AI_INTERVIEW_VOICE_LOAD_WAIT_MS:700}
-    voice-next-question-delay-ms: ${AI_INTERVIEW_VOICE_NEXT_QUESTION_DELAY_MS:150}
+    voice-next-question-delay-ms: ${AI_INTERVIEW_VOICE_NEXT_QUESTION_DELAY_MS:0}
+    background-core-pool-size: ${AI_INTERVIEW_BACKGROUND_CORE_POOL_SIZE:4}
+    background-queue-capacity: ${AI_INTERVIEW_BACKGROUND_QUEUE_CAPACITY:32}
     voice-evidence-core-pool-size: ${AI_INTERVIEW_VOICE_EVIDENCE_CORE_POOL_SIZE:2}
     voice-evidence-queue-capacity: ${AI_INTERVIEW_VOICE_EVIDENCE_QUEUE_CAPACITY:4}
     voice-evidence-await-timeout-ms: ${AI_INTERVIEW_VOICE_EVIDENCE_AWAIT_TIMEOUT_MS:5000}
@@ -130,7 +176,7 @@ app:
     speechmatics-max-delay-seconds: ${SPEECHMATICS_MAX_DELAY_SECONDS:1.5}
     speechmatics-ticket-ttl-seconds: ${SPEECHMATICS_TICKET_TTL_SECONDS:60}
     speechmatics-connect-timeout-ms: ${SPEECHMATICS_CONNECT_TIMEOUT_MS:8000}
-    speechmatics-final-flush-timeout-ms: ${SPEECHMATICS_FINAL_FLUSH_TIMEOUT_MS:6000}
+    speechmatics-final-flush-timeout-ms: ${SPEECHMATICS_FINAL_FLUSH_TIMEOUT_MS:15000}
     speechmatics-max-concurrent-sessions: ${SPEECHMATICS_MAX_CONCURRENT_SESSIONS:20}
     transcript-correction-enabled: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_ENABLED:false}
     transcript-correction-min-confidence: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MIN_CONFIDENCE:0.90}
@@ -139,7 +185,7 @@ app:
     transcript-correction-max-context-terms: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_CONTEXT_TERMS:100}
     transcript-correction-max-previous-context-chars: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_PREVIOUS_CONTEXT_CHARS:1200}
     transcript-correction-timeout-ms: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_TIMEOUT_MS:15000}
-    transcript-correction-prompt-version: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_PROMPT_VERSION:browser-transcript-correction-v1}
+    transcript-correction-prompt-version: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_PROMPT_VERSION:browser-transcript-correction-v2}
     costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
     gladia-languages: ${GLADIA_LANGUAGES:vi,en}
     gladia-code-switching-enabled: ${GLADIA_CODE_SWITCHING_ENABLED:true}

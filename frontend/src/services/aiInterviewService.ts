@@ -10,6 +10,7 @@ import type {
   AiInterviewSpeechTicket,
   AiInterviewTranscript,
   AiInterviewTranscriptionTicket,
+  AiInterviewTranscriptReviewRequest,
   HandsFreeAnswerCaptureResult,
   HandsFreeAudioSegmentUpload,
 } from '../types/aiInterview';
@@ -142,6 +143,32 @@ export const aiInterviewService = {
     return { ...response.data, questionId: turnId };
   },
 
+  getHandsFreeTurnCaptureStatus: async (
+    sessionId: string,
+    turnId: string,
+    captureId: string,
+    captureVersion: number,
+  ): Promise<HandsFreeAnswerCaptureResult> => {
+    const response = await api.get<HandsFreeAnswerCaptureResult>(
+      `/candidate/ai-interviews/sessions/${sessionId}/turns/${turnId}/answer-captures/${captureId}`,
+      { params: { captureVersion } },
+    );
+    return response.data;
+  },
+
+  getHandsFreeQuestionCaptureStatus: async (
+    sessionId: string,
+    questionId: string,
+    captureId: string,
+    captureVersion: number,
+  ): Promise<HandsFreeAnswerCaptureResult> => {
+    const response = await api.get<HandsFreeAnswerCaptureResult>(
+      `/candidate/ai-interviews/sessions/${sessionId}/questions/${questionId}/answer-captures/${captureId}`,
+      { params: { captureVersion } },
+    );
+    return response.data;
+  },
+
   createSpeechTicket: async (sessionId: string, input: string): Promise<AiInterviewSpeechTicket> => {
     const response = await api.post<AiInterviewSpeechTicket>(
       `/candidate/ai-interviews/sessions/${sessionId}/speech`,
@@ -232,6 +259,27 @@ export const aiInterviewService = {
   retryConversation: async (sessionId: string): Promise<AiInterviewSession> => {
     const response = await api.post<AiInterviewSession>(
       `/candidate/ai-interviews/sessions/${sessionId}/conversation/retry`,
+    );
+    return response.data;
+  },
+
+  reviewConversationTranscript: async (
+    sessionId: string,
+    turnId: string,
+    review: AiInterviewTranscriptReviewRequest,
+  ): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/turns/${turnId}/transcript-review`,
+      review,
+    );
+    return response.data;
+  },
+
+  completeConversationTranscriptReview: async (
+    sessionId: string,
+  ): Promise<AiInterviewSession> => {
+    const response = await api.post<AiInterviewSession>(
+      `/candidate/ai-interviews/sessions/${sessionId}/conversation/transcript-review/complete`,
     );
     return response.data;
   },

@@ -20,6 +20,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.core.task.SyncTaskExecutor;
 
 import java.util.List;
 import java.util.Map;
@@ -50,6 +51,7 @@ class TranscriptCorrectionServiceTest {
 
     @BeforeEach
     void setUp() {
+        properties.setTranscriptCorrectionEnabled(true);
         answer = new InterviewAnswer();
         answer.setId(answerId);
         answer.setActiveCaptureId(captureId);
@@ -73,18 +75,19 @@ class TranscriptCorrectionServiceTest {
         capture.setRawTranscript(answer.getRawTranscript());
         capture.setTranscriptCorrectionStatus(TranscriptCorrectionStatus.PENDING);
 
-        when(captureRepository.findByAnswerIdAndCaptureIdAndCaptureVersion(answerId, captureId, 1))
+        when(captureRepository.findForUpdate(answerId, captureId, 1))
                 .thenReturn(Optional.of(capture));
         when(transactions.execute(any())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             TransactionCallback<Object> callback = invocation.getArgument(0);
             return callback.doInTransaction(org.mockito.Mockito.mock(TransactionStatus.class));
         });
-        service = new TranscriptCorrectionService(properties, aiClient, captureRepository, transactions);
+        service = new TranscriptCorrectionService(
+                properties, aiClient, captureRepository, transactions, new SyncTaskExecutor());
     }
 
     @Test
-    void appliesOnlyDeclaredHighConfidenceCorrectionsToTheActiveReviewDraft() {
+    void storesDeclaredHighConfidenceCorrectionsWithoutOverwritingCandidateDraft() {
         when(aiClient.correctBrowserTranscript(sessionId, context())).thenReturn(draft(
                 "ờ em dùng Spring Boot với Postman",
                 List.of(
@@ -101,8 +104,25 @@ class TranscriptCorrectionServiceTest {
         assertThat(capture.getCorrectedTranscript()).isEqualTo(result.correctedTranscript());
         assertThat(capture.getTranscriptCorrectionJson()).containsKeys(
                 "corrections", "evidence", "answerSummary", "followUpNeeded", "promptVersion");
-        assertThat(answer.getFinalTranscript()).isEqualTo(result.correctedTranscript());
-        assertThat(turn.getCandidateFinalAnswer()).isEqualTo(result.correctedTranscript());
+        assertThat(answer.getFinalTranscript()).isEqualTo(answer.getRawTranscript());
+        assertThat(turn.getCandidateFinalAnswer()).isEqualTo(answer.getRawTranscript());
+    }
+
+    @Test
+    void providerResultPreservesCandidateDecisionWrittenWhileCorrectionWasRunning() {
+        capture.setTranscriptCorrectionJson(Map.of(
+                "candidateDecision", "REJECTED",
+                "decidedTranscript", answer.getRawTranscript()));
+        when(aiClient.correctBrowserTranscript(sessionId, context())).thenReturn(draft(
+                "ờ em dùng Spring Boot với post men",
+                List.of(correction("spring bút", "Spring Boot", 0.98, "cv_term"))));
+
+        correct();
+
+        assertThat(capture.getTranscriptCorrectionJson())
+                .containsEntry("candidateDecision", "REJECTED")
+                .containsEntry("decidedTranscript", answer.getRawTranscript())
+                .containsKeys("corrections", "promptVersion");
     }
 
     @Test
@@ -148,7 +168,7 @@ class TranscriptCorrectionServiceTest {
                 .containsEntry("providerTranscriptMatched", false)
                 .containsEntry("validationWarningCode", "TRANSCRIPT_CORRECTION_UNDECLARED_CHANGE_IGNORED")
                 .containsEntry("providerMismatchIndex", 0);
-        assertThat(answer.getFinalTranscript()).isEqualTo(result.correctedTranscript());
+        assertThat(answer.getFinalTranscript()).isEqualTo(answer.getRawTranscript());
         assertThat(output.getAll())
                 .contains("Transcript correction provider changes ignored")
                 .contains("code=TRANSCRIPT_CORRECTION_UNDECLARED_CHANGE_IGNORED")

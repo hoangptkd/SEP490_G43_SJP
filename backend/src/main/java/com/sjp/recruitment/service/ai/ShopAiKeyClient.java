@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 @Service
@@ -40,14 +41,24 @@ import java.util.function.Supplier;
 @Slf4j
 public class ShopAiKeyClient {
 
-    static final int INITIAL_QUESTION_MAX_TOKENS = 1_800;
-    static final int ANSWER_ANALYSIS_MAX_TOKENS = 800;
-    static final int TRANSCRIPT_CORRECTION_MAX_TOKENS = 1_600;
-    static final int PROVIDER_MAX_ATTEMPTS = 2;
-    static final String ANSWER_ANALYSIS_STAGE = "assessment_turn_analysis";
-    static final String ANSWER_ANALYSIS_PROMPT_VERSION = "assessment-turn-analysis-v1";
+    static final int INITIAL_QUESTION_MAX_TOKENS = 8_000;
+    static final int CV_PROFILE_MAX_TOKENS = 8_000;
+    static final int CV_PROFILE_RETRY_MAX_TOKENS = 8_000;
+    static final int TURN_DECISION_MAX_TOKENS = 256;
+    static final int TURN_EVIDENCE_MAX_TOKENS = 4_000;
+    static final int ADAPTIVE_QUESTION_MAX_TOKENS = 8_000;
+    static final int TRANSCRIPT_CORRECTION_MAX_TOKENS = 8_000;
+    static final int FINAL_EVALUATION_MAX_TOKENS = 8_000;
+    static final int PROVIDER_MAX_ATTEMPTS = 3;
+    static final int QUESTION_TARGET_MAX_LENGTH = 240;
+    static final int QUESTION_HARD_MAX_LENGTH = 500;
+    static final String TURN_DECISION_STAGE = "assessment_turn_decision";
+    static final String TURN_DECISION_PROMPT_VERSION = "assessment-turn-decision-v2";
+    static final String TURN_EVIDENCE_STAGE = "assessment_turn_evidence";
+    static final String TURN_EVIDENCE_PROMPT_VERSION = "assessment-turn-evidence-v1";
     static final String TRANSCRIPT_CORRECTION_STAGE = "transcript_correction";
     static final int UPDATED_ITEM_SUMMARY_MAX_LENGTH = 1_200;
+    static final int FOLLOW_UP_MAX_LENGTH = 600;
     static final String EMPTY_ITEM_SUMMARY =
             "Chưa ghi nhận bằng chứng cụ thể từ câu trả lời này.";
     static final String ADAPTIVE_PROMPT_VERSION = "ai-question-adaptive-v4";
@@ -91,6 +102,9 @@ public class ShopAiKeyClient {
                    Kể cả chỉ đổi chữ hoa/chữ thường hoặc dấu câu cũng phải khai báo thành correction; nếu không khai báo
                    thì phải giữ nguyên chính tả, cách viết hoa và dấu câu của rawTranscript.
                 8. Trích evidence quan sát được làm draft cho adaptive analysis; không tạo điểm số.
+                9. Nếu original xuất hiện nhiều lần trong rawTranscript, phải lấy thêm từ xung quanh để original
+                   chỉ xuất hiện đúng một lần; replacement phải thay toàn bộ cùng đoạn đó. Không khai báo một
+                   original mơ hồ có nhiều vị trí khớp.
                 JSON schema chính xác:
                 {
                   "correctedTranscript": "string",
@@ -120,7 +134,7 @@ public class ShopAiKeyClient {
                 TRANSCRIPT_CORRECTION_STAGE,
                 properties.getTranscriptCorrectionPromptVersion(),
                 properties.getTranscriptCorrectionTimeoutMs(),
-                true
+                false
         );
         return parseProviderResponse(
                 sessionId,
@@ -138,6 +152,8 @@ public class ShopAiKeyClient {
         String prompt = withSystemPrompt("""
                 Tạo Evaluation Profile và đúng 3 câu đầu cho buổi phỏng vấn luyện tập bằng tiếng Việt.
                 Chỉ trả JSON hợp lệ, không markdown.
+                Bắt đầu response ngay bằng ký tự { và kết thúc bằng ký tự }. Không giải thích schema,
+                không nhắc lại yêu cầu và không viết nội dung nào ngoài JSON.
                 Evaluation Profile có 3-6 năng lực tổng, nhưng scoredCompetencyIds phải chọn đúng 3-4 năng lực
                 thực sự được chấm trong phiên 5 câu.
                 Không dùng bằng cấp, trường học, tuổi, giới tính hoặc ngoại hình làm tiêu chí.
@@ -151,7 +167,8 @@ public class ShopAiKeyClient {
                 Chỉ chọn vào scoredCompetencyIds các năng lực có thể quan sát bằng 5 câu phỏng vấn.
                 communicationDemand là số nguyên 1-5 dựa trên mức giao tiếp cần thiết của vai trò.
                 Ba câu đầu phải gồm: 1 câu xác minh kinh nghiệm/dự án, 1 câu năng lực cốt lõi,
-                và 1 câu hành vi hoặc tình huống. Mỗi câu chỉ hỏi một ý chính, trả lời trong 2-3 phút.
+                và 1 câu hành vi hoặc tình huống. Mỗi question chỉ hỏi một ý chính, tối đa %d ký tự,
+                chỉ có một dấu hỏi (?) và có thể trả lời trong 2-3 phút.
                 Ba câu đầu phải dùng 3 competencyId khác nhau thuộc scoredCompetencyIds để ưu tiên coverage.
                 BARS là rubric ẩn; level1, level3 và level5 phải mô tả hành vi/bằng chứng quan sát được.
                 JSON schema:
@@ -185,82 +202,101 @@ public class ShopAiKeyClient {
                 }
                 Context:
                 %s
-                """.formatted(buildContext(session, candidate)));
-        JsonNode json = callJson(prompt, INITIAL_QUESTION_MAX_TOKENS, 0.2,
-                session.getId(), "initial_questions", "ai-question-initial-v2");
-        return new InterviewPackageDraft(
-                evaluationProfile(json.path("evaluationProfile")),
-                rubricQuestions(json.path("questions"), 3)
+                """.formatted(QUESTION_TARGET_MAX_LENGTH, buildContext(session, candidate)));
+        return callJsonValidated(
+                prompt,
+                INITIAL_QUESTION_MAX_TOKENS,
+                0.2,
+                session.getId(),
+                "initial_questions",
+                "ai-question-initial-v2",
+                json -> new InterviewPackageDraft(
+                        evaluationProfile(json.path("evaluationProfile")),
+                        rubricQuestions(json.path("questions"), 3)
+                )
         );
     }
 
-    public AnswerAnalysisDraft analyzeAssessmentTurn(
+    public AnswerDecisionDraft analyzeAssessmentTurnDecision(
             InterviewSession session,
             InterviewQuestion coreQuestion,
             String currentAnswer,
-            Map<String, Object> itemEvidenceSummary,
-            AssessmentTurnCounters counters
-    ) {
-        return analyzeAssessmentTurn(session, coreQuestion, currentAnswer,
-                itemEvidenceSummary, Map.of(), counters);
-    }
-
-    public AnswerAnalysisDraft analyzeAssessmentTurn(
-            InterviewSession session,
-            InterviewQuestion coreQuestion,
-            String currentAnswer,
-            Map<String, Object> itemEvidenceSummary,
-            Map<String, Object> correctionEvidenceDraft,
             AssessmentTurnCounters counters
     ) {
         validateAssessmentTurnInput(session, coreQuestion, currentAnswer, counters);
         String questionType = normalizedQuestionType(coreQuestion.getQuestionType());
+        String prompt = withSystemPrompt("""
+                Chọn bước tiếp theo cho một lượt phỏng vấn tiếng Việt. Chỉ trả JSON, không markdown:
+                {"action":"NEXT|PROBE|CLARIFY","followUp":"string|null"}
+                NEXT khi câu trả lời đã hữu ích, chỉ còn thiếu chi tiết phụ/lặp ý, hoặc đã chạm giới hạn.
+                PROBE khi câu trả lời liên quan nhưng thiếu đúng một evidence quan trọng có thể đổi đánh giá.
+                CLARIFY khi câu trả lời mơ hồ, quá ngắn hoặc lệch trọng tâm nhưng ứng viên có thể làm rõ.
+                PROBE/CLARIFY phải có đúng một câu hỏi followUp ngắn; NEXT phải có followUp=null.
+                Tổng PROBE+CLARIFY tối đa %d; probeCount >= %d thì cấm PROBE; clarifyCount >= %d thì cấm CLARIFY.
+                Nếu totalAssessmentTurns + remainingCoreQuestions >= %d thì bắt buộc NEXT.
+                Context: %s
+                """.formatted(
+                properties.getMaxFollowUpsPerCore(),
+                properties.getMaxProbesPerCore(),
+                properties.getMaxClarifiesPerCore(),
+                properties.getMaxTotalAssessmentTurns(),
+                jsonString(assessmentDecisionContext(
+                        session, coreQuestion, currentAnswer, counters, questionType))
+        ));
+
+        JsonNode json = callJson(
+                prompt,
+                TURN_DECISION_MAX_TOKENS,
+                0.0,
+                session.getId(),
+                TURN_DECISION_STAGE,
+                TURN_DECISION_PROMPT_VERSION
+        );
+        return parseProviderResponse(
+                session.getId(),
+                TURN_DECISION_STAGE,
+                TURN_DECISION_PROMPT_VERSION,
+                json,
+                () -> answerDecisionDraft(json, session.getId())
+        );
+    }
+
+    public AnswerEvidenceDraft analyzeAssessmentTurnEvidence(
+            InterviewSession session,
+            InterviewQuestion coreQuestion,
+            String currentAnswer,
+            Map<String, Object> itemEvidenceSummary
+    ) {
+        validateAssessmentEvidenceInput(session, coreQuestion, currentAnswer);
+        String questionType = normalizedQuestionType(coreQuestion.getQuestionType());
         List<String> dimensions = evidenceDimensions(questionType);
         Map<String, Boolean> coverageSchema = new LinkedHashMap<>();
         dimensions.forEach(dimension -> coverageSchema.put(dimension, false));
-
-        String compactItemSummary = jsonString(itemEvidenceSummary == null ? Map.of() : itemEvidenceSummary);
-        if (compactItemSummary.length() > 4_000) {
+        Map<String, Object> currentSummary = itemEvidenceSummary == null ? Map.of() : itemEvidenceSummary;
+        if (jsonString(currentSummary).length() > 4_000) {
             throw new AiProviderException("AI_CONTEXT_TOO_LARGE",
                     "Tóm tắt evidence của assessment item vượt giới hạn cho phép");
         }
 
         String prompt = withSystemPrompt("""
-                Phân tích đúng một lượt trả lời trong structured interview bằng tiếng Việt.
-                Chỉ trả đúng một JSON object hợp lệ, không markdown, không thêm field ngoài schema.
-                Chỉ được chọn action NEXT, PROBE hoặc CLARIFY.
-                - NEXT: evidence đã đủ hữu ích hoặc giới hạn follow-up đã đạt.
-                - PROBE: câu trả lời liên quan nhưng còn thiếu evidence quan trọng.
-                - CLARIFY: câu trả lời mơ hồ, quá ngắn hoặc chưa trả lời đúng trọng tâm.
-                STAR (situation/task/action/result) CHỈ áp dụng cho behavioral; không dùng STAR cho loại khác.
-                Với behavioral, ưu tiên hỏi Action rồi Result; không bắt buộc hỏi Situation/Task nếu context đã rõ.
+                Trích xuất và cập nhật evidence cho đúng một lượt trả lời structured interview bằng tiếng Việt.
+                Chỉ trả đúng một JSON object hợp lệ, không markdown. Không quyết định NEXT/PROBE/CLARIFY
+                và không tạo câu hỏi follow-up.
+                STAR chỉ áp dụng cho behavioral. Không chấm điểm ở bước này và không thưởng vì nói dài.
                 Với technical, chỉ xét accuracy, reasoning, tradeOffs, implementationDetail, realWorldApplication.
                 Với situational, chỉ xét problemIdentification, decision, reasoning, risk, alternative.
                 Với cv_experience, chỉ xét personalContribution, technicalDepth, consistency, result.
                 Với general, xét relevance, specificity, evidence, result.
-                BARS/expectedEvidence là mục tiêu evidence; không chấm điểm ở bước này và không thưởng vì nói dài
-                hoặc chỉ vì trình bày đủ STAR.
-                PROBE/CLARIFY phải có đúng một followUp ngắn, gắn với core question và competency hiện tại.
-                NEXT bắt buộc followUp=null. Không tạo competency mới.
-                Nếu probeCount >= %d thì không được chọn PROBE; nếu clarifyCount >= %d thì không được chọn CLARIFY.
-                Nếu totalAssessmentTurns + remainingCoreQuestions >= %d thì bắt buộc NEXT để luôn chừa đủ lượt
-                cho chính xác 5 CORE_QUESTION.
                 updatedItemSummary phải là tóm tắt evidence tích lũy ngắn, không chép lại transcript,
-                bắt buộc không rỗng và dài tối đa %d ký tự. Nếu currentAnswer không có evidence hữu ích,
-                hãy giữ summary trước đó; nếu chưa có summary thì trả đúng câu:
-                "%s"
-                globalEvidenceDelta chỉ chứa thay đổi mới từ lượt hiện tại và dùng competencyId hiện tại.
-                demonstratedCompetencyIds có tối đa 1 phần tử; weakEvidence, interestingClaims và
-                unverifiedClaims mỗi trường có tối đa 4 phần tử. Nếu không có dữ liệu thì trả array rỗng [].
-                correctionEvidenceDraft chỉ là gợi ý chưa được xác nhận. Phải kiểm chứng từng claim bằng
-                currentAnswer; bỏ qua mọi evidence không quan sát được trong currentAnswer.
-                JSON schema chính xác:
+                không rỗng và dài tối đa %d ký tự. Nếu currentAnswer không có evidence hữu ích,
+                giữ summary trước đó; nếu chưa có summary thì trả đúng câu: "%s"
+                globalEvidenceDelta chỉ chứa thay đổi mới từ currentAnswer và dùng competencyId hiện tại.
+                demonstratedCompetencyIds có tối đa 1 phần tử; các danh sách khác tối đa 4 phần tử.
+                JSON schema:
                 {
-                  "action": "NEXT|PROBE|CLARIFY",
                   "keyClaims": ["string"],
                   "evidenceCoverage": %s,
                   "missingEvidence": ["string"],
-                  "followUp": "string or null",
                   "updatedItemSummary": "string",
                   "globalEvidenceDelta": {
                     "demonstratedCompetencyIds": ["string"],
@@ -269,46 +305,35 @@ public class ShopAiKeyClient {
                     "unverifiedClaims": ["string"]
                   }
                 }
-                AssessmentContext:
+                EvidenceContext:
                 %s
                 """.formatted(
-                properties.getMaxProbesPerCore(),
-                properties.getMaxClarifiesPerCore(),
-                properties.getMaxTotalAssessmentTurns(),
                 UPDATED_ITEM_SUMMARY_MAX_LENGTH,
                 EMPTY_ITEM_SUMMARY,
                 jsonString(coverageSchema),
-                jsonString(assessmentTurnContext(
-                        session,
-                        coreQuestion,
-                        currentAnswer,
-                        itemEvidenceSummary == null ? Map.of() : itemEvidenceSummary,
-                        correctionEvidenceDraft == null ? Map.of() : correctionEvidenceDraft,
-                        counters,
-                        questionType))
+                jsonString(assessmentEvidenceContext(
+                        session, coreQuestion, currentAnswer, currentSummary, questionType))
         ));
 
         JsonNode json = callJson(
                 prompt,
-                ANSWER_ANALYSIS_MAX_TOKENS,
+                TURN_EVIDENCE_MAX_TOKENS,
                 0.0,
                 session.getId(),
-                ANSWER_ANALYSIS_STAGE,
-                ANSWER_ANALYSIS_PROMPT_VERSION
+                TURN_EVIDENCE_STAGE,
+                TURN_EVIDENCE_PROMPT_VERSION
         );
         return parseProviderResponse(
                 session.getId(),
-                ANSWER_ANALYSIS_STAGE,
-                ANSWER_ANALYSIS_PROMPT_VERSION,
+                TURN_EVIDENCE_STAGE,
+                TURN_EVIDENCE_PROMPT_VERSION,
                 json,
-                () -> answerAnalysisDraft(
+                () -> answerEvidenceDraft(
                         json,
                         questionType,
                         coreQuestion.getCompetencyId(),
-                        counters,
-                        itemEvidenceSummary,
-                        session.getId()
-                )
+                        currentSummary,
+                        session.getId())
         );
     }
 
@@ -375,7 +400,7 @@ public class ShopAiKeyClient {
                 ));
         JsonNode json = callJson(
                 prompt,
-                2_200,
+                ADAPTIVE_QUESTION_MAX_TOKENS,
                 coverageCorrection ? 0.0 : 0.2,
                 session.getId(),
                 coverageCorrection ? "adaptive_questions_coverage_retry" : "adaptive_questions",
@@ -411,6 +436,8 @@ public class ShopAiKeyClient {
                 Không chấm điểm CV. Không suy luận tuổi, giới tính, ngoại hình hoặc giá trị bằng cấp.
                 Chỉ trích xuất kinh nghiệm, dự án, kỹ năng và các tuyên bố có thể hỏi sâu trong phỏng vấn.
                 Đề xuất từ 3 đến 5 vị trí thực tế. Nếu CV còn ít thông tin, vẫn đề xuất vai trò ở cấp độ phù hợp và giải thích ngắn.
+                Giữ output ngắn gọn: summary tối đa 500 ký tự, skills tối đa 20 phần tử,
+                suggestedRoles tối đa 5 phần tử và evidenceClaims tối đa 12 phần tử.
                 experienceLevel chỉ được là intern|fresher|junior|middle|senior.
                 JSON schema:
                 {
@@ -427,7 +454,8 @@ public class ShopAiKeyClient {
                 CandidateContext:
                 %s
                 """.formatted(jsonString(candidateContext)));
-        JsonNode json = callJson(prompt, 1_400, 0.2, null, "cv_profile", properties.getCvProfilePromptVersion());
+        JsonNode json = callJson(prompt, CV_PROFILE_MAX_TOKENS, 0.2, null,
+                "cv_profile", properties.getCvProfilePromptVersion());
         List<RoleSuggestionDraft> roles = roleSuggestions(json.path("suggestedRoles"));
         if (roles.isEmpty()) {
             throw new AiProviderException("AI_MISSING_FIELD", "AI thiếu danh sách vị trí gợi ý");
@@ -460,64 +488,121 @@ public class ShopAiKeyClient {
     private JsonNode callJson(String userPrompt, int maxTokens, double temperature,
                               UUID sessionId, String stage, String promptVersion, int readTimeoutMs,
                               boolean requireJsonOnly) {
+        return callJsonInternal(userPrompt, maxTokens, temperature, sessionId, stage, promptVersion,
+                readTimeoutMs, requireJsonOnly, Function.identity());
+    }
+
+    private <T> T callJsonValidated(
+            String userPrompt,
+            int maxTokens,
+            double temperature,
+            UUID sessionId,
+            String stage,
+            String promptVersion,
+            Function<JsonNode, T> responseParser
+    ) {
+        return callJsonInternal(userPrompt, maxTokens, temperature, sessionId, stage, promptVersion,
+                properties.getProviderReadTimeoutMs(), false, responseParser);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T callJsonInternal(
+            String userPrompt,
+            int maxTokens,
+            double temperature,
+            UUID sessionId,
+            String stage,
+            String promptVersion,
+            int readTimeoutMs,
+            boolean requireJsonOnly,
+            Function<JsonNode, T> responseParser
+    ) {
+        AiInterviewProperties.ModelRoute route = routeFor(stage);
+        int maxAttempts = TURN_DECISION_STAGE.equals(stage)
+                ? 1
+                : Math.max(1, route.getMaxAttempts());
+        int effectiveReadTimeoutMs = route.getReadTimeoutMs() > 0
+                ? route.getReadTimeoutMs()
+                : readTimeoutMs;
         AiProviderException lastFailure = null;
-        for (int attempt = 1; attempt <= PROVIDER_MAX_ATTEMPTS; attempt++) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             long started = System.nanoTime();
             String responseContent = null;
             try {
-                RestClient client = buildClient(readTimeoutMs);
-                Map<String, Object> body = Map.of(
-                        "model", properties.getShopaikeyModel(),
-                        "messages", List.of(
-                                Map.of("role", "system", "content", "You return strict JSON only."),
-                                Map.of("role", "user", "content", userPrompt)
-                        ),
-                        "max_tokens", maxTokens,
-                        "temperature", temperature
-                );
+                int requestMaxTokens = expandedStructuredOutputRetryBudget(attempt, lastFailure)
+                        ? CV_PROFILE_RETRY_MAX_TOKENS
+                        : maxTokens;
+                String requestPrompt = promptForRetry(userPrompt, stage, lastFailure);
+                RestClient client = buildClient(effectiveReadTimeoutMs);
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("model", route.getModel());
+                String endpoint;
+                if (isGeminiModel(route.getModel())) {
+                    endpoint = "/chat/completions";
+                    body.put("messages", List.of(
+                            Map.of("role", "system", "content", "You return strict JSON only."),
+                            Map.of("role", "user", "content", requestPrompt)
+                    ));
+                    body.put("max_tokens", requestMaxTokens);
+                    body.put("temperature", temperature);
+                } else {
+                    endpoint = "/responses";
+                    body.put("instructions", "You return strict JSON only.");
+                    body.put("input", requestPrompt);
+                    body.put("max_output_tokens", requestMaxTokens);
+                    if (route.isReasoningEnabled()) {
+                        body.put("reasoning", Map.of("effort", route.getEffort()));
+                    }
+                }
                 Map<String, Object> response = client.post()
-                        .uri("/chat/completions")
-                        .header("Authorization", "Bearer " + properties.getShopaikeyApiKey())
+                        .uri(endpoint)
+                        .header("Authorization", "Bearer " + properties.getTextAi().getApiKey())
                         .accept(MediaType.APPLICATION_JSON)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(body)
                         .retrieve()
                         .body(Map.class);
-                List<Map<String, Object>> choices = response == null
-                        ? List.of()
-                        : (List<Map<String, Object>>) response.get("choices");
-                if (choices == null || choices.isEmpty()) {
-                    throw new AiProviderException("AI_EMPTY_RESPONSE", "ShopAIKey không trả kết quả");
-                }
-                Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-                Object content = message == null ? null : message.get("content");
-                if (!(content instanceof String value) || value.isBlank()) {
-                    throw new AiProviderException("AI_EMPTY_CONTENT", "ShopAIKey không trả nội dung");
-                }
-                Integer inputTokens = usageTokens(response, "prompt_tokens", "input_tokens");
-                Integer outputTokens = usageTokens(response, "completion_tokens", "output_tokens");
+                String value = responseOutputText(response);
+                Integer inputTokens = usageTokens(response, "input_tokens", "prompt_tokens");
+                Integer outputTokens = usageTokens(response, "output_tokens", "completion_tokens");
                 responseContent = value.trim();
                 if (requireJsonOnly && (!responseContent.startsWith("{")
                         || !responseContent.endsWith("}"))) {
                     throw new AiProviderException("AI_INVALID_JSON",
                             "AI phải chỉ trả một JSON object hợp lệ");
                 }
-                JsonNode parsed = objectMapper.readTree(
-                        requireJsonOnly ? responseContent : extractJson(value));
-                recordTelemetry(sessionId, stage, promptVersion, inputTokens, outputTokens,
+                JsonNode parsed;
+                try {
+                    parsed = objectMapper.readTree(
+                            requireJsonOnly ? responseContent : extractJson(value));
+                } catch (JsonProcessingException | AiProviderException invalidJson) {
+                    if (providerOutputWasTruncated(response)) {
+                        throw new AiProviderException(
+                                "AI_PROVIDER_OUTPUT_TRUNCATED",
+                                "ShopAIKey đã cắt output trước khi hoàn tất JSON."
+                        );
+                    }
+                    throw invalidJson;
+                }
+                T parsedResponse = responseParser.apply(parsed);
+                recordTelemetry(sessionId, stage, route.getModel(), promptVersion, inputTokens, outputTokens,
                         elapsedMillis(started), true, null);
-                return parsed;
+                return parsedResponse;
             } catch (JsonProcessingException | RuntimeException exception) {
                 ProviderFailure failure = classifyProviderFailure(exception);
                 lastFailure = failure.exception();
-                boolean retryScheduled = failure.retryable() && attempt < PROVIDER_MAX_ATTEMPTS;
-                recordTelemetry(sessionId, stage, promptVersion, null, null,
+                boolean retryScheduled = (failure.retryable()
+                        || retryableStructuredOutputFailure(failure.exception())
+                        || retryableResponseContractFailure(stage, failure.exception()))
+                        && attempt < maxAttempts;
+                recordTelemetry(sessionId, stage, route.getModel(), promptVersion, null, null,
                         elapsedMillis(started), false, failure.exception().getCode());
                 logProviderFailure(
                         sessionId,
                         stage,
                         promptVersion,
                         attempt,
+                        maxAttempts,
                         retryScheduled,
                         failure,
                         exception,
@@ -532,6 +617,147 @@ public class ShopAiKeyClient {
                 : lastFailure;
     }
 
+    private String responseOutputText(Map<String, Object> response) {
+        if (response == null) {
+            throw new AiProviderException("AI_EMPTY_RESPONSE", "Nhà cung cấp AI không trả kết quả");
+        }
+        Object rawChoices = response.get("choices");
+        if (rawChoices instanceof List<?> choices && !choices.isEmpty()
+                && choices.get(0) instanceof Map<?, ?> choice
+                && choice.get("message") instanceof Map<?, ?> message
+                && message.get("content") instanceof String content
+                && !content.isBlank()) {
+            return content;
+        }
+        Object direct = response.get("output_text");
+        if (direct instanceof String value && !value.isBlank()) return value;
+        Object rawOutput = response.get("output");
+        if (!(rawOutput instanceof List<?> output)) {
+            throw new AiProviderException("AI_EMPTY_RESPONSE", "Nhà cung cấp AI không trả output");
+        }
+        StringBuilder text = new StringBuilder();
+        for (Object rawItem : output) {
+            if (!(rawItem instanceof Map<?, ?> item)) continue;
+            Object rawContent = item.get("content");
+            if (!(rawContent instanceof List<?> content)) continue;
+            for (Object rawPart : content) {
+                if (!(rawPart instanceof Map<?, ?> part)) continue;
+                Object rawText = part.get("text");
+                if (rawText instanceof String value && !value.isBlank()) {
+                    if (!text.isEmpty()) text.append('\n');
+                    text.append(value);
+                }
+            }
+        }
+        if (text.isEmpty()) {
+            throw new AiProviderException("AI_EMPTY_CONTENT", "Nhà cung cấp AI không trả nội dung");
+        }
+        return text.toString();
+    }
+
+    private boolean isGeminiModel(String model) {
+        return model != null && model.trim().toLowerCase(java.util.Locale.ROOT)
+                .startsWith("gemini-");
+    }
+
+    private boolean expandedStructuredOutputRetryBudget(
+            int attempt,
+            AiProviderException lastFailure
+    ) {
+        return attempt > 1 && retryableStructuredOutputFailure(lastFailure);
+    }
+
+    private boolean retryableStructuredOutputFailure(AiProviderException failure) {
+        if (failure == null) return false;
+        return Set.of(
+                        "AI_INVALID_JSON",
+                        "AI_PROVIDER_OUTPUT_TRUNCATED",
+                        "AI_EMPTY_RESPONSE",
+                        "AI_EMPTY_CONTENT"
+                )
+                .contains(failure.getCode());
+    }
+
+    private boolean retryableResponseContractFailure(String stage, AiProviderException failure) {
+        if (!"initial_questions".equals(stage) || failure == null) return false;
+        return Set.of(
+                        "AI_MISSING_FIELD",
+                        "AI_QUESTION_TOO_LONG",
+                        "AI_INVALID_QUESTION_BATCH",
+                        "AI_INVALID_EVALUATION_PROFILE",
+                        "AI_INVALID_SCORED_COMPETENCY_SET"
+                )
+                .contains(failure.getCode());
+    }
+
+    private String promptForRetry(
+            String originalPrompt,
+            String stage,
+            AiProviderException lastFailure
+    ) {
+        if (!retryableResponseContractFailure(stage, lastFailure)) return originalPrompt;
+        return originalPrompt + """
+
+                QUAN TRỌNG: response trước đã bị backend từ chối (%s: %s).
+                Hãy tạo lại TOÀN BỘ JSON từ đầu theo đúng schema. Giữ đúng 3 questions có BARS hợp lệ.
+                Mỗi questions[].question phải có tối đa %d ký tự, chỉ hỏi một ý chính và chỉ có một dấu hỏi (?).
+                """.formatted(
+                lastFailure.getCode(),
+                lastFailure.getMessage(),
+                QUESTION_TARGET_MAX_LENGTH
+        );
+    }
+
+    private boolean providerOutputWasTruncated(Map<String, Object> response) {
+        if (response == null) return false;
+        Object rawChoices = response.get("choices");
+        if (!(rawChoices instanceof List<?> choices) || choices.isEmpty()
+                || !(choices.get(0) instanceof Map<?, ?> choice)) {
+            return false;
+        }
+        Object rawReason = choice.get("finish_reason");
+        if (!(rawReason instanceof String reason)) return false;
+        String normalized = reason.trim().toLowerCase(java.util.Locale.ROOT);
+        return Set.of("length", "max_tokens", "max_output_tokens").contains(normalized);
+    }
+
+    private AiInterviewProperties.ModelRoute routeFor(String stage) {
+        AiInterviewProperties.TextAi textAi = properties.getTextAi();
+        AiInterviewProperties.ModelRoute route = switch (stage) {
+            case "cv_profile" -> textAi.getCvAnalysis();
+            case "initial_questions" -> textAi.getInitialQuestions();
+            case TURN_DECISION_STAGE -> textAi.getTurnDecision();
+            case TURN_EVIDENCE_STAGE -> textAi.getTurnEvidence();
+            case "adaptive_questions", "adaptive_questions_coverage_retry" -> textAi.getAdaptiveQuestions();
+            case TRANSCRIPT_CORRECTION_STAGE -> textAi.getTranscriptCorrection();
+            case "interview_evaluation" -> textAi.getFinalEvaluation();
+            default -> throw new AiProviderException("AI_STAGE_ROUTE_MISSING",
+                    "Chưa cấu hình model cho AI stage " + stage);
+        };
+        if (route == null || !StringUtils.hasText(route.getModel())) {
+            throw new AiProviderException("AI_STAGE_ROUTE_INVALID",
+                    "Cấu hình model không hợp lệ cho AI stage " + stage);
+        }
+        Set<String> allowedEfforts = Set.of("none", "low", "medium", "high", "xhigh", "max");
+        String normalizedEffort = StringUtils.hasText(route.getEffort())
+                ? route.getEffort().trim().toLowerCase(java.util.Locale.ROOT)
+                : "none";
+        if (route.isReasoningEnabled() && !allowedEfforts.contains(normalizedEffort)) {
+            throw new AiProviderException("AI_REASONING_EFFORT_INVALID",
+                    "Reasoning effort không hợp lệ cho AI stage " + stage);
+        }
+        if (route.getMaxAttempts() <= 0) {
+            throw new AiProviderException("AI_STAGE_ROUTE_INVALID",
+                    "Số lần gọi provider không hợp lệ cho AI stage " + stage);
+        }
+        return new AiInterviewProperties.ModelRoute(
+                route.getModel().trim(),
+                normalizedEffort,
+                route.isReasoningEnabled(),
+                route.getMaxAttempts(),
+                route.getReadTimeoutMs());
+    }
+
     static AiProviderException mapProviderException(Exception exception) {
         return classifyProviderFailure(exception).exception();
     }
@@ -544,12 +770,20 @@ public class ShopAiKeyClient {
                 exception, RestClientResponseException.class);
         if (responseException != null) {
             int status = responseException.getStatusCode().value();
+            String responseBody = responseException.getResponseBodyAsString();
+            boolean unsupportedConversion = responseBody != null
+                    && responseBody.toLowerCase(java.util.Locale.ROOT)
+                    .contains("convert_request_failed");
             return new ProviderFailure(
                     new AiProviderException(
-                            "AI_PROVIDER_HTTP_ERROR",
-                            "ShopAIKey trả lỗi HTTP " + status + ", vui lòng thử lại."
+                            unsupportedConversion
+                                    ? "AI_PROVIDER_UNSUPPORTED_REQUEST"
+                                    : "AI_PROVIDER_HTTP_ERROR",
+                            unsupportedConversion
+                                    ? "ShopAIKey không hỗ trợ định dạng request này cho model đã chọn."
+                                    : "ShopAIKey trả lỗi HTTP " + status + ", vui lòng thử lại."
                     ),
-                    status >= 500 && status <= 599,
+                    !unsupportedConversion && status >= 500 && status <= 599,
                     status
             );
         }
@@ -610,6 +844,7 @@ public class ShopAiKeyClient {
             String stage,
             String promptVersion,
             int attempt,
+            int maxAttempts,
             boolean retryScheduled,
             ProviderFailure failure,
             Exception source,
@@ -629,7 +864,7 @@ public class ShopAiKeyClient {
                 stage,
                 promptVersion,
                 attempt,
-                PROVIDER_MAX_ATTEMPTS,
+                maxAttempts,
                 retryScheduled,
                 failure.exception().getCode(),
                 failure.httpStatus(),
@@ -744,13 +979,62 @@ public class ShopAiKeyClient {
         }
     }
 
-    private Map<String, Object> assessmentTurnContext(
+    private void validateAssessmentEvidenceInput(
+            InterviewSession session,
+            InterviewQuestion coreQuestion,
+            String currentAnswer
+    ) {
+        if (session == null || session.getId() == null) {
+            throw new AiProviderException("AI_INVALID_ANALYSIS_CONTEXT",
+                    "Thiếu session để phân tích evidence");
+        }
+        if (coreQuestion == null || coreQuestion.getId() == null
+                || !StringUtils.hasText(coreQuestion.getContent())
+                || !StringUtils.hasText(coreQuestion.getCompetencyId())
+                || coreQuestion.getRubric() == null || coreQuestion.getRubric().isEmpty()) {
+            throw new AiProviderException("AI_INVALID_ANALYSIS_CONTEXT",
+                    "Thiếu core question, competency hoặc BARS để phân tích evidence");
+        }
+        if (!StringUtils.hasText(currentAnswer)) {
+            throw new AiProviderException("AI_INVALID_ANALYSIS_CONTEXT",
+                    "Không có câu trả lời để phân tích evidence");
+        }
+    }
+
+    private Map<String, Object> assessmentDecisionContext(
+            InterviewSession session,
+            InterviewQuestion coreQuestion,
+            String currentAnswer,
+            AssessmentTurnCounters counters,
+            String questionType
+    ) {
+        Map<String, Object> question = new LinkedHashMap<>();
+        question.put("questionType", questionType);
+        question.put("competencyId", coreQuestion.getCompetencyId());
+        Map<String, Object> competency = relevantCompetency(session, coreQuestion.getCompetencyId());
+        question.put("competencyName", competency.getOrDefault("name", coreQuestion.getCompetencyId()));
+        question.put("question", coreQuestion.getContent());
+        question.put("expectedEvidence",
+                coreQuestion.getRubric().getOrDefault("expectedEvidence", List.of()));
+
+        Map<String, Object> limits = new LinkedHashMap<>();
+        limits.put("probeCount", counters.probeCount());
+        limits.put("clarifyCount", counters.clarifyCount());
+        limits.put("totalAssessmentTurns", counters.totalAssessmentTurns());
+        limits.put("remainingCoreQuestions", counters.remainingCoreQuestions());
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("coreQuestion", question);
+        context.put("currentAnswer", currentAnswer.replaceAll("\\s+", " ").trim());
+        context.put("counters", limits);
+        return context;
+    }
+
+    private Map<String, Object> assessmentEvidenceContext(
             InterviewSession session,
             InterviewQuestion coreQuestion,
             String currentAnswer,
             Map<String, Object> itemEvidenceSummary,
-            Map<String, Object> correctionEvidenceDraft,
-            AssessmentTurnCounters counters,
             String questionType
     ) {
         Map<String, Object> question = new LinkedHashMap<>();
@@ -761,21 +1045,10 @@ public class ShopAiKeyClient {
         question.put("question", coreQuestion.getContent());
         question.put("rubric", coreQuestion.getRubric());
 
-        Map<String, Object> limits = new LinkedHashMap<>();
-        limits.put("probeCount", counters.probeCount());
-        limits.put("clarifyCount", counters.clarifyCount());
-        limits.put("totalAssessmentTurns", counters.totalAssessmentTurns());
-        limits.put("remainingCoreQuestions", counters.remainingCoreQuestions());
-        limits.put("maxProbesPerCore", properties.getMaxProbesPerCore());
-        limits.put("maxClarifiesPerCore", properties.getMaxClarifiesPerCore());
-        limits.put("maxTotalAssessmentTurns", properties.getMaxTotalAssessmentTurns());
-
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("coreQuestion", question);
         context.put("currentAnswer", currentAnswer.replaceAll("\\s+", " ").trim());
         context.put("itemEvidenceSummary", itemEvidenceSummary);
-        context.put("correctionEvidenceDraft", correctionEvidenceDraft);
-        context.put("counters", limits);
         return context;
     }
 
@@ -867,8 +1140,15 @@ public class ShopAiKeyClient {
 
     private String conciseQuestion(String value) {
         String normalized = value == null ? "" : value.replaceAll("\\s+", " ").trim();
-        if (normalized.length() > 260 || normalized.split("\\?").length > 2) {
-            throw new AiProviderException("AI_QUESTION_TOO_LONG", "AI tạo câu hỏi quá dài");
+        if (normalized.isEmpty()) {
+            throw new AiProviderException("AI_INVALID_QUESTION_BATCH", "AI trả câu hỏi rỗng");
+        }
+        long questionMarkCount = normalized.chars().filter(character -> character == '?').count();
+        if (normalized.length() > QUESTION_HARD_MAX_LENGTH || questionMarkCount > 1) {
+            throw new AiProviderException(
+                    "AI_QUESTION_TOO_LONG",
+                    "AI tạo câu hỏi vượt giới hạn hoặc ghép nhiều câu hỏi"
+            );
         }
         return normalized;
     }
@@ -929,50 +1209,56 @@ public class ShopAiKeyClient {
         return values;
     }
 
-    private AnswerAnalysisDraft answerAnalysisDraft(
-            JsonNode json,
-            String questionType,
-            String competencyId,
-            AssessmentTurnCounters counters,
-            Map<String, Object> itemEvidenceSummary,
-            UUID sessionId
-    ) {
-        requireExactFields(json, Set.of(
-                "action",
-                "keyClaims",
-                "evidenceCoverage",
-                "missingEvidence",
-                "followUp",
-                "updatedItemSummary",
-                "globalEvidenceDelta"
-        ), "answer analysis");
+    private AnswerDecisionDraft answerDecisionDraft(JsonNode json, UUID sessionId) {
+        if (json == null || !json.isObject()) {
+            throw new AiProviderException("AI_INVALID_ANALYSIS_SCHEMA",
+                    "AI phải trả object hợp lệ cho turn decision");
+        }
 
         AnswerAnalysisAction action;
         try {
-            action = AnswerAnalysisAction.valueOf(requireText(json, "action"));
+            action = AnswerAnalysisAction.valueOf(
+                    requireText(json, "action").trim().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException exception) {
             throw new AiProviderException("AI_INVALID_ANALYSIS_ACTION",
                     "AI chỉ được trả action NEXT, PROBE hoặc CLARIFY");
         }
-        List<String> keyClaims = requiredCompactStringList(json, "keyClaims", 6, 240);
-        Map<String, Boolean> coverage = evidenceCoverage(json.path("evidenceCoverage"), questionType);
-        List<String> missingEvidence = requiredCompactStringList(json, "missingEvidence", 6, 240);
-        String followUp = validatedFollowUp(json.get("followUp"), action);
+        return new AnswerDecisionDraft(
+                action,
+                validatedFollowUp(json.get("followUp"), action, sessionId)
+        );
+    }
+
+    private AnswerEvidenceDraft answerEvidenceDraft(
+            JsonNode json,
+            String questionType,
+            String competencyId,
+            Map<String, Object> itemEvidenceSummary,
+            UUID sessionId
+    ) {
+        if (json == null || !json.isObject()) {
+            throw new AiProviderException("AI_INVALID_ANALYSIS_SCHEMA",
+                    "AI phải trả object hợp lệ cho turn evidence");
+        }
+        List<String> keyClaims = tolerantCompactStringList(
+                json, "keyClaims", 6, 240, sessionId);
+        Map<String, Boolean> coverage = tolerantEvidenceCoverage(
+                json.get("evidenceCoverage"), questionType, sessionId);
+        List<String> missingEvidence = tolerantCompactStringList(
+                json, "missingEvidence", 6, 240, sessionId);
         String updatedItemSummary = normalizedUpdatedItemSummary(
                 json,
                 itemEvidenceSummary,
                 keyClaims,
                 sessionId
         );
-        GlobalEvidenceDeltaDraft globalDelta = globalEvidenceDelta(
-                json.path("globalEvidenceDelta"), competencyId);
+        GlobalEvidenceDeltaDraft globalDelta = tolerantGlobalEvidenceDelta(
+                json.get("globalEvidenceDelta"), competencyId, sessionId);
 
-        return new AnswerAnalysisDraft(
-                action,
+        return new AnswerEvidenceDraft(
                 keyClaims,
                 coverage,
                 missingEvidence,
-                followUp,
                 updatedItemSummary,
                 globalDelta
         );
@@ -986,7 +1272,10 @@ public class ShopAiKeyClient {
     ) {
         JsonNode node = parent == null ? null : parent.get("updatedItemSummary");
         if (node == null || !node.isTextual()) {
-            throw new AiProviderException("AI_MISSING_FIELD", "AI thiếu trường updatedItemSummary");
+            String fallback = fallbackItemSummary(itemEvidenceSummary, keyClaims);
+            logEvidenceNormalization(sessionId, "UPDATED_ITEM_SUMMARY_DEFAULTED",
+                    "updatedItemSummary bị thiếu hoặc không phải chuỗi");
+            return fallback;
         }
         String value = node.asText().replaceAll("\\s+", " ").trim();
         if (value.isEmpty()) {
@@ -1130,58 +1419,151 @@ public class ShopAiKeyClient {
         return List.copyOf(result);
     }
 
-    private Map<String, Boolean> evidenceCoverage(JsonNode node, String questionType) {
-        List<String> dimensions = evidenceDimensions(questionType);
-        requireExactFields(node, Set.copyOf(dimensions), "evidenceCoverage");
-        Map<String, Boolean> values = new LinkedHashMap<>();
-        for (String dimension : dimensions) {
-            JsonNode value = node.get(dimension);
-            if (value == null || !value.isBoolean()) {
-                throw new AiProviderException("AI_INVALID_EVIDENCE_COVERAGE",
-                        "AI phải trả boolean cho evidenceCoverage." + dimension);
-            }
-            values.put(dimension, value.asBoolean());
-        }
-        return Map.copyOf(values);
-    }
-
-    private String validatedFollowUp(JsonNode node, AnswerAnalysisAction action) {
-        if (node == null) {
-            throw new AiProviderException("AI_MISSING_FIELD", "AI thiếu trường followUp");
-        }
+    private String validatedFollowUp(
+            JsonNode node,
+            AnswerAnalysisAction action,
+            UUID sessionId
+    ) {
         if (action == AnswerAnalysisAction.NEXT) {
-            if (!node.isNull()) {
-                throw new AiProviderException("AI_INVALID_FOLLOW_UP", "Action NEXT bắt buộc followUp=null");
+            if (node != null && !node.isNull() && StringUtils.hasText(node.asText())) {
+                logDecisionNormalization(sessionId, "NEXT_FOLLOW_UP_IGNORED",
+                        "action NEXT được ưu tiên và followUp bị bỏ qua");
             }
             return null;
         }
-        if (!node.isTextual() || !StringUtils.hasText(node.asText())) {
+        if (node == null || !node.isTextual() || !StringUtils.hasText(node.asText())) {
             throw new AiProviderException("AI_INVALID_FOLLOW_UP",
                     "Action PROBE/CLARIFY bắt buộc có followUp");
         }
-        String followUp = conciseQuestion(node.asText());
+        String followUp = node.asText().replaceAll("\\s+", " ").trim();
+        if (followUp.length() > FOLLOW_UP_MAX_LENGTH) {
+            throw new AiProviderException("AI_INVALID_FOLLOW_UP",
+                    "Follow-up vượt giới hạn độ dài cho phép");
+        }
         if (!followUp.endsWith("?")) {
-            throw new AiProviderException("AI_INVALID_FOLLOW_UP", "Follow-up phải là một câu hỏi");
+            followUp = followUp.replaceFirst("[.!;:…]+$", "").trim() + "?";
+            logDecisionNormalization(sessionId, "FOLLOW_UP_PUNCTUATION_NORMALIZED",
+                    "dấu kết thúc followUp được chuẩn hóa thành dấu hỏi");
         }
         return followUp;
     }
 
-    private GlobalEvidenceDeltaDraft globalEvidenceDelta(JsonNode node, String competencyId) {
-        requireExactFields(node, Set.of(
-                "demonstratedCompetencyIds", "weakEvidence", "interestingClaims", "unverifiedClaims"
-        ), "globalEvidenceDelta");
-        List<String> demonstratedIds = requiredCompactStringList(
-                node, "demonstratedCompetencyIds", 1, 100);
-        if (demonstratedIds.stream().anyMatch(id -> !competencyId.equals(id))) {
-            throw new AiProviderException("AI_INVALID_EVIDENCE_DELTA",
-                    "AI không được tạo competency mới trong globalEvidenceDelta");
+    private Map<String, Boolean> tolerantEvidenceCoverage(
+            JsonNode node,
+            String questionType,
+            UUID sessionId
+    ) {
+        List<String> dimensions = evidenceDimensions(questionType);
+        Map<String, Boolean> values = new LinkedHashMap<>();
+        boolean normalized = node == null || !node.isObject();
+        for (String dimension : dimensions) {
+            JsonNode value = node != null && node.isObject() ? node.get(dimension) : null;
+            if (value != null && value.isBoolean()) {
+                values.put(dimension, value.booleanValue());
+            } else {
+                values.put(dimension, false);
+                normalized = true;
+            }
+        }
+        if (normalized) {
+            logEvidenceNormalization(sessionId, "EVIDENCE_COVERAGE_DEFAULTED",
+                    "evidenceCoverage thiếu hoặc chứa giá trị không phải boolean");
+        }
+        return Map.copyOf(values);
+    }
+
+    private GlobalEvidenceDeltaDraft tolerantGlobalEvidenceDelta(
+            JsonNode node,
+            String competencyId,
+            UUID sessionId
+    ) {
+        if (node == null || !node.isObject()) {
+            logEvidenceNormalization(sessionId, "GLOBAL_EVIDENCE_DELTA_DEFAULTED",
+                    "globalEvidenceDelta bị thiếu hoặc không phải object");
+            return new GlobalEvidenceDeltaDraft(List.of(), List.of(), List.of(), List.of());
+        }
+        List<String> rawDemonstratedIds = tolerantCompactStringList(
+                node, "demonstratedCompetencyIds", 6, 100, sessionId);
+        List<String> demonstratedIds = rawDemonstratedIds.stream()
+                .filter(competencyId::equals)
+                .distinct()
+                .limit(1)
+                .toList();
+        if (demonstratedIds.size() != rawDemonstratedIds.size()) {
+            logEvidenceNormalization(sessionId, "UNKNOWN_COMPETENCY_IDS_FILTERED",
+                    "competency ID ngoài assessment item hiện tại đã bị lọc");
         }
         return new GlobalEvidenceDeltaDraft(
                 demonstratedIds,
-                requiredCompactStringList(node, "weakEvidence", 4, 240),
-                requiredCompactStringList(node, "interestingClaims", 4, 240),
-                requiredCompactStringList(node, "unverifiedClaims", 4, 240)
+                tolerantCompactStringList(node, "weakEvidence", 4, 240, sessionId),
+                tolerantCompactStringList(node, "interestingClaims", 4, 240, sessionId),
+                tolerantCompactStringList(node, "unverifiedClaims", 4, 240, sessionId)
         );
+    }
+
+    private List<String> tolerantCompactStringList(
+            JsonNode parent,
+            String field,
+            int maxItems,
+            int maxLength,
+            UUID sessionId
+    ) {
+        JsonNode node = parent == null ? null : parent.get(field);
+        if (node == null || !node.isArray()) {
+            logEvidenceNormalization(sessionId, "OPTIONAL_LIST_DEFAULTED",
+                    field + " bị thiếu hoặc không phải array");
+            return List.of();
+        }
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        boolean sanitized = node.size() > maxItems;
+        for (JsonNode item : node) {
+            if (!item.isTextual()) {
+                sanitized = true;
+                continue;
+            }
+            String value = item.asText().replaceAll("\\s+", " ").trim();
+            if (value.isEmpty()) {
+                sanitized = true;
+                continue;
+            }
+            String normalized = truncateAtWordBoundary(value, maxLength);
+            boolean added = values.add(normalized);
+            if (!normalized.equals(value) || !added) {
+                sanitized = true;
+            }
+            if (values.size() == maxItems) break;
+        }
+        if (sanitized) {
+            logEvidenceNormalization(sessionId, "OPTIONAL_LIST_SANITIZED",
+                    field + " chứa phần tử không hợp lệ, trùng hoặc vượt giới hạn");
+        }
+        return List.copyOf(values);
+    }
+
+    private void logDecisionNormalization(UUID sessionId, String code, String detail) {
+        logResponseNormalization(
+                sessionId, TURN_DECISION_STAGE, TURN_DECISION_PROMPT_VERSION, code, detail);
+    }
+
+    private void logEvidenceNormalization(UUID sessionId, String code, String detail) {
+        logResponseNormalization(
+                sessionId, TURN_EVIDENCE_STAGE, TURN_EVIDENCE_PROMPT_VERSION, code, detail);
+    }
+
+    private void logResponseNormalization(
+            UUID sessionId,
+            String stage,
+            String promptVersion,
+            String code,
+            String detail
+    ) {
+        log.warn("ShopAIKey assessment response normalized: sessionId={}, stage={}, "
+                        + "promptVersion={}, code={}, detail=\"{}\"",
+                sessionId,
+                stage,
+                promptVersion,
+                code,
+                compactLogValue(detail));
     }
 
     private List<String> requiredCompactStringList(
@@ -1357,7 +1739,7 @@ public class ShopAiKeyClient {
                 """.formatted(groupedEvaluationInput(session, groupedEvidence)));
         JsonNode json = callJson(
                 prompt,
-                3_200,
+                FINAL_EVALUATION_MAX_TOKENS,
                 0.1,
                 session.getId(),
                 "interview_evaluation",
@@ -1438,12 +1820,12 @@ public class ShopAiKeyClient {
         return value instanceof Number number ? Math.max(0, number.intValue()) : null;
     }
 
-    private void recordTelemetry(UUID sessionId, String stage, String promptVersion,
+    private void recordTelemetry(UUID sessionId, String stage, String model, String promptVersion,
                                  Integer inputTokens, Integer outputTokens, long latencyMs,
                                  boolean success, String errorCode) {
         if (telemetryService == null) return;
         try {
-            telemetryService.record(sessionId, stage, properties.getShopaikeyModel(), promptVersion,
+            telemetryService.record(sessionId, stage, model, promptVersion,
                     inputTokens, outputTokens, latencyMs, success, errorCode);
         } catch (RuntimeException ignored) {
             // Telemetry must not hide or change the provider result.
@@ -1629,7 +2011,7 @@ public class ShopAiKeyClient {
         requestFactory.setReadTimeout(Duration.ofMillis(Math.max(1, readTimeoutMs)));
         return restClientBuilder
                 .requestFactory(requestFactory)
-                .baseUrl(trimTrailingSlash(properties.getShopaikeyBaseUrl()))
+                .baseUrl(trimTrailingSlash(properties.getTextAi().getBaseUrl()))
                 .build();
     }
 
@@ -1659,6 +2041,21 @@ public class ShopAiKeyClient {
             int clarifyCount,
             int totalAssessmentTurns,
             int remainingCoreQuestions
+    ) {
+    }
+
+    public record AnswerDecisionDraft(
+            AnswerAnalysisAction action,
+            String followUp
+    ) {
+    }
+
+    public record AnswerEvidenceDraft(
+            List<String> keyClaims,
+            Map<String, Boolean> evidenceCoverage,
+            List<String> missingEvidence,
+            String updatedItemSummary,
+            GlobalEvidenceDeltaDraft globalEvidenceDelta
     ) {
     }
 

@@ -1,6 +1,8 @@
 package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.dto.response.*;
+import com.sjp.recruitment.model.dto.request.AiInterviewTranscriptReviewRequest;
+import com.sjp.recruitment.model.enums.TranscriptReviewAction;
 import com.sjp.recruitment.service.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,7 +24,7 @@ class AiInterviewControllerTest {
     @Mock private AiInterviewCvProfileService aiInterviewCvProfileService;
     @Mock private AiInterviewSpeechService aiInterviewSpeechService;
     @Mock private HandsFreeAnswerCaptureService handsFreeAnswerCaptureService;
-    @Mock private GladiaLiveSessionService gladiaLiveSessionService;
+    @Mock private SpeechmaticsRealtimeTicketService speechmaticsRealtimeTicketService;
     @InjectMocks private AiInterviewController controller;
 
     @Test
@@ -94,6 +96,28 @@ class AiInterviewControllerTest {
         AiInterviewSessionResponse expected = mock(AiInterviewSessionResponse.class);
         when(aiInterviewService.retryConversation("s-1")).thenReturn(expected);
         assertSame(expected, controller.retryConversation("s-1").getBody());
+    }
+
+    @Test
+    void reviewConversationTranscript_delegatesToService() {
+        AiInterviewSessionResponse expected = mock(AiInterviewSessionResponse.class);
+        AiInterviewTranscriptReviewRequest request = new AiInterviewTranscriptReviewRequest(
+                TranscriptReviewAction.MANUAL_EDIT, null, null, "Bản đã sửa", 1);
+        when(aiInterviewService.reviewConversationTranscript("s-1", "t-1", request))
+                .thenReturn(expected);
+
+        assertSame(expected,
+                controller.reviewConversationTranscript("s-1", "t-1", request).getBody());
+    }
+
+    @Test
+    void completeConversationTranscriptReview_delegatesToService() {
+        AiInterviewSessionResponse expected = mock(AiInterviewSessionResponse.class);
+        when(aiInterviewService.completeConversationTranscriptReview("s-1"))
+                .thenReturn(expected);
+
+        assertSame(expected,
+                controller.completeConversationTranscriptReview("s-1").getBody());
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.sjp.recruitment.model.dto.request.AiInterviewPracticeSessionRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewSpeechRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewSubmitAnswerRequest;
 import com.sjp.recruitment.model.dto.request.AiInterviewTurnCommandRequest;
+import com.sjp.recruitment.model.dto.request.AiInterviewTranscriptReviewRequest;
 import com.sjp.recruitment.model.dto.response.AiInterviewConfigResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewCvProfileResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewEligibleApplicationResponse;
@@ -145,6 +146,26 @@ public class AiInterviewController {
                 audioSegments, segmentSequences, browserTranscript, transcriptionProvider, durationSeconds));
     }
 
+    @GetMapping("/sessions/{sessionId}/turns/{turnId}/answer-captures/{captureId}")
+    public ResponseEntity<HandsFreeAnswerCaptureResponse> turnAnswerCaptureStatus(
+            @PathVariable String sessionId,
+            @PathVariable String turnId,
+            @PathVariable String captureId,
+            @RequestParam(value = "captureVersion", defaultValue = "1") int captureVersion) {
+        return ResponseEntity.ok(handsFreeAnswerCaptureService.turnCaptureStatus(
+                sessionId, turnId, captureId, captureVersion));
+    }
+
+    @GetMapping("/sessions/{sessionId}/questions/{questionId}/answer-captures/{captureId}")
+    public ResponseEntity<HandsFreeAnswerCaptureResponse> questionAnswerCaptureStatus(
+            @PathVariable String sessionId,
+            @PathVariable String questionId,
+            @PathVariable String captureId,
+            @RequestParam(value = "captureVersion", defaultValue = "1") int captureVersion) {
+        return ResponseEntity.ok(handsFreeAnswerCaptureService.questionCaptureStatus(
+                sessionId, questionId, captureId, captureVersion));
+    }
+
     @PostMapping("/sessions/{sessionId}/speech")
     public ResponseEntity<AiInterviewSpeechTicketResponse> createSpeechTicket(
             @PathVariable String sessionId,
@@ -241,6 +262,22 @@ public class AiInterviewController {
     public ResponseEntity<AiInterviewSessionResponse> retryConversation(
             @PathVariable String sessionId) {
         return ResponseEntity.ok(aiInterviewService.retryConversation(sessionId));
+    }
+
+    @PostMapping("/sessions/{sessionId}/turns/{turnId}/transcript-review")
+    public ResponseEntity<AiInterviewSessionResponse> reviewConversationTranscript(
+            @PathVariable String sessionId,
+            @PathVariable String turnId,
+            @Valid @RequestBody AiInterviewTranscriptReviewRequest request) {
+        return ResponseEntity.ok(aiInterviewService.reviewConversationTranscript(
+                sessionId, turnId, request));
+    }
+
+    @PostMapping("/sessions/{sessionId}/conversation/transcript-review/complete")
+    public ResponseEntity<AiInterviewSessionResponse> completeConversationTranscriptReview(
+            @PathVariable String sessionId) {
+        return ResponseEntity.ok(
+                aiInterviewService.completeConversationTranscriptReview(sessionId));
     }
 
     @PostMapping("/sessions/{sessionId}/questions/retry")
