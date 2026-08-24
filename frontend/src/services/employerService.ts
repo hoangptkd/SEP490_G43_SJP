@@ -48,6 +48,14 @@ export interface TaxCodeLookupResult {
   status?: string;
 }
 
+export interface OccupiedInterviewSlot {
+  id: string;
+  applicationId: string;
+  candidateName: string;
+  scheduledAt: string;
+  status: string;
+}
+
 export interface EmployerInterview {
   id: string;
   applicationId: string;
@@ -297,6 +305,13 @@ export const employerService = {
 
   getAiRankingQuota: async (): Promise<{ used: number; limit: number; remaining: number; isUnlimited: boolean }> => {
     const response = await api.get<{ used: number; limit: number; remaining: number; isUnlimited: boolean }>('/employer/ai-ranking-quota');
+    return response.data;
+  },
+
+  getOccupiedInterviewSlots: async (jobId: string, date?: string): Promise<OccupiedInterviewSlot[]> => {
+    const response = await api.get<OccupiedInterviewSlot[]>(`/v1/jobs/${jobId}/occupied-interview-slots`, {
+      params: date ? { date } : undefined,
+    });
     return response.data;
   },
 };

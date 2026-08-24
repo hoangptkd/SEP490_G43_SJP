@@ -93,11 +93,12 @@ public class AuthService {
         validatePassword(request.getPassword());
 
         if (request.getRole() == User.UserRole.EMPLOYER) {
-            if (request.getFullName() == null || request.getFullName().trim().isEmpty()) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Vui lòng nhập họ và tên");
-            }
+            validateEmployerFullName(request.getFullName());
             if (request.getPhone() == null || request.getPhone().trim().isEmpty()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Vui lòng nhập số điện thoại");
+            }
+            if (request.getGender() == null || request.getGender().trim().isEmpty()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Vui lòng chọn giới tính");
             }
             // Removed industry validation based on user request
         }
@@ -108,7 +109,16 @@ public class AuthService {
         user.setRole(request.getRole());
         user.setFullName(request.getFullName());
         user.setPhone(request.getPhone());
-        user.setGender(request.getGender());
+        String rawGender = request.getGender();
+        if (rawGender != null && !rawGender.trim().isEmpty()) {
+            String trimmedGender = rawGender.trim();
+            if (!List.of("male", "female", "other", "prefer_not_to_say").contains(trimmedGender)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Giới tính không hợp lệ");
+            }
+            user.setGender(trimmedGender);
+        } else {
+            user.setGender(null);
+        }
         user.setStatus(User.UserStatus.PENDING_VERIFICATION);
         user.setEmailVerified(false);
 
@@ -488,6 +498,22 @@ public class AuthService {
             return passwordEncoder.matches(rawPassword, passwordHash);
         } catch (IllegalArgumentException exception) {
             return false;
+        }
+    }
+
+    private void validateEmployerFullName(String fullName) {
+        if (fullName == null || fullName.trim().isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Vui lòng nhập họ và tên");
+        }
+        String trimmed = fullName.trim();
+        if (trimmed.length() < 2) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Họ và tên quá ngắn (tối thiểu 2 ký tự)");
+        }
+        if (trimmed.length() > 50) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Họ và tên quá dài (tối đa 50 ký tự)");
+        }
+        if (!trimmed.matches("^[\\p{L}\\s]+$")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "Họ và tên không hợp lệ (không được chứa số hoặc ký tự đặc biệt)");
         }
     }
 
