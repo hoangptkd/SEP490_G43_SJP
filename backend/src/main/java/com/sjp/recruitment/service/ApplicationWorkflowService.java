@@ -70,6 +70,8 @@ public class ApplicationWorkflowService {
     public InterviewScheduleResponse scheduleInterview(UUID applicationId, UUID employerId, InterviewScheduleRequest request) {
         Application application = getApplicationAndVerifyEmployer(applicationId, employerId);
 
+        validateNoInterviewTimeConflict(application.getJob().getId(), request.scheduledAt(), null);
+
         List<InterviewSchedule> existingSchedules = interviewScheduleRepository.findByApplicationId(applicationId);
         int roundNumber = existingSchedules.size() + 1;
 
@@ -243,6 +245,7 @@ public class ApplicationWorkflowService {
         String oldTimeStr = schedule.getScheduledAt() != null ? schedule.getScheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")) : "Chưa có";
         if ("accept_reschedule".equals(request.response())) {
             if (request.scheduledAt() != null) {
+                validateNoInterviewTimeConflict(schedule.getApplication().getJob().getId(), request.scheduledAt(), schedule.getId());
                 schedule.setScheduledAt(request.scheduledAt());
                 
                 schedule.setResponseDeadline(calculateResponseDeadline(request.scheduledAt()));
@@ -504,5 +507,48 @@ public class ApplicationWorkflowService {
         });
 
         return dtoMapper.toJobOfferResponse(saved);
+    }
+
+    private void validateNoInterviewTimeConflict(UUID jobId, LocalDateTime proposedTime, UUID currentScheduleId) {
+        if (proposedTime == null || jobId == null) return;
+
+        List<InterviewSchedule> activeSchedules = interviewScheduleRepository.findActiveInterviewsByJob(jobId);
+
+        for (InterviewSchedule existing : activeSchedules) {
+            if (currentScheduleId != null && existing.getId().equals(currentScheduleId)) {
+                continue;
+            }
+            if (existing.getScheduledAt() != null) {
+                long minutesDiff = Math.abs(java.time.Duration.between(existing.getScheduledAt(), proposedTime).toMinutes());
+                if (minutesDiff < 30) {
+                    String formattedExistingTime = existing.getScheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+                    String candidateName = existing.getCandidate() != null ? existing.getCandidate().getFullName() : "ứng viên khác";
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "INTERVIEW_TIME_CONFLICT",
+                            "Thời gian phỏng vấn bị trùng hoặc cách lịch phỏng vấn của " + candidateName + " (" + formattedExistingTime + ") dưới 30 phút. Vui lòng chọn khung giờ khác.");
+                }
+            }
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.sjp.recruitment.model.dto.response.OccupiedInterviewSlotResponse> getOccupiedInterviewSlots(UUID jobId, UUID employerId, LocalDate date) {
+        List<Application> jobApps = applicationRepository.findAllByJobId(jobId);
+        if (!jobApps.isEmpty()) {
+            getApplicationAndVerifyEmployer(jobApps.get(0).getId(), employerId);
+        }
+
+        LocalDate targetDate = date != null ? date : LocalDate.now();
+        LocalDateTime startOfDay = targetDate.atStartOfDay();
+        LocalDateTime endOfDay = targetDate.atTime(23, 59, 59);
+
+        List<InterviewSchedule> activeSchedules = interviewScheduleRepository.findActiveInterviewsByJobAndDate(jobId, startOfDay, endOfDay);
+
+        return activeSchedules.stream().map(s -> new com.sjp.recruitment.model.dto.response.OccupiedInterviewSlotResponse(
+                s.getId(),
+                s.getApplication() != null ? s.getApplication().getId() : null,
+                s.getCandidate() != null ? s.getCandidate().getFullName() : "Ứng viên",
+                s.getScheduledAt(),
+                s.getStatus()
+        )).toList();
     }
 }

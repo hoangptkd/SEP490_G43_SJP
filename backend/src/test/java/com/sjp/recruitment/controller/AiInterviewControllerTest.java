@@ -22,7 +22,7 @@ class AiInterviewControllerTest {
     @Mock private AiInterviewCvProfileService aiInterviewCvProfileService;
     @Mock private AiInterviewSpeechService aiInterviewSpeechService;
     @Mock private HandsFreeAnswerCaptureService handsFreeAnswerCaptureService;
-    @Mock private GladiaLiveSessionService gladiaLiveSessionService;
+    @Mock private SpeechmaticsRealtimeTicketService speechmaticsRealtimeTicketService;
     @InjectMocks private AiInterviewController controller;
 
     @Test

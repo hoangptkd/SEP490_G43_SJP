@@ -127,4 +127,14 @@ public class ApplicationWorkflowController {
         JobOfferResponse response = workflowService.candidateFinalRespondToOffer(id, candidate.getId(), request);
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/jobs/{jobId}/occupied-interview-slots")
+    @PreAuthorize("hasRole('EMPLOYER')")
+    public ResponseEntity<java.util.List<com.sjp.recruitment.model.dto.response.OccupiedInterviewSlotResponse>> getOccupiedInterviewSlots(
+            @PathVariable UUID jobId,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate date) {
+        Employer employer = employerService.getCurrentEmployerOrRegisterPlaceholder();
+        java.util.List<com.sjp.recruitment.model.dto.response.OccupiedInterviewSlotResponse> slots = workflowService.getOccupiedInterviewSlots(jobId, employer.getId(), date);
+        return ResponseEntity.ok(slots);
+    }
 }

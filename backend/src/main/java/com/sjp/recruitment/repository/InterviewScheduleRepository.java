@@ -103,4 +103,20 @@ public interface InterviewScheduleRepository extends JpaRepository<InterviewSche
             @Param("status") String status,
             @Param("from") java.time.LocalDateTime from,
             @Param("to") java.time.LocalDateTime to);
+
+    @EntityGraph(attributePaths = {"candidate", "candidate.user"})
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.application.job.id = :jobId " +
+           "AND UPPER(i.status) IN ('PENDING_RESPONSE', 'ACCEPTED', 'RESCHEDULE_REQUESTED', 'SCHEDULED', 'RESCHEDULED') " +
+           "ORDER BY i.scheduledAt ASC")
+    List<InterviewSchedule> findActiveInterviewsByJob(@Param("jobId") UUID jobId);
+
+    @EntityGraph(attributePaths = {"candidate", "candidate.user"})
+    @Query("SELECT i FROM InterviewSchedule i WHERE i.application.job.id = :jobId " +
+           "AND UPPER(i.status) IN ('PENDING_RESPONSE', 'ACCEPTED', 'RESCHEDULE_REQUESTED', 'SCHEDULED', 'RESCHEDULED') " +
+           "AND i.scheduledAt >= :startOfDay AND i.scheduledAt <= :endOfDay " +
+           "ORDER BY i.scheduledAt ASC")
+    List<InterviewSchedule> findActiveInterviewsByJobAndDate(
+            @Param("jobId") UUID jobId,
+            @Param("startOfDay") java.time.LocalDateTime startOfDay,
+            @Param("endOfDay") java.time.LocalDateTime endOfDay);
 }
