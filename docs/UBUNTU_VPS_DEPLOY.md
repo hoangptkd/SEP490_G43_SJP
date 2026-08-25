@@ -68,7 +68,7 @@ journalctl -u sjp-backend -f
 
 Test API backend tren VPS:
 
-```bash
+```bashs
 curl http://127.0.0.1:8080/api/auth/config
 ```
 

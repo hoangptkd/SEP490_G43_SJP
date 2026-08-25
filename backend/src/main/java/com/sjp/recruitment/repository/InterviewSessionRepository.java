@@ -22,6 +22,8 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
             "job.employer",
             "job.employer.user",
             "job.companyLocation",
+            "job.jobSkills",
+            "job.jobSkills.skill",
             "application"
     })
     List<InterviewSession> findByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(UUID candidateId);
@@ -32,6 +34,8 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
             "job.employer",
             "job.employer.user",
             "job.companyLocation",
+            "job.jobSkills",
+            "job.jobSkills.skill",
             "application"
     })
     List<InterviewSession> findByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(UUID candidateId, Pageable pageable);
@@ -42,6 +46,8 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
             "job.employer",
             "job.employer.user",
             "job.companyLocation",
+            "job.jobSkills",
+            "job.jobSkills.skill",
             "application"
     })
     Optional<InterviewSession> findByIdAndCandidateIdAndDeletedAtIsNull(UUID id, UUID candidateId);
