@@ -9,10 +9,15 @@ public record CandidateOfferResponseRequest(
 ) {
     public enum Decision {
         ACCEPT,
-        REJECT
+        REJECT,
+        NEGOTIATE
     }
 
     public boolean accepted() {
         return decision == Decision.ACCEPT;
+    }
+
+    public boolean isNegotiate() {
+        return decision == Decision.NEGOTIATE;
     }
 }

@@ -195,9 +195,10 @@ export const candidateService = {
     return response.data;
   },
 
-  respondToOffer: async (offerId: string, accepted: boolean, note?: string): Promise<import('../types/candidateDomain').JobOfferResponse> => {
+  respondToOffer: async (offerId: string, decision: 'ACCEPT' | 'REJECT' | 'NEGOTIATE' | boolean, note?: string): Promise<import('../types/candidateDomain').JobOfferResponse> => {
+    const decisionStr = typeof decision === 'boolean' ? (decision ? 'ACCEPT' : 'REJECT') : decision;
     const response = await api.put(`/v1/offers/${offerId}/response`, {
-      decision: accepted ? 'ACCEPT' : 'REJECT',
+      decision: decisionStr,
       note,
     });
     return response.data;

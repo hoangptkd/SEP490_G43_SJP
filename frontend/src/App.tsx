@@ -5523,12 +5523,14 @@ function ApplicationDetailPage() {
     }
   }
 
-  async function respondToOffer(offerId: string, accepted: boolean, note?: string) {
+  async function respondToOffer(offerId: string, decision: 'ACCEPT' | 'REJECT' | 'NEGOTIATE' | boolean, note?: string) {
     setActionBusy(true);
     setMessage('');
     try {
-      await candidateService.respondToOffer(offerId, accepted, note);
-      setMessage(accepted ? 'Đã chấp nhận job offer.' : 'Đã gửi phản hồi job offer.');
+      await candidateService.respondToOffer(offerId, decision, note);
+      const isAccept = decision === true || decision === 'ACCEPT';
+      const isNegotiate = decision === 'NEGOTIATE';
+      setMessage(isAccept ? 'Đã chấp nhận job offer.' : isNegotiate ? 'Đã gửi đề xuất thương lượng job offer.' : 'Đã từ chối job offer.');
       setRejectOfferId('');
       setOfferNote('');
       await loadApplication();
@@ -5818,7 +5820,7 @@ function ApplicationDetailPage() {
                           type="button"
                           className="success sm"
                           disabled={actionBusy}
-                          onClick={() => respondToOffer(application.jobOffer.id, true)}
+                          onClick={() => respondToOffer(application.jobOffer.id, 'ACCEPT')}
                         >
                           ✅ Chấp nhận Offer
                         </button>
@@ -5833,7 +5835,7 @@ function ApplicationDetailPage() {
                           type="button"
                           className="danger sm"
                           disabled={actionBusy}
-                          onClick={() => respondToOffer(application.jobOffer.id, false, 'Ứng viên từ chối nhận việc')}
+                          onClick={() => respondToOffer(application.jobOffer.id, 'REJECT', 'Ứng viên từ chối nhận việc')}
                         >
                           ❌ Từ chối Offer
                         </button>
@@ -6003,7 +6005,7 @@ function ApplicationDetailPage() {
             danger
             busy={actionBusy}
             onClose={() => { setRejectOfferId(''); setOfferNote(''); }}
-            onConfirm={() => respondToOffer(rejectOfferId, false, offerNote.trim())}
+            onConfirm={() => respondToOffer(rejectOfferId, 'NEGOTIATE', offerNote.trim())}
           >
             <label className="modal-field">
               Ghi chú gửi nhà tuyển dụng

@@ -2583,7 +2583,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                       </div>
                     )}
 
-                    {manageOfferApp.jobOffer.status === 'declined' && (
+                    {(manageOfferApp.jobOffer.status === 'declined' || manageOfferApp.jobOffer.status === 'rejected') && (
                       <div style={{ background: '#fef2f2', color: '#991b1b', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca', fontSize: '0.9rem', textAlign: 'center', fontWeight: 600 }}>
                         🔴 Ứng viên đã từ chối Job Offer này
                       </div>

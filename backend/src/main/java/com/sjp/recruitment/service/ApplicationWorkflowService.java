@@ -385,18 +385,29 @@ public class ApplicationWorkflowService {
         }
 
         boolean accepted = request.accepted();
+        boolean isNegotiation = request.isNegotiate();
+
+        if (!accepted && !isNegotiation && request.decision() != CandidateOfferResponseRequest.Decision.REJECT) {
+            String noteLower = request.note() != null ? request.note().toLowerCase() : "";
+            isNegotiation = (
+                    noteLower.contains("thương lượng") ||
+                    noteLower.contains("đề xuất") ||
+                    noteLower.contains("lương") ||
+                    noteLower.contains("ngày") ||
+                    noteLower.contains("điều chỉnh") ||
+                    noteLower.contains("đổi")
+            ) && !noteLower.contains("từ chối nhận việc") && !noteLower.contains("từ chối offer");
+        }
+
         offer.setCandidateNote(request.note());
         offer.setRespondedAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
-
-        String noteLower = request.note() != null ? request.note().toLowerCase() : "";
-        boolean isNegotiation = !accepted && (noteLower.contains("thương lượng") || noteLower.contains("đề xuất") || noteLower.contains("lương") || noteLower.contains("ngày") || (request.note() != null && !request.note().isBlank()));
 
         if (accepted) {
             offer.setStatus("accepted");
             applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.HIRED, "Ứng viên đã chấp nhận Thư mời nhận việc (Job Offer)");
         } else if (isNegotiation) {
             offer.setStatus("rejected");
-            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đề xuất thương lượng Job Offer (Lý do / Đề xuất: " + request.note() + ")");
+            applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.ACCEPTED, "Ứng viên đề xuất thương lượng Job Offer (Lý do / Đề xuất: " + (request.note() != null ? request.note() : "") + ")");
         } else {
             offer.setStatus("rejected");
             applicationService.seedStatus(offer.getApplication(), Application.ApplicationStatus.REJECTED, "Ứng viên đã từ chối Thư mời nhận việc (Job Offer)");
