@@ -376,6 +376,12 @@ public class DtoMapper {
 
     public JobOfferResponse toJobOfferResponse(JobOffer offer) {
         if (offer == null) return null;
+        String mappedStatus = offer.getStatus();
+        if ("rejected".equalsIgnoreCase(mappedStatus) && offer.getCandidateNote() != null && !offer.getCandidateNote().isBlank() && (offer.getEmployerNote() == null || offer.getEmployerNote().isBlank())) {
+            mappedStatus = "negotiation_requested";
+        } else if ("sent".equalsIgnoreCase(mappedStatus) && offer.getEmployerNote() != null && !offer.getEmployerNote().isBlank() && offer.getCandidateNote() != null && !offer.getCandidateNote().isBlank()) {
+            mappedStatus = "employer_declined_negotiation";
+        }
         return new JobOfferResponse(
                 offer.getId(),
                 offer.getApplication() != null ? offer.getApplication().getId() : null,
@@ -387,7 +393,7 @@ public class DtoMapper {
                 offer.getBenefits(),
                 offer.getWorkingLocation(),
                 offer.getOfferLetterUrl(),
-                offer.getStatus(),
+                mappedStatus,
                 offer.getSentAt(),
                 offer.getRespondedAt(),
                 offer.getExpiresAt(),

@@ -64,6 +64,7 @@ public record EmployerDashboardResponse(
             long interviewAcceptedCount,
             long interviewRescheduleCount,
             long interviewCompletedCount,
+            long interviewFailedCount,
             long offerPendingResponseCount,
             long offerAcceptedCount,
             long offerRejectedCount,

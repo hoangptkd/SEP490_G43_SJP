@@ -5777,10 +5777,124 @@ function ApplicationDetailPage() {
             {application.jobOffer.offerLetterUrl && <p style={{ margin: '4px 0' }}><strong>Link Offer Letter:</strong> <a href={application.jobOffer.offerLetterUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Xem chi tiết đính kèm</a></p>}
             {application.jobOffer.employerNote && <p style={{ margin: '4px 0' }}><strong>Lời nhắn từ Nhà tuyển dụng:</strong> {application.jobOffer.employerNote}</p>}
 
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-              <p style={{ margin: '4px 0', fontSize: '0.9rem', color: '#475569' }}>
-                Nếu bạn có bất kỳ thắc mắc hoặc cần trao đổi thêm về Job Offer này, vui lòng liên hệ trực tiếp với nhà tuyển dụng qua thông tin liên hệ của công ty.
-              </p>
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
+              {application.jobOffer.status === 'sent' && (
+                <div>
+                  {rejectOfferId === application.jobOffer.id ? (
+                    <div style={{ background: '#fff7ed', padding: 14, borderRadius: 8, border: '1px solid #ffedd5' }}>
+                      <p style={{ margin: '0 0 8px 0', fontWeight: 600, color: '#c2410c' }}>💬 Nhập ý kiến đề xuất thương lượng / đổi Offer:</p>
+                      <textarea
+                        rows={3}
+                        value={offerNote}
+                        onChange={(e) => setOfferNote(e.target.value)}
+                        placeholder="VD: Em mong muốn mức lương 25M và ngày bắt đầu từ 15/09..."
+                        style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.9rem', marginBottom: 10 }}
+                      />
+                      <div className="button-row">
+                        <button
+                          type="button"
+                          className="primary sm"
+                          disabled={actionBusy}
+                          onClick={() => respondToOffer(application.jobOffer.id, false, offerNote)}
+                        >
+                          Gửi đề xuất thương lượng
+                        </button>
+                        <button
+                          type="button"
+                          className="outline sm"
+                          onClick={() => { setRejectOfferId(''); setOfferNote(''); }}
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#1e40af', fontWeight: 600 }}>
+                        ⏳ Bạn đã nhận được Thư mời nhận việc. Vui lòng xem thông tin và phản hồi:
+                      </p>
+                      <div className="button-row">
+                        <button
+                          type="button"
+                          className="success sm"
+                          disabled={actionBusy}
+                          onClick={() => respondToOffer(application.jobOffer.id, true)}
+                        >
+                          ✅ Chấp nhận Offer
+                        </button>
+                        <button
+                          type="button"
+                          className="outline sm"
+                          onClick={() => { setRejectOfferId(application.jobOffer.id); setOfferNote(''); }}
+                        >
+                          💬 Xin đổi / Đề xuất thương lượng
+                        </button>
+                        <button
+                          type="button"
+                          className="danger sm"
+                          disabled={actionBusy}
+                          onClick={() => respondToOffer(application.jobOffer.id, false, 'Ứng viên từ chối nhận việc')}
+                        >
+                          ❌ Từ chối Offer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {application.jobOffer.status === 'negotiation_requested' && (
+                <div style={{ background: '#fff7ed', padding: 12, borderRadius: 8, border: '1px solid #fed7aa', color: '#c2410c' }}>
+                  <p style={{ margin: '0 0 4px 0', fontWeight: 600 }}>⏳ Đang chờ Nhà tuyển dụng phản hồi yêu cầu thương lượng của bạn</p>
+                  <p style={{ margin: 0, fontSize: '0.85rem' }}><strong>Đề xuất của bạn:</strong> {application.jobOffer.candidateNote}</p>
+                </div>
+              )}
+
+              {application.jobOffer.status === 'employer_declined_negotiation' && (
+                <div style={{ background: '#fffbeb', padding: 14, borderRadius: 8, border: '1px solid #fde68a' }}>
+                  <p style={{ margin: '0 0 4px 0', fontWeight: 600, color: '#b45309' }}>
+                    ⚠️ Nhà tuyển dụng từ chối đề xuất thương lượng và giữ nguyên Offer ban đầu.
+                  </p>
+                  {application.jobOffer.employerNote && (
+                    <p style={{ margin: '4px 0 10px 0', fontSize: '0.85rem', color: '#92400e' }}>
+                      <strong>Lời nhắn từ NTD:</strong> {application.jobOffer.employerNote}
+                    </p>
+                  )}
+                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#475569' }}>
+                    Vui lòng xác nhận xem bạn có chấp nhận Offer ban đầu này hay không:
+                  </p>
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      className="success sm"
+                      disabled={actionBusy}
+                      onClick={() => finalRespondToOffer(application.jobOffer.id, true)}
+                    >
+                      ✅ Chấp nhận Offer ban đầu
+                    </button>
+                    <button
+                      type="button"
+                      className="danger sm"
+                      disabled={actionBusy}
+                      onClick={() => finalRespondToOffer(application.jobOffer.id, false)}
+                    >
+                      ❌ Từ chối / Hủy bỏ
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {application.jobOffer.status === 'accepted' && (
+                <div style={{ background: '#f0fdf4', padding: 12, borderRadius: 8, border: '1px solid #bbf7d0', color: '#166534', fontWeight: 600, textAlign: 'center' }}>
+                  🎉 Bạn đã chấp nhận Thư mời nhận việc (Job Offer)! Chúc mừng bạn đã được tuyển dụng thành công.
+                </div>
+              )}
+
+              {(application.jobOffer.status === 'declined' || application.jobOffer.status === 'rejected') && (
+                <div style={{ background: '#fef2f2', padding: 12, borderRadius: 8, border: '1px solid #fecaca', color: '#991b1b', fontStyle: 'italic', textAlign: 'center' }}>
+                  🔴 Bạn đã từ chối Thư mời nhận việc này.
+                </div>
+              )}
             </div>
           </div>
         </div>

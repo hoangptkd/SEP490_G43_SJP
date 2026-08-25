@@ -371,7 +371,8 @@ function CompanyProfilePage() {
                   type="text"
                   value={company.contactPhone || ''}
                   onChange={(e) => {
-                    setCompany({ ...company, contactPhone: e.target.value });
+                    const cleaned = e.target.value.replace(/[^\d+]/g, '');
+                    setCompany({ ...company, contactPhone: cleaned });
                     setFieldErrors(prev => ({ ...prev, contactPhone: '' }));
                   }}
                   placeholder="0912345678"
