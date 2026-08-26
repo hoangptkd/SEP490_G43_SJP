@@ -250,7 +250,7 @@ public class AiInterviewConversationService {
                 return AdvanceResult.NEXT_CORE_READY;
             }
 
-            if (questions.size() < properties.effectiveCoreQuestionCount()) {
+            if (questions.size() < session.effectiveTargetQuestionCount()) {
                 return AdvanceResult.NEEDS_ADAPTIVE_QUESTIONS;
             }
             InterviewConversationTurn closing = newTurn(
@@ -411,7 +411,7 @@ public class AiInterviewConversationService {
                 .filter(item -> item.getTurnType() == InterviewTurnType.CLARIFY)
                 .count();
         int remainingCore = Math.max(0,
-                properties.effectiveCoreQuestionCount() - question.getOrderIndex());
+                session.effectiveTargetQuestionCount() - question.getOrderIndex());
         ShopAiKeyClient.AssessmentTurnCounters counters =
                 new ShopAiKeyClient.AssessmentTurnCounters(
                         probes,
@@ -453,7 +453,8 @@ public class AiInterviewConversationService {
                 claim.counters().probeCount(),
                 claim.counters().clarifyCount(),
                 claim.counters().totalAssessmentTurns(),
-                claim.counters().remainingCoreQuestions()
+                claim.counters().remainingCoreQuestions(),
+                session.effectiveTargetQuestionCount()
         );
         turn.setAnalysisJson(decisionMap(decision, resolved));
         turnRepository.save(turn);

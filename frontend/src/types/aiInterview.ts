@@ -111,11 +111,30 @@ export interface AiInterviewCvProfile {
   cached: boolean;
 }
 
+export type AiInterviewQuestionCount = 3 | 5 | 7 | 10;
+
 export interface AiInterviewPracticeInput {
   cvId: string;
   targetRole: string;
   seniority: AiInterviewCvProfile['experienceLevel'];
   focusSkills: string[];
+  questionCount: AiInterviewQuestionCount;
+}
+
+export type AiInterviewPreparationStatus = 'QUEUED' | 'RUNNING' | 'READY' | 'FAILED';
+
+export interface AiInterviewPreparation {
+  id: string;
+  status: AiInterviewPreparationStatus;
+  stage: string;
+  progress: number;
+  message: string;
+  warningMessage?: string;
+  sessionId?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AiInterviewSummary {
@@ -146,6 +165,7 @@ export interface AiInterviewSession {
   contextType: 'application' | 'practice';
   status: 'created' | 'in_progress' | 'completed' | 'cancelled';
   totalQuestions: number;
+  targetQuestionCount: number;
   overallScore?: number;
   applicationId?: string;
   job?: Job;

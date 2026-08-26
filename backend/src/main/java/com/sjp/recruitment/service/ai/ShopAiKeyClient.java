@@ -149,13 +149,17 @@ public class ShopAiKeyClient {
             InterviewSession session,
             CandidateProfile candidate
     ) {
+        int targetQuestionCount = session.effectiveTargetQuestionCount();
+        String scoredCompetencyRule = targetQuestionCount == 3
+                ? "đúng 3 năng lực"
+                : "từ 3 đến 4 năng lực";
         String prompt = withSystemPrompt("""
                 Tạo Evaluation Profile và đúng 3 câu đầu cho buổi phỏng vấn luyện tập bằng tiếng Việt.
                 Chỉ trả JSON hợp lệ, không markdown.
                 Bắt đầu response ngay bằng ký tự { và kết thúc bằng ký tự }. Không giải thích schema,
                 không nhắc lại yêu cầu và không viết nội dung nào ngoài JSON.
-                Evaluation Profile có 3-6 năng lực tổng, nhưng scoredCompetencyIds phải chọn đúng 3-4 năng lực
-                thực sự được chấm trong phiên 5 câu.
+                Evaluation Profile có 3-6 năng lực tổng, nhưng scoredCompetencyIds phải chọn %s
+                thực sự được chấm trong phiên %d câu.
                 Không dùng bằng cấp, trường học, tuổi, giới tính hoặc ngoại hình làm tiêu chí.
                 Mỗi rating importance, entryNeedScore, distinguishingValueScore là số nguyên 1-5 và đều cùng chiều:
                 - importance: 5 = cực kỳ quan trọng.
@@ -164,7 +168,7 @@ public class ShopAiKeyClient {
                 - distinguishingValueScore: 5 = phân biệt rất mạnh người thể hiện tốt và yếu.
                 Không dùng trực tiếp encoding Need At Entry của OPM vì thang OPM có chiều ngược với entryNeedScore.
                 Backend tính priority = 0.50*importance + 0.20*entryNeedScore + 0.30*distinguishingValueScore.
-                Chỉ chọn vào scoredCompetencyIds các năng lực có thể quan sát bằng 5 câu phỏng vấn.
+                Chỉ chọn vào scoredCompetencyIds các năng lực có thể quan sát bằng %d câu phỏng vấn.
                 communicationDemand là số nguyên 1-5 dựa trên mức giao tiếp cần thiết của vai trò.
                 Ba câu đầu phải gồm: 1 câu xác minh kinh nghiệm/dự án, 1 câu năng lực cốt lõi,
                 và 1 câu hành vi hoặc tình huống. Mỗi question chỉ hỏi một ý chính, tối đa %d ký tự,
@@ -202,7 +206,12 @@ public class ShopAiKeyClient {
                 }
                 Context:
                 %s
-                """.formatted(QUESTION_TARGET_MAX_LENGTH, buildContext(session, candidate)));
+                """.formatted(
+                        scoredCompetencyRule,
+                        targetQuestionCount,
+                        targetQuestionCount,
+                        QUESTION_TARGET_MAX_LENGTH,
+                        buildContext(session, candidate)));
         return callJsonValidated(
                 prompt,
                 INITIAL_QUESTION_MAX_TOKENS,
@@ -239,7 +248,7 @@ public class ShopAiKeyClient {
                 properties.getMaxFollowUpsPerCore(),
                 properties.getMaxProbesPerCore(),
                 properties.getMaxClarifiesPerCore(),
-                properties.getMaxTotalAssessmentTurns(),
+                properties.effectiveMaxAssessmentTurns(session.effectiveTargetQuestionCount()),
                 jsonString(assessmentDecisionContext(
                         session, coreQuestion, currentAnswer, counters, questionType))
         ));
@@ -342,7 +351,16 @@ public class ShopAiKeyClient {
             List<InterviewQuestion> questions,
             List<InterviewAnswer> answers
     ) {
-        return generateAdaptiveInterviewQuestions(session, questions, answers, false);
+        return generateAdaptiveInterviewQuestions(session, questions, answers, 2, false);
+    }
+
+    public List<RubricQuestionDraft> generateAdaptiveInterviewQuestions(
+            InterviewSession session,
+            List<InterviewQuestion> questions,
+            List<InterviewAnswer> answers,
+            int requestedCount
+    ) {
+        return generateAdaptiveInterviewQuestions(session, questions, answers, requestedCount, false);
     }
 
     public List<RubricQuestionDraft> regenerateAdaptiveInterviewQuestionsForCoverage(
@@ -350,30 +368,46 @@ public class ShopAiKeyClient {
             List<InterviewQuestion> questions,
             List<InterviewAnswer> answers
     ) {
-        return generateAdaptiveInterviewQuestions(session, questions, answers, true);
+        return generateAdaptiveInterviewQuestions(session, questions, answers, 2, true);
+    }
+
+    public List<RubricQuestionDraft> regenerateAdaptiveInterviewQuestionsForCoverage(
+            InterviewSession session,
+            List<InterviewQuestion> questions,
+            List<InterviewAnswer> answers,
+            int requestedCount
+    ) {
+        return generateAdaptiveInterviewQuestions(session, questions, answers, requestedCount, true);
     }
 
     private List<RubricQuestionDraft> generateAdaptiveInterviewQuestions(
             InterviewSession session,
             List<InterviewQuestion> questions,
             List<InterviewAnswer> answers,
+            int requestedCount,
             boolean coverageCorrection
     ) {
+        if (requestedCount < 1 || requestedCount > 2) {
+            throw new AiProviderException(
+                    "AI_INVALID_ADAPTIVE_BATCH_SIZE",
+                    "Số câu hỏi thích ứng mỗi batch phải từ 1 đến 2");
+        }
+        int targetQuestionCount = session.effectiveTargetQuestionCount();
         String prompt = withSystemPrompt("""
-                Tạo đúng 2 câu tiếp theo cho buổi phỏng vấn luyện tập bằng tiếng Việt.
+                Tạo đúng %1$d câu tiếp theo cho buổi phỏng vấn luyện tập bằng tiếng Việt.
                 Chỉ trả JSON hợp lệ, không markdown.
                 Chỉ dùng competencyId trong scoredCompetencyIds của EvaluationProfile.
-                Hai câu phải kết hợp các mục tiêu sau theo thứ tự ưu tiên:
+                Các câu mới phải kết hợp các mục tiêu sau theo thứ tự ưu tiên:
                 - cover competency thứ 4 nếu scored set có 4 phần tử và ba câu đầu chưa cover;
                 - đào sâu competency có evidence yếu, chưa rõ hoặc chưa nhất quán;
                 - cross-check competency quan trọng đã có bằng chứng nhưng cần xác nhận.
-                Sau 5 câu, mọi scored competency phải có ít nhất một primary question.
+                Sau %2$d câu, mọi scored competency phải có ít nhất một primary question.
                 CoverageStatus đã được backend tính sẵn. Nếu missingScoredCompetencyIds không rỗng,
                 câu adaptive đầu tiên BẮT BUỘC dùng competencyId đầu tiên trong danh sách đó.
-                CoverageCorrectionMode: %s.
+                CoverageCorrectionMode: %3$s.
                 Nếu CoverageCorrectionMode=true thì kết quả trước đã bị backend từ chối do thiếu coverage;
                 tuyệt đối không được lặp lại lỗi và không được thay competencyId còn thiếu bằng competency khác.
-                Không bắt buộc 5 câu tương ứng với 5 competency khác nhau.
+                Không bắt buộc %2$d câu tương ứng với %2$d competency khác nhau.
                 Không lặp lại câu cũ. Mỗi câu chỉ hỏi một ý chính và trả lời trong 2-3 phút.
                 JSON schema:
                 {"questions": [{
@@ -386,11 +420,13 @@ public class ShopAiKeyClient {
                   "expectedEvidence": ["string"],
                   "bars": {"level1": "string", "level3": "string", "level5": "string"}
                 }]}
-                EvaluationProfile: %s
-                CoverageStatus: %s
+                EvaluationProfile: %4$s
+                CoverageStatus: %5$s
                 InterviewEvidenceSummary:
-                %s
+                %6$s
                 """.formatted(
+                        requestedCount,
+                        targetQuestionCount,
                         coverageCorrection,
                         jsonString(session.getEvaluationProfile()),
                         jsonString(adaptiveCoverageStatus(session, questions)),
@@ -406,7 +442,7 @@ public class ShopAiKeyClient {
                 coverageCorrection ? "adaptive_questions_coverage_retry" : "adaptive_questions",
                 ADAPTIVE_PROMPT_VERSION
         );
-        return rubricQuestions(json.path("questions"), 2);
+        return rubricQuestions(json.path("questions"), requestedCount);
     }
 
     private Map<String, Object> adaptiveCoverageStatus(

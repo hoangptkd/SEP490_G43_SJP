@@ -27,6 +27,13 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
             "application"
     })
     List<InterviewSession> findByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(UUID candidateId);
+    @Query("select session.id from InterviewSession session "
+            + "where session.candidate.id = :candidateId and session.deletedAt is null "
+            + "order by session.updatedAt desc")
+    List<UUID> findIdsByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(
+            @Param("candidateId") UUID candidateId,
+            Pageable pageable);
+
     @EntityGraph(attributePaths = {
             "candidate",
             "job",
@@ -38,7 +45,8 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
             "job.jobSkills.skill",
             "application"
     })
-    List<InterviewSession> findByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(UUID candidateId, Pageable pageable);
+    @Query("select distinct session from InterviewSession session where session.id in :ids")
+    List<InterviewSession> findAllWithResponseDetailsByIdIn(@Param("ids") List<UUID> ids);
     @EntityGraph(attributePaths = {
             "candidate",
             "job",

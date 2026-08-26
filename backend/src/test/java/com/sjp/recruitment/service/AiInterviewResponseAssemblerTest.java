@@ -57,6 +57,7 @@ class AiInterviewResponseAssemblerTest {
         session.setContextType("practice");
         session.setStatus("in_progress");
         session.setTotalQuestions(5);
+        session.setTargetQuestionCount(7);
 
         InterviewQuestion question = new InterviewQuestion();
         question.setId(UUID.randomUUID());
@@ -89,6 +90,7 @@ class AiInterviewResponseAssemblerTest {
 
         AiInterviewSessionResponse response = assembler.assemble(session);
 
+        assertThat(response.targetQuestionCount()).isEqualTo(7);
         assertThat(response.questions()).hasSize(1);
         assertThat(response.questions().get(0).answer().rawTranscript()).isEqualTo("Em dùng spring bút.");
         assertThat(response.questions().get(0).answer().finalTranscript()).isNull();

@@ -152,6 +152,11 @@ public class AiInterviewProperties {
         return 5;
     }
 
+    public int effectiveMaxAssessmentTurns(int targetQuestionCount) {
+        int extraTurnBudget = Math.max(0, maxTotalAssessmentTurns - effectiveCoreQuestionCount());
+        return Math.max(0, targetQuestionCount) + extraTurnBudget;
+    }
+
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }

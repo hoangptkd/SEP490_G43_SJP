@@ -44,6 +44,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -231,7 +232,7 @@ class AiInterviewDeferredEvaluationTest {
         when(questionRepository.findBySessionIdOrderByOrderIndexAsc(any())).thenReturn(List.of());
         when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(any())).thenReturn(List.of());
         service.createPracticeSession(new AiInterviewPracticeSessionRequest(
-                cvId.toString(), "Backend Developer", "junior", List.of("Java", "SQL")));
+                cvId.toString(), "Backend Developer", "junior", List.of("Java", "SQL"), 7));
 
         ArgumentCaptor<InterviewSession> sessionCaptor = ArgumentCaptor.forClass(InterviewSession.class);
         verify(sessionRepository, times(3)).save(sessionCaptor.capture());
@@ -240,8 +241,19 @@ class AiInterviewDeferredEvaluationTest {
         assertEquals("junior", savedSession.getPracticeContext().get("seniority"));
         assertEquals(List.of("Java", "SQL"), savedSession.getPracticeContext().get("focusSkills"));
         assertEquals("ai_generated", savedSession.getPracticeContext().get("questionMode"));
+        assertEquals(7, savedSession.effectiveTargetQuestionCount());
         verify(aiInterviewCvProfileService).analyze(cvId.toString());
         verifyNoInteractions(questionSetRepository, questionBankRepository);
+    }
+
+    @Test
+    void creatingPracticeRejectsUnsupportedQuestionCountBeforeLoadingCandidateOrCv() {
+        ApiException exception = assertThrows(ApiException.class, () ->
+                service.createPracticeSession(new AiInterviewPracticeSessionRequest(
+                        cvId.toString(), "Backend Developer", "junior", List.of("Java"), 6)));
+
+        assertEquals("QUESTION_COUNT_INVALID", exception.getCode());
+        verifyNoInteractions(candidateService, aiInterviewCvProfileService);
     }
 
     @Test
@@ -257,9 +269,13 @@ class AiInterviewDeferredEvaluationTest {
                 cvId.toString(), "Backend Developer", "junior", List.of("Java")));
 
         verify(speechPrefetchService).prefetchSegmentsAndAwait(
-                "Chào bạn.\nBạn hãy giới thiệu kinh nghiệm Java.", 20_000);
+                "Chào bạn.\nBạn hãy giới thiệu kinh nghiệm Java.",
+                20_000,
+                List.of("opening", "initial_question_1"));
         verify(conversationTemplates).initialPriorityPhrases(List.of());
-        verify(speechPrefetchService).prefetch(List.of("Được rồi."));
+        verify(speechPrefetchService).prefetchLabeled(List.of(
+                new AiInterviewSpeechPrefetchService.PrefetchRequest("Được rồi.", null)
+        ));
     }
 
     @Test
@@ -351,7 +367,7 @@ class AiInterviewDeferredEvaluationTest {
         when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(session.getId()))
                 .thenReturn(List.of(firstAnswer, secondAnswer, answer));
         when(shopAiKeyClient.generateAdaptiveInterviewQuestions(
-                session, List.of(first, second, third), List.of(firstAnswer, secondAnswer, answer)))
+                session, List.of(first, second, third), List.of(firstAnswer, secondAnswer, answer), 2))
                 .thenReturn(List.of(
                         rubricQuestion("problem-solving", "Câu đào sâu 4"),
                         rubricQuestion("technical-depth", "Câu bổ sung 5")
@@ -364,7 +380,77 @@ class AiInterviewDeferredEvaluationTest {
         assertEquals(List.of(4, 5), captor.getAllValues().stream().map(InterviewQuestion::getOrderIndex).toList());
         assertEquals("ai-question-adaptive-v3", captor.getAllValues().get(0).getPromptVersion());
         assertEquals("bars-v2", captor.getAllValues().get(1).getRubricVersion());
-        verify(shopAiKeyClient, times(1)).generateAdaptiveInterviewQuestions(any(), any(), any());
+        verify(shopAiKeyClient, times(1)).generateAdaptiveInterviewQuestions(any(), any(), any(), eq(2));
+    }
+
+    @Test
+    void confirmingThirdAnswerEndsCoreQuestionGenerationWhenTargetIsThree() {
+        InterviewQuestion first = interviewQuestion(1, "problem-solving", "Câu 1");
+        InterviewQuestion second = interviewQuestion(2, "technical-depth", "Câu 2");
+        InterviewQuestion third = interviewQuestion(3, "communication", "Câu 3");
+        InterviewAnswer firstAnswer = completedAnswer(first, "Trả lời 1");
+        InterviewAnswer secondAnswer = completedAnswer(second, "Trả lời 2");
+        session.setTargetQuestionCount(3);
+        answer.setQuestionId(third.getId());
+        answer.setSession(session);
+        when(questionRepository.findByIdAndSessionId(third.getId(), session.getId()))
+                .thenReturn(Optional.of(third));
+        when(questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId()))
+                .thenReturn(List.of(first, second, third));
+        when(answerRepository.findBySessionIdAndQuestionId(eq(session.getId()), any())).thenAnswer(invocation -> {
+            UUID questionId = invocation.getArgument(1);
+            if (questionId.equals(first.getId())) return Optional.of(firstAnswer);
+            if (questionId.equals(second.getId())) return Optional.of(secondAnswer);
+            return Optional.of(answer);
+        });
+
+        service.confirmAnswer(session.getId().toString(), third.getId().toString(), "Trả lời 3");
+
+        verify(shopAiKeyClient, never())
+                .generateAdaptiveInterviewQuestions(any(), any(), any(), any(Integer.class));
+        verify(questionRepository, never()).save(any(InterviewQuestion.class));
+    }
+
+    @Test
+    void confirmingNinthAnswerCreatesOnlyOneFinalQuestionWhenTargetIsTen() {
+        session.setTargetQuestionCount(10);
+        session.setEvaluationProfile(scoredProfile());
+        List<String> competencyIds = List.of(
+                "problem-solving", "technical-depth", "communication");
+        List<InterviewQuestion> questions = new ArrayList<>();
+        List<InterviewAnswer> answers = new ArrayList<>();
+        for (int order = 1; order <= 9; order++) {
+            InterviewQuestion item = interviewQuestion(
+                    order, competencyIds.get((order - 1) % competencyIds.size()), "Câu " + order);
+            questions.add(item);
+            if (order < 9) {
+                answers.add(completedAnswer(item, "Trả lời " + order));
+            } else {
+                answer.setQuestionId(item.getId());
+                answer.setSession(session);
+                answers.add(answer);
+            }
+        }
+        InterviewQuestion ninth = questions.get(8);
+        when(questionRepository.findByIdAndSessionId(ninth.getId(), session.getId()))
+                .thenReturn(Optional.of(ninth));
+        when(questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId()))
+                .thenReturn(questions);
+        when(answerRepository.findBySessionIdAndQuestionId(eq(session.getId()), any()))
+                .thenAnswer(invocation -> answers.stream()
+                        .filter(item -> item.getQuestionId().equals(invocation.getArgument(1)))
+                        .findFirst());
+        when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(session.getId()))
+                .thenReturn(answers);
+        when(shopAiKeyClient.generateAdaptiveInterviewQuestions(session, questions, answers, 1))
+                .thenReturn(List.of(rubricQuestion("problem-solving", "Câu cuối 10")));
+
+        service.confirmAnswer(session.getId().toString(), ninth.getId().toString(), "Trả lời 9");
+
+        ArgumentCaptor<InterviewQuestion> captor = ArgumentCaptor.forClass(InterviewQuestion.class);
+        verify(questionRepository).save(captor.capture());
+        assertEquals(10, captor.getValue().getOrderIndex());
+        verify(shopAiKeyClient).generateAdaptiveInterviewQuestions(session, questions, answers, 1);
     }
 
     @Test
@@ -388,12 +474,12 @@ class AiInterviewDeferredEvaluationTest {
         });
         when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(session.getId()))
                 .thenReturn(List.of(firstAnswer, secondAnswer, answer));
-        when(shopAiKeyClient.generateAdaptiveInterviewQuestions(any(), any(), any()))
+        when(shopAiKeyClient.generateAdaptiveInterviewQuestions(any(), any(), any(), eq(2)))
                 .thenReturn(List.of(
                         rubricQuestion("problem-solving", "Đào sâu câu 4"),
                         rubricQuestion("technical-depth", "Cross-check câu 5")
                 ));
-        when(shopAiKeyClient.regenerateAdaptiveInterviewQuestionsForCoverage(any(), any(), any()))
+        when(shopAiKeyClient.regenerateAdaptiveInterviewQuestionsForCoverage(any(), any(), any(), eq(2)))
                 .thenReturn(List.of(
                         rubricQuestion("leadership", "Bổ sung năng lực thứ tư"),
                         rubricQuestion("problem-solving", "Đào sâu câu 5")
@@ -404,8 +490,8 @@ class AiInterviewDeferredEvaluationTest {
         ArgumentCaptor<InterviewQuestion> captor = ArgumentCaptor.forClass(InterviewQuestion.class);
         verify(questionRepository, times(2)).save(captor.capture());
         assertEquals("leadership", captor.getAllValues().get(0).getCompetencyId());
-        verify(shopAiKeyClient).generateAdaptiveInterviewQuestions(any(), any(), any());
-        verify(shopAiKeyClient).regenerateAdaptiveInterviewQuestionsForCoverage(any(), any(), any());
+        verify(shopAiKeyClient).generateAdaptiveInterviewQuestions(any(), any(), any(), eq(2));
+        verify(shopAiKeyClient).regenerateAdaptiveInterviewQuestionsForCoverage(any(), any(), any(), eq(2));
     }
 
     @Test
@@ -429,7 +515,7 @@ class AiInterviewDeferredEvaluationTest {
         });
         when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(session.getId()))
                 .thenReturn(List.of(firstAnswer, secondAnswer, answer));
-        when(shopAiKeyClient.generateAdaptiveInterviewQuestions(any(), any(), any()))
+        when(shopAiKeyClient.generateAdaptiveInterviewQuestions(any(), any(), any(), eq(2)))
                 .thenThrow(new AiProviderException("AI_PROVIDER_FAILED", "provider unavailable"));
 
         service.confirmAnswer(session.getId().toString(), third.getId().toString(), "Trả lời 3");
@@ -441,7 +527,7 @@ class AiInterviewDeferredEvaluationTest {
         assertTrue(questionCaptor.getAllValues().stream()
                 .allMatch(item -> AiInterviewFallbackFactory.FALLBACK_PROMPT_VERSION
                         .equals(item.getPromptVersion())));
-        verify(shopAiKeyClient).generateAdaptiveInterviewQuestions(any(), any(), any());
+        verify(shopAiKeyClient).generateAdaptiveInterviewQuestions(any(), any(), any(), eq(2));
     }
 
     @Test

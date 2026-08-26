@@ -11,6 +11,7 @@ import com.sjp.recruitment.service.ai.AiProviderException;
 import com.sjp.recruitment.service.ai.GladiaTranscriptionClient;
 import com.sjp.recruitment.service.ai.AiInterviewRateLimiter;
 import com.sjp.recruitment.service.ai.AiInterviewSpeechPrefetchService;
+import com.sjp.recruitment.service.ai.AiInterviewSpeechPrefetchService.PrefetchRequest;
 import com.sjp.recruitment.service.ai.ShopAiKeyClient;
 import com.sjp.recruitment.model.enums.InterviewDialogueState;
 import com.sjp.recruitment.model.enums.InterviewTurnAnswerStatus;
@@ -46,6 +47,9 @@ public class AiInterviewService {
     private static final String ADAPTIVE_QUESTION_PROMPT_VERSION = "ai-question-adaptive-v3";
     private static final String EVALUATION_PROFILE_VERSION = "evaluation-profile-v2";
     private static final String BARS_RUBRIC_VERSION = "bars-v2";
+    private static final Set<Integer> SUPPORTED_PRACTICE_QUESTION_COUNTS = Set.of(3, 5, 7, 10);
+    private static final PreparationProgressReporter NO_PREPARATION_PROGRESS =
+            (stage, progress, message, warningMessage) -> { };
 
     private final AiInterviewProperties properties;
     private final CandidateService candidateService;
@@ -172,6 +176,7 @@ public class AiInterviewService {
         session.setJob(application.getJob());
         session.setContextType("application");
         session.setSessionType("job_based");
+        session.setTargetQuestionCount(properties.effectiveCoreQuestionCount());
         session.setTitle("Luyện phỏng vấn: " + application.getJob().getTitle());
         session.setStatus("created");
         session.setStartedAt(LocalDateTime.now());
@@ -187,11 +192,26 @@ public class AiInterviewService {
 
     @Transactional
     public AiInterviewSessionResponse createPracticeSession(AiInterviewPracticeSessionRequest request) {
+        return createPracticeSession(request, NO_PREPARATION_PROGRESS);
+    }
+
+    @Transactional
+    public AiInterviewSessionResponse createPracticeSession(
+            AiInterviewPracticeSessionRequest request,
+            PreparationProgressReporter progressReporter
+    ) {
+        PreparationProgressReporter progress = progressReporter == null
+                ? NO_PREPARATION_PROGRESS
+                : progressReporter;
+        progress.update("VALIDATING", 5, "Đang kiểm tra yêu cầu", null);
         ensureEnabled();
+        int targetQuestionCount = resolvePracticeQuestionCount(request.questionCount());
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         rateLimiter.check(candidate.getId(), "session-create");
         requireAiSession(candidate.getUser());
+        progress.update("ANALYZING_CV", 15, "Đang phân tích CV", null);
         AiInterviewCvProfileResponse cvProfile = aiInterviewCvProfileService.analyze(request.cvId());
+        progress.update("CV_READY", 25, "Đã phân tích CV", null);
         List<String> focusSkills = request.focusSkills() == null
                 ? List.of()
                 : request.focusSkills().stream()
@@ -218,16 +238,32 @@ public class AiInterviewService {
         session.setJob(null);
         session.setContextType("practice");
         session.setSessionType("practice");
+        session.setTargetQuestionCount(targetQuestionCount);
         session.setPracticeContext(practiceContext);
         session.setTitle("Luyện tập: " + request.targetRole().trim());
         session.setStatus("created");
         session.setStartedAt(LocalDateTime.now());
         session = sessionRepository.save(session);
+        progress.update("GENERATING_QUESTIONS", 30, "Đang tạo câu hỏi phỏng vấn", null);
         createNextQuestion(session);
+        progress.update("QUESTIONS_READY", 55, "Đã tạo xong 3 câu hỏi", null);
+        progress.update("PREPARING_ROOM", 65, "Đang chuẩn bị phòng phỏng vấn", null);
         conversationService.initialize(session);
         session.setStatus("in_progress");
         session = sessionRepository.save(session);
-        prefetchInitialConversationSpeech(session);
+        progress.update("GENERATING_FIRST_VOICE", 75,
+                "Đang tạo giọng nói phần mở đầu và câu 1", null);
+        boolean firstVoiceReady = prefetchInitialConversationSpeech(session);
+        String voiceWarning = firstVoiceReady
+                ? null
+                : "Giọng Gemini chưa sẵn sàng; hệ thống sẽ dùng giọng trình duyệt hoặc hiển thị câu hỏi để bạn đọc.";
+        progress.update("FIRST_VOICE_READY", 90,
+                firstVoiceReady
+                        ? "Đã chuẩn bị giọng nói câu 1"
+                        : "Câu 1 sẽ sử dụng phương án giọng đọc dự phòng",
+                voiceWarning);
+        progress.update("BACKGROUND_VOICE_QUEUED", 95,
+                "Đang tạo giọng nói câu 2 và câu 3 trong nền", voiceWarning);
         consumeAiSession(candidate.getUser());
         return responseAssembler.assemble(session);
     }
@@ -238,10 +274,20 @@ public class AiInterviewService {
         CandidateProfile candidate = candidateService.getCurrentCandidateProfile();
         int safePage = Math.max(0, page);
         int safeSize = Math.max(1, Math.min(size, 50));
-        return responseAssembler.assembleAll(sessionRepository.findByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(
+        List<UUID> sessionIds = sessionRepository.findIdsByCandidateIdAndDeletedAtIsNullOrderByUpdatedAtDesc(
                 candidate.getId(),
                 org.springframework.data.domain.PageRequest.of(safePage, safeSize)
-        ));
+        );
+        if (sessionIds.isEmpty()) return List.of();
+        Map<UUID, InterviewSession> sessionsById = sessionRepository
+                .findAllWithResponseDetailsByIdIn(sessionIds)
+                .stream()
+                .collect(Collectors.toMap(InterviewSession::getId, session -> session));
+        List<InterviewSession> orderedSessions = sessionIds.stream()
+                .map(sessionsById::get)
+                .filter(Objects::nonNull)
+                .toList();
+        return responseAssembler.assembleAll(orderedSessions);
     }
 
     @Transactional(readOnly = true)
@@ -360,7 +406,7 @@ public class AiInterviewService {
                     parsedSessionId, result.confirmedTurnId());
         }
         CompletableFuture<Void> evidenceJob = submitTurnEvidence(parsedSessionId, result);
-        startAdaptivePrefetchAfterThirdCoreAnswer(parsedSessionId, result, evidenceJob);
+        startAdaptivePrefetchAfterCompletedBatch(parsedSessionId, result, evidenceJob);
         if (result.itemCompleted()) {
             continueConversation(parsedSessionId);
         }
@@ -426,7 +472,7 @@ public class AiInterviewService {
                         parsedSessionId, result.confirmedTurnId());
             }
             CompletableFuture<Void> evidenceJob = submitTurnEvidence(parsedSessionId, result);
-            startAdaptivePrefetchAfterThirdCoreAnswer(parsedSessionId, result, evidenceJob);
+            startAdaptivePrefetchAfterCompletedBatch(parsedSessionId, result, evidenceJob);
             if (result.itemCompleted()) {
                 continueConversation(parsedSessionId);
             }
@@ -669,12 +715,15 @@ public class AiInterviewService {
         }
     }
 
-    private void startAdaptivePrefetchAfterThirdCoreAnswer(
+    private void startAdaptivePrefetchAfterCompletedBatch(
             UUID sessionId,
             AiInterviewConversationService.ConversationResult result,
             CompletableFuture<Void> evidenceJob
     ) {
-        if (result == null || result.idempotent() || result.assessmentItemOrder() != 3) return;
+        if (result == null || result.idempotent() || result.assessmentItemOrder() < 3
+                || result.assessmentItemOrder() % 2 == 0) return;
+        InterviewSession session = sessionRepository.findById(sessionId).orElse(null);
+        if (session == null || result.assessmentItemOrder() >= session.effectiveTargetQuestionCount()) return;
         adaptivePrefetchCoordinator.startAfter(sessionId, evidenceJob,
                 () -> generateAdaptiveForConversation(sessionId));
     }
@@ -711,19 +760,22 @@ public class AiInterviewService {
             long completedAnswers = answers.stream()
                     .filter(answer -> answer.getAnsweredAt() != null)
                     .count();
-            boolean thirdCoreHasConfirmedTurn = questions.size() == 3
+            int generatedQuestionCount = questions.size();
+            boolean latestCoreHasConfirmedTurn = generatedQuestionCount >= 3
                     && conversationTurnRepository
                     .findBySessionIdAndAssessmentItemIdOrderBySequenceNoAsc(
-                            sessionId, questions.get(2).getId())
+                            sessionId, questions.get(generatedQuestionCount - 1).getId())
                     .stream()
                     .anyMatch(turn -> turn.getAnswerStatus() == InterviewTurnAnswerStatus.CONFIRMED
                             && hasText(turn.getCandidateFinalAnswer()));
             boolean ready = session.getDialogueState() == null
-                    ? completedAnswers >= 3
-                    : completedAnswers >= 2 && thirdCoreHasConfirmedTurn;
-            if (questions.size() != 3 || !ready) {
+                    ? completedAnswers >= generatedQuestionCount
+                    : completedAnswers >= generatedQuestionCount - 1 && latestCoreHasConfirmedTurn;
+            if (generatedQuestionCount < 3
+                    || generatedQuestionCount >= session.effectiveTargetQuestionCount()
+                    || !ready) {
                 throw new ApiException(HttpStatus.CONFLICT, "ADAPTIVE_QUESTIONS_NOT_READY",
-                        "Chưa có đủ evidence từ ba assessment item đầu để tạo batch thích ứng.");
+                        "Chưa có đủ evidence từ batch assessment item hiện tại để tạo batch thích ứng.");
             }
             createAdaptiveQuestionBatch(session, questions, answers);
         } catch (ApiException exception) {
@@ -754,10 +806,10 @@ public class AiInterviewService {
             InterviewSession session,
             List<InterviewQuestion> questions
     ) {
-        int remaining = Math.max(0, properties.effectiveCoreQuestionCount() - questions.size());
-        if (remaining == 0) return;
+        int requestedCount = adaptiveBatchSize(session, questions.size());
+        if (requestedCount == 0) return;
         List<ShopAiKeyClient.RubricQuestionDraft> drafts = fallbackFactory.adaptiveQuestions(
-                session, questions, remaining);
+                session, questions, requestedCount);
         persistAdaptiveBatchAtomically(
                 session.getId(),
                 drafts,
@@ -1014,7 +1066,7 @@ public class AiInterviewService {
             return;
         }
         List<InterviewQuestion> questions = questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId());
-        if (questions.size() >= properties.effectiveCoreQuestionCount()) {
+        if (questions.size() >= session.effectiveTargetQuestionCount()) {
             return;
         }
         List<InterviewAnswer> answers = answerRepository.findBySessionIdOrderByAnsweredAtAsc(session.getId());
@@ -1022,7 +1074,8 @@ public class AiInterviewService {
             createInitialQuestionBatch(session);
             return;
         }
-        if (questions.size() == 3 && answers.stream().filter(answer -> answer.getAnsweredAt() != null).count() >= 3) {
+        if (questions.size() >= 3
+                && answers.stream().filter(answer -> answer.getAnsweredAt() != null).count() >= questions.size()) {
             createAdaptiveQuestionBatch(session, questions, answers);
         }
     }
@@ -1040,7 +1093,7 @@ public class AiInterviewService {
             ShopAiKeyClient.InterviewPackageDraft interviewPackage,
             String promptVersion
     ) {
-        Map<String, Object> evaluationProfile = evaluationProfileMap(interviewPackage.evaluationProfile());
+        Map<String, Object> evaluationProfile = evaluationProfileMap(session, interviewPackage.evaluationProfile());
         session.setEvaluationProfile(evaluationProfile);
         persistQuestionBatch(
                 session,
@@ -1067,8 +1120,10 @@ public class AiInterviewService {
     private void createProviderAdaptiveQuestionBatch(InterviewSession session,
                                                      List<InterviewQuestion> questions,
                                                      List<InterviewAnswer> answers) {
+        int requestedCount = adaptiveBatchSize(session, questions.size());
+        if (requestedCount == 0) return;
         List<ShopAiKeyClient.RubricQuestionDraft> drafts =
-                generateAdaptiveQuestionDrafts(session, questions, answers, false);
+                generateAdaptiveQuestionDrafts(session, questions, answers, requestedCount, false);
         List<ShopAiKeyClient.RubricQuestionDraft> persistedDrafts = drafts;
         try {
             persistAdaptiveBatchAtomically(
@@ -1082,7 +1137,7 @@ public class AiInterviewService {
                 throw exception;
             }
             List<ShopAiKeyClient.RubricQuestionDraft> correctedDrafts =
-                    generateAdaptiveQuestionDrafts(session, questions, answers, true);
+                    generateAdaptiveQuestionDrafts(session, questions, answers, requestedCount, true);
             persistAdaptiveBatchAtomically(
                     session.getId(),
                     correctedDrafts,
@@ -1122,12 +1177,20 @@ public class AiInterviewService {
                             "Không tìm thấy phiên phỏng vấn."));
             List<InterviewQuestion> currentQuestions = questionRepository
                     .findBySessionIdOrderByOrderIndexAsc(sessionId);
-            if (currentQuestions.size() >= properties.effectiveCoreQuestionCount()) {
+            int targetQuestionCount = lockedSession.effectiveTargetQuestionCount();
+            int expectedExistingCount = firstOrderIndex - 1;
+            int expectedEndCount = expectedExistingCount + drafts.size();
+            if (currentQuestions.size() >= expectedEndCount) {
                 return null;
             }
-            if (currentQuestions.size() != 3 || firstOrderIndex != 4) {
+            if (currentQuestions.size() != expectedExistingCount) {
                 throw new ApiException(HttpStatus.CONFLICT, "ADAPTIVE_QUESTION_STATE_CHANGED",
                         "Trạng thái batch câu hỏi thích ứng đã thay đổi.");
+            }
+            int expectedBatchSize = Math.min(2, targetQuestionCount - currentQuestions.size());
+            if (expectedBatchSize <= 0 || drafts.size() != expectedBatchSize) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_INVALID_ADAPTIVE_BATCH_SIZE",
+                        "Số câu hỏi thích ứng không khớp với số câu còn lại của phiên.");
             }
             persistQuestionBatch(
                     lockedSession,
@@ -1144,11 +1207,14 @@ public class AiInterviewService {
             InterviewSession session,
             List<InterviewQuestion> questions,
             List<InterviewAnswer> answers,
+            int requestedCount,
             boolean coverageCorrection) {
         try {
             return coverageCorrection
-                    ? shopAiKeyClient.regenerateAdaptiveInterviewQuestionsForCoverage(session, questions, answers)
-                    : shopAiKeyClient.generateAdaptiveInterviewQuestions(session, questions, answers);
+                    ? shopAiKeyClient.regenerateAdaptiveInterviewQuestionsForCoverage(
+                            session, questions, answers, requestedCount)
+                    : shopAiKeyClient.generateAdaptiveInterviewQuestions(
+                            session, questions, answers, requestedCount);
         } catch (AiProviderException exception) {
             throw providerApiException(exception, "tạo câu hỏi phỏng vấn thích ứng");
         }
@@ -1165,23 +1231,39 @@ public class AiInterviewService {
         }
     }
 
-    private void prefetchInitialConversationSpeech(InterviewSession session) {
+    private boolean prefetchInitialConversationSpeech(InterviewSession session) {
         try {
             String speechText = responseAssembler.currentConversationSpeech(session);
-            speechPrefetchService.prefetchSegmentsAndAwait(
+            byte[] firstVoice = speechPrefetchService.prefetchSegmentsAndAwait(
                     speechText,
-                    properties.getTtsPrefetchInitialWaitMs());
+                    properties.getTtsPrefetchInitialWaitMs(),
+                    List.of("opening", "initial_question_1"));
             List<String> coreQuestions = questionRepository
                     .findBySessionIdOrderByOrderIndexAsc(session.getId())
                     .stream()
                     .map(InterviewQuestion::getContent)
                     .toList();
-            speechPrefetchService.prefetch(
-                    conversationTemplates.initialPriorityPhrases(coreQuestions));
+            String questionTwo = coreQuestions.size() >= 2 ? coreQuestions.get(1) : null;
+            String questionThree = coreQuestions.size() >= 3 ? coreQuestions.get(2) : null;
+            List<PrefetchRequest> priorityRequests = conversationTemplates
+                    .initialPriorityPhrases(coreQuestions)
+                    .stream()
+                    .map(phrase -> new PrefetchRequest(
+                            phrase,
+                            phrase.equals(questionTwo)
+                                    ? "initial_question_2"
+                                    : phrase.equals(questionThree)
+                                    ? "initial_question_3"
+                                    : null
+                    ))
+                    .toList();
+            speechPrefetchService.prefetchLabeled(priorityRequests);
+            return firstVoice != null;
         } catch (RuntimeException exception) {
             log.warn("AI interview initial speech prefetch skipped: sessionId={}, exceptionType={}, detail=\"{}\"",
                     session.getId(),
                     exception.getClass().getSimpleName(), exception.getMessage());
+            return false;
         }
     }
 
@@ -1232,11 +1314,14 @@ public class AiInterviewService {
             question.setRubric(rubricMap(draft));
             questionRepository.save(question);
         }
-        session.setTotalQuestions(Math.min(properties.effectiveCoreQuestionCount(), orderIndex - 1));
+        session.setTotalQuestions(Math.min(session.effectiveTargetQuestionCount(), orderIndex - 1));
         sessionRepository.save(session);
     }
 
-    private Map<String, Object> evaluationProfileMap(ShopAiKeyClient.EvaluationProfileDraft draft) {
+    private Map<String, Object> evaluationProfileMap(
+            InterviewSession session,
+            ShopAiKeyClient.EvaluationProfileDraft draft
+    ) {
         if (draft.competencies() == null || draft.competencies().size() < 3 || draft.competencies().size() > 6) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_INVALID_EVALUATION_PROFILE",
                     "Evaluation Profile phải có từ 3 đến 6 năng lực.");
@@ -1254,11 +1339,14 @@ public class AiInterviewService {
         }
         List<Map<String, Object>> competencies = new ArrayList<>();
         Set<String> scoredIds = new LinkedHashSet<>(draft.scoredCompetencyIds());
-        if (scoredIds.size() < 3 || scoredIds.size() > 4
+        int maxScoredCompetencies = session.effectiveTargetQuestionCount() == 3 ? 3 : 4;
+        if (scoredIds.size() < 3 || scoredIds.size() > maxScoredCompetencies
                 || scoredIds.size() != draft.scoredCompetencyIds().size()
                 || !allCompetencyIds.containsAll(scoredIds)) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_INVALID_SCORED_COMPETENCY_SET",
-                    "Scored Competency Set phải có 3 đến 4 competencyId hợp lệ và không trùng lặp.");
+                    session.effectiveTargetQuestionCount() == 3
+                            ? "Phiên 3 câu phải có đúng 3 competencyId hợp lệ và không trùng lặp."
+                            : "Scored Competency Set phải có 3 đến 4 competencyId hợp lệ và không trùng lặp.");
         }
         double prioritySum = draft.competencies().stream()
                 .filter(competency -> scoredIds.contains(competency.id()))
@@ -1315,9 +1403,10 @@ public class AiInterviewService {
                                           List<ShopAiKeyClient.RubricQuestionDraft> drafts,
                                           int firstOrderIndex,
                                           Set<String> scoredIds) {
-        if (scoredIds.size() < 3 || scoredIds.size() > 4) {
+        int maxScoredCompetencies = session.effectiveTargetQuestionCount() == 3 ? 3 : 4;
+        if (scoredIds.size() < 3 || scoredIds.size() > maxScoredCompetencies) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_INVALID_SCORED_COMPETENCY_SET",
-                    "Evaluation Profile phải có từ 3 đến 4 năng lực được chấm.");
+                    "Evaluation Profile có số năng lực được chấm không phù hợp với số câu đã chọn.");
         }
         Set<String> draftIds = drafts.stream()
                 .map(ShopAiKeyClient.RubricQuestionDraft::competencyId)
@@ -1330,8 +1419,11 @@ public class AiInterviewService {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_INVALID_INITIAL_COVERAGE",
                     "Ba câu đầu phải ưu tiên ba năng lực chính khác nhau.");
         }
-        if (firstOrderIndex > 1) {
-            Set<String> coveredIds = questionRepository
+        int resultingQuestionCount = firstOrderIndex - 1 + drafts.size();
+        if (resultingQuestionCount >= session.effectiveTargetQuestionCount()) {
+            Set<String> coveredIds = firstOrderIndex == 1
+                    ? new LinkedHashSet<>()
+                    : questionRepository
                     .findBySessionIdOrderByOrderIndexAsc(session.getId())
                     .stream()
                     .map(InterviewQuestion::getCompetencyId)
@@ -1340,9 +1432,25 @@ public class AiInterviewService {
             coveredIds.addAll(draftIds);
             if (!coveredIds.containsAll(scoredIds)) {
                 throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_INCOMPLETE_SCORED_COMPETENCY_COVERAGE",
-                        "Năm câu hỏi phải cover toàn bộ Scored Competency Set.");
+                        "Các câu hỏi chính phải cover toàn bộ Scored Competency Set.");
             }
         }
+    }
+
+    private int adaptiveBatchSize(InterviewSession session, int generatedQuestionCount) {
+        return Math.min(2, Math.max(0,
+                session.effectiveTargetQuestionCount() - generatedQuestionCount));
+    }
+
+    private int resolvePracticeQuestionCount(Integer requestedCount) {
+        int questionCount = requestedCount == null
+                ? properties.effectiveCoreQuestionCount()
+                : requestedCount;
+        if (!SUPPORTED_PRACTICE_QUESTION_COUNTS.contains(questionCount)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "QUESTION_COUNT_INVALID",
+                    "Số câu hỏi phải là 3, 5, 7 hoặc 10.");
+        }
+        return questionCount;
     }
 
     private Map<String, Object> rubricMap(ShopAiKeyClient.RubricQuestionDraft draft) {
@@ -1559,6 +1667,11 @@ public class AiInterviewService {
             List<InterviewQuestion> questions,
             List<InterviewAnswer> answers,
             List<ShopAiKeyClient.GroupedAssessmentEvidence> groupedEvidence) {
+    }
+
+    @FunctionalInterface
+    public interface PreparationProgressReporter {
+        void update(String stage, int progress, String message, String warningMessage);
     }
 
     private void requireAiSession(User user) {

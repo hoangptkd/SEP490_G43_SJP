@@ -86,6 +86,37 @@ class AiInterviewSpeechPrefetchServiceTest {
     }
 
     @Test
+    void providerSafetyBlockOnlySkipsThatSegmentAndContinuesQueue() throws Exception {
+        List<String> callOrder = new CopyOnWriteArrayList<>();
+        doAnswer(invocation -> {
+            String text = invocation.getArgument(0);
+            callOrder.add(text);
+            if (text.contains("nhạy cảm")) {
+                throw new AiProviderException("GEMINI_TTS_PROVIDER_BLOCKED", "finishReason=SAFETY");
+            }
+            OutputStream output = invocation.getArgument(1);
+            output.write(new byte[]{6, 0});
+            return new ShopAiKeyGeminiTtsClient.StreamMetrics(2, 10, 20,
+                    ShopAiKeyGeminiTtsClient.CONTENT_TYPE);
+        }).when(ttsClient).streamSpeech(anyString(), any(OutputStream.class));
+
+        service.prefetchLabeled(List.of(
+                new AiInterviewSpeechPrefetchService.PrefetchRequest(
+                        "Đoạn bị bộ lọc đánh dấu nhạy cảm", "initial_question_1"),
+                new AiInterviewSpeechPrefetchService.PrefetchRequest(
+                        "Câu hỏi thứ hai vẫn được đọc", "initial_question_2")
+        ));
+
+        assertThat(service.awaitReady("Đoạn bị bộ lọc đánh dấu nhạy cảm", 1_000)).isNull();
+        assertThat(service.awaitReady("Câu hỏi thứ hai vẫn được đọc", 1_000))
+                .containsExactly(6, 0);
+        assertThat(callOrder).containsExactly(
+                "Đoạn bị bộ lọc đánh dấu nhạy cảm",
+                "Câu hỏi thứ hai vẫn được đọc");
+        verify(ttsClient, times(2)).streamSpeech(anyString(), any(OutputStream.class));
+    }
+
+    @Test
     void allowsALaterPrefetchAfterCooldownExpires() throws Exception {
         AtomicInteger attempts = new AtomicInteger();
         doAnswer(invocation -> {

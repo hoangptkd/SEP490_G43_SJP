@@ -4,6 +4,7 @@ import type {
   AiInterviewConfirmedAnswer,
   AiInterviewCvProfile,
   AiInterviewEligibleApplication,
+  AiInterviewPreparation,
   AiInterviewPracticeInput,
   AiInterviewQuestionSet,
   AiInterviewSession,
@@ -58,8 +59,15 @@ export const aiInterviewService = {
     return response.data;
   },
 
-  createPracticeSession: async (input: AiInterviewPracticeInput): Promise<AiInterviewSession> => {
-    const response = await api.post<AiInterviewSession>('/candidate/ai-interviews/sessions/practice', input);
+  createPracticeSession: async (input: AiInterviewPracticeInput): Promise<AiInterviewPreparation> => {
+    const response = await api.post<AiInterviewPreparation>('/candidate/ai-interviews/sessions/practice', input);
+    return response.data;
+  },
+
+  getPracticePreparation: async (id: string): Promise<AiInterviewPreparation> => {
+    const response = await api.get<AiInterviewPreparation>(
+      `/candidate/ai-interviews/practice/preparations/${id}`,
+    );
     return response.data;
   },
 

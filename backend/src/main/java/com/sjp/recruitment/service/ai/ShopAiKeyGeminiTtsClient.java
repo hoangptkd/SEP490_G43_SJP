@@ -390,6 +390,10 @@ public class ShopAiKeyGeminiTtsClient {
         if (status == 429) {
             return new AiProviderException("GEMINI_TTS_RATE_LIMITED", "ShopAIKey TTS đang giới hạn tần suất");
         }
+        if (status >= 500) {
+            return new AiProviderException("GEMINI_TTS_HTTP_5XX",
+                    "ShopAIKey Gemini TTS phản hồi HTTP " + status + ": " + safeDetail(detail));
+        }
         return new AiProviderException("GEMINI_TTS_HTTP_ERROR",
                 "ShopAIKey Gemini TTS phản hồi HTTP " + status + ": " + safeDetail(detail));
     }

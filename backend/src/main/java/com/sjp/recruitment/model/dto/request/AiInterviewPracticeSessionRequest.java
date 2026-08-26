@@ -12,6 +12,15 @@ public record AiInterviewPracticeSessionRequest(
         @NotBlank
         @Pattern(regexp = "intern|fresher|junior|middle|senior")
         String seniority,
-        @Size(max = 3) List<@NotBlank @Size(max = 80) String> focusSkills
+        @Size(max = 3) List<@NotBlank @Size(max = 80) String> focusSkills,
+        Integer questionCount
 ) {
+    public AiInterviewPracticeSessionRequest(
+            String cvId,
+            String targetRole,
+            String seniority,
+            List<String> focusSkills
+    ) {
+        this(cvId, targetRole, seniority, focusSkills, null);
+    }
 }

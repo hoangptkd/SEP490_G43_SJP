@@ -14,12 +14,14 @@ import com.sjp.recruitment.model.dto.response.AiInterviewConfigResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewCvProfileResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewEligibleApplicationResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewQuestionSetResponse;
+import com.sjp.recruitment.model.dto.response.AiInterviewPreparationResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewSessionResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewSpeechTicketResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewTranscriptResponse;
 import com.sjp.recruitment.model.dto.response.AiInterviewTranscriptionTicketResponse;
 import com.sjp.recruitment.model.dto.response.HandsFreeAnswerCaptureResponse;
 import com.sjp.recruitment.service.AiInterviewService;
+import com.sjp.recruitment.service.AiInterviewPreparationService;
 import com.sjp.recruitment.service.AiInterviewCvProfileService;
 import com.sjp.recruitment.service.AiInterviewSpeechService;
 import com.sjp.recruitment.service.HandsFreeAnswerCaptureService;
@@ -42,6 +44,7 @@ import java.util.concurrent.Callable;
 public class AiInterviewController {
 
     private final AiInterviewService aiInterviewService;
+    private final AiInterviewPreparationService aiInterviewPreparationService;
     private final AiInterviewCvProfileService aiInterviewCvProfileService;
     private final AiInterviewSpeechService aiInterviewSpeechService;
     private final HandsFreeAnswerCaptureService handsFreeAnswerCaptureService;
@@ -68,8 +71,16 @@ public class AiInterviewController {
     }
 
     @PostMapping("/sessions/practice")
-    public ResponseEntity<AiInterviewSessionResponse> createPracticeSession(@Valid @RequestBody AiInterviewPracticeSessionRequest request) {
-        return ResponseEntity.ok(aiInterviewService.createPracticeSession(request));
+    public ResponseEntity<AiInterviewPreparationResponse> createPracticeSession(
+            @Valid @RequestBody AiInterviewPracticeSessionRequest request) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.ACCEPTED)
+                .body(aiInterviewPreparationService.start(request));
+    }
+
+    @GetMapping("/practice/preparations/{preparationId}")
+    public ResponseEntity<AiInterviewPreparationResponse> practicePreparation(
+            @PathVariable String preparationId) {
+        return ResponseEntity.ok(aiInterviewPreparationService.get(preparationId));
     }
 
     @GetMapping("/sessions")

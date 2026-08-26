@@ -18,8 +18,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AiInterviewResponseAssembler {
 
-    private static final int TOTAL_CORE_QUESTIONS = 5;
-
     private final InterviewQuestionRepository questionRepository;
     private final InterviewAnswerRepository answerRepository;
     private final AiAnswerFeedbackRepository answerFeedbackRepository;
@@ -119,6 +117,7 @@ public class AiInterviewResponseAssembler {
                 session.getContextType(),
                 session.getStatus(),
                 session.getTotalQuestions() == null ? 0 : session.getTotalQuestions(),
+                session.effectiveTargetQuestionCount(),
                 session.isCompleted() ? session.getOverallScore() : null,
                 session.getApplication() == null ? null : session.getApplication().getId().toString(),
                 session.getJob() == null ? null : jobService.toJobResponse(session.getJob(), session.getCandidate()),
@@ -151,6 +150,7 @@ public class AiInterviewResponseAssembler {
         long completedCoreQuestions = answers.values().stream()
                 .filter(answer -> answer.getAnsweredAt() != null)
                 .count();
+        int targetQuestionCount = session.effectiveTargetQuestionCount();
 
         return new AiInterviewConversationResponse(
                 session.getDialogueState() == null ? null : session.getDialogueState().name(),
@@ -158,8 +158,8 @@ public class AiInterviewResponseAssembler {
                 currentTurnId == null ? null : currentTurnId.toString(),
                 expectsAnswer(currentTurn),
                 speechText(publishedTurns),
-                Math.toIntExact(Math.min(completedCoreQuestions, TOTAL_CORE_QUESTIONS)),
-                TOTAL_CORE_QUESTIONS,
+                Math.toIntExact(Math.min(completedCoreQuestions, targetQuestionCount)),
+                targetQuestionCount,
                 session.getLastErrorStage(),
                 session.getLastErrorCode(),
                 session.getLastErrorMessage(),

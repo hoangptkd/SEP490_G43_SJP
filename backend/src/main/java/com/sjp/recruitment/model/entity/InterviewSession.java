@@ -98,6 +98,9 @@ public class InterviewSession {
     @Column(name = "total_questions", nullable = false)
     private Integer totalQuestions = 0;
 
+    @Column(name = "target_question_count", nullable = false)
+    private Integer targetQuestionCount = 5;
+
     @Column(name = "overall_score")
     private BigDecimal overallScore;
 
@@ -122,5 +125,9 @@ public class InterviewSession {
 
     public boolean isCompleted() {
         return "completed".equals(status);
+    }
+
+    public int effectiveTargetQuestionCount() {
+        return targetQuestionCount == null ? 5 : targetQuestionCount;
     }
 }

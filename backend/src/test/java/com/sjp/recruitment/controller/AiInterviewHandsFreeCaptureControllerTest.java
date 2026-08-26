@@ -2,6 +2,7 @@ package com.sjp.recruitment.controller;
 
 import com.sjp.recruitment.model.dto.response.HandsFreeAnswerCaptureResponse;
 import com.sjp.recruitment.service.AiInterviewService;
+import com.sjp.recruitment.service.AiInterviewPreparationService;
 import com.sjp.recruitment.service.AiInterviewCvProfileService;
 import com.sjp.recruitment.service.AiInterviewSpeechService;
 import com.sjp.recruitment.service.HandsFreeAnswerCaptureService;
@@ -24,12 +25,14 @@ class AiInterviewHandsFreeCaptureControllerTest {
     @Test
     void bindsQuestionScopedMultipartCaptureMetadataAndReturnsProviderNeutralResult() throws Exception {
         AiInterviewService interviewService = mock(AiInterviewService.class);
+        AiInterviewPreparationService preparationService = mock(AiInterviewPreparationService.class);
         AiInterviewCvProfileService cvProfileService = mock(AiInterviewCvProfileService.class);
         AiInterviewSpeechService speechService = mock(AiInterviewSpeechService.class);
         HandsFreeAnswerCaptureService captureService = mock(HandsFreeAnswerCaptureService.class);
         SpeechmaticsRealtimeTicketService transcriptionTicketService = mock(SpeechmaticsRealtimeTicketService.class);
         AiInterviewController controller = new AiInterviewController(
-                interviewService, cvProfileService, speechService, captureService, transcriptionTicketService);
+                interviewService, preparationService, cvProfileService, speechService, captureService,
+                transcriptionTicketService);
         MockMvc mvc = standaloneSetup(controller).build();
         String sessionId = UUID.randomUUID().toString();
         String questionId = UUID.randomUUID().toString();

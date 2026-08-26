@@ -36,6 +36,23 @@ public class AiInterviewConversationPolicy {
             int totalAssessmentTurns,
             int remainingCoreQuestions
     ) {
+        return resolveAction(
+                requestedAction,
+                probeCount,
+                clarifyCount,
+                totalAssessmentTurns,
+                remainingCoreQuestions,
+                properties.effectiveCoreQuestionCount());
+    }
+
+    public AnswerAnalysisAction resolveAction(
+            String requestedAction,
+            int probeCount,
+            int clarifyCount,
+            int totalAssessmentTurns,
+            int remainingCoreQuestions,
+            int targetCoreQuestions
+    ) {
         AnswerAnalysisAction requested = parseAction(requestedAction);
         if (requested != AnswerAnalysisAction.NEXT
                 && probeCount + clarifyCount >= properties.getMaxFollowUpsPerCore()) {
@@ -51,7 +68,7 @@ public class AiInterviewConversationPolicy {
         }
         if (requested != AnswerAnalysisAction.NEXT
                 && totalAssessmentTurns + remainingCoreQuestions
-                >= properties.getMaxTotalAssessmentTurns()) {
+                >= properties.effectiveMaxAssessmentTurns(targetCoreQuestions)) {
             return AnswerAnalysisAction.NEXT;
         }
         return requested;

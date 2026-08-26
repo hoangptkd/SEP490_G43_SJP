@@ -50,7 +50,9 @@ import type {
   AiInterviewConversationTurn,
   AiInterviewCvProfile,
   AiInterviewEligibleApplication,
+  AiInterviewPreparation,
   AiInterviewQuestion,
+  AiInterviewQuestionCount,
   AiInterviewSession,
 } from './types/aiInterview';
 import type {
@@ -6546,6 +6548,94 @@ function EmployerLayout() {
 // ─── EMPLOYER DASHBOARD ──────────────────────────────────────────────────────
 
 // ─── AI INTERVIEW PAGE ───────────────────────────────────────────────────────
+const AI_INTERVIEW_QUESTION_COUNTS: ReadonlyArray<{
+  value: AiInterviewQuestionCount;
+  label: string;
+}> = [
+  { value: 3, label: 'Khởi động' },
+  { value: 5, label: 'Tiêu chuẩn' },
+  { value: 7, label: 'Chuyên sâu' },
+  { value: 10, label: 'Mô phỏng' },
+];
+
+const PRACTICE_PREPARATION_STEPS = [
+  { progress: 5, label: 'Kiểm tra yêu cầu' },
+  { progress: 15, label: 'Phân tích CV' },
+  { progress: 30, label: 'Tạo câu hỏi phỏng vấn' },
+  { progress: 55, label: 'Hoàn tất 3 câu hỏi đầu' },
+  { progress: 65, label: 'Chuẩn bị phòng phỏng vấn' },
+  { progress: 75, label: 'Tạo giọng nói câu 1' },
+  { progress: 95, label: 'Chuẩn bị giọng câu 2–3 trong nền' },
+  { progress: 100, label: 'Sẵn sàng bắt đầu' },
+] as const;
+
+const PRACTICE_PREPARATION_STORAGE_KEY = 'ai-interview-practice-preparation-id';
+
+function PracticePreparationProgress({
+  preparation,
+  onRetry,
+}: {
+  preparation: AiInterviewPreparation;
+  onRetry: () => void;
+}) {
+  const progress = Math.max(0, Math.min(100, preparation.progress));
+  const failed = preparation.status === 'FAILED';
+
+  return (
+    <section className={`practice-preparation${failed ? ' failed' : ''}`} aria-live="polite">
+      <div className="practice-preparation-heading">
+        <div>
+          <p className="eyebrow">Đang chuẩn bị phiên luyện tập</p>
+          <h2>{failed ? 'Chưa thể tạo phòng phỏng vấn' : preparation.message}</h2>
+        </div>
+        <strong className="practice-preparation-percent">{progress}%</strong>
+      </div>
+
+      <div
+        className="practice-preparation-track"
+        role="progressbar"
+        aria-label="Tiến độ chuẩn bị phiên phỏng vấn"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        aria-valuetext={preparation.message}
+      >
+        <span style={{ transform: `scaleX(${progress / 100})` }} />
+      </div>
+
+      <ol className="practice-preparation-steps">
+        {PRACTICE_PREPARATION_STEPS.map((step) => {
+          const complete = progress > step.progress || preparation.status === 'READY';
+          const active = !failed && !complete && progress >= step.progress;
+          return (
+            <li key={step.progress} className={complete ? 'complete' : active ? 'active' : ''}>
+              <span aria-hidden="true">{complete ? '✓' : active ? '•' : ''}</span>
+              <p>{step.label}</p>
+            </li>
+          );
+        })}
+      </ol>
+
+      {preparation.warningMessage ? (
+        <p className="practice-preparation-warning" role="status">
+          {preparation.warningMessage}
+        </p>
+      ) : null}
+
+      {failed ? (
+        <div className="practice-preparation-error" role="alert">
+          <p>{preparation.errorMessage || 'Không thể chuẩn bị phiên phỏng vấn. Vui lòng thử lại.'}</p>
+          <button type="button" onClick={onRetry}>Thử lại</button>
+        </div>
+      ) : (
+        <p className="practice-preparation-note">
+          Bạn có thể bắt đầu ngay khi câu 1 sẵn sàng; câu 2 và câu 3 sẽ tiếp tục được tạo giọng nói trong nền.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function AiInterviewPage() {
   const [config, setConfig] = useState<AiInterviewConfig | null>(null);
   const [applications, setApplications] = useState<AiInterviewEligibleApplication[]>([]);
@@ -6558,6 +6648,8 @@ function AiInterviewPage() {
   const [targetRole, setTargetRole] = useState('');
   const [seniority, setSeniority] = useState<AiInterviewCvProfile['experienceLevel']>('fresher');
   const [focusSkills, setFocusSkills] = useState<string[]>([]);
+  const [questionCount, setQuestionCount] = useState<AiInterviewQuestionCount>(5);
+  const [practicePreparation, setPracticePreparation] = useState<AiInterviewPreparation | null>(null);
   const [analyzingCv, setAnalyzingCv] = useState(false);
   const [selectedSession, setSelectedSession] = useState<AiInterviewSession | null>(null);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<AiInterviewSession | null>(null);
@@ -6565,6 +6657,7 @@ function AiInterviewPage() {
   const [planLimitReached, setPlanLimitReached] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sessionPage, setSessionPage] = useState(0);
+  const preparationPollingTokenRef = useRef(0);
   const SESSION_PAGE_SIZE = 5;
 
   const practiceCvOptions = useMemo(() => [
@@ -6582,7 +6675,7 @@ function AiInterviewPage() {
     })),
   ], [practiceCvs, practiceCvVersions]);
 
-  async function load() {
+  const load = useCallback(async () => {
     const configData = await aiInterviewService.configStatus();
     setConfig(configData);
     if (!configData.enabled) {
@@ -6609,11 +6702,64 @@ function AiInterviewPage() {
       || cvVersionData.items[0]?.id
       || '';
     setSelectedCvId((current) => availableIds.has(current) ? current : preferredCvId);
-  }
+  }, []);
+
+  const followPracticePreparation = useCallback(async (initialPreparation: AiInterviewPreparation) => {
+    const pollingToken = ++preparationPollingTokenRef.current;
+    let preparation = initialPreparation;
+    setPracticePreparation(preparation);
+    setLoading(true);
+    try {
+      while (
+        (preparation.status === 'QUEUED' || preparation.status === 'RUNNING')
+        && preparationPollingTokenRef.current === pollingToken
+      ) {
+        await new Promise((resolve) => window.setTimeout(resolve, 750));
+        if (preparationPollingTokenRef.current !== pollingToken) return;
+        preparation = await aiInterviewService.getPracticePreparation(preparation.id);
+        setPracticePreparation(preparation);
+      }
+      if (preparationPollingTokenRef.current !== pollingToken) return;
+      if (preparation.status === 'FAILED') {
+        setPlanLimitReached(preparation.errorCode === 'PLAN_LIMIT_REACHED');
+        return;
+      }
+      if (!preparation.sessionId) {
+        throw new Error('Phiên phỏng vấn đã sẵn sàng nhưng không có mã phiên.');
+      }
+      const session = await aiInterviewService.getSession(preparation.sessionId);
+      window.sessionStorage.removeItem(PRACTICE_PREPARATION_STORAGE_KEY);
+      setSelectedSession(session);
+      setPracticePreparation(null);
+      await load();
+    } finally {
+      if (preparationPollingTokenRef.current === pollingToken) {
+        setLoading(false);
+      }
+    }
+  }, [load]);
 
   useEffect(() => {
-    load().catch((err) => setMessage(readError(err)));
-  }, []);
+    let active = true;
+    load()
+      .then(async () => {
+        const preparationId = window.sessionStorage.getItem(PRACTICE_PREPARATION_STORAGE_KEY);
+        if (!preparationId || !active) return;
+        const preparation = await aiInterviewService.getPracticePreparation(preparationId);
+        if (!active) return;
+        setActiveTab('practice');
+        await followPracticePreparation(preparation);
+      })
+      .catch((err) => {
+        if (!active) return;
+        window.sessionStorage.removeItem(PRACTICE_PREPARATION_STORAGE_KEY);
+        setMessage(readError(err));
+      });
+    return () => {
+      active = false;
+      preparationPollingTokenRef.current += 1;
+    };
+  }, [followPracticePreparation, load]);
 
   async function createFromApplication(applicationId: string) {
     setLoading(true);
@@ -6641,14 +6787,15 @@ function AiInterviewPage() {
         setMessage('Vui lòng chọn và phân tích một CV trước khi bắt đầu.');
         return;
       }
-      const session = await aiInterviewService.createPracticeSession({
+      const preparation = await aiInterviewService.createPracticeSession({
         cvId: selectedCvId,
         targetRole,
         seniority,
         focusSkills,
+        questionCount,
       });
-      setSelectedSession(session);
-      await load();
+      window.sessionStorage.setItem(PRACTICE_PREPARATION_STORAGE_KEY, preparation.id);
+      await followPracticePreparation(preparation);
     } catch (err) {
       setMessage(readError(err));
       setPlanLimitReached(isPlanLimitError(err));
@@ -6725,7 +6872,7 @@ function AiInterviewPage() {
           <h1>AI Interview</h1>
           <p className="muted">Nhận xét AI chỉ dùng để luyện tập, không phải quyết định tuyển dụng.</p>
         </div>
-        <span className="chip">{config.questionCount} câu / phiên</span>
+        <span className="chip">Theo CV: 3 / 5 / 7 / 10 câu chính</span>
       </div>
 
       {!config.enabled && (
@@ -6790,6 +6937,19 @@ function AiInterviewPage() {
                 <motion.form key="practice" className="form-grid" onSubmit={createPractice}
                   variants={fadeUp} initial="initial" animate="animate" exit="exit"
                   transition={{ duration: 0.18, ease: EASE_OUT }}>
+                  {practicePreparation ? (
+                    <PracticePreparationProgress
+                      preparation={practicePreparation}
+                      onRetry={() => {
+                        preparationPollingTokenRef.current += 1;
+                        window.sessionStorage.removeItem(PRACTICE_PREPARATION_STORAGE_KEY);
+                        setPracticePreparation(null);
+                        setMessage('');
+                        setPlanLimitReached(false);
+                      }}
+                    />
+                  ) : (
+                    <>
                   <label>
                     Chọn CV để luyện tập
                     <select
@@ -6847,6 +7007,35 @@ function AiInterviewPage() {
                         </select>
                       </label>
 
+                      <fieldset className="practice-question-count-fieldset">
+                        <legend>Số câu hỏi chính</legend>
+                        <p id="practice-question-count-help">
+                          Câu hỏi đào sâu hoặc làm rõ có thể xuất hiện thêm trong quá trình luyện tập.
+                        </p>
+                        <div className="practice-question-count-grid">
+                          {AI_INTERVIEW_QUESTION_COUNTS.map((option) => {
+                            const selected = questionCount === option.value;
+                            return (
+                              <label
+                                key={option.value}
+                                className={selected ? 'selected' : ''}
+                              >
+                                <input
+                                  type="radio"
+                                  name="practice-question-count"
+                                  value={option.value}
+                                  checked={selected}
+                                  aria-describedby="practice-question-count-help"
+                                  onChange={() => setQuestionCount(option.value)}
+                                />
+                                <strong>{option.value}</strong>
+                                <span>{option.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+
                       <fieldset className="practice-skill-fieldset">
                         <legend>Kỹ năng muốn luyện sâu — chọn tối đa 3</legend>
                         <div className="practice-skill-grid">
@@ -6869,6 +7058,8 @@ function AiInterviewPage() {
                       </button>
                     </>
                   ) : null}
+                    </>
+                  )}
                 </motion.form>
               )}
             </AnimatePresence>
@@ -7898,7 +8089,7 @@ function LegacyAiInterviewRoom({
       <button type="button" className="outline" onClick={onBack}>← Quay lại danh sách</button>
       <div className="question-panel">
         <div className="interview-progress">
-          <span>Câu {currentQuestion?.orderIndex || session.totalQuestions}/{session.totalQuestions || config.questionCount}</span>
+          <span>Câu {currentQuestion?.orderIndex || session.totalQuestions}/{session.targetQuestionCount || config.questionCount}</span>
           <span className="chip">{session.title}</span>
         </div>
         <p className="muted" style={{ fontSize: '0.8rem' }}>
@@ -8092,7 +8283,7 @@ function LegacyAiInterviewRoom({
               </>
             )}
           </>
-        ) : session.totalQuestions < config.questionCount ? (
+        ) : session.totalQuestions < (session.targetQuestionCount || config.questionCount) ? (
           <div className="notice-panel">
             <p>Câu trả lời đã được lưu, nhưng AI chưa tạo được phần câu hỏi thích ứng. Bạn có thể thử lại mà không cần trả lời lại câu trước.</p>
             <button type="button" disabled={Boolean(busy)} onClick={() => void retryQuestionGeneration()} style={{ marginTop: 8 }}>

@@ -1898,6 +1898,270 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.practice-question-count-fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.practice-question-count-fieldset legend {
+  color: var(--on-surface);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.practice-question-count-fieldset > p {
+  color: var(--on-muted);
+  font-size: 0.8rem;
+  margin: 4px 0 10px;
+}
+
+.practice-question-count-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.practice-question-count-grid label {
+  align-items: center;
+  background: var(--surface-lowest);
+  border: 1px solid rgb(192 199 209 / 0.75);
+  border-radius: var(--radius-control);
+  color: var(--on-muted);
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  min-height: 68px;
+  padding: 10px 8px;
+  position: relative;
+}
+
+.practice-question-count-grid label:hover {
+  border-color: var(--primary-soft);
+}
+
+.practice-question-count-grid label:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.practice-question-count-grid label.selected {
+  background: var(--primary-softer);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary-soft);
+  color: var(--primary);
+}
+
+.practice-question-count-grid input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.practice-question-count-grid strong {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.practice-question-count-grid span {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.practice-preparation {
+  background: var(--surface-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-card);
+  display: grid;
+  gap: 20px;
+  padding: 22px;
+}
+
+.practice-preparation.failed {
+  border-color: rgb(186 26 26 / 0.45);
+}
+
+.practice-preparation-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.practice-preparation-heading .eyebrow {
+  margin-bottom: 6px;
+}
+
+.practice-preparation-heading h2 {
+  margin: 0;
+  max-width: 36rem;
+  text-wrap: balance;
+}
+
+.practice-preparation-percent {
+  color: var(--primary);
+  font-family: "Lexend", "Inter", system-ui, sans-serif;
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.practice-preparation.failed .practice-preparation-percent {
+  color: var(--danger);
+}
+
+.practice-preparation-track {
+  background: var(--surface-highest);
+  border-radius: var(--radius-pill);
+  block-size: 10px;
+  overflow: hidden;
+}
+
+.practice-preparation-track > span {
+  background: var(--primary);
+  border-radius: inherit;
+  display: block;
+  block-size: 100%;
+  inline-size: 100%;
+  transform-origin: left center;
+  transition: transform 180ms ease-out;
+}
+
+.practice-preparation.failed .practice-preparation-track > span {
+  background: var(--danger);
+}
+
+.practice-preparation-steps {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.practice-preparation-steps li {
+  align-items: center;
+  color: var(--on-muted);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  min-height: 34px;
+  position: relative;
+}
+
+.practice-preparation-steps li:not(:last-child)::after {
+  background: var(--outline-variant);
+  content: "";
+  inset-block: 25px -9px;
+  inset-inline-start: 11px;
+  position: absolute;
+  inline-size: 2px;
+}
+
+.practice-preparation-steps li > span {
+  align-items: center;
+  background: var(--surface-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: 50%;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 800;
+  justify-content: center;
+  position: relative;
+  block-size: 24px;
+  inline-size: 24px;
+  z-index: 1;
+}
+
+.practice-preparation-steps li p {
+  font-size: 0.875rem;
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.practice-preparation-steps li.active {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.practice-preparation-steps li.active > span {
+  background: var(--primary-softer);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.practice-preparation-steps li.complete {
+  color: var(--on-surface);
+}
+
+.practice-preparation-steps li.complete > span {
+  background: var(--secondary-soft);
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+.practice-preparation-steps li.complete:not(:last-child)::after {
+  background: var(--secondary);
+}
+
+.practice-preparation-note,
+.practice-preparation-warning,
+.practice-preparation-error p {
+  font-size: 0.84rem;
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.practice-preparation-note {
+  color: var(--on-muted);
+}
+
+.practice-preparation-warning {
+  background: var(--tertiary-soft);
+  border-radius: var(--radius-control);
+  color: var(--tertiary);
+  padding: 10px 12px;
+}
+
+.practice-preparation-error {
+  align-items: center;
+  background: var(--danger-soft);
+  border-radius: var(--radius-control);
+  color: var(--danger);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.practice-preparation-error button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .practice-preparation {
+    padding: 16px;
+  }
+
+  .practice-preparation-heading,
+  .practice-preparation-error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .practice-preparation-percent {
+    font-size: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .practice-preparation-track > span {
+    transition: none;
+  }
+}
+
 /* ============================================================
    AI INTERVIEW PAGE
    ============================================================ */
@@ -5080,6 +5344,10 @@ textarea {
   .filter-split,
   .form-grid.two {
     grid-template-columns: 1fr;
+  }
+
+  .practice-question-count-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .application-modal {

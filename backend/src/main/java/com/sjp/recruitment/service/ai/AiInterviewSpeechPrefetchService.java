@@ -62,7 +62,18 @@ public class AiInterviewSpeechPrefetchService {
         }
         questionTexts.stream()
                 .filter(text -> text != null && !text.isBlank())
-                .forEach(this::prefetchOne);
+                .forEach(text -> prefetchOne(text, null));
+    }
+
+    public void prefetchLabeled(List<PrefetchRequest> requests) {
+        if (!ttsClient.isConfigured() || requests == null) {
+            return;
+        }
+        requests.stream()
+                .filter(request -> request != null
+                        && request.text() != null
+                        && !request.text().isBlank())
+                .forEach(request -> prefetchOne(request.text(), request.label()));
     }
 
     public byte[] awaitReady(String speechText, long waitMillis) {
@@ -97,16 +108,26 @@ public class AiInterviewSpeechPrefetchService {
             return null;
         }
         String normalized = AiInterviewSpeechCache.normalizeSpeech(questionText);
-        prefetchOne(normalized);
+        prefetchOne(normalized, null);
         return awaitReady(normalized, waitMillis);
     }
 
     public byte[] prefetchSegmentsAndAwait(String speechText, long waitMillis) {
+        return prefetchSegmentsAndAwait(speechText, waitMillis, List.of());
+    }
+
+    public byte[] prefetchSegmentsAndAwait(
+            String speechText,
+            long waitMillis,
+            List<String> segmentLabels
+    ) {
         if (!ttsClient.isConfigured()) return null;
         String normalized = AiInterviewSpeechCache.normalizeSpeech(speechText);
         if (normalized.isBlank()) return null;
         List<String> segments = normalized.lines().filter(line -> !line.isBlank()).toList();
-        segments.forEach(this::prefetchOne);
+        for (int index = 0; index < segments.size(); index++) {
+            prefetchOne(segments.get(index), segmentLabel(segmentLabels, index));
+        }
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1, waitMillis));
         for (String segment : segments) {
             long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
@@ -115,41 +136,106 @@ public class AiInterviewSpeechPrefetchService {
         return cache.getSpeech(normalized);
     }
 
-    private void prefetchOne(String text) {
+    private void prefetchOne(String text, String label) {
         String normalized = AiInterviewSpeechCache.normalizeSpeech(text);
         if (normalized.isBlank()) return;
         String cacheKey = cache.key(normalized);
         if (cache.getSpeech(normalized) != null) {
+            if (hasLabel(label)) {
+                log.info("AI interview TTS prefetch cache hit: label={}", label);
+            }
             return;
         }
         if (isCoolingDown()) {
-            log.debug("Gemini TTS prefetch skipped during provider cooldown: textLength={}",
-                    normalized.length());
+            log.info("AI interview TTS prefetch skipped during provider cooldown: label={}, "
+                            + "cooldownMs={}, textLength={}",
+                    safeLabel(label), properties.getTtsPrefetchCooldownMs(), normalized.length());
             return;
         }
+        long queuedAtNanos = nanoTime.getAsLong();
         CompletableFuture<Void> task = inFlight.computeIfAbsent(cacheKey,
                 ignored -> CompletableFuture.runAsync(() -> {
                     if (isCoolingDown()) {
-                        log.debug("Queued Gemini TTS prefetch skipped during provider cooldown: textLength={}",
-                                normalized.length());
+                        log.info("Queued AI interview TTS prefetch skipped during provider cooldown: "
+                                        + "label={}, cooldownMs={}, queueWaitMs={}, textLength={}",
+                                safeLabel(label), properties.getTtsPrefetchCooldownMs(),
+                                elapsedMillis(queuedAtNanos), normalized.length());
                         return;
+                    }
+                    long startedAtNanos = nanoTime.getAsLong();
+                    if (hasLabel(label)) {
+                        log.info("AI interview TTS prefetch started: label={}, queueWaitMs={}, "
+                                        + "connectTimeoutMs={}, firstAudioTimeoutMs={}, idleTimeoutMs={}",
+                                label, elapsedMillis(queuedAtNanos),
+                                properties.getTtsConnectTimeoutMs(),
+                                properties.getTtsFirstAudioTimeoutMs(),
+                                properties.getTtsIdleTimeoutMs());
                     }
                     try {
                         ByteArrayOutputStream output = new ByteArrayOutputStream();
                         ttsClient.streamSpeech(normalized, output);
-                        cache.put(cacheKey, output.toByteArray());
+                        byte[] audio = output.toByteArray();
+                        cache.put(cacheKey, audio);
+                        if (hasLabel(label)) {
+                            log.info("AI interview TTS prefetch succeeded: label={}, elapsedMs={}, audioBytes={}",
+                                    label, elapsedMillis(startedAtNanos), audio.length);
+                        }
                     } catch (RuntimeException exception) {
-                        openCooldown();
+                        if (shouldOpenProviderCooldown(exception)) {
+                            openCooldown();
+                        }
                         throw exception;
                     }
                 }, executor));
         task.whenComplete((unused, error) -> {
             if (inFlight.remove(cacheKey, task) && error != null) {
-                log.warn("Gemini TTS prefetch failed; provider cooldown opened: "
-                                + "cooldownMs={}, textLength={}, detail={}",
-                        properties.getTtsPrefetchCooldownMs(), normalized.length(), safeDetail(error));
+                if (shouldOpenProviderCooldown(error)) {
+                    log.warn("AI interview TTS prefetch failed; provider cooldown opened: "
+                                    + "label={}, cooldownMs={}, textLength={}, detail={}",
+                            safeLabel(label), properties.getTtsPrefetchCooldownMs(),
+                            normalized.length(), safeDetail(error));
+                } else {
+                    log.warn("AI interview TTS prefetch failed for one segment; queue continues: "
+                                    + "label={}, textLength={}, detail={}",
+                            safeLabel(label), normalized.length(), safeDetail(error));
+                }
             }
         });
+    }
+
+    private String segmentLabel(List<String> labels, int index) {
+        if (labels == null || labels.isEmpty()) return null;
+        return labels.get(Math.min(index, labels.size() - 1));
+    }
+
+    private boolean shouldOpenProviderCooldown(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof AiProviderException providerException) {
+                return switch (providerException.getCode()) {
+                    case "GEMINI_TTS_FIRST_AUDIO_TIMEOUT",
+                         "GEMINI_TTS_IDLE_TIMEOUT",
+                         "GEMINI_TTS_RATE_LIMITED",
+                         "GEMINI_TTS_HTTP_5XX" -> true;
+                    default -> false;
+                };
+            }
+            if (current.getCause() == null || current.getCause() == current) break;
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private long elapsedMillis(long startedAtNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(Math.max(0, nanoTime.getAsLong() - startedAtNanos));
+    }
+
+    private boolean hasLabel(String label) {
+        return label != null && !label.isBlank();
+    }
+
+    private String safeLabel(String label) {
+        return hasLabel(label) ? label : "unlabeled";
     }
 
     private boolean isCoolingDown() {
@@ -178,5 +264,8 @@ public class AiInterviewSpeechPrefetchService {
     public void shutdown() {
         inFlight.values().forEach(task -> task.cancel(true));
         executor.shutdownNow();
+    }
+
+    public record PrefetchRequest(String text, String label) {
     }
 }

@@ -21,6 +21,7 @@ import static org.mockito.Mockito.*;
 class AiInterviewControllerTest {
 
     @Mock private AiInterviewService aiInterviewService;
+    @Mock private AiInterviewPreparationService aiInterviewPreparationService;
     @Mock private AiInterviewCvProfileService aiInterviewCvProfileService;
     @Mock private AiInterviewSpeechService aiInterviewSpeechService;
     @Mock private HandsFreeAnswerCaptureService handsFreeAnswerCaptureService;
@@ -96,6 +97,13 @@ class AiInterviewControllerTest {
         AiInterviewSessionResponse expected = mock(AiInterviewSessionResponse.class);
         when(aiInterviewService.retryConversation("s-1")).thenReturn(expected);
         assertSame(expected, controller.retryConversation("s-1").getBody());
+    }
+
+    @Test
+    void practicePreparation_delegatesToPreparationService() {
+        AiInterviewPreparationResponse expected = mock(AiInterviewPreparationResponse.class);
+        when(aiInterviewPreparationService.get("p-1")).thenReturn(expected);
+        assertSame(expected, controller.practicePreparation("p-1").getBody());
     }
 
     @Test

@@ -50,6 +50,14 @@ class AiInterviewConversationPolicyTest {
     }
 
     @Test
+    void keepsTheExistingFiveFollowUpTurnBudgetForTenCoreQuestions() {
+        assertThat(policy.resolveAction("PROBE", 0, 0, 10, 4, 10))
+                .isEqualTo(AnswerAnalysisAction.PROBE);
+        assertThat(policy.resolveAction("PROBE", 0, 0, 11, 4, 10))
+                .isEqualTo(AnswerAnalysisAction.NEXT);
+    }
+
+    @Test
     void rejectsUnknownProviderActionInsteadOfCreatingFallbackBehavior() {
         assertThatThrownBy(() -> policy.resolveAction("CHAT", 0, 0, 5))
                 .isInstanceOf(IllegalArgumentException.class);
