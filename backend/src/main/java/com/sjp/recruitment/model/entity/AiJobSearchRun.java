@@ -7,6 +7,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import com.sjp.recruitment.model.dto.request.AiJobSearchFilters;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "ai_job_search_runs")
@@ -33,6 +36,10 @@ public class AiJobSearchRun {
 
     @Column(name = "cv_id")
     private UUID cvId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "search_filters", columnDefinition = "jsonb", nullable = false)
+    private AiJobSearchFilters searchFilters = AiJobSearchFilters.empty();
 
     @Column(name = "cv_type")
     private String cvType;

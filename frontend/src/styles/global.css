@@ -3367,6 +3367,44 @@ textarea {
   min-width: 210px;
 }
 
+.ai-cv-picker {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.ai-cv-picker select {
+  min-width: 0;
+  width: 100%;
+}
+
+.ai-cv-picker p,
+.ai-search-note {
+  font-size: 0.85rem;
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.ai-job-banner-copy > .ai-search-note {
+  margin-top: 12px;
+}
+
+.ai-job-evidence {
+  border-top: 1px solid var(--outline-variant);
+  font-size: 0.85rem;
+  padding: 12px 16px;
+  overflow-wrap: anywhere;
+}
+
+.ai-job-evidence summary {
+  cursor: pointer;
+  color: var(--primary);
+}
+
+.ai-job-evidence p {
+  margin: 8px 0;
+}
+
 .ai-consent-revoke {
   background: transparent;
   border: 0;

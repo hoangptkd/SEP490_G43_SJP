@@ -54,18 +54,18 @@ class AiJobSearchControllerTest {
     }
 
     @Test
-    void search_delegatesWithNullRequest() {
+    void search_delegatesWithSelectedCv() {
+        AiJobSearchRequest request = new AiJobSearchRequest(UUID.randomUUID(), false, null);
         AiJobSearchResponse expected = mock(AiJobSearchResponse.class);
-        when(aiJobSearchService.search(false)).thenReturn(expected);
-        assertSame(expected, controller.search(null).getBody());
+        when(aiJobSearchService.search(request)).thenReturn(expected);
+        assertSame(expected, controller.search(request).getBody());
     }
 
     @Test
     void search_delegatesWithForceRefresh() {
-        AiJobSearchRequest request = mock(AiJobSearchRequest.class);
-        when(request.forceRefresh()).thenReturn(true);
+        AiJobSearchRequest request = new AiJobSearchRequest(UUID.randomUUID(), true, null);
         AiJobSearchResponse expected = mock(AiJobSearchResponse.class);
-        when(aiJobSearchService.search(true)).thenReturn(expected);
+        when(aiJobSearchService.search(request)).thenReturn(expected);
         assertSame(expected, controller.search(request).getBody());
     }
 
@@ -76,5 +76,45 @@ class AiJobSearchControllerTest {
         AiJobSearchItemResponse expected = mock(AiJobSearchItemResponse.class);
         when(aiJobSearchService.recommendation(runId, jobId)).thenReturn(expected);
         assertSame(expected, controller.recommendation(runId, jobId).getBody());
+    }
+
+    @Test
+    void httpSearchRejectsMissingCvAndInvalidSalaryRange() throws Exception {
+        var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(controller).build();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/candidate/ai-job-search/search")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"forceRefresh\":false}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/candidate/ai-job-search/search")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"cvId\":\"" + UUID.randomUUID() + "\",\"filters\":{\"minSalary\":20,\"maxSalary\":10}}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());
+        verifyNoInteractions(aiJobSearchService);
+    }
+
+    @Test
+    void httpSearchReturnsProfileFallbackAsSuccessfulResponseWithoutAiRunId() throws Exception {
+        UUID cvId = UUID.randomUUID();
+        when(aiJobSearchService.search(any())).thenReturn(new AiJobSearchResponse("PROFILE_FALLBACK", cvId,
+                null, false, false, true, null, null,
+                new com.sjp.recruitment.model.dto.response.AiJobSearchQuotaResponse(1, 3, 2, null), java.util.List.of()));
+        var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(controller).build();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/candidate/ai-job-search/search")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"cvId\":\"" + cvId + "\"}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.source").value("PROFILE_FALLBACK"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.cvId").value(cvId.toString()))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.runId").doesNotExist())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.quota.used").value(1));
+    }
+
+    @Test
+    void filtersRoundTripAsStoredJsonAndNormalizeDecimals() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var filters = new com.sjp.recruitment.model.dto.request.AiJobSearchFilters("Hà Nội", new java.math.BigDecimal("20000000.00"), null, null, "hybrid");
+        String json = mapper.writeValueAsString(filters);
+        assertFalse(json.contains("salaryRangeValid"));
+        assertEquals(filters, mapper.readValue(json, com.sjp.recruitment.model.dto.request.AiJobSearchFilters.class));
+        assertEquals(com.sjp.recruitment.model.dto.request.AiJobSearchFilters.empty(),
+                mapper.readValue("{}", com.sjp.recruitment.model.dto.request.AiJobSearchFilters.class));
     }
 }

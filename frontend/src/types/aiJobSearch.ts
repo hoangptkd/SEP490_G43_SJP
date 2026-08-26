@@ -1,5 +1,18 @@
 import type { Job } from './job';
 
+export interface AiJobSearchFilters {
+  location?: string;
+  minSalary?: number;
+  maxSalary?: number;
+  jobType?: string;
+  workMode?: string;
+}
+
+export interface AiJobSearchInput {
+  cvId: string;
+  filters: AiJobSearchFilters;
+}
+
 export interface AiJobSearchQuota {
   used: number;
   limit: number;
@@ -13,7 +26,7 @@ export interface AiJobSearchStatus {
   policyVersion: string;
   readiness: {
     profileAvailable: boolean;
-    defaultCvAvailable: boolean;
+    cvAvailable: boolean;
     lowConfidence: boolean;
     missingItems: string[];
   };
@@ -33,10 +46,12 @@ export interface AiJobSearchItem {
   matchedSkills: string[];
   missingSkills: string[];
   reason: string;
+  evidence: { cvQuote: string; jobQuote: string }[];
 }
 
 export interface AiJobSearchResult {
-  source: 'AI';
+  source: 'AI' | 'PROFILE_FALLBACK';
+  cvId: string;
   runId?: string | null;
   cached: boolean;
   stale: boolean;

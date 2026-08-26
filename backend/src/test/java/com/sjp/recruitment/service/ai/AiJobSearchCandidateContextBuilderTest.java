@@ -95,4 +95,70 @@ class AiJobSearchCandidateContextBuilderTest {
         assertTrue(context.lowConfidence());
         assertEquals("", context.cvText());
     }
+
+    @Test
+    void selectedCvDoesNotImportProfileSkillsOrExperience() {
+        CandidateCv cv = selectedCv("Python developer building Django REST APIs with PostgreSQL for ecommerce projects.");
+        var first = builder.buildForJobSearch(candidate, cv.getId());
+        assertTrue(first.skills().isEmpty());
+        assertNull(first.experienceYears());
+        assertFalse(first.providerContext().containsKey("skills"));
+        assertFalse(first.providerContext().toString().contains("Spring Boot"));
+        candidate.setSkills(List.of("Unrelated"));
+        candidate.setBio("Unrelated profile update");
+        assertEquals(first.inputHash(), builder.buildForJobSearch(candidate, cv.getId()).inputHash());
+        verify(cvRepository, never()).findFirstByCandidateIdAndDefaultCvTrueAndDeletedAtIsNullOrderByUpdatedAtDesc(any());
+    }
+
+    @Test
+    void cvIdentityContentAndRevisionInvalidateCache() {
+        CandidateCv cv = selectedCv("Python developer building Django REST APIs with PostgreSQL for ecommerce projects.");
+        String initial = builder.buildForJobSearch(candidate, cv.getId()).inputHash();
+        cv.setParsedText(cv.getParsedText() + " Worked on Kubernetes deployments.");
+        String changed = builder.buildForJobSearch(candidate, cv.getId()).inputHash();
+        assertNotEquals(initial, changed);
+        cv.setUpdatedAt(LocalDateTime.now());
+        assertNotEquals(changed, builder.buildForJobSearch(candidate, cv.getId()).inputHash());
+        CandidateCv second = selectedCv(cv.getParsedText());
+        assertNotEquals(builder.buildForJobSearch(candidate, cv.getId()).inputHash(),
+                builder.buildForJobSearch(candidate, second.getId()).inputHash());
+    }
+
+    @Test
+    void rejectsMissingForeignDeletedAndUnreadableCvs() {
+        assertThrows(com.sjp.recruitment.exception.ApiException.class, () -> builder.buildForJobSearch(candidate, null));
+        assertThrows(com.sjp.recruitment.exception.ApiException.class, () -> builder.buildForJobSearch(candidate, UUID.randomUUID()));
+        CandidateCv cv = selectedCv("");
+        var unreadable = assertThrows(com.sjp.recruitment.exception.ApiException.class,
+                () -> builder.buildForJobSearch(candidate, cv.getId()));
+        assertEquals("AI_JOB_SEARCH_CV_UNREADABLE", unreadable.getCode());
+        cv.setDeletedAt(LocalDateTime.now());
+        var deleted = assertThrows(com.sjp.recruitment.exception.ApiException.class,
+                () -> builder.buildForJobSearch(candidate, cv.getId()));
+        assertEquals("CV_NOT_FOUND", deleted.getCode());
+    }
+
+    @Test
+    void supportsBuilderCvWithoutUsingProfileCapabilities() {
+        CandidateCv cv = selectedCv("");
+        cv.setSourceType("builder");
+        cv.setSnapshot(Map.of("fullName", "Nguyễn Văn An", "summary", "Python developer building Django REST APIs with PostgreSQL for ecommerce projects."));
+        var result = builder.buildForJobSearch(candidate, cv.getId());
+        assertTrue(result.cvText().contains("Python"));
+        assertFalse(result.cvText().contains("Nguyễn Văn An"));
+        assertFalse(result.providerContext().toString().contains("Spring Boot"));
+        cv.setSnapshot(Map.of());
+        assertThrows(com.sjp.recruitment.exception.ApiException.class, () -> builder.buildForJobSearch(candidate, cv.getId()));
+        cv.setSnapshot(Map.of("professionalSummary", "", "workExperience", List.of(), "certifications", List.of(), "education", List.of()));
+        assertThrows(com.sjp.recruitment.exception.ApiException.class, () -> builder.buildForJobSearch(candidate, cv.getId()));
+    }
+
+    private CandidateCv selectedCv(String text) {
+        CandidateCv cv = new CandidateCv();
+        cv.setId(UUID.randomUUID());
+        cv.setSourceType("uploaded");
+        cv.setParsedText(text);
+        when(cvRepository.findByIdAndCandidateId(cv.getId(), candidate.getId())).thenReturn(Optional.of(cv));
+        return cv;
+    }
 }

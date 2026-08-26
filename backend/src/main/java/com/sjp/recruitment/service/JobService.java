@@ -956,6 +956,29 @@ public class JobService {
         return calculateMatchScore(candidate, normalized(candidate.getSkills()), job);
     }
 
+    public ProfileMatch profileMatch(CandidateProfile candidate, Job job) {
+        return profileMatch(candidate, normalized(candidate.getSkills()), job);
+    }
+
+    private ProfileMatch profileMatch(CandidateProfile candidate, Set<String> candidateSkills, Job job) {
+        List<String> jobSkills = job.getSkills() == null ? List.of() : job.getSkills();
+        List<String> matched = jobSkills.stream()
+                .filter(skill -> candidateSkills.contains(skill.trim().toLowerCase(Locale.ROOT)))
+                .toList();
+        List<String> missing = jobSkills.stream()
+                .filter(skill -> !candidateSkills.contains(skill.trim().toLowerCase(Locale.ROOT)))
+                .limit(5)
+                .toList();
+        String reason = matched.isEmpty()
+                ? "Hoàn thiện hồ sơ kỹ năng để nhận gợi ý chính xác hơn."
+                : "Phù hợp vì bạn có " + String.join(", ", matched) + ".";
+        return new ProfileMatch(calculateMatchScore(candidate, candidateSkills, job), matched, missing,
+                reason, candidateSkills.isEmpty());
+    }
+
+    public record ProfileMatch(int matchScore, List<String> matchedSkills, List<String> missingSkills,
+                               String reason, boolean lowConfidence) {}
+
     private int calculateMatchScore(CandidateProfile candidate, Set<String> candidateSkills, Job job) {
         Set<String> jobSkills = normalized(job.getSkills() == null || job.getSkills().isEmpty() ? job.getRequirements() : job.getSkills());
         long matches = jobSkills.stream().filter(candidateSkills::contains).count();
@@ -999,22 +1022,12 @@ public class JobService {
             long applicationCount,
             int listingPriority
     ) {
-        List<String> jobSkills = job.getSkills() == null ? List.of() : job.getSkills();
-        List<String> matched = jobSkills.stream()
-                .filter(skill -> candidateSkills.contains(skill.toLowerCase()))
-                .toList();
-        List<String> missing = jobSkills.stream()
-                .filter(skill -> !candidateSkills.contains(skill.toLowerCase()))
-                .limit(5)
-                .toList();
-        int score = calculateMatchScore(candidate, candidateSkills, job);
-        String reason = matched.isEmpty()
-                ? "Hoàn thiện hồ sơ kỹ năng để nhận gợi ý chính xác hơn."
-                : "Phù hợp vì bạn có " + String.join(", ", matched) + ".";
+        ProfileMatch match = profileMatch(candidate, candidateSkills, job);
         JobResponse jobResponse = dtoMapper.toJobResponse(
                 job, saved, applied, null, applicationCount, listingPriority
         );
-        return new RecommendationResponse(jobResponse, score, matched, missing, reason, lowConfidence);
+        return new RecommendationResponse(jobResponse, match.matchScore(), match.matchedSkills(),
+                match.missingSkills(), match.reason(), lowConfidence);
     }
 
     private UUID employerUserId(Job job) {

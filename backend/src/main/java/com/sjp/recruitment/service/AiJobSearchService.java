@@ -1,11 +1,13 @@
 package com.sjp.recruitment.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.sjp.recruitment.config.AiJobSearchProperties;
 import com.sjp.recruitment.exception.ApiException;
 import com.sjp.recruitment.model.dto.request.AiJobSearchConsentRequest;
+import com.sjp.recruitment.model.dto.request.AiJobSearchRequest;
+import com.sjp.recruitment.model.dto.request.AiJobSearchFilters;
 import com.sjp.recruitment.model.dto.response.*;
 import com.sjp.recruitment.model.entity.AiJobSearchRun;
-import com.sjp.recruitment.model.entity.CandidateCv;
 import com.sjp.recruitment.model.entity.CandidateProfile;
 import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.repository.*;
@@ -45,32 +47,16 @@ public class AiJobSearchService {
 
     public AiJobSearchStatusResponse status() {
         CandidateProfile candidate = currentCandidate();
-        CandidateCv defaultCv = defaultCv(candidate);
+        boolean hasCv = candidateCvRepository.existsByCandidateIdAndDeletedAtIsNull(candidate.getId());
         String policyVersion = policyVersion();
-        AiJobSearchRun latest = runRepository
-                .findFirstByCandidateIdAndStatusOrderByCreatedAtDesc(candidate.getId(), "SUCCEEDED")
-                .orElse(null);
-        boolean fresh = false;
-        if (latest != null) {
-            AiJobSearchContext context = contextBuilder.build(candidate);
-            List<AiJobSearchCandidateSelector.SelectedJob> candidates = selector.select(context);
-            fresh = Objects.equals(latest.getInputHash(), selector.evaluationHash(context, candidates));
-        }
-        List<String> missing = new ArrayList<>();
-        if (candidate.getHeadline() == null || candidate.getHeadline().isBlank()) missing.add("headline");
-        if (candidate.getSkills().isEmpty()) missing.add("skills");
-        if (defaultCv == null) missing.add("defaultCv");
         return new AiJobSearchStatusResponse(
                 enabled(),
                 !hasValidConsent(candidate, policyVersion),
                 policyVersion,
-                new AiJobSearchStatusResponse.Readiness(true, defaultCv != null, defaultCv == null, List.copyOf(missing)),
+                new AiJobSearchStatusResponse.Readiness(true, hasCv, !hasCv, hasCv ? List.of() : List.of("cv")),
                 quota(authService.getCurrentUser()),
                 new AiJobSearchStatusResponse.Cache(
-                        latest != null,
-                        latest == null ? null : latest.getCompletedAt(),
-                        latest == null ? null : latest.getExpiresAt(),
-                        latest != null && !fresh
+                        false, null, null, false
                 )
         );
     }
@@ -93,8 +79,12 @@ public class AiJobSearchService {
         persistence.revokeConsent(currentCandidate());
     }
 
-    public AiJobSearchResponse search(boolean forceRefresh) {
+    public AiJobSearchResponse search(AiJobSearchRequest request) {
         requireEnabled();
+        if (request == null || request.cvId() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AI_JOB_SEARCH_CV_REQUIRED",
+                    "Vui lòng chọn CV để tìm việc bằng AI.");
+        }
         User user = authService.getCurrentUser();
         CandidateProfile candidate = candidateProfileRepository.findWithSkillsByUserId(user.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "AI_JOB_SEARCH_PROFILE_REQUIRED",
@@ -103,13 +93,16 @@ public class AiJobSearchService {
             throw new ApiException(HttpStatus.FORBIDDEN, "AI_JOB_SEARCH_CONSENT_REQUIRED",
                     "Vui lòng đồng ý chính sách xử lý dữ liệu AI trước khi tiếp tục.");
         }
-        AiJobSearchContext context = contextBuilder.build(candidate);
-        List<AiJobSearchCandidateSelector.SelectedJob> candidates = selector.select(context);
-        String evaluationHash = selector.evaluationHash(context, candidates);
+        AiJobSearchFilters filters = request.filters();
+        AiJobSearchContext context = contextBuilder.buildForJobSearch(candidate, request.cvId());
+        List<AiJobSearchCandidateSelector.SelectedJob> candidates = selector.select(context, filters);
+        String evaluationHash = selector.evaluationHash(context, candidates, filters);
         Optional<AiJobSearchRun> reusableRun = runRepository
                 .findFirstByCandidateIdAndStatusAndInputHashOrderByCreatedAtDesc(
                         candidate.getId(), "SUCCEEDED", evaluationHash);
-        if (reusableRun.isPresent()) {
+        if (reusableRun.filter(run -> run.getExpiresAt() != null
+                && run.getExpiresAt().isAfter(LocalDateTime.now())
+                && request.cvId().equals(run.getCvId())).isPresent()) {
             AiJobSearchRun run = reusableRun.get();
             List<AiJobSearchPersistenceService.StoredRecommendation> stored =
                     publicRecommendations(persistence.load(candidate.getId(), run.getId()));
@@ -120,7 +113,7 @@ public class AiJobSearchService {
         }
         if (candidates.isEmpty()) {
             recordOutcome("empty_pool");
-            return new AiJobSearchResponse("AI", null, false, false, context.lowConfidence(), null, null, quota(user), List.of());
+            return new AiJobSearchResponse("AI", request.cvId(), null, false, false, context.lowConfidence(), null, null, quota(user), List.of());
         }
         try {
             featureLimitService.requireAiJobSearch(user);
@@ -132,7 +125,7 @@ public class AiJobSearchService {
         }
         AiJobSearchRun run;
         try {
-            run = persistence.start(context, evaluationHash);
+            run = persistence.start(context, evaluationHash, filters);
         } catch (AiJobSearchPersistenceService.AiJobSearchInProgressException | DataIntegrityViolationException exception) {
             throw new ApiException(HttpStatus.CONFLICT, "AI_JOB_SEARCH_IN_PROGRESS",
                     "Một lượt tìm việc bằng AI đang được xử lý. Vui lòng chờ hoàn tất.");
@@ -140,13 +133,20 @@ public class AiJobSearchService {
 
         try {
             List<AiJobSearchResultValidator.RankedJob> ranked = null;
+            JsonNode previousResponse = null;
+            AiJobSearchValidationException validationFailure = null;
             for (int attempt = 0; attempt < 2; attempt++) {
                 Timer.Sample providerTimer = Timer.start(meterRegistry);
                 try {
-                    ranked = validator.validate(aiClient.rank(context, candidates), context, candidates);
+                    previousResponse = validationFailure == null
+                            ? aiClient.rank(context, candidates)
+                            : aiClient.rank(context, candidates, previousResponse, validationFailure);
+                    ranked = validator.validate(previousResponse, context, candidates);
                     break;
                 } catch (AiJobSearchValidationException exception) {
-                    log.warn("AI job search returned invalid output runId={}, attempt={}", run.getId(), attempt + 1);
+                    validationFailure = exception;
+                    log.warn("AI job search returned invalid output runId={}, attempt={}, code={}, path={}",
+                            run.getId(), attempt + 1, exception.getCode(), exception.getPath());
                 } finally {
                     providerTimer.stop(meterRegistry.timer("sjp.ai.job.search.provider", "provider", "shopaikey"));
                 }
@@ -155,14 +155,23 @@ public class AiJobSearchService {
                 throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_JOB_SEARCH_INVALID_RESPONSE",
                         "AI trả kết quả chưa hợp lệ. Vui lòng thử lại.");
             }
+            if (!hasValidConsent(candidate, policyVersion())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "AI_JOB_SEARCH_CONSENT_REQUIRED",
+                        "Quyền xử lý dữ liệu AI đã thay đổi. Vui lòng xác nhận lại chính sách.");
+            }
             AiJobSearchRun completed = persistence.complete(run.getId(), user, context, ranked);
             log.info("AI job search succeeded runId={}, resultCount={}, model={}, promptVersion={}",
                     completed.getId(), completed.getResultCount(), completed.getModelUsed(), completed.getPromptVersion());
             recordOutcome("success");
-            return response(completed, persistence.load(candidate.getId(), completed.getId()), false, false, user);
+            return response(completed, publicRecommendations(persistence.load(candidate.getId(), completed.getId())), false, false, user);
         } catch (ApiException exception) {
             persistence.fail(run.getId(), exception.getCode());
             recordOutcome("failed");
+            // Only provider/validation failures qualify, never auth, quota, DB or application errors.
+            if (Set.of("AI_JOB_SEARCH_PROVIDER_FAILED", "AI_JOB_SEARCH_EMPTY_RESPONSE",
+                    "AI_JOB_SEARCH_EMPTY_CONTENT", "AI_JOB_SEARCH_INVALID_RESPONSE").contains(exception.getCode())) {
+                return profileFallback(request, candidate, user, run.getId(), exception.getCode());
+            }
             throw exception;
         } catch (RuntimeException exception) {
             persistence.fail(run.getId(), "AI_JOB_SEARCH_FAILED");
@@ -172,6 +181,37 @@ public class AiJobSearchService {
                     "AI chưa thể tạo gợi ý việc làm lúc này. Vui lòng thử lại sau.");
         }
     }
+
+    private AiJobSearchResponse profileFallback(AiJobSearchRequest request, CandidateProfile candidate,
+                                                User user, UUID failedRunId, String failureCode) {
+        if (!hasValidConsent(candidate, policyVersion())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "AI_JOB_SEARCH_CONSENT_REQUIRED",
+                    "Quyền xử lý dữ liệu đã thay đổi. Vui lòng xác nhận lại chính sách.");
+        }
+        // Re-query after the provider delay: keep current publication/deadline/filter constraints.
+        // Rank the full eligible pool by Profile, not the earlier shortlist selected from the CV.
+        var ranked = selector.eligibleJobs(request.filters()).stream()
+                .map(job -> new ProfileRankedJob(job.getId(), jobService.profileMatch(candidate, job)))
+                .sorted(Comparator.comparingInt((ProfileRankedJob item) -> item.match().matchScore()).reversed()
+                        .thenComparing(ProfileRankedJob::jobId))
+                .limit(Math.max(1, Math.min(properties.getMaxResults(), 10)))
+                .toList();
+        List<AiJobSearchItemResponse> items = new ArrayList<>();
+        for (ProfileRankedJob item : ranked) {
+            var match = item.match();
+            items.add(new AiJobSearchItemResponse(items.size() + 1,
+                    jobService.findPublicJobResponseByIdWithoutViewIncrement(item.jobId().toString()),
+                    match.matchScore(), match.matchedSkills(), match.missingSkills(), match.reason(), List.of()));
+        }
+        recordOutcome("profile_fallback");
+        log.info("Job search profile fallback runId={}, failureCode={}, resultCount={}", failedRunId, failureCode, items.size());
+        // The failed AI run remains failed; fallback is not persisted/cached as an AI result or charged.
+        return new AiJobSearchResponse("PROFILE_FALLBACK", request.cvId(), null, false, false,
+                ranked.stream().anyMatch(item -> item.match().lowConfidence()), LocalDateTime.now(), null,
+                quota(user), List.copyOf(items));
+    }
+
+    private record ProfileRankedJob(UUID jobId, JobService.ProfileMatch match) {}
 
     private AiJobSearchResponse response(
             AiJobSearchRun run,
@@ -188,11 +228,12 @@ public class AiJobSearchService {
                         item.matchScore(),
                         item.matchedSkills(),
                         item.missingSkills(),
-                        item.reason()
+                        item.reason(),
+                        item.evidence()
                 ))
                 .toList();
         boolean lowConfidence = stored.stream().anyMatch(AiJobSearchPersistenceService.StoredRecommendation::lowConfidence);
-        return new AiJobSearchResponse("AI", run.getId(), cached, stale, lowConfidence, run.getCompletedAt(), run.getExpiresAt(), quota(user), items);
+        return new AiJobSearchResponse("AI", run.getCvId(), run.getId(), cached, stale, lowConfidence, run.getCompletedAt(), run.getExpiresAt(), quota(user), items);
     }
 
     public AiJobSearchItemResponse recommendation(UUID runId, UUID jobId) {
@@ -200,9 +241,14 @@ public class AiJobSearchService {
         AiJobSearchRun run = runRepository.findByIdAndCandidateIdAndStatus(runId, candidate.getId(), "SUCCEEDED")
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AI_JOB_SEARCH_RESULT_NOT_FOUND",
                         "Không tìm thấy kết quả đánh giá AI."));
-        AiJobSearchContext context = contextBuilder.build(candidate);
-        List<AiJobSearchCandidateSelector.SelectedJob> candidates = selector.select(context);
-        if (!Objects.equals(run.getInputHash(), selector.evaluationHash(context, candidates))) {
+        if (run.getCvId() == null || run.getExpiresAt() == null || !run.getExpiresAt().isAfter(LocalDateTime.now())) {
+            throw new ApiException(HttpStatus.CONFLICT, "AI_JOB_SEARCH_RESULT_STALE",
+                    "Kết quả đã hết hạn. Hãy chọn CV và tìm việc lại.");
+        }
+        AiJobSearchContext context = contextBuilder.buildForJobSearch(candidate, run.getCvId());
+        AiJobSearchFilters filters = run.getSearchFilters() == null ? AiJobSearchFilters.empty() : run.getSearchFilters();
+        List<AiJobSearchCandidateSelector.SelectedJob> candidates = selector.select(context, filters);
+        if (!Objects.equals(run.getInputHash(), selector.evaluationHash(context, candidates, filters))) {
             throw new ApiException(HttpStatus.CONFLICT, "AI_JOB_SEARCH_RESULT_STALE",
                     "Hồ sơ hoặc thông tin việc làm đã được cập nhật. Hãy cập nhật kết quả AI.");
         }
@@ -218,7 +264,8 @@ public class AiJobSearchService {
                 stored.matchScore(),
                 stored.matchedSkills(),
                 stored.missingSkills(),
-                stored.reason()
+                stored.reason(),
+                stored.evidence()
         );
     }
 
@@ -249,11 +296,6 @@ public class AiJobSearchService {
         return candidateProfileRepository.findWithSkillsByUserId(user.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "AI_JOB_SEARCH_PROFILE_REQUIRED",
                         "Vui lòng tạo hồ sơ ứng viên trước khi sử dụng tìm việc bằng AI."));
-    }
-
-    private CandidateCv defaultCv(CandidateProfile candidate) {
-        return candidateCvRepository.findFirstByCandidateIdAndDefaultCvTrueAndDeletedAtIsNullOrderByUpdatedAtDesc(candidate.getId())
-                .orElse(null);
     }
 
     private boolean hasValidConsent(CandidateProfile candidate, String policyVersion) {

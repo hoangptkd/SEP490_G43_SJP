@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record AiJobSearchResponse(
         String source,
+        UUID cvId,
         UUID runId,
         boolean cached,
         boolean stale,

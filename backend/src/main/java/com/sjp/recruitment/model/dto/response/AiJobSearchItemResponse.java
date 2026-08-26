@@ -8,6 +8,8 @@ public record AiJobSearchItemResponse(
         int matchScore,
         List<String> matchedSkills,
         List<String> missingSkills,
-        String reason
+        String reason,
+        List<Evidence> evidence
 ) {
+    public record Evidence(String cvQuote, String jobQuote) {}
 }

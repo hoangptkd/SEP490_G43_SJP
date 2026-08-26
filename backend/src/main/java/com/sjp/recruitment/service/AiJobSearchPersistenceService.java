@@ -2,6 +2,8 @@ package com.sjp.recruitment.service;
 
 import com.sjp.recruitment.config.AiJobSearchProperties;
 import com.sjp.recruitment.model.entity.*;
+import com.sjp.recruitment.model.dto.request.AiJobSearchFilters;
+import com.sjp.recruitment.model.dto.response.AiJobSearchItemResponse.Evidence;
 import com.sjp.recruitment.repository.AiJobRecommendationRepository;
 import com.sjp.recruitment.repository.AiJobSearchRunRepository;
 import com.sjp.recruitment.repository.CandidateAiConsentRepository;
@@ -27,11 +29,13 @@ public class AiJobSearchPersistenceService {
     private final AiJobSearchProperties properties;
 
     @Transactional
-    public AiJobSearchRun start(AiJobSearchContext context, String evaluationHash) {
+    public AiJobSearchRun start(AiJobSearchContext context, String evaluationHash, AiJobSearchFilters filters) {
         LocalDateTime now = LocalDateTime.now();
         runRepository.findFirstByCandidateIdAndStatusOrderByCreatedAtDesc(context.candidate().getId(), "PROCESSING")
                 .ifPresent(existing -> {
-                    if (existing.getStartedAt() != null && existing.getStartedAt().isBefore(now.minusMinutes(2))) {
+                    long staleSeconds = Math.max(180L,
+                            2L * (properties.getProviderConnectTimeoutMs() + properties.getProviderReadTimeoutMs()) / 1000 + 60);
+                    if (existing.getStartedAt() != null && existing.getStartedAt().isBefore(now.minusSeconds(staleSeconds))) {
                         existing.setStatus("FAILED");
                         existing.setFailureCode("AI_JOB_SEARCH_STALE_RUN");
                         existing.setCompletedAt(now);
@@ -44,6 +48,7 @@ public class AiJobSearchPersistenceService {
         run.setCandidate(context.candidate());
         run.setStatus("PROCESSING");
         run.setInputHash(evaluationHash);
+        run.setSearchFilters(filters);
         run.setProfileUpdatedAt(context.candidate().getUpdatedAt());
         run.setCvId(context.defaultCv() == null ? null : context.defaultCv().getId());
         run.setCvType(context.defaultCv() == null ? null
@@ -66,6 +71,9 @@ public class AiJobSearchPersistenceService {
             throw new IllegalArgumentException("A successful AI job search must contain recommendations");
         }
         AiJobSearchRun run = runRepository.findById(runId).orElseThrow();
+        if (!"PROCESSING".equals(run.getStatus())) {
+            throw new IllegalStateException("AI job search run is no longer processing");
+        }
         LocalDateTime now = LocalDateTime.now();
         List<AiJobRecommendation> recommendations = ranked.stream().map(item -> {
             AiJobRecommendation recommendation = new AiJobRecommendation();
@@ -80,13 +88,10 @@ public class AiJobSearchPersistenceService {
                     "matchedSkills", item.matchedSkills(),
                     "missingSkills", item.missingSkills(),
                     "reason", item.reason(),
-                    "lowConfidence", context.lowConfidence() || item.lowConfidenceEvidence(),
-                    "skillScore", item.scoreBreakdown().skillScore(),
-                    "experienceScore", item.scoreBreakdown().experienceScore(),
-                    "targetRoleScore", item.scoreBreakdown().targetRoleScore(),
-                    "cvJdScore", item.scoreBreakdown().cvJdScore(),
-                    "locationScore", item.scoreBreakdown().locationScore(),
-                    "scoringVersion", properties.getScoringVersion()
+                    "lowConfidence", context.lowConfidence(),
+                    "evidence", item.evidence().stream().map(e -> Map.of("cvQuote", e.cvQuote(), "jobQuote", e.jobQuote())).toList(),
+                    "scoreSource", "AI",
+                    "scoringVersion", "ai-cv-ranking-v1"
             ));
             return recommendation;
         }).toList();
@@ -124,7 +129,8 @@ public class AiJobSearchPersistenceService {
                         stringList(item.getReasonJson().get("matchedSkills")),
                         stringList(item.getReasonJson().get("missingSkills")),
                         String.valueOf(item.getReasonJson().getOrDefault("reason", "")),
-                        Boolean.TRUE.equals(item.getReasonJson().get("lowConfidence"))
+                        Boolean.TRUE.equals(item.getReasonJson().get("lowConfidence")),
+                        evidenceList(item.getReasonJson().get("evidence"))
                 ))
                 .toList();
     }
@@ -156,6 +162,15 @@ public class AiJobSearchPersistenceService {
         recommendationRepository.deleteByCandidateId(candidate.getId());
     }
 
+    private List<Evidence> evidenceList(Object value) {
+        if (!(value instanceof List<?> items)) return List.of();
+        return items.stream().filter(item -> item instanceof Map<?, ?>)
+                .map(item -> (Map<?, ?>) item)
+                .filter(item -> item.get("cvQuote") instanceof String && item.get("jobQuote") instanceof String)
+                .map(item -> new Evidence((String) item.get("cvQuote"), (String) item.get("jobQuote")))
+                .toList();
+    }
+
     private List<String> stringList(Object value) {
         if (!(value instanceof Collection<?> collection)) return List.of();
         return collection.stream().map(String::valueOf).toList();
@@ -173,7 +188,8 @@ public class AiJobSearchPersistenceService {
             List<String> matchedSkills,
             List<String> missingSkills,
             String reason,
-            boolean lowConfidence
+            boolean lowConfidence,
+            List<Evidence> evidence
     ) {
     }
 

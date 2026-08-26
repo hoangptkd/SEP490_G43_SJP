@@ -37,8 +37,8 @@ public class AiJobSearchController {
     }
 
     @PostMapping("/search")
-    public ResponseEntity<AiJobSearchResponse> search(@RequestBody(required = false) AiJobSearchRequest request) {
-        return ResponseEntity.ok(aiJobSearchService.search(request != null && request.forceRefresh()));
+    public ResponseEntity<AiJobSearchResponse> search(@Valid @RequestBody AiJobSearchRequest request) {
+        return ResponseEntity.ok(aiJobSearchService.search(request));
     }
 
     @GetMapping("/runs/{runId}/jobs/{jobId}")

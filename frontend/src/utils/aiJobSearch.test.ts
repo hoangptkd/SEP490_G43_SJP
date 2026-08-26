@@ -1,53 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { filterAiJobSearchItems } from './aiJobSearch';
-import type { AiJobSearchItem } from '../types/aiJobSearch';
+import { aiJobSearchInput } from './aiJobSearch';
 
-function item(overrides: Partial<AiJobSearchItem['job']> = {}): AiJobSearchItem {
-  return {
-    rank: 1,
-    matchScore: 90,
-    matchedSkills: ['Java'],
-    missingSkills: [],
-    reason: 'Phù hợp.',
-    job: {
-      id: 'job-1',
-      title: 'Backend Developer',
-      description: '',
-      location: 'Hà Nội',
-      requirements: [],
-      skills: ['Java'],
-      company: { id: 'company-1', name: 'SRP' },
-      status: 'PUBLISHED',
-      saved: false,
-      applied: false,
-      salaryMin: 15_000_000,
-      salaryMax: 25_000_000,
-      jobType: 'full_time',
-      workMode: 'hybrid',
-      ...overrides,
-    },
-  };
-}
-
-describe('filterAiJobSearchItems', () => {
-  it('lọc top AI theo địa điểm, lương, loại việc và hình thức', () => {
-    const matching = item();
-    const remote = item({ id: 'job-2', location: 'TP.HCM', workMode: 'remote' });
-
-    expect(filterAiJobSearchItems([matching, remote], {
-      location: 'hà nội',
-      minSalary: 18_000_000,
-      maxSalary: 30_000_000,
-      jobType: 'full_time',
-      workMode: 'hybrid',
-    })).toEqual([matching]);
+describe('aiJobSearchInput', () => {
+  it('sends the selected CV and hard filters to backend', () => {
+    expect(aiJobSearchInput('cv-a', {
+      location: ' Hà Nội ', minSalary: 15_000_000, maxSalary: 25_000_000,
+      jobType: 'full_time', workMode: 'hybrid',
+    })).toEqual({
+      cvId: 'cv-a', filters: {
+        location: 'Hà Nội', minSalary: 15_000_000, maxSalary: 25_000_000,
+        jobType: 'full_time', workMode: 'hybrid',
+      },
+    });
   });
 
-  it('giữ nguyên thứ hạng và không áp dụng keyword của tìm kiếm thường', () => {
-    const first = item({ id: 'job-1' });
-    const second = { ...item({ id: 'job-2' }), rank: 2 };
+  it('does not forward ordinary search keywords or sort order', () => {
+    expect(JSON.stringify(aiJobSearchInput('cv-a', { search: 'Java', sort: 'salary' })))
+      .toBe(JSON.stringify(aiJobSearchInput('cv-a', {})));
+  });
 
-    expect(filterAiJobSearchItems([first, second], { search: 'không liên quan' }))
-      .toEqual([first, second]);
+  it('isolates displayed results when CV or any hard filter changes', () => {
+    const key = JSON.stringify(aiJobSearchInput('cv-a', {}));
+    expect(JSON.stringify(aiJobSearchInput('cv-b', {}))).not.toBe(key);
+    for (const filters of [
+      { location: 'Hà Nội' }, { minSalary: 1 }, { maxSalary: 2 },
+      { jobType: 'full_time' }, { workMode: 'remote' },
+    ]) expect(JSON.stringify(aiJobSearchInput('cv-a', filters))).not.toBe(key);
   });
 });

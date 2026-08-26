@@ -10,7 +10,7 @@ import { useVoiceConversation, type VoicePhase } from './hooks/useVoiceConversat
 import { useCandidateRealtime } from './hooks/useCandidateRealtime';
 import { clearAuthSession, getToken, setAuthSession, getStoredUser } from './utils/authStorage';
 import { parseApiError } from './utils/planLimits';
-import { filterAiJobSearchItems } from './utils/aiJobSearch';
+import { aiJobSearchInput } from './utils/aiJobSearch';
 import PlanLimitAlert from './components/PlanLimitAlert';
 import { NotificationInbox } from './components/NotificationInbox';
 import { DialogContainer } from './components/common/DialogContainer';
@@ -2683,8 +2683,17 @@ function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [aiStatus, setAiStatus] = useState<AiJobSearchStatus | null>(null);
-  const [aiResult, setAiResult] = useState<AiJobSearchResult | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState<{ key: string; result: AiJobSearchResult } | null>(null);
+  const [aiSearching, setAiSearching] = useState(false);
+  const [aiSetupLoading, setAiSetupLoading] = useState(false);
+  const aiLoading = aiSearching || aiSetupLoading;
+  const [aiCvs, setAiCvs] = useState<{ id: string; label: string }[]>([]);
+  const [selectedAiCvId, setSelectedAiCvId] = useState('');
+  const aiInput = useMemo(() => aiJobSearchInput(selectedAiCvId, filters), [selectedAiCvId, filters]);
+  const aiInputKey = JSON.stringify(aiInput);
+  const aiResult = aiResponse?.key === aiInputKey ? aiResponse.result : null;
+  const aiRequestRef = useRef<AbortController | null>(null);
+  const aiRequestSequence = useRef(0);
   const [aiError, setAiError] = useState('');
   const [showAiConsent, setShowAiConsent] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
@@ -2716,12 +2725,25 @@ function JobsPage() {
   }, [aiMode, filters, page, pageSize, setParams]);
 
   const runAiSearch = useCallback(async (forceRefresh: boolean) => {
-    setAiLoading(true);
+    if (!aiInput.cvId) {
+      setAiError('Vui lòng chọn CV trước khi tìm việc.');
+      return;
+    }
+    aiRequestRef.current?.abort();
+    const controller = new AbortController();
+    aiRequestRef.current = controller;
+    const sequence = ++aiRequestSequence.current;
+    setAiSearching(true);
     setAiError('');
     setAiPlanLimit(false);
     try {
-      const result = await aiJobSearchService.search(forceRefresh);
-      setAiResult(result);
+      const result = await aiJobSearchService.search(aiInput, forceRefresh, controller.signal);
+      if (controller.signal.aborted || sequence !== aiRequestSequence.current) return;
+      if (result.cvId !== aiInput.cvId) {
+        setAiError('Kết quả không thuộc CV đã chọn. Vui lòng tải lại trang và thử lại.');
+        return;
+      }
+      setAiResponse({ key: aiInputKey, result });
       setAiStatus((current) => current ? {
         ...current,
         quota: result.quota,
@@ -2733,13 +2755,31 @@ function JobsPage() {
         },
       } : current);
     } catch (err) {
+      if (controller.signal.aborted || sequence !== aiRequestSequence.current) return;
       const parsed = parseApiError(err);
       setAiError(parsed.message);
       setAiPlanLimit(parsed.isPlanLimit);
+      if (parsed.code === 'AI_JOB_SEARCH_CONSENT_REQUIRED') {
+        setAiStatus((current) => current ? { ...current, consentRequired: true } : current);
+        setShowAiConsent(true);
+      }
     } finally {
-      setAiLoading(false);
+      if (sequence === aiRequestSequence.current) setAiSearching(false);
     }
-  }, []);
+  }, [aiInput, aiInputKey]);
+
+  useEffect(() => {
+    aiRequestSequence.current += 1;
+    aiRequestRef.current?.abort();
+    setAiSearching(false);
+    setAiResponse(null);
+    setAiError('');
+    setAiPlanLimit(false);
+    return () => {
+      aiRequestSequence.current += 1;
+      aiRequestRef.current?.abort();
+    };
+  }, [aiInputKey, aiMode]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2754,33 +2794,28 @@ function JobsPage() {
       navigate(`/login?redirect=${encodeURIComponent('/jobs?mode=ai')}`, { replace: true });
       return;
     }
-    setAiLoading(true);
+    setAiSetupLoading(true);
     let active = true;
-    aiJobSearchService.status()
-      .then((status) => {
+    Promise.all([aiJobSearchService.status(), candidateService.getCvs(0, 100), candidateService.getCvVersions(0, 100)])
+      .then(([status, uploaded, created]) => {
         if (!active) return;
         setAiStatus(status);
+        setAiCvs([
+          ...uploaded.items.filter((cv) => !cv.deleted).map((cv) => ({ id: cv.id, label: `CV tải lên · ${cv.originalFileName}` })),
+          ...created.items.map((cv) => ({ id: cv.id, label: `CV đã tạo · ${cv.title}` })),
+        ]);
         if (!status.enabled) {
           setAiError('Tìm việc bằng AI hiện chưa sẵn sàng. Vui lòng thử lại sau.');
-          setAiLoading(false);
         } else if (status.consentRequired) {
           setShowAiConsent(true);
-          setAiLoading(false);
-        } else if (status.cache.available && !status.cache.stale) {
-          void runAiSearch(false);
-        } else {
-          setAiResult(null);
-          setAiLoading(false);
         }
       })
       .catch((err) => {
-        if (active) {
-          setAiError(readError(err));
-          setAiLoading(false);
-        }
-      });
+        if (active) setAiError(readError(err));
+      })
+      .finally(() => { if (active) setAiSetupLoading(false); });
     return () => { active = false; };
-  }, [aiMode, navigate, runAiSearch]);
+  }, [aiMode, navigate]);
   useEffect(() => {
     if (aiMode) {
       setCategories([]);
@@ -2858,14 +2893,7 @@ function JobsPage() {
   }
 
   function refreshAiResults() {
-    const remaining = aiResult?.quota.remaining ?? aiStatus?.quota.remaining;
-    if (remaining === 0) {
-      setAiPlanLimit(true);
-      setAiError('Bạn đã hết lượt tìm việc bằng AI trong tháng này.');
-      return;
-    }
-    const needsNewEvaluation = !aiStatus?.cache.available || aiStatus.cache.stale;
-    if (!needsNewEvaluation || window.confirm('Đánh giá mới có thể sử dụng 1 lượt AI. Bạn muốn tiếp tục?')) {
+    if (aiResult || window.confirm('AI sẽ đánh giá CV đã chọn với các việc đáp ứng bộ lọc. Kết quả mới sử dụng 1 lượt AI; kết quả đã lưu còn hạn không trừ lượt. Tiếp tục?')) {
       void runAiSearch(true);
     }
   }
@@ -2876,7 +2904,10 @@ function JobsPage() {
     setAiError('');
     try {
       await aiJobSearchService.revokeConsent();
-      setAiResult(null);
+      aiRequestSequence.current += 1;
+      aiRequestRef.current?.abort();
+      setAiResponse(null);
+      setAiSearching(false);
       setAiStatus((current) => current ? {
         ...current,
         consentRequired: true,
@@ -2889,13 +2920,11 @@ function JobsPage() {
     }
   }
 
-  const filteredAiItems = useMemo(() => {
-    return filterAiJobSearchItems(aiResult?.items || [], filters);
-  }, [aiResult, filters]);
+  const filteredAiItems = aiResult?.items || [];
   const isEmployer = localStorage.getItem('role') === 'EMPLOYER';
   const jobCards = aiMode
     ? filteredAiItems.map((item) => (
-      <AiRecommendationCard key={item.job.id} item={item} />
+      <AiRecommendationCard key={item.job.id} item={item} source={aiResult?.source || 'AI'} />
     ))
     : jobs.map((job, i) => (
       <motion.div
@@ -2925,13 +2954,13 @@ function JobsPage() {
   const jobsEmpty = (
     <div className="empty-state card" style={{ padding: 48, textAlign: 'center' }}>
       <div className="empty-state-icon"><IconSearch size={36} /></div>
-      <h3>{aiMode ? 'Chưa có công việc phù hợp' : 'Không tìm thấy việc làm'}</h3>
+      <h3>{aiMode ? aiResult ? 'Chưa có việc đáp ứng bộ lọc' : 'Tìm công việc theo CV của bạn' : 'Không tìm thấy việc làm'}</h3>
       <p className="muted">
         {aiMode && !aiResult
-          ? 'Hãy thử lại hoặc cập nhật Profile và CV mặc định.'
+          ? 'Chọn CV, áp dụng bộ lọc nếu cần, sau đó bấm “Tìm việc theo CV”.'
           : 'Thử thay đổi bộ lọc để xem thêm kết quả.'}
       </p>
-      {aiMode && !aiResult && <Link className="button-link outline" to="/candidate/profile">Cập nhật Profile</Link>}
+      {aiMode && !aiResult && aiCvs.length === 0 && <Link className="button-link outline" to="/candidate/cvs">Thêm CV</Link>}
     </div>
   );
 
@@ -2943,18 +2972,32 @@ function JobsPage() {
             setMobileFiltersOpen((value) => !value);
             window.requestAnimationFrame(() => filterRef.current?.querySelector<HTMLInputElement>('input')?.focus());
           }}>
-          {mobileFiltersOpen ? 'Đóng bộ lọc' : aiMode ? 'Lọc top 10 AI' : 'Mở bộ lọc tìm việc'}
+          {mobileFiltersOpen ? 'Đóng bộ lọc' : 'Mở bộ lọc tìm việc'}
         </button>
         {aiMode && (
           <section className="ai-job-banner" aria-labelledby="ai-job-banner-title" aria-busy={aiLoading}>
             <div className="ai-job-banner-copy">
               <p className="eyebrow">AI Job Match</p>
-              <h1 id="ai-job-banner-title">10 công việc phù hợp nhất</h1>
+              <h1 id="ai-job-banner-title">Tìm việc theo CV với AI</h1>
               <p>
-                {aiResult?.lowConfidence || aiStatus?.readiness.lowConfidence
-                  ? 'Đang xếp hạng từ Profile. Thêm CV mặc định để tăng độ tin cậy.'
-                  : 'Xếp hạng từ Profile và CV mặc định của bạn.'}
+                AI đối chiếu CV bạn chọn với yêu cầu tuyển dụng và đề xuất tối đa 10 công việc.
               </p>
+              <div className="ai-cv-picker">
+                <label htmlFor="ai-search-cv" className="filter-label">CV dùng để tìm việc <span aria-hidden="true">*</span></label>
+                <select id="ai-search-cv" required value={selectedAiCvId}
+                  disabled={aiSetupLoading || aiCvs.length === 0}
+                  aria-describedby="ai-search-cv-help"
+                  onChange={(event) => setSelectedAiCvId(event.target.value)}>
+                  <option value="">{aiSetupLoading ? 'Đang tải danh sách CV…' : 'Chọn một CV'}</option>
+                  {aiCvs.map((cv) => <option key={cv.id} value={cv.id}>{cv.label}</option>)}
+                </select>
+                <p id="ai-search-cv-help" className="muted">
+                  {!aiSetupLoading && aiCvs.length === 0
+                    ? 'Bạn cần thêm CV trước khi tìm việc.'
+                    : 'CV được dùng để phân tích với AI. Hồ sơ ứng viên được dùng cho gợi ý bổ sung và mong muốn công việc.'}
+                  {' '}<Link to="/candidate/cvs">Quản lý CV</Link>
+                </p>
+              </div>
               <div className="ai-job-banner-meta" aria-live="polite">
                 {(aiResult?.quota || aiStatus?.quota) && (
                   <span>
@@ -2965,12 +3008,15 @@ function JobsPage() {
                 )}
                 {aiResult?.generatedAt && <span>Tạo lúc: {formatAiDate(aiResult.generatedAt)}</span>}
                 {aiResult?.cached && <span>Kết quả đã lưu · đầu vào không thay đổi</span>}
+                {aiResult && <span>{aiResult.source === 'PROFILE_FALLBACK'
+                  ? 'Dữ liệu: Hồ sơ ứng viên'
+                  : `CV: ${aiCvs.find((cv) => cv.id === aiResult.cvId)?.label}`}</span>}
               </div>
-              {aiStatus?.cache.stale && !aiResult && (
-                <div className="warning-panel" role="status" style={{ marginTop: 12 }}>
-                  Hồ sơ hoặc thông tin việc làm đã được cập nhật. Hãy cập nhật kết quả AI để nhận đề xuất mới nhất.
-                </div>
-              )}
+              <p className="ai-search-note" role="status">
+                {aiSearching
+                  ? 'Đang đọc CV và đánh giá công việc. Đổi CV hoặc rời trang không hủy lượt đã gửi đến máy chủ.'
+                  : 'Đổi CV hoặc áp dụng bộ lọc sẽ xóa kết quả cũ. Bấm tìm để đánh giá đầu vào mới.'}
+              </p>
             </div>
             <div className="ai-job-banner-actions">
               {aiStatus?.consentRequired && !aiResult ? (
@@ -2978,14 +3024,13 @@ function JobsPage() {
                   Xem và đồng ý chính sách
                 </button>
               ) : (
-                <button type="button" onClick={refreshAiResults} disabled={aiLoading}>
+                <button type="button" onClick={refreshAiResults}
+                  disabled={aiLoading || !selectedAiCvId || !aiStatus?.enabled} aria-describedby="ai-search-cv-help">
                   {aiLoading
-                    ? 'AI đang phân tích…'
-                    : aiStatus?.cache.stale
-                      ? 'Cập nhật kết quả AI'
+                    ? 'Đang tìm việc phù hợp…'
                       : aiResult
                         ? 'Kiểm tra cập nhật kết quả'
-                        : 'Tìm việc phù hợp với AI'}
+                        : 'Tìm việc theo CV'}
                 </button>
               )}
               <button type="button" className="outline" onClick={() => navigate('/jobs')}>
@@ -3001,11 +3046,12 @@ function JobsPage() {
               <div className="ai-job-inline-error" role="alert">
                 <span>{aiError}</span>
                 <div>
-                  {!aiPlanLimit && aiStatus?.enabled && (
-                    <button type="button" className="outline sm" onClick={() => void runAiSearch(true)} disabled={aiLoading}>
+                  {!aiPlanLimit && aiStatus?.enabled && selectedAiCvId && (
+                    <button type="button" className="outline sm" onClick={refreshAiResults} disabled={aiLoading || aiStatus.consentRequired}>
                       Thử lại
                     </button>
                   )}
+                  {!aiStatus && <button type="button" className="outline sm" onClick={() => window.location.reload()}>Tải lại trang</button>}
                   {aiPlanLimit && <Link className="button-link sm" to="/candidate/subscription/plans">Xem gói dịch vụ</Link>}
                 </div>
               </div>
@@ -3015,7 +3061,8 @@ function JobsPage() {
         <div className="jobs-layout">
           {/* Filter Sidebar */}
           <form ref={filterRef} id="job-search-filters" className={`filter-panel ${mobileFiltersOpen ? 'mobile-open' : ''}`} onSubmit={applyFilters}>
-            <h2>{aiMode ? 'Lọc kết quả AI' : 'Tìm việc làm'}</h2>
+            <h2>{aiMode ? 'Điều kiện tìm việc' : 'Tìm việc làm'}</h2>
+            {aiMode && <p className="muted">Bộ lọc áp dụng trên kho việc trước khi AI đánh giá. Sau khi áp dụng, bấm “Tìm việc theo CV”.</p>}
 
             {!aiMode && <div>
               <label className="filter-label">Từ khóa</label>
@@ -3139,7 +3186,7 @@ function JobsPage() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
               </svg>
-              {aiMode ? 'Lọc top 10' : 'Tìm kiếm'}
+              {aiMode ? 'Áp dụng bộ lọc' : 'Tìm kiếm'}
             </button>
             {hasActiveFilters && (
               <button type="button" className="outline" style={{ width: '100%' }} onClick={resetFilters}>
@@ -3154,7 +3201,7 @@ function JobsPage() {
           {/* Job List */}
           <div>
             <div className="jobs-list-header">
-              <h1>{aiMode ? 'Kết quả được AI xếp hạng' : 'Việc làm đang tuyển'}</h1>
+              <h1>{aiMode ? 'Gợi ý phù hợp' : 'Việc làm đang tuyển'}</h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {!aiMode && localStorage.getItem('role') === 'CANDIDATE' && (
                   <button type="button" className="outline sm"
@@ -3163,7 +3210,7 @@ function JobsPage() {
                   </button>
                 )}
                 {aiMode
-                  ? !aiLoading && <span className="chip neutral">{filteredAiItems.length}/{aiResult?.items.length || 0} kết quả</span>
+                  ? !aiLoading && <span className="chip neutral">{filteredAiItems.length} kết quả</span>
                   : !loading && <span className="chip neutral">{totalElements} kết quả</span>}
                 {!aiMode && <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   Hiển thị
@@ -3246,17 +3293,18 @@ function formatAiDate(value: string) {
     : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(parsed);
 }
 
-function AiRecommendationCard({ item }: { item: AiJobSearchItem }) {
+function AiRecommendationCard({ item, source }: { item: AiJobSearchItem; source: AiJobSearchResult['source'] }) {
   return (
     <section className="ai-recommendation-card" aria-labelledby={`ai-job-${item.job.id}`}>
       <div className="ai-recommendation-summary">
-        <div className="ai-rank-score" role="img" aria-label={`Xếp hạng ${item.rank}, phù hợp ${item.matchScore} phần trăm`}>
+        <div className="ai-rank-score" role="img" aria-label={`Xếp hạng ${item.rank}, điểm tham khảo ${item.matchScore} trên 100`}>
           <span>#{item.rank}</span>
-          <strong>{item.matchScore}%</strong>
+          <strong>{item.matchScore}/100</strong>
         </div>
         <div>
-          <h2 id={`ai-job-${item.job.id}`}>Vì sao công việc này phù hợp?</h2>
+          <h2 id={`ai-job-${item.job.id}`}>Gợi ý phù hợp</h2>
           <p>{item.reason}</p>
+          <small className="muted">Điểm tham khảo, không phải xác suất được tuyển.</small>
         </div>
       </div>
       <div className="ai-skill-groups">
@@ -3269,14 +3317,25 @@ function AiRecommendationCard({ item }: { item: AiJobSearchItem }) {
           </div>
         </div>
         <div>
-          <span className="ai-skill-label">Nên bổ sung</span>
+          <span className="ai-skill-label">{source === 'PROFILE_FALLBACK' ? 'Chưa thấy trong hồ sơ' : 'Chưa thấy trong CV'}</span>
           <div className="ai-skill-list">
             {item.missingSkills.length > 0
               ? item.missingSkills.map((skill) => <span className="chip warning" key={skill}>{skill}</span>)
-              : <span className="muted">Không có khoảng trống kỹ năng nổi bật</span>}
+              : <span className="muted">Chưa ghi nhận kỹ năng cần bổ sung</span>}
           </div>
         </div>
       </div>
+      {item.evidence?.length > 0 && (
+        <details className="ai-job-evidence">
+          <summary>Xem dẫn chứng từ CV và tin tuyển dụng</summary>
+          {item.evidence.map((entry, index) => (
+            <div key={index}>
+              <p><strong>CV:</strong> {entry.cvQuote}</p>
+              <p><strong>Tin tuyển dụng:</strong> {entry.jobQuote}</p>
+            </div>
+          ))}
+        </details>
+      )}
       <JobCard job={item.job} />
     </section>
   );
@@ -3319,10 +3378,10 @@ function AiConsentDialog({
         <p className="eyebrow">Quyền riêng tư · {policyVersion}</p>
         <h2 id="ai-consent-title">Cho phép AI phân tích dữ liệu nghề nghiệp?</h2>
         <p id="ai-consent-description">
-          Hệ thống sử dụng kỹ năng, kinh nghiệm, học vấn, dự án và nội dung nghề nghiệp trong CV mặc định để xếp hạng công việc.
+          Hệ thống gửi nội dung nghề nghiệp từ CV bạn chọn và các tin tuyển dụng đến nhà cung cấp AI để đánh giá, xếp hạng và giải thích mức phù hợp. Profile chỉ bổ sung mong muốn địa điểm và lương.
         </p>
         <ul>
-          <li>Không gửi email, số điện thoại, ngày sinh, tên đầy đủ hoặc file CV gốc.</li>
+          <li>Không gửi file CV gốc. Hệ thống lọc các thông tin nhận dạng phổ biến; bạn nên kiểm tra và bỏ dữ liệu nhạy cảm khỏi CV trước khi dùng.</li>
           <li>Kết quả chỉ là gợi ý cho bạn, không phải quyết định tuyển dụng.</li>
           <li>Bạn có thể thu hồi đồng ý và xóa cache gợi ý bất cứ lúc nào.</li>
         </ul>

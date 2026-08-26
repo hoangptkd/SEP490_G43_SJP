@@ -12,13 +12,13 @@ public class AiJobSearchProperties {
     private String shopaikeyApiKey;
     private String shopaikeyBaseUrl = "https://api.shopaikey.com/v1";
     private String shopaikeyModel = "gpt-4.1-mini";
-    private String promptVersion = "ai-job-search-v2";
-    private String scoringVersion = "deterministic-match-v1";
+    private String promptVersion = "selected-cv-ranking-v4";
+    private String scoringVersion = "cv-shortlist-v2";
     private int providerConnectTimeoutMs = 5_000;
-    private int providerReadTimeoutMs = 25_000;
+    private int providerReadTimeoutMs = 60_000;
     private int cacheHours = 24;
     private int maxCandidateJobs = 30;
-    private int maxPromptJobs = 20;
+    private int maxPromptJobs = 30;
     private int maxResults = 10;
     private int maxCvCharacters = 12_000;
     private int retentionDays = 90;

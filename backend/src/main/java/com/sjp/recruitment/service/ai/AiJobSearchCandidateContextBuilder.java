@@ -70,6 +70,57 @@ public class AiJobSearchCandidateContextBuilder {
         return buildContext(candidate, cv);
     }
 
+    /** Isolated from the profile-enriched context used by interview preparation. */
+    @Transactional
+    public AiJobSearchContext buildForJobSearch(CandidateProfile candidate, UUID cvId) {
+        if (cvId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AI_JOB_SEARCH_CV_REQUIRED",
+                    "Vui lòng chọn CV để tìm việc bằng AI.");
+        }
+        CandidateCv cv = candidateCvRepository.findByIdAndCandidateId(cvId, candidate.getId())
+                .filter(item -> !item.isDeleted())
+                .filter(item -> "uploaded".equalsIgnoreCase(item.getSourceType())
+                        || "builder".equalsIgnoreCase(item.getSourceType()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND",
+                        "CV đã chọn không tồn tại hoặc không thuộc tài khoản của bạn."));
+        String cvText = normalizedCvText(cv, candidate);
+        String contentForValidation = "builder".equalsIgnoreCase(cv.getSourceType())
+                ? builderValues(removePrivateFields(cv.getSnapshot())) : cvText;
+        String meaningful = contentForValidation.replaceAll("\\[[A-Z_]+\\]", "")
+                .replaceAll("[^\\p{L}\\p{N}]", "");
+        if (meaningful.length() < 40) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AI_JOB_SEARCH_CV_UNREADABLE",
+                    "CV chưa có đủ nội dung đọc được. Hãy chọn CV khác hoặc tải lên PDF có văn bản thay vì bản scan.");
+        }
+        List<String> preferredLocations = safeStringList(candidate.getPreferredLocations());
+        Map<String, Object> preferences = new LinkedHashMap<>();
+        preferences.put("preferredLocations", preferredLocations);
+        preferences.put("expectedSalary", candidate.getExpectedSalary());
+        preferences.put("willingToRelocate", candidate.isWillingToRelocate());
+        Map<String, Object> provider = new LinkedHashMap<>();
+        provider.put("cvContent", cvText);
+        provider.put("jobPreferences", preferences);
+        Map<String, Object> hash = new TreeMap<>(provider);
+        hash.put("cvId", cv.getId().toString());
+        hash.put("cvUpdatedAt", String.valueOf(cv.getUpdatedAt()));
+        hash.put("cvType", cvType(cv));
+        hash.put("contextVersion", "selected-cv-only-v1");
+        return new AiJobSearchContext(candidate, cv, sha256(toJson(hash)), false,
+                List.of(), "", "", "", null, "", List.of(), candidate.getExpectedSalary(),
+                preferredLocations, candidate.isWillingToRelocate(), List.of(), List.of(), List.of(), List.of(),
+                cvText, Collections.unmodifiableMap(provider));
+    }
+
+    private String builderValues(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return map.values().stream().map(this::builderValues).collect(java.util.stream.Collectors.joining(" "));
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.stream().map(this::builderValues).collect(java.util.stream.Collectors.joining(" "));
+        }
+        return value instanceof String text ? text : "";
+    }
+
     private AiJobSearchContext buildContext(CandidateProfile candidate, CandidateCv cv) {
         List<String> skills = candidate.getSkills().stream()
                 .filter(Objects::nonNull)

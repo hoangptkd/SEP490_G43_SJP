@@ -13,7 +13,7 @@ public record AiJobSearchStatusResponse(
 ) {
     public record Readiness(
             boolean profileAvailable,
-            boolean defaultCvAvailable,
+            boolean cvAvailable,
             boolean lowConfidence,
             List<String> missingItems
     ) {

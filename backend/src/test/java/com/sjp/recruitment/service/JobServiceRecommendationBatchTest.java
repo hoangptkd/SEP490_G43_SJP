@@ -101,6 +101,10 @@ class JobServiceRecommendationBatchTest {
 
         assertEquals(1, recommendations.size());
         assertEquals(List.of("Java"), recommendations.get(0).matchedSkills());
+        var profileMatch = jobService.profileMatch(candidate, job);
+        assertEquals(recommendations.get(0).matchScore(), profileMatch.matchScore());
+        assertEquals(recommendations.get(0).matchedSkills(), profileMatch.matchedSkills());
+        assertEquals(recommendations.get(0).missingSkills(), profileMatch.missingSkills());
         verify(jobRepository).findRecommendationJobIds(argThat(page -> page.getPageSize() == 20));
         verify(savedJobRepository, never()).existsByCandidateIdAndJobId(any(), any());
         verify(applicationRepository, never()).existsByCandidateIdAndJobId(any(), any());
