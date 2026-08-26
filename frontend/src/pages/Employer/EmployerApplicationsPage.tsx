@@ -2307,6 +2307,7 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                                 <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151' }}>Chọn Ngày/Giờ mới:</label>
                                 <input
                                   type="datetime-local"
+                                  min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
                                   value={rescheduleDate}
                                   onChange={(e) => setRescheduleDate(e.target.value)}
                                   style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
@@ -2318,16 +2319,23 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                                         showToast('Vui lòng chọn ngày/giờ mới', 'error');
                                         return;
                                       }
-                                      const scheduledAtIso = new Date(rescheduleDate).toISOString();
-                                      employerService.employerRespondToReschedule(iv.id, 'accept_reschedule', 'Đồng ý đổi lịch', scheduledAtIso).then(async () => {
+                                      if (new Date(rescheduleDate).getTime() < Date.now()) {
+                                        showToast('Thời gian phỏng vấn mới không được ở trong quá khứ', 'error');
+                                        return;
+                                      }
+                                      try {
+                                        await employerService.employerRespondToReschedule(iv.id, 'accept_reschedule', 'Đồng ý đổi lịch', rescheduleDate);
                                         showToast('Đã chốt lịch mới thành công!', 'success');
                                         setRescheduleInterviewId(null);
+                                        setRescheduleDate('');
                                         await loadApplications();
                                         try {
                                           const freshApp = await employerService.getApplicationDetail(manageInterviewApp.id);
                                           setManageInterviewApp(freshApp);
                                         } catch(e) {}
-                                      }).catch(console.error);
+                                      } catch (err: any) {
+                                        showToast(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi chốt lịch mới', 'error');
+                                      }
                                     }}
                                     style={{ background: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
                                   >
@@ -2360,7 +2368,8 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                                         showToast('Vui lòng nhập lý do từ chối', 'error');
                                         return;
                                       }
-                                      employerService.employerRespondToReschedule(iv.id, 'reject_reschedule', rejectReason).then(async () => {
+                                      try {
+                                        await employerService.employerRespondToReschedule(iv.id, 'reject_reschedule', rejectReason);
                                         showToast('Đã từ chối yêu cầu đổi lịch!', 'success');
                                         setRejectInterviewId(null);
                                         setRejectReason('');
@@ -2369,7 +2378,9 @@ export default function EmployerApplicationsPage({ isInterviewOnly = false }: { 
                                           const freshApp = await employerService.getApplicationDetail(manageInterviewApp.id);
                                           setManageInterviewApp(freshApp);
                                         } catch(e) {}
-                                      }).catch(console.error);
+                                      } catch (err: any) {
+                                        showToast(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi từ chối đổi lịch', 'error');
+                                      }
                                     }}
                                     style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}
                                   >

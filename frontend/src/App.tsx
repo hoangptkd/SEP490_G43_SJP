@@ -257,6 +257,29 @@ function formatMoney(value?: number) {
   return new Intl.NumberFormat('vi-VN').format(value) + ' VND';
 }
 
+function formatJobSalary(job: { salaryType?: string; salaryMin?: number; salaryMax?: number }) {
+  if (job.salaryType === 'negotiable' || (!job.salaryMin && !job.salaryMax)) {
+    return 'Thỏa thuận';
+  }
+  if (job.salaryType === 'fixed') {
+    const val = job.salaryMax || job.salaryMin;
+    return val ? `${new Intl.NumberFormat('vi-VN').format(val)} VND` : 'Thỏa thuận';
+  }
+  if (job.salaryMin && job.salaryMax) {
+    if (job.salaryMin === job.salaryMax) {
+      return `${new Intl.NumberFormat('vi-VN').format(job.salaryMin)} VND`;
+    }
+    return `${new Intl.NumberFormat('vi-VN').format(job.salaryMin)} – ${new Intl.NumberFormat('vi-VN').format(job.salaryMax)} VND`;
+  }
+  if (job.salaryMin) {
+    return `Từ ${new Intl.NumberFormat('vi-VN').format(job.salaryMin)} VND`;
+  }
+  if (job.salaryMax) {
+    return `Đến ${new Intl.NumberFormat('vi-VN').format(job.salaryMax)} VND`;
+  }
+  return 'Thỏa thuận';
+}
+
 function formatDate(value?: string) {
   if (!value) return '—';
   const date = new Date(value);
@@ -3416,12 +3439,10 @@ function JobCard({ job }: { job: Job }) {
                   <span className="job-meta-badge-text">{job.experienceLevel}</span>
                 </span>
               )}
-              {(job.salaryMin || job.salaryMax) && (
-                <span className="job-meta-badge salary">
-                  <IconWallet size={12} />
-                  <span className="job-meta-badge-text">{formatMoney(job.salaryMin)} – {formatMoney(job.salaryMax)}</span>
-                </span>
-              )}
+              <span className="job-meta-badge salary">
+                <IconWallet size={12} />
+                <span className="job-meta-badge-text">{formatJobSalary(job)}</span>
+              </span>
             </div>
           </div>
         </div>
@@ -3785,11 +3806,9 @@ function JobDetailPage() {
                   {job.experienceLevel && (
                     <span className="job-meta-badge">{job.experienceLevel}</span>
                   )}
-                  {(job.salaryMin || job.salaryMax) && (
-                    <span className="job-meta-badge salary">
-                      💰 {formatMoney(job.salaryMin)} – {formatMoney(job.salaryMax)}
-                    </span>
-                  )}
+                  <span className="job-meta-badge salary">
+                    💰 {formatJobSalary(job)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -5799,7 +5818,7 @@ function ApplicationDetailPage() {
                           type="button"
                           className="primary sm"
                           disabled={actionBusy}
-                          onClick={() => respondToOffer(application.jobOffer.id, false, offerNote)}
+                          onClick={() => respondToOffer(application.jobOffer.id, 'NEGOTIATE', offerNote)}
                         >
                           Gửi đề xuất thương lượng
                         </button>
