@@ -6,6 +6,7 @@ import type { Company, CompanyDocument, Category } from '../../types/job';
 import { FiCheckCircle, FiClock, FiAlertCircle, FiUploadCloud, FiFileText, FiImage, FiDownload, FiTrash2, FiRefreshCw, FiExternalLink, FiChevronDown, FiX, FiSearch, FiCamera, FiBuilding } from '../../components/Icons';
 import { TaxCodeLookupField } from '../../components/employer/TaxCodeLookupField';
 import { isVietnamTaxCodeFormat } from '../../utils/taxCode';
+import { downloadFile, openFileInNewTab } from '../../utils/helpers';
 
 function CompanyVerificationPage() {
   const [company, setCompany] = useState<Company | null>(null);
@@ -859,24 +860,21 @@ function CompanyVerificationPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <a
-                        href={doc.fileType === 'pdf' || doc.fileName?.toLowerCase().endsWith('.pdf') ? `https://docs.google.com/gview?url=${encodeURIComponent(doc.fileUrl)}` : doc.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+                      <button
+                        type="button"
+                        onClick={() => openFileInNewTab(doc.fileUrl)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                       >
                         <FiExternalLink className="w-4 h-4" /> Xem
-                      </a>
+                      </button>
 
-                      <a
-                        href={doc.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download={doc.fileName}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white border border-gray-200 text-slate-600 hover:bg-gray-50 transition-colors"
+                      <button
+                        type="button"
+                        onClick={() => downloadFile(doc.fileUrl, doc.fileName)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white border border-gray-200 text-slate-600 hover:bg-gray-50 transition-colors cursor-pointer"
                       >
                         <FiDownload className="w-4 h-4" /> Tải về
-                      </a>
+                      </button>
 
                       {docStatus === 'pending' && (
                         <button

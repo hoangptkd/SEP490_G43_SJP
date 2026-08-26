@@ -149,10 +149,14 @@ public class DtoMapper {
         if (doc == null) {
             return null;
         }
+        String url = doc.getFileUrl();
+        if (url != null && url.contains("res.cloudinary.com") && url.contains("/raw/upload/") && !url.toLowerCase().contains(".pdf") && !url.toLowerCase().contains(".png") && !url.toLowerCase().contains(".jpg")) {
+            url = url + ".pdf";
+        }
         return new CompanyDocumentResponse(
                 String.valueOf(doc.getId()),
                 doc.getFileName(),
-                doc.getFileUrl(),
+                url,
                 doc.getFileType(),
                 doc.getStatus(),
                 doc.getRejectReason(),
