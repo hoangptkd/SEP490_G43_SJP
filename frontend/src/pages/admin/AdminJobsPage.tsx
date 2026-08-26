@@ -75,9 +75,16 @@ function reportReasonLabel(reason?: string) {
   return map[reason || ''] || reason || '—';
 }
 
-function formatMoney(min?: number, max?: number) {
-  if (!min && !max) return 'Thỏa thuận';
+function formatMoney(min?: number, max?: number, salaryType?: string) {
+  if (salaryType === 'negotiable' || (!min && !max)) return 'Thỏa thuận';
+  if (salaryType === 'fixed') {
+    const val = max || min;
+    return val ? `${new Intl.NumberFormat('vi-VN').format(val)} VND` : 'Thỏa thuận';
+  }
   if (min && max) {
+    if (min === max) {
+      return `${new Intl.NumberFormat('vi-VN').format(min)} VND`;
+    }
     return `${new Intl.NumberFormat('vi-VN').format(min)} - ${new Intl.NumberFormat('vi-VN').format(max)} VND`;
   }
   if (min) return `Từ ${new Intl.NumberFormat('vi-VN').format(min)} VND`;
@@ -538,7 +545,7 @@ export default function AdminJobsPage() {
                         <span>{job.companyName || '—'}</span>
                         <span>{job.employerEmail || '—'}</span>
                         <span>{job.location || '—'}</span>
-                        <span>{formatMoney(job.salaryMin, job.salaryMax)}</span>
+                        <span>{formatMoney(job.salaryMin, job.salaryMax, job.salaryType)}</span>
                       </div>
                     </Link>
                     <div className="admin-company-actions">

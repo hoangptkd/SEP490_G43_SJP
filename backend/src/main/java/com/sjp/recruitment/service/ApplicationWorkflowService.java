@@ -71,6 +71,12 @@ public class ApplicationWorkflowService {
     public InterviewScheduleResponse scheduleInterview(UUID applicationId, UUID employerId, InterviewScheduleRequest request) {
         Application application = getApplicationAndVerifyEmployer(applicationId, employerId);
 
+        if (request.scheduledAt() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INTERVIEW_TIME", "Thời gian phỏng vấn không được để trống");
+        }
+        if (request.scheduledAt().isBefore(LocalDateTime.now())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INTERVIEW_TIME", "Thời gian phỏng vấn không thể ở trong quá khứ");
+        }
         validateNoInterviewTimeConflict(application.getJob().getId(), request.scheduledAt(), null);
 
         List<InterviewSchedule> existingSchedules = interviewScheduleRepository.findByApplicationId(applicationId);
@@ -245,12 +251,16 @@ public class ApplicationWorkflowService {
 
         String oldTimeStr = schedule.getScheduledAt() != null ? schedule.getScheduledAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")) : "Chưa có";
         if ("accept_reschedule".equals(request.response())) {
-            if (request.scheduledAt() != null) {
-                validateNoInterviewTimeConflict(schedule.getApplication().getJob().getId(), request.scheduledAt(), schedule.getId());
-                schedule.setScheduledAt(request.scheduledAt());
-                
-                schedule.setResponseDeadline(calculateResponseDeadline(request.scheduledAt()));
+            if (request.scheduledAt() == null) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INTERVIEW_TIME", "Vui lòng chọn ngày giờ phỏng vấn mới");
             }
+            if (request.scheduledAt().isBefore(LocalDateTime.now())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_INTERVIEW_TIME", "Thời gian phỏng vấn mới không thể ở trong quá khứ");
+            }
+            validateNoInterviewTimeConflict(schedule.getApplication().getJob().getId(), request.scheduledAt(), schedule.getId());
+            schedule.setScheduledAt(request.scheduledAt());
+            
+            schedule.setResponseDeadline(calculateResponseDeadline(request.scheduledAt()));
         }
         
         schedule.setRespondedAt(null);
@@ -377,29 +387,31 @@ public class ApplicationWorkflowService {
         if (!offer.getApplication().getCandidate().getId().equals(candidateId)) {
              throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không có quyền truy cập");
         }
-        if (!"sent".equalsIgnoreCase(offer.getStatus())) {
-            throw new ApiException(HttpStatus.CONFLICT, "OFFER_ALREADY_RESPONDED", "Job Offer không còn chờ phản hồi");
+        boolean isAllowedStatus = "sent".equalsIgnoreCase(offer.getStatus())
+                || "negotiation_requested".equalsIgnoreCase(offer.getStatus())
+                || ("rejected".equalsIgnoreCase(offer.getStatus()) && offer.getApplication() != null && "accepted".equalsIgnoreCase(offer.getApplication().getStatus()));
+        if (!isAllowedStatus) {
+            throw new ApiException(HttpStatus.CONFLICT, "OFFER_ALREADY_RESPONDED", "Job Offer không còn ở trạng thái chờ phản hồi");
         }
         if (offer.getExpiresAt() != null && offer.getExpiresAt().isBefore(LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")))) {
             throw new ApiException(HttpStatus.CONFLICT, "OFFER_EXPIRED", "Job Offer đã hết hạn");
         }
 
         boolean accepted = request.accepted();
-        boolean isNegotiation = request.isNegotiate();
+        boolean isNegotiation = request.isNegotiate() || request.decision() == com.sjp.recruitment.model.dto.request.CandidateOfferResponseRequest.Decision.NEGOTIATE;
 
-        if (!accepted && !isNegotiation && request.decision() != CandidateOfferResponseRequest.Decision.REJECT) {
-            String noteLower = request.note() != null ? request.note().toLowerCase() : "";
-            isNegotiation = (
-                    noteLower.contains("thương lượng") ||
-                    noteLower.contains("đề xuất") ||
-                    noteLower.contains("lương") ||
-                    noteLower.contains("ngày") ||
-                    noteLower.contains("điều chỉnh") ||
-                    noteLower.contains("đổi")
-            ) && !noteLower.contains("từ chối nhận việc") && !noteLower.contains("từ chối offer");
+        if (!accepted && !isNegotiation) {
+            String noteLower = request.note() != null ? request.note().trim().toLowerCase() : "";
+            if (!noteLower.isEmpty()) {
+                boolean isExplicitReject = noteLower.contains("từ chối nhận việc") || noteLower.contains("từ chối offer") || noteLower.equals("ứng viên từ chối nhận việc");
+                if (!isExplicitReject) {
+                    isNegotiation = true;
+                }
+            }
         }
 
         offer.setCandidateNote(request.note());
+        offer.setEmployerNote(null);
         offer.setRespondedAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
 
         if (accepted) {

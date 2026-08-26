@@ -770,9 +770,20 @@ public class JobService {
         job.setDescription(request.getDescription());
         job.setRequirements(request.getRequirements() == null ? List.of() : request.getRequirements());
         job.setBenefits(request.getBenefits());
-        job.setSalaryMin(request.getSalaryMin());
-        job.setSalaryMax(request.getSalaryMax());
-        job.setSalaryType(request.getSalaryType() != null ? request.getSalaryType() : (request.getSalaryMin() != null && request.getSalaryMax() != null ? "range" : "negotiable"));
+        String resolvedSalaryType = request.getSalaryType() != null && !request.getSalaryType().isBlank()
+                ? request.getSalaryType()
+                : (request.getSalaryMin() != null && request.getSalaryMax() != null ? "range" : "negotiable");
+        job.setSalaryType(resolvedSalaryType);
+        if ("fixed".equalsIgnoreCase(resolvedSalaryType)) {
+            job.setSalaryMin(null);
+            job.setSalaryMax(request.getSalaryMax() != null ? request.getSalaryMax() : request.getSalaryMin());
+        } else if ("negotiable".equalsIgnoreCase(resolvedSalaryType)) {
+            job.setSalaryMin(null);
+            job.setSalaryMax(null);
+        } else {
+            job.setSalaryMin(request.getSalaryMin());
+            job.setSalaryMax(request.getSalaryMax());
+        }
         job.setVacancies(request.getVacancies() != null && request.getVacancies() > 0 ? request.getVacancies() : 1);
         job.setWorkingTime(request.getWorkingTime());
         job.setJobType(request.getJobType() != null ? request.getJobType() : "full_time");

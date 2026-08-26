@@ -86,9 +86,16 @@ function companyVerificationLabel(status?: string) {
   }
 }
 
-function formatMoney(min?: number, max?: number) {
-  if (!min && !max) return 'Thỏa thuận';
+function formatMoney(min?: number, max?: number, salaryType?: string) {
+  if (salaryType === 'negotiable' || (!min && !max)) return 'Thỏa thuận';
+  if (salaryType === 'fixed') {
+    const val = max || min;
+    return val ? `${new Intl.NumberFormat('vi-VN').format(val)} VND` : 'Thỏa thuận';
+  }
   if (min && max) {
+    if (min === max) {
+      return `${new Intl.NumberFormat('vi-VN').format(min)} VND`;
+    }
     return `${new Intl.NumberFormat('vi-VN').format(min)} - ${new Intl.NumberFormat('vi-VN').format(max)} VND`;
   }
   if (min) return `Từ ${new Intl.NumberFormat('vi-VN').format(min)} VND`;
@@ -371,7 +378,7 @@ export default function AdminJobDetailPage() {
               </strong>
             </div>
             <div><span>Địa điểm</span><strong>{detail.job.location || '—'}</strong></div>
-            <div><span>Mức lương</span><strong>{formatMoney(detail.job.salaryMin, detail.job.salaryMax)}</strong></div>
+            <div><span>Mức lương</span><strong>{formatMoney(detail.job.salaryMin, detail.job.salaryMax, detail.job.salaryType)}</strong></div>
             <div><span>Loại lương</span><strong>{salaryTypeLabel(detail.job.salaryType)}</strong></div>
             <div><span>Kinh nghiệm</span><strong>{detail.job.experienceLevel || '—'}</strong></div>
             <div><span>Loại hình</span><strong>{jobTypeLabel(detail.job.jobType)}</strong></div>
