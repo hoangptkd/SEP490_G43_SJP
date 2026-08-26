@@ -52,6 +52,7 @@ public class JobOffer {
     @Column(name = "start_date")
     private LocalDate startDate;
 
+    @Column(name = "benefits", columnDefinition = "TEXT")
     private String benefits;
 
     @Column(name = "working_location")
@@ -72,10 +73,10 @@ public class JobOffer {
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
-    @Column(name = "candidate_note")
+    @Column(name = "candidate_note", columnDefinition = "TEXT")
     private String candidateNote;
 
-    @Column(name = "employer_note")
+    @Column(name = "employer_note", columnDefinition = "TEXT")
     private String employerNote;
 
     @CreatedDate
