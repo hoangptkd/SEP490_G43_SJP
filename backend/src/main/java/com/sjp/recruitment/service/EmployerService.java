@@ -962,9 +962,21 @@ public class EmployerService {
         String publicId = null;
         try {
             String resourceType = "pdf".equalsIgnoreCase(fileType) ? "raw" : "image";
+            String ext = "";
+            int dotIdx = fileName.lastIndexOf('.');
+            if (dotIdx >= 0) {
+                ext = fileName.substring(dotIdx).toLowerCase();
+            } else {
+                ext = "pdf".equalsIgnoreCase(fileType) ? ".pdf" : ".png";
+            }
+            String cleanPublicId = UUID.randomUUID().toString().replaceAll("-", "") + ext;
+
             Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
                     "folder", "sjp/company_docs",
-                    "resource_type", resourceType
+                    "public_id", cleanPublicId,
+                    "resource_type", resourceType,
+                    "use_filename", true,
+                    "unique_filename", true
             ));
             fileUrl = (String) uploadResult.get("secure_url");
             publicId = (String) uploadResult.get("public_id");
@@ -1039,9 +1051,21 @@ public class EmployerService {
                     cloudinary.uploader().destroy(doc.getPublicId(), ObjectUtils.asMap("resource_type", oldType));
                 } catch (Exception ignored) {}
             }
+            String ext = "";
+            int dotIdx = fileName.lastIndexOf('.');
+            if (dotIdx >= 0) {
+                ext = fileName.substring(dotIdx).toLowerCase();
+            } else {
+                ext = "pdf".equalsIgnoreCase(fileType) ? ".pdf" : ".png";
+            }
+            String cleanPublicId = UUID.randomUUID().toString().replaceAll("-", "") + ext;
+
             Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
                     "folder", "sjp/company_docs",
-                    "resource_type", resourceType
+                    "public_id", cleanPublicId,
+                    "resource_type", resourceType,
+                    "use_filename", true,
+                    "unique_filename", true
             ));
             fileUrl = (String) uploadResult.get("secure_url");
             publicId = (String) uploadResult.get("public_id");

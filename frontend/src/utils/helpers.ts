@@ -53,10 +53,20 @@ export const validatePassword = (password: string): { valid: boolean; errors: st
   return { valid: errors.length === 0, errors };
 };
 
-/** Open file URL in a new tab (browser native image/PDF viewer). */
+/** Open file URL in a new tab (browser native image/PDF viewer or Google Docs Viewer). */
 export const openFileInNewTab = (fileUrl?: string) => {
   if (!fileUrl) return;
-  window.open(fileUrl, '_blank', 'noopener,noreferrer');
+  let url = fileUrl;
+  if (url.includes('res.cloudinary.com') && url.includes('/raw/upload/') && !url.toLowerCase().includes('.pdf') && !url.toLowerCase().includes('.png') && !url.toLowerCase().includes('.jpg')) {
+    url = url + '.pdf';
+  }
+
+  const lower = url.toLowerCase();
+  if (lower.includes('.pdf') || lower.includes('/raw/upload/')) {
+    window.open(`https://docs.google.com/gview?url=${encodeURIComponent(url)}`, '_blank', 'noopener,noreferrer');
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 };
 
 /**
@@ -65,9 +75,18 @@ export const openFileInNewTab = (fileUrl?: string) => {
  */
 export const downloadFile = async (fileUrl?: string, fileName?: string) => {
   if (!fileUrl) return;
-  const name = fileName?.trim() || 'document';
+  let url = fileUrl;
+  if (url.includes('res.cloudinary.com') && url.includes('/raw/upload/') && !url.toLowerCase().includes('.pdf') && !url.toLowerCase().includes('.png') && !url.toLowerCase().includes('.jpg')) {
+    url = url + '.pdf';
+  }
+
+  let name = fileName?.trim() || 'tai_lieu.pdf';
+  if (!name.includes('.')) {
+    name += url.toLowerCase().includes('.pdf') ? '.pdf' : '.png';
+  }
+
   try {
-    const response = await fetch(fileUrl, { mode: 'cors' });
+    const response = await fetch(url, { mode: 'cors' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
@@ -80,6 +99,13 @@ export const downloadFile = async (fileUrl?: string, fileName?: string) => {
     anchor.remove();
     URL.revokeObjectURL(objectUrl);
   } catch {
-    window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = name;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   }
 };
