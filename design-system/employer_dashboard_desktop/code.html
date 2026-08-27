@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Employer Dashboard - Nexus Recruit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lexend:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-container": "#cbe4ff",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#94ccff",
+                        "tertiary-container": "#955301",
+                        "primary-container": "#0369a1",
+                        "on-secondary-fixed": "#00210a",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-low": "#eff4ff",
+                        "surface-container-lowest": "#ffffff",
+                        "outline": "#707881",
+                        "on-primary-fixed": "#001d32",
+                        "inverse-surface": "#213145",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#cbdbf5",
+                        "secondary-container": "#92f5a4",
+                        "on-tertiary-fixed": "#2e1500",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#733f00",
+                        "secondary-fixed": "#95f8a7",
+                        "outline-variant": "#c0c7d1",
+                        "on-secondary-fixed-variant": "#005323",
+                        "background": "#f8f9ff",
+                        "surface-container-highest": "#d3e4fe",
+                        "primary": "#00507d",
+                        "primary-fixed-dim": "#94ccff",
+                        "on-tertiary-fixed-variant": "#6c3a00",
+                        "on-background": "#0b1c30",
+                        "on-surface-variant": "#40474f",
+                        "tertiary-fixed-dim": "#ffb878",
+                        "on-surface": "#0b1c30",
+                        "error": "#ba1a1a",
+                        "surface-container": "#e5eeff",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed": "#cde5ff",
+                        "surface-bright": "#f8f9ff",
+                        "on-tertiary-container": "#ffdbbe",
+                        "secondary-fixed-dim": "#79db8d",
+                        "surface": "#f8f9ff",
+                        "secondary": "#006d30",
+                        "surface-tint": "#006399",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed": "#ffdcc1",
+                        "on-primary-fixed-variant": "#004b74",
+                        "on-secondary-container": "#007233"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "md": "16px",
+                        "container-max": "1440px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "sidebar-width": "280px",
+                        "gutter": "24px",
+                        "xl": "32px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "display-lg": ["Lexend"],
+                        "headline-lg": ["Lexend"],
+                        "headline-md": ["Lexend"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg-mobile": ["Lexend"],
+                        "mono-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "mono-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex">
+<!-- SideNavBar -->
+<aside class="bg-surface dark:bg-surface-dim text-primary dark:text-primary-fixed-dim text-body-md font-body-md h-screen w-64 fixed left-0 top-0 border-r border-outline-variant dark:border-outline flat no shadows flex flex-col gap-sm p-md z-40 hidden md:flex">
+<div class="mb-lg px-sm">
+<h1 class="text-headline-md font-headline-md text-primary">Nexus Recruit</h1>
+</div>
+<nav class="flex-1 flex flex-col gap-sm">
+<a class="bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-xl font-semibold flex items-center gap-md px-md py-sm transition-transform scale-[0.98]" href="#">
+<span class="material-symbols-outlined icon-filled" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="text-on-surface-variant dark:text-on-secondary-fixed-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-high rounded-xl flex items-center gap-md px-md py-sm hover:bg-surface-container-highest dark:hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+                Profile
+            </a>
+<a class="text-on-surface-variant dark:text-on-secondary-fixed-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-high rounded-xl flex items-center gap-md px-md py-sm hover:bg-surface-container-highest dark:hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+                CVs
+            </a>
+<a class="text-on-surface-variant dark:text-on-secondary-fixed-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-high rounded-xl flex items-center gap-md px-md py-sm hover:bg-surface-container-highest dark:hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="bookmark">bookmark</span>
+                Saved Jobs
+            </a>
+<a class="text-on-surface-variant dark:text-on-secondary-fixed-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-high rounded-xl flex items-center gap-md px-md py-sm hover:bg-surface-container-highest dark:hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+                Applications
+            </a>
+<a class="text-on-surface-variant dark:text-on-secondary-fixed-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-high rounded-xl flex items-center gap-md px-md py-sm hover:bg-surface-container-highest dark:hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+                AI Interviews
+            </a>
+<a class="text-on-surface-variant dark:text-on-secondary-fixed-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-high rounded-xl flex items-center gap-md px-md py-sm hover:bg-surface-container-highest dark:hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+                Notifications
+            </a>
+<a class="text-on-surface-variant dark:text-on-secondary-fixed-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-high rounded-xl flex items-center gap-md px-md py-sm hover:bg-surface-container-highest dark:hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+</nav>
+<div class="mt-auto flex flex-col gap-sm">
+<button class="bg-primary text-on-primary font-label-md text-label-md py-sm px-md rounded-lg hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm hover:shadow-md">
+                Upload New CV
+            </button>
+<div class="flex items-center gap-sm mt-md pt-md border-t border-outline-variant px-sm">
+<img alt="Candidate Profile Picture" class="w-8 h-8 rounded-full object-cover" data-alt="A small, professional headshot of a product designer in a bright, modern office setting, suitable for an avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuASb4V35OwMzHcEAJc2VRwn9UBIgm6qV-AuwssYiQuvGOavtRWOuSJ_JjPnjLrWryRmTFANYJw-zfCZuYTEA1hpHNKlbb3ASCNMbxnWDyN5nTHwwuQuWJkfSa2yiqTETps9mfPxmSH35GlmrqiPzjxmTNKNQwi99nzDveOSTLTm6LBlUT_3LWW_qvAAHX9ceaw4KwLaOBd-eVyI8pnsvPqrDA3m6XlpRR87nvlZKUaRz3jl3dKesxbZ"/>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">Alex Thompson</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Product Designer</span>
+</div>
+</div>
+<a class="text-on-surface-variant hover:bg-surface-container-highest rounded-xl flex items-center gap-md px-md py-sm transition-all mt-sm" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+                Help Center
+            </a>
+<a class="text-on-surface-variant hover:bg-surface-container-highest rounded-xl flex items-center gap-md px-md py-sm transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Logout
+            </a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-64 flex flex-col min-h-screen">
+<!-- Mobile Top Nav (Simplified) -->
+<header class="bg-surface-container-lowest border-b border-outline-variant flex items-center justify-between p-md md:hidden sticky top-0 z-50">
+<h1 class="text-headline-md font-headline-md font-bold text-primary">Nexus Recruit</h1>
+<button class="text-on-surface-variant">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</header>
+<div class="flex-1 p-md md:p-lg lg:p-xl max-w-container-max mx-auto w-full flex flex-col gap-lg">
+<!-- Page Header & Action -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-md">
+<div>
+<h2 class="text-headline-lg font-headline-lg text-on-surface">Dashboard</h2>
+<p class="text-body-md font-body-md text-on-surface-variant mt-xs">Overview of your recruitment activity</p>
+</div>
+<button class="bg-primary text-on-primary font-label-md text-label-md py-sm px-lg rounded-lg hover:bg-surface-tint transition-colors shadow-sm hover:shadow-md flex items-center gap-sm">
+<span class="material-symbols-outlined" style="font-size: 20px;">add</span>
+                    Post a New Job
+                </button>
+</div>
+<!-- Metrics Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
+<!-- Metric Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col gap-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-md text-label-md uppercase tracking-wider">Active Jobs</span>
+<span class="material-symbols-outlined text-primary bg-primary-container/20 p-xs rounded-full">work</span>
+</div>
+<div class="text-display-lg font-display-lg text-on-surface mt-sm">24</div>
+<div class="text-body-sm font-body-sm text-secondary flex items-center gap-xs">
+<span class="material-symbols-outlined" style="font-size: 16px;">trending_up</span>
+                        +3 this week
+                    </div>
+</div>
+<!-- Metric Card 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col gap-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-md text-label-md uppercase tracking-wider">Total Candidates</span>
+<span class="material-symbols-outlined text-primary bg-primary-container/20 p-xs rounded-full">groups</span>
+</div>
+<div class="text-display-lg font-display-lg text-on-surface mt-sm">1,248</div>
+<div class="text-body-sm font-body-sm text-secondary flex items-center gap-xs">
+<span class="material-symbols-outlined" style="font-size: 16px;">trending_up</span>
+                        +145 this month
+                    </div>
+</div>
+<!-- Metric Card 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col gap-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-md text-label-md uppercase tracking-wider">Interviews</span>
+<span class="material-symbols-outlined text-primary bg-primary-container/20 p-xs rounded-full">event</span>
+</div>
+<div class="text-display-lg font-display-lg text-on-surface mt-sm">56</div>
+<div class="text-body-sm font-body-sm text-on-surface-variant flex items-center gap-xs">
+                        Scheduled
+                    </div>
+</div>
+<!-- Metric Card 4 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col gap-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-md text-label-md uppercase tracking-wider">Hired</span>
+<span class="material-symbols-outlined text-secondary bg-secondary-container/30 p-xs rounded-full">task_alt</span>
+</div>
+<div class="text-display-lg font-display-lg text-on-surface mt-sm">12</div>
+<div class="text-body-sm font-body-sm text-secondary flex items-center gap-xs">
+<span class="material-symbols-outlined" style="font-size: 16px;">trending_up</span>
+                        +2 this quarter
+                    </div>
+</div>
+</div>
+<!-- Recent Submissions Table -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden flex flex-col mt-md">
+<div class="p-md border-b border-outline-variant flex justify-between items-center bg-surface-container-low/50">
+<h3 class="text-headline-md font-headline-md text-on-surface">Recent Submissions</h3>
+<button class="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs">
+                        View All
+                        <span class="material-symbols-outlined" style="font-size: 18px;">arrow_forward</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-outline-variant bg-surface-bright">
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider w-1/3">Candidate</th>
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider w-1/4">Role Applied</th>
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider w-1/5">Date</th>
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider w-1/5">Status</th>
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider w-16"></th>
+</tr>
+</thead>
+<tbody class="text-body-md font-body-md text-on-surface">
+<tr class="border-b border-surface-container-high hover:bg-surface-container-low transition-colors h-[48px]">
+<td class="px-md py-sm font-medium">Sarah Jenkins</td>
+<td class="px-md py-sm text-on-surface-variant">Senior Frontend Engineer</td>
+<td class="px-md py-sm text-on-surface-variant">Oct 24, 2023</td>
+<td class="px-md py-sm">
+<span class="inline-flex items-center px-sm py-[2px] rounded-full text-label-sm font-label-sm bg-primary-container/10 text-primary">
+                                        Screening
+                                    </span>
+</td>
+<td class="px-md py-sm text-right">
+<button class="text-outline hover:text-on-surface transition-colors"><span class="material-symbols-outlined" style="font-size: 20px;">more_vert</span></button>
+</td>
+</tr>
+<tr class="border-b border-surface-container-high hover:bg-surface-container-low transition-colors h-[48px]">
+<td class="px-md py-sm font-medium">David Chen</td>
+<td class="px-md py-sm text-on-surface-variant">Product Marketing Manager</td>
+<td class="px-md py-sm text-on-surface-variant">Oct 23, 2023</td>
+<td class="px-md py-sm">
+<span class="inline-flex items-center px-sm py-[2px] rounded-full text-label-sm font-label-sm bg-secondary-container/20 text-secondary">
+                                        Interviewed
+                                    </span>
+</td>
+<td class="px-md py-sm text-right">
+<button class="text-outline hover:text-on-surface transition-colors"><span class="material-symbols-outlined" style="font-size: 20px;">more_vert</span></button>
+</td>
+</tr>
+<tr class="border-b border-surface-container-high hover:bg-surface-container-low transition-colors h-[48px]">
+<td class="px-md py-sm font-medium">Elena Rodriguez</td>
+<td class="px-md py-sm text-on-surface-variant">UX Researcher</td>
+<td class="px-md py-sm text-on-surface-variant">Oct 22, 2023</td>
+<td class="px-md py-sm">
+<span class="inline-flex items-center px-sm py-[2px] rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant">
+                                        New
+                                    </span>
+</td>
+<td class="px-md py-sm text-right">
+<button class="text-outline hover:text-on-surface transition-colors"><span class="material-symbols-outlined" style="font-size: 20px;">more_vert</span></button>
+</td>
+</tr>
+<tr class="border-b border-surface-container-high hover:bg-surface-container-low transition-colors h-[48px]">
+<td class="px-md py-sm font-medium">Michael Chang</td>
+<td class="px-md py-sm text-on-surface-variant">DevOps Engineer</td>
+<td class="px-md py-sm text-on-surface-variant">Oct 21, 2023</td>
+<td class="px-md py-sm">
+<span class="inline-flex items-center px-sm py-[2px] rounded-full text-label-sm font-label-sm bg-error-container/30 text-error">
+                                        Rejected
+                                    </span>
+</td>
+<td class="px-md py-sm text-right">
+<button class="text-outline hover:text-on-surface transition-colors"><span class="material-symbols-outlined" style="font-size: 20px;">more_vert</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors h-[48px]">
+<td class="px-md py-sm font-medium">Aisha Patel</td>
+<td class="px-md py-sm text-on-surface-variant">Data Scientist</td>
+<td class="px-md py-sm text-on-surface-variant">Oct 20, 2023</td>
+<td class="px-md py-sm">
+<span class="inline-flex items-center px-sm py-[2px] rounded-full text-label-sm font-label-sm bg-primary-container/10 text-primary">
+                                        Screening
+                                    </span>
+</td>
+<td class="px-md py-sm text-right">
+<button class="text-outline hover:text-on-surface transition-colors"><span class="material-symbols-outlined" style="font-size: 20px;">more_vert</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main>
+</body></html>

@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="Electron" agent="Codex generated draw.io XML" version="28.2.8">
+  <diagram name="AI CV Ranking Main Workflow" id="ai-cv-ranking-mainworkflow-sequential-bw">
+    <mxGraphModel dx="2600" dy="1300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2900" pageHeight="1050" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Main Workflow - AI lọc, sắp xếp, chấm điểm CV ứng viên" style="text;html=1;fontColor=#000000;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="24" width="980" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Bản tuần tự, trắng đen: Employer -&gt; System -&gt; Actor bên thứ 3 -&gt; quay lại System/Employer sau khi xong nhánh." style="text;html=1;fontColor=#000000;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="70" y="56" width="1320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="pool" value="AI CV Ranking Main Workflow - Sequential" style="shape=pool;startSize=34;horizontal=1;childLayout=stackLayout;horizontalStack=0;resizeParent=1;collapsible=0;marginBottom=0;swimlaneLine=1;fontStyle=1;fontSize=15;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="70" y="95" width="2700" height="780" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_actor" value="Actor chính: Employer / Nhà tuyển dụng" style="swimlane;startSize=34;horizontal=0;fontStyle=1;fontSize=13;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;" vertex="1" parent="pool">
+          <mxGeometry x="0" y="0" width="2700" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_system" value="System: Smart Recruitment Portal" style="swimlane;startSize=34;horizontal=0;fontStyle=1;fontSize=13;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;" vertex="1" parent="pool">
+          <mxGeometry x="0" y="250" width="2700" height="310" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_third" value="Actor bên thứ 3: AI / CV Parsing Provider" style="swimlane;startSize=34;horizontal=0;fontStyle=1;fontSize=13;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;" vertex="1" parent="pool">
+          <mxGeometry x="0" y="560" width="2700" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="a_start" value="" style="ellipse;whiteSpace=wrap;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;" vertex="1" parent="lane_actor">
+          <mxGeometry x="40" y="100" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="a_1_open" value="1. Mở danh sách&#10;ứng viên / CV" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;fontStyle=1;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_actor">
+          <mxGeometry x="100" y="75" width="185" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a_2_filter" value="2. Chọn job&#10;và bộ lọc" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_actor">
+          <mxGeometry x="365" y="76" width="165" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="a_3_request" value="3. Yêu cầu AI&#10;xếp hạng CV" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;fontStyle=1;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_actor">
+          <mxGeometry x="625" y="76" width="175" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="a_4_wait" value="4. Chờ kết quả&#10;ranking" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_actor">
+          <mxGeometry x="895" y="76" width="165" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="a_5_ranked" value="5. Xem danh sách&#10;CV đã sắp xếp" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;fontStyle=1;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_actor">
+          <mxGeometry x="1165" y="75" width="190" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a_6_detail" value="6. Mở hồ sơ&#10;ứng viên top" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_actor">
+          <mxGeometry x="1455" y="76" width="185" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="a_7_decide" value="7. Quyết định&#10;xử lý CV" style="rhombus;whiteSpace=wrap;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_actor">
+          <mxGeometry x="1745" y="66" width="145" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="a_8_update" value="8. Cập nhật trạng thái&#10;và ghi chú" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;fontStyle=1;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_actor">
+          <mxGeometry x="2025" y="75" width="205" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a_end" value="" style="ellipse;double=1;whiteSpace=wrap;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;" vertex="1" parent="lane_actor">
+          <mxGeometry x="2380" y="100" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="s_1_auth" value="1.1 Kiểm tra quyền Employer&#10;và công ty sở hữu job" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="100" y="52" width="220" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="s_2_load" value="2.1 Tải job và applications&#10;theo jobId, status, search&#10;(current employer applications flow)" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="365" y="42" width="230" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="s_3_prepare" value="3.1 Chuẩn bị batch ranking&#10;JD, requirements, skills&#10;Candidate profile, CV file/CV online" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="625" y="28" width="250" height="116" as="geometry" />
+        </mxCell>
+        <mxCell id="s_3_normalize" value="3.2 Chuẩn hóa dữ liệu CV&#10;profile + CV version snapshot&#10;PDF thì lấy text qua parser" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="910" y="34" width="245" height="108" as="geometry" />
+        </mxCell>
+        <mxCell id="s_4_baseline" value="4.1 Tính điểm nền&#10;skill match, location, kinh nghiệm&#10;dựa trên MatchingService/JobService" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="1190" y="32" width="250" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="s_4_ai_request" value="4.2 Gửi context sang AI&#10;JD + CV text + profile + tiêu chí ranking" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="1485" y="45" width="245" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="s_5_save_sort" value="5.1 Lưu kết quả ranking&#10;ai_ranking_jobs, ai_ranking_results&#10;application.ai_match_score" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="1780" y="28" width="250" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="s_5_return" value="5.2 Sắp xếp và trả danh sách&#10;rank, score 0-100, lý do phù hợp&#10;matched/missing skills" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="2070" y="36" width="245" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="s_6_detail" value="6.1 Hiển thị chi tiết&#10;CV, profile, kinh nghiệm, timeline&#10;và AI explanation" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="1455" y="185" width="240" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="s_8_update" value="8.1 Validate quyền và update application&#10;SHORTLISTED / INTERVIEW_SCHEDULED&#10;REJECTED / ACCEPTED&#10;Ghi application timeline" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_system">
+          <mxGeometry x="2025" y="180" width="245" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="t_3_parser" value="3.2A CV Parsing/OCR Provider&#10;trích xuất text từ PDF CV&#10;khi CV không có snapshot" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_third">
+          <mxGeometry x="910" y="50" width="245" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="t_4_ai" value="4.2A AI Ranking Model&#10;chấm CV theo JD&#10;trả score, rank, reason, gap" style="rounded=0;whiteSpace=wrap;arcSize=0;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=8;" vertex="1" parent="lane_third">
+          <mxGeometry x="1485" y="48" width="245" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_0" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_start" target="a_1_open">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_1_open" target="a_2_filter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_2_filter" target="a_3_request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_3_request" target="a_4_wait">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_4_wait" target="a_5_ranked">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_5_ranked" target="a_6_detail">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_6_detail" target="a_7_decide">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_7" value="shortlist / mời PV / từ chối" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_7_decide" target="a_8_update">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e_8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="a_8_update" target="a_end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_1_auth" value="request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="a_1_open" target="s_1_auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_1_auth_done" value="xong kiểm tra" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="s_1_auth" target="a_2_filter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_2_load" value="filter" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="a_2_filter" target="s_2_load">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_2_load_done" value="trả danh sách hồ sơ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="s_2_load" target="a_3_request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_3_prepare" value="start ranking" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="a_3_request" target="s_3_prepare">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_3_normalize" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="s_3_prepare" target="s_3_normalize">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_3_parser" value="CV PDF" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="s_3_normalize" target="t_3_parser">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_3_parser_back" value="CV text" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="t_3_parser" target="s_4_baseline">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_3_norm_baseline" value="CV snapshot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="s_3_normalize" target="s_4_baseline">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1032" y="170" />
+              <mxPoint x="1315" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x_4_ai_context" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="s_4_baseline" target="s_4_ai_request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_4_ai" value="ranking context" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="s_4_ai_request" target="t_4_ai">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_4_ai_back" value="scores" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="t_4_ai" target="s_5_save_sort">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_5_return" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;" edge="1" parent="pool" source="s_5_save_sort" target="s_5_return">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_5_actor" value="xong ranking" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="s_5_return" target="a_5_ranked">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_6_detail" value="open detail" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="a_6_detail" target="s_6_detail">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_6_detail_back" value="xem xong hồ sơ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="s_6_detail" target="a_7_decide">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_8_update" value="save decision" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="a_8_update" target="s_8_update">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x_8_done" value="hoàn tất" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;strokeColor=#000000;dashed=1;" edge="1" parent="pool" source="s_8_update" target="a_end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="note" value="Ghi chú: Workflow giữ các bước chính 1 -&gt; 8, bỏ qua nhánh lỗi nhỏ để tránh trùng flow. Code hiện có Employer Applications, MatchingService/JobService match score, schema ai_ranking_jobs/ai_ranking_results; phần AI ranking CV là luồng nghiệp vụ đề xuất dựa trên các nền tảng này. Toàn bộ diagram dùng trắng đen." style="shape=note;whiteSpace=wrap;backgroundOutline=1;size=16;fontSize=11;html=1;fontColor=#000000;strokeColor=#000000;fillColor=#ffffff;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="70" y="900" width="1560" height="84" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

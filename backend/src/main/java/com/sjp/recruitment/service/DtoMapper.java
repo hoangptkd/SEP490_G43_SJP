@@ -1,0 +1,414 @@
+package com.sjp.recruitment.service;
+
+import com.sjp.recruitment.model.dto.response.*;
+import com.sjp.recruitment.model.dto.SubmittedResumeSnapshot;
+import com.sjp.recruitment.model.entity.*;
+import com.sjp.recruitment.repository.ApplicationRepository;
+import com.sjp.recruitment.repository.JobReviewHistoryRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+import java.time.Period;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class DtoMapper {
+
+    @Autowired
+    private JobReviewHistoryRepository jobReviewHistoryRepository;
+
+    @Autowired
+    private ApplicationRepository applicationRepository;
+
+    @Autowired
+    private com.sjp.recruitment.repository.AiRankingResultRepository aiRankingResultRepository;
+
+    @Autowired(required = false)
+    private FeatureLimitService featureLimitService;
+
+    public UserResponse toUserResponse(User user) {
+        return new UserResponse(
+                String.valueOf(user.getId()),
+                user.getEmail(),
+                user.getRoleEnum() == null ? user.getRole() : user.getRoleEnum().name(),
+                user.getStatusEnum() == null ? user.getStatus() : user.getStatusEnum().name(),
+                user.isEmailVerified()
+        );
+    }
+
+    public CandidateProfileResponse toCandidateProfileResponse(CandidateProfile profile, boolean applyReady) {
+        return toCandidateProfileResponse(profile, applyReady, List.of());
+    }
+
+    public CandidateProfileResponse toCandidateProfileResponse(
+            CandidateProfile profile, boolean applyReady, List<String> missingReadinessItems) {
+        if (profile == null) {
+            return null;
+        }
+        String userId = null;
+        try {
+            if (profile.getUser() != null && profile.getUser().getId() != null) {
+                userId = String.valueOf(profile.getUser().getId());
+            }
+        } catch (Exception ignored) {}
+        return new CandidateProfileResponse(
+                String.valueOf(profile.getId()),
+                userId,
+                profile.getFullName(),
+                profile.getPhone(),
+                profile.getDateOfBirth(),
+                profile.getDateOfBirth() == null ? null : Period.between(profile.getDateOfBirth(), LocalDate.now()).getYears(),
+                profile.getLocation(),
+                profile.getBio(),
+                safeList(profile.getSkills()),
+                profile.getHeadline(),
+                profile.getExperienceYears(),
+                profile.getExperienceLevel(),
+                profile.getLinkedinUrl(),
+                profile.getPortfolioUrl(),
+                safeList(profile.getDesiredJobTitles()),
+                profile.getExpectedSalary(),
+                safeList(profile.getPreferredLocations()),
+                profile.isWillingToRelocate(),
+                profile.getOnboardingStatus(),
+                profile.getOnboardingCompletedAt(),
+                safeTypedList(profile.getEducation()),
+                safeTypedList(profile.getWorkExperience()),
+                safeTypedList(profile.getProjects()),
+                safeTypedList(profile.getCertifications()),
+                applyReady,
+                missingReadinessItems == null ? List.of() : List.copyOf(missingReadinessItems)
+        );
+    }
+
+    public CvResponse toCvResponse(CandidateCv cv) {
+        if (cv == null) {
+            return null;
+        }
+        return new CvResponse(
+                String.valueOf(cv.getId()),
+                cv.getOriginalFileName(),
+                cv.getContentType(),
+                cv.getFileSize(),
+                cv.isDefaultCv(),
+                cv.isDeleted(),
+                cv.getCreatedAt()
+        );
+    }
+
+    public CvVersionResponse toCvVersionResponse(CvVersion version) {
+        if (version == null) {
+            return null;
+        }
+        return new CvVersionResponse(
+                String.valueOf(version.getId()),
+                version.getTitle(),
+                version.getTemplateKey(),
+                version.getSnapshot(),
+                version.getUpdatedAt()
+        );
+    }
+
+    public CompanyResponse toCompanyResponse(Company company) {
+        if (company == null) return null;
+        return new CompanyResponse(String.valueOf(company.getId()), company.getName(), company.getWebsite(), company.getLocation(), company.getLogoUrl());
+    }
+
+    public CompanyLocationResponse toCompanyLocationResponse(CompanyLocation location) {
+        if (location == null) {
+            return null;
+        }
+        return new CompanyLocationResponse(
+                String.valueOf(location.getId()),
+                location.getBranchName(),
+                location.getAddress(),
+                location.getCity(),
+                location.getDistrict(),
+                location.getCountry(),
+                location.isHeadquarter()
+        );
+    }
+
+    public CompanyIndustryResponse toCompanyIndustryResponse(CompanyIndustry companyIndustry) {
+        if (companyIndustry == null || companyIndustry.getCategory() == null) {
+            return null;
+        }
+        Category cat = companyIndustry.getCategory();
+        return new CompanyIndustryResponse(
+                companyIndustry.getId(),
+                cat.getId(),
+                cat.getName(),
+                cat.getSlug(),
+                companyIndustry.isPrimary()
+        );
+    }
+
+    public CompanyDocumentResponse toCompanyDocumentResponse(CompanyDocument doc) {
+        if (doc == null) {
+            return null;
+        }
+        String url = doc.getFileUrl();
+        if (url != null && url.contains("res.cloudinary.com") && url.contains("/raw/upload/") && !url.toLowerCase().contains(".pdf") && !url.toLowerCase().contains(".png") && !url.toLowerCase().contains(".jpg")) {
+            url = url + ".pdf";
+        }
+        return new CompanyDocumentResponse(
+                String.valueOf(doc.getId()),
+                doc.getFileName(),
+                url,
+                doc.getFileType(),
+                doc.getStatus(),
+                doc.getRejectReason(),
+                doc.getUploadedAt(),
+                doc.getReviewedAt()
+        );
+    }
+
+    public JobResponse toJobResponse(Job job, boolean saved, boolean applied, Integer matchScore) {
+        long appsCount = (applicationRepository != null && job.getId() != null) ? applicationRepository.countByJobId(job.getId()) : 0L;
+        int listingPriority = 0;
+        if (featureLimitService != null && job.getEmployer() != null && job.getEmployer().getUser() != null) {
+            listingPriority = featureLimitService.resolveListingPriorityForUser(job.getEmployer().getUser().getId());
+        }
+        return toJobResponse(job, saved, applied, matchScore, appsCount, listingPriority);
+    }
+
+    public JobResponse toJobResponse(
+            Job job,
+            boolean saved,
+            boolean applied,
+            Integer matchScore,
+            long appsCount,
+            int listingPriority
+    ) {
+        String rejectionReason = job.getRejectionReason();
+        if (rejectionReason == null && "rejected".equalsIgnoreCase(job.getStatus()) && jobReviewHistoryRepository != null && job.getId() != null) {
+            rejectionReason = jobReviewHistoryRepository.findFirstByJobIdAndActionOrderByReviewedAtDesc(job.getId(), "REJECTED")
+                    .map(JobReviewHistory::getReason)
+                    .orElse(null);
+        }
+        String frontendStatus = toFrontendJobStatus(job.getStatus());
+        if (("PUBLISHED".equals(frontendStatus) || "ACTIVE".equals(frontendStatus))
+                && job.getDeadline() != null && job.getDeadline().isBefore(java.time.LocalDate.now())) {
+            frontendStatus = "EXPIRED";
+        }
+        return new JobResponse(
+                String.valueOf(job.getId()),
+                job.getTitle(),
+                job.getDescription(),
+                safeList(job.getRequirements()),
+                safeList(job.getSkills()),
+                job.getSalaryMin(),
+                job.getSalaryMax(),
+                job.getLocation(),
+                job.getExperienceLevel(),
+                job.getDeadline() == null ? null : job.getDeadline().atStartOfDay(),
+                frontendStatus,
+                toCompanyResponse(job.getCompany()),
+                job.getCompanyLocation() == null ? null : String.valueOf(job.getCompanyLocation().getId()),
+                toCompanyLocationResponse(job.getCompanyLocation()),
+                saved,
+                applied,
+                matchScore,
+                job.getBenefits(),
+                job.getVacancies(),
+                job.getWorkingTime(),
+                job.getSalaryType(),
+                job.getJobType(),
+                job.getWorkMode(),
+                job.getViewsCount() != null ? job.getViewsCount() : 0,
+                rejectionReason,
+                appsCount,
+                job.getReportFixDeadline(),
+                job.getRankingConfig(),
+                listingPriority,
+                FeatureLimitService.isFeatured(listingPriority)
+        );
+    }
+
+    public ApplicationTimelineResponse toTimelineResponse(ApplicationStatusHistory history) {
+        return new ApplicationTimelineResponse(
+                String.valueOf(history.getId()),
+                toFrontendApplicationStatus(history.getFromStatus()),
+                toFrontendApplicationStatus(history.getToStatus()),
+                history.getPublicNote(),
+                history.getCreatedAt()
+        );
+    }
+
+    public ApplicationResponse toApplicationResponse(
+            Application application,
+            JobResponse job,
+            List<ApplicationTimelineResponse> timeline,
+            List<InterviewScheduleResponse> interviews,
+            JobOfferResponse jobOffer) {
+        CandidateCv submittedCv = application.getCv();
+        CvVersion submittedVersion = application.getCvVersion();
+        boolean builderResume = submittedVersion != null && "builder".equalsIgnoreCase(submittedVersion.getSourceType());
+        SubmittedResumeSnapshot resumeSnapshot = application.getResumeSnapshot();
+        if (resumeSnapshot == null && builderResume) {
+            resumeSnapshot = SubmittedResumeSnapshot.fromBuilder(submittedVersion);
+        } else if (resumeSnapshot == null && submittedCv != null) {
+            resumeSnapshot = SubmittedResumeSnapshot.fromUploaded(submittedCv);
+        }
+        SubmittedResumeResponse submittedResume = resumeSnapshot == null ? null : new SubmittedResumeResponse(
+                resumeSnapshot.sourceType(),
+                resumeSnapshot.resumeId(),
+                resumeSnapshot.title(),
+                resumeSnapshot.originalFileName(),
+                resumeSnapshot.contentType(),
+                resumeSnapshot.fileSize(),
+                resumeSnapshot.templateKey(),
+                resumeSnapshot.builderSnapshot(),
+                resumeSnapshot.sourceUpdatedAt(),
+                "uploaded".equalsIgnoreCase(resumeSnapshot.sourceType())
+                        && ((application.getResumeFileStorageKeySnapshot() != null
+                        && !application.getResumeFileStorageKeySnapshot().isBlank())
+                        || (submittedCv != null && submittedCv.getStorageKey() != null && !submittedCv.getStorageKey().isBlank()))
+        );
+        com.sjp.recruitment.model.entity.AiRankingResult aiResult = application.getId() != null ? 
+                aiRankingResultRepository.findByApplicationId(application.getId()).orElse(null) : null;
+
+        return new ApplicationResponse(
+                String.valueOf(application.getId()),
+                job,
+                application.getCandidate() != null ? toCandidateProfileResponse(application.getCandidate(), true) : null,
+                builderResume ? null : toCvResponse(submittedCv),
+                builderResume ? toCvVersionResponse(submittedVersion) : null,
+                submittedResume,
+                application.getPreferredLocation(),
+                application.getCoverLetter(),
+                toFrontendApplicationStatus(application.getStatus()),
+                application.getSubmittedAt(),
+                application.getUpdatedAt(),
+                timeline,
+                interviews,
+                jobOffer,
+                application.getAiMatchScore(),
+                application.getAiMatchAnalysis(),
+                aiResult != null ? aiResult.getMissingRequirements() : null,
+                aiResult != null ? aiResult.getScoreBreakdown() : null,
+                application.getNeedRerank()
+        );
+    }
+
+    public NotificationResponse toNotificationResponse(Notification notification) {
+        return new NotificationResponse(
+                String.valueOf(notification.getId()),
+                notification.getType(),
+                notification.getTitle(),
+                notification.getMessage(),
+                notification.isRead(),
+                notification.getRelatedEntityType(),
+                notification.getRelatedEntityId() == null ? null : String.valueOf(notification.getRelatedEntityId()),
+                notification.getCreatedAt()
+        );
+    }
+
+    private List<String> safeList(List<String> values) {
+        try {
+            return values == null ? List.of() : new ArrayList<>(values);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private <T> List<T> safeTypedList(List<T> values) {
+        try {
+            return values == null ? List.of() : new ArrayList<>(values);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private String toFrontendJobStatus(String status) {
+        if (status == null) {
+            return "DRAFT";
+        }
+        return switch (status.toLowerCase()) {
+            case "published", "active" -> "PUBLISHED";
+            case "pending_review" -> "PENDING_REVIEW";
+            case "awaiting_company" -> "AWAITING_COMPANY";
+            case "rejected" -> "REJECTED";
+            case "closed" -> "CLOSED";
+            case "removed" -> "REMOVED";
+            case "expired" -> "EXPIRED";
+            default -> status.toUpperCase();
+        };
+    }
+
+    private String toFrontendApplicationStatus(String status) {
+        if (status == null) {
+            return null;
+        }
+        return switch (status.toLowerCase()) {
+            case "applied" -> "SUBMITTED";
+            case "reviewed" -> "UNDER_REVIEW";
+            case "shortlisted" -> "SHORTLISTED";
+            case "interview_scheduled" -> "INTERVIEW_SCHEDULED";
+            case "accepted" -> "ACCEPTED";
+            case "rejected" -> "REJECTED";
+            case "withdrawn" -> "WITHDRAWN";
+            default -> status.toUpperCase();
+        };
+    }
+
+    public InterviewScheduleResponse toInterviewScheduleResponse(InterviewSchedule schedule) {
+        if (schedule == null) return null;
+        return new InterviewScheduleResponse(
+                schedule.getId(),
+                schedule.getApplication() != null ? schedule.getApplication().getId() : null,
+                schedule.getRoundNumber(),
+                schedule.getScheduledAt(),
+                schedule.getMeetingLink(),
+                schedule.getLocation(),
+                schedule.getStatus(),
+                schedule.getNote(),
+                schedule.getViewedAt(),
+                schedule.getRespondedAt(),
+                schedule.getResponseDeadline(),
+                schedule.getLastReminderAt(),
+                schedule.getCandidateRescheduleNote(),
+                schedule.getEmployerRescheduleResponse(),
+                schedule.getEmployerRescheduleNote(),
+                schedule.getEmployerRescheduleAt(),
+                schedule.getCreatedAt(),
+                schedule.getUpdatedAt()
+        );
+    }
+
+    public JobOfferResponse toJobOfferResponse(JobOffer offer) {
+        if (offer == null) return null;
+        String mappedStatus = offer.getStatus();
+        if ("rejected".equalsIgnoreCase(mappedStatus)
+                && offer.getApplication() != null
+                && "accepted".equalsIgnoreCase(offer.getApplication().getStatus())
+                && offer.getCandidateNote() != null && !offer.getCandidateNote().isBlank()
+                && (offer.getEmployerNote() == null || offer.getEmployerNote().isBlank())) {
+            mappedStatus = "negotiation_requested";
+        } else if ("sent".equalsIgnoreCase(mappedStatus) && offer.getEmployerNote() != null && !offer.getEmployerNote().isBlank() && offer.getCandidateNote() != null && !offer.getCandidateNote().isBlank()) {
+            mappedStatus = "employer_declined_negotiation";
+        }
+        return new JobOfferResponse(
+                offer.getId(),
+                offer.getApplication() != null ? offer.getApplication().getId() : null,
+                offer.getPositionTitle(),
+                offer.getSalary(),
+                offer.getSalaryCurrency(),
+                offer.getSalaryType(),
+                offer.getStartDate(),
+                offer.getBenefits(),
+                offer.getWorkingLocation(),
+                offer.getOfferLetterUrl(),
+                mappedStatus,
+                offer.getSentAt(),
+                offer.getRespondedAt(),
+                offer.getExpiresAt(),
+                offer.getCandidateNote(),
+                offer.getEmployerNote(),
+                offer.getCreatedAt(),
+                offer.getUpdatedAt()
+        );
+    }
+}

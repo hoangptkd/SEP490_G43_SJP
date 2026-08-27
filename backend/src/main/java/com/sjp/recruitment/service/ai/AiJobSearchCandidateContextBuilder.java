@@ -1,0 +1,289 @@
+package com.sjp.recruitment.service.ai;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sjp.recruitment.config.AiJobSearchProperties;
+import com.sjp.recruitment.exception.ApiException;
+import com.sjp.recruitment.model.entity.CandidateCv;
+import com.sjp.recruitment.model.entity.CandidateProfile;
+import com.sjp.recruitment.repository.CandidateCvRepository;
+import com.sjp.recruitment.service.storage.StorageService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.tika.Tika;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.text.Normalizer;
+import java.util.*;
+import java.util.regex.Pattern;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class AiJobSearchCandidateContextBuilder {
+    private static final Pattern EMAIL = Pattern.compile("(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b");
+    private static final Pattern PHONE = Pattern.compile("(?<!\\d)(?:\\+?84|0)[\\s.-]?(?:\\d[\\s.-]?){8,10}(?!\\d)");
+    private static final Pattern DATE_OF_BIRTH = Pattern.compile(
+            "(?imu)(ngày\\s*sinh|date\\s*of\\s*birth|dob)\\s*[:\\-]?\\s*\\d{1,2}[\\s./-]\\d{1,2}[\\s./-]\\d{2,4}");
+    private static final Pattern ADDRESS = Pattern.compile(
+            "(?imu)^(địa\\s*chỉ|address)\\s*[:\\-]\\s*[^\\r\\n]{1,240}");
+    private static final Set<String> PRIVATE_KEYS = Set.of(
+            "fullname", "firstname", "lastname", "email", "phone", "phonenumber",
+            "dateofbirth", "dob", "birthday", "address", "avatar", "avatarurl", "photo",
+            "hoten", "hovaten", "tenungvien", "sodienthoai", "ngaysinh", "diachi"
+    );
+
+    private final CandidateCvRepository candidateCvRepository;
+    private final StorageService storageService;
+    private final ObjectMapper objectMapper;
+    private final AiJobSearchProperties properties;
+
+    @Transactional
+    public AiJobSearchContext build(CandidateProfile candidate) {
+        if (candidate == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AI_JOB_SEARCH_PROFILE_REQUIRED",
+                    "Vui lòng hoàn thiện hồ sơ ứng viên trước khi sử dụng tìm việc bằng AI.");
+        }
+        CandidateCv cv = candidateCvRepository
+                .findFirstByCandidateIdAndDefaultCvTrueAndDeletedAtIsNullOrderByUpdatedAtDesc(candidate.getId())
+                .orElse(null);
+        return buildContext(candidate, cv);
+    }
+
+    @Transactional
+    public AiJobSearchContext build(CandidateProfile candidate, UUID cvId) {
+        if (candidate == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AI_INTERVIEW_CV_REQUIRED",
+                    "Vui lòng chọn một CV trước khi luyện phỏng vấn.");
+        }
+        CandidateCv cv = candidateCvRepository.findByIdAndCandidateId(cvId, candidate.getId())
+                .filter(item -> !item.isDeleted())
+                .filter(item -> "uploaded".equalsIgnoreCase(item.getSourceType())
+                        || "builder".equalsIgnoreCase(item.getSourceType()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND",
+                        "Không tìm thấy CV đã chọn."));
+        return buildContext(candidate, cv);
+    }
+
+    /** Isolated from the profile-enriched context used by interview preparation. */
+    @Transactional
+    public AiJobSearchContext buildForJobSearch(CandidateProfile candidate, UUID cvId) {
+        if (cvId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AI_JOB_SEARCH_CV_REQUIRED",
+                    "Vui lòng chọn CV để tìm việc bằng AI.");
+        }
+        CandidateCv cv = candidateCvRepository.findByIdAndCandidateId(cvId, candidate.getId())
+                .filter(item -> !item.isDeleted())
+                .filter(item -> "uploaded".equalsIgnoreCase(item.getSourceType())
+                        || "builder".equalsIgnoreCase(item.getSourceType()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND",
+                        "CV đã chọn không tồn tại hoặc không thuộc tài khoản của bạn."));
+        String cvText = normalizedCvText(cv, candidate);
+        String contentForValidation = "builder".equalsIgnoreCase(cv.getSourceType())
+                ? builderValues(removePrivateFields(cv.getSnapshot())) : cvText;
+        String meaningful = contentForValidation.replaceAll("\\[[A-Z_]+\\]", "")
+                .replaceAll("[^\\p{L}\\p{N}]", "");
+        if (meaningful.length() < 40) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AI_JOB_SEARCH_CV_UNREADABLE",
+                    "CV chưa có đủ nội dung đọc được. Hãy chọn CV khác hoặc tải lên PDF có văn bản thay vì bản scan.");
+        }
+        List<String> preferredLocations = safeStringList(candidate.getPreferredLocations());
+        Map<String, Object> preferences = new LinkedHashMap<>();
+        preferences.put("preferredLocations", preferredLocations);
+        preferences.put("expectedSalary", candidate.getExpectedSalary());
+        preferences.put("willingToRelocate", candidate.isWillingToRelocate());
+        Map<String, Object> provider = new LinkedHashMap<>();
+        provider.put("cvContent", cvText);
+        provider.put("jobPreferences", preferences);
+        Map<String, Object> hash = new TreeMap<>(provider);
+        hash.put("cvId", cv.getId().toString());
+        hash.put("cvUpdatedAt", String.valueOf(cv.getUpdatedAt()));
+        hash.put("cvType", cvType(cv));
+        hash.put("contextVersion", "selected-cv-only-v1");
+        return new AiJobSearchContext(candidate, cv, sha256(toJson(hash)), false,
+                List.of(), "", "", "", null, "", List.of(), candidate.getExpectedSalary(),
+                preferredLocations, candidate.isWillingToRelocate(), List.of(), List.of(), List.of(), List.of(),
+                cvText, Collections.unmodifiableMap(provider));
+    }
+
+    private String builderValues(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return map.values().stream().map(this::builderValues).collect(java.util.stream.Collectors.joining(" "));
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.stream().map(this::builderValues).collect(java.util.stream.Collectors.joining(" "));
+        }
+        return value instanceof String text ? text : "";
+    }
+
+    private AiJobSearchContext buildContext(CandidateProfile candidate, CandidateCv cv) {
+        List<String> skills = candidate.getSkills().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(value -> value.replaceAll("\\s+", " "))
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+
+        String cvText = cv == null ? "" : normalizedCvText(cv, candidate);
+        Map<String, Object> providerContext = new LinkedHashMap<>();
+        providerContext.put("headline", safe(candidate.getHeadline()));
+        providerContext.put("professionalSummary", safe(candidate.getBio()));
+        providerContext.put("location", safe(candidate.getLocation()));
+        providerContext.put("experienceYears", candidate.getExperienceYears());
+        providerContext.put("experienceLevel", safe(candidate.getExperienceLevel()));
+        providerContext.put("desiredJobTitles", safeList(candidate.getDesiredJobTitles()));
+        providerContext.put("expectedSalary", candidate.getExpectedSalary());
+        providerContext.put("preferredLocations", safeList(candidate.getPreferredLocations()));
+        providerContext.put("willingToRelocate", candidate.isWillingToRelocate());
+        providerContext.put("skills", skills);
+        providerContext.put("education", safeList(candidate.getEducation()));
+        providerContext.put("workExperience", safeList(candidate.getWorkExperience()));
+        providerContext.put("projects", safeList(candidate.getProjects()));
+        providerContext.put("certifications", safeList(candidate.getCertifications()));
+        providerContext.put("cvContent", cvText);
+
+        Map<String, Object> hashInput = new TreeMap<>();
+        hashInput.putAll(providerContext);
+        hashInput.put("defaultCvId", cv == null ? null : cv.getId().toString());
+        hashInput.put("defaultCvType", cv == null ? null : cvType(cv));
+        hashInput.put("promptVersion", properties.getPromptVersion());
+
+        return new AiJobSearchContext(
+                candidate,
+                cv,
+                sha256(toJson(hashInput)),
+                cv == null,
+                skills,
+                safe(candidate.getHeadline()),
+                safe(candidate.getBio()),
+                safe(candidate.getLocation()),
+                candidate.getExperienceYears(),
+                safe(candidate.getExperienceLevel()),
+                safeStringList(candidate.getDesiredJobTitles()),
+                candidate.getExpectedSalary(),
+                safeStringList(candidate.getPreferredLocations()),
+                candidate.isWillingToRelocate(),
+                safeList(candidate.getEducation()),
+                safeList(candidate.getWorkExperience()),
+                safeList(candidate.getProjects()),
+                safeList(candidate.getCertifications()),
+                cvText,
+                Collections.unmodifiableMap(providerContext)
+        );
+    }
+
+    private List<String> safeStringList(List<String> values) {
+        return values == null ? List.of() : values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .toList();
+    }
+
+    private String normalizedCvText(CandidateCv cv, CandidateProfile candidate) {
+        String sourceType = safe(cv.getSourceType()).toLowerCase(Locale.ROOT);
+        String raw;
+        if ("builder".equals(sourceType)) {
+            raw = toJson(removePrivateFields(cv.getSnapshot()));
+        } else {
+            raw = safe(cv.getParsedText());
+            if (raw.isBlank()) {
+                raw = extractUploadedCv(cv);
+                if (!raw.isBlank()) {
+                    cv.setParsedText(normalizeWhitespace(raw));
+                    cv.setParseStatus("parsed");
+                    candidateCvRepository.save(cv);
+                }
+            }
+        }
+        String sanitized = EMAIL.matcher(raw).replaceAll("[EMAIL_REMOVED]");
+        sanitized = PHONE.matcher(sanitized).replaceAll("[PHONE_REMOVED]");
+        sanitized = DATE_OF_BIRTH.matcher(sanitized).replaceAll("$1: [DOB_REMOVED]");
+        sanitized = ADDRESS.matcher(sanitized).replaceAll("$1: [ADDRESS_REMOVED]");
+        String fullName = candidate.getFullName();
+        if (fullName != null && !fullName.isBlank()) {
+            sanitized = sanitized.replaceAll("(?i)" + Pattern.quote(fullName.trim()), "[NAME_REMOVED]");
+        }
+        sanitized = normalizeWhitespace(sanitized);
+        return sanitized.length() <= properties.getMaxCvCharacters()
+                ? sanitized
+                : sanitized.substring(0, properties.getMaxCvCharacters());
+    }
+
+    private String extractUploadedCv(CandidateCv cv) {
+        if (cv.getStorageKey() == null || cv.getStorageKey().isBlank()) {
+            return "";
+        }
+        try {
+            try (InputStream stream = storageService.loadCandidateCv(cv.getStorageKey()).getInputStream()) {
+                return new Tika().parseToString(stream);
+            }
+        } catch (Exception exception) {
+            log.warn("Không thể trích xuất CV cho AI Job Search, cvId={}", cv.getId());
+            return "";
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object removePrivateFields(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> cleaned = new TreeMap<>();
+            map.forEach((key, child) -> {
+                String textKey = String.valueOf(key);
+                String normalizedKey = Normalizer.normalize(textKey, Normalizer.Form.NFD)
+                        .replaceAll("\\p{M}", "")
+                        .replaceAll("[^A-Za-z]", "")
+                        .toLowerCase(Locale.ROOT);
+                if (!PRIVATE_KEYS.contains(normalizedKey)) {
+                    cleaned.put(textKey, removePrivateFields(child));
+                }
+            });
+            return cleaned;
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.stream().map(this::removePrivateFields).toList();
+        }
+        return value;
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "AI_JOB_SEARCH_CONTEXT_FAILED",
+                    "Không thể chuẩn bị dữ liệu nghề nghiệp cho AI.");
+        }
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (Exception exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
+    }
+
+    private String cvType(CandidateCv cv) {
+        return "builder".equalsIgnoreCase(cv.getSourceType()) ? "BUILDER" : "UPLOADED";
+    }
+
+    private List<?> safeList(List<?> value) {
+        return value == null ? List.of() : value;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String normalizeWhitespace(String value) {
+        return safe(value).replaceAll("[\\p{Z}\\s]+", " ").trim();
+    }
+}

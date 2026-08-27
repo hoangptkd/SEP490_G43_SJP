@@ -1,0 +1,9 @@
+package com.sjp.recruitment.model.dto.request;
+
+import jakarta.validation.constraints.NotBlank;
+
+public record AiJobSearchConsentRequest(
+        boolean accepted,
+        @NotBlank String policyVersion
+) {
+}

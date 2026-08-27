@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CV Management - Nexus Recruit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lexend:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#f8f9ff",
+                        "on-secondary-fixed": "#00210a",
+                        "on-tertiary-fixed-variant": "#6c3a00",
+                        "surface-container-highest": "#d3e4fe",
+                        "secondary-container": "#92f5a4",
+                        "surface-container": "#e5eeff",
+                        "on-surface-variant": "#40474f",
+                        "secondary": "#006d30",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#94ccff",
+                        "primary-fixed": "#cde5ff",
+                        "on-surface": "#0b1c30",
+                        "outline": "#707881",
+                        "tertiary": "#733f00",
+                        "on-secondary-fixed-variant": "#005323",
+                        "tertiary-fixed-dim": "#ffb878",
+                        "inverse-on-surface": "#eaf1ff",
+                        "background": "#f8f9ff",
+                        "tertiary-container": "#955301",
+                        "on-primary-fixed": "#001d32",
+                        "surface-container-low": "#eff4ff",
+                        "on-tertiary-fixed": "#2e1500",
+                        "on-primary": "#ffffff",
+                        "inverse-primary": "#94ccff",
+                        "on-primary-container": "#cbe4ff",
+                        "primary": "#00507d",
+                        "on-background": "#0b1c30",
+                        "on-tertiary-container": "#ffdbbe",
+                        "surface-dim": "#cbdbf5",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed-dim": "#79db8d",
+                        "outline-variant": "#c0c7d1",
+                        "surface-bright": "#f8f9ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-tint": "#006399",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed": "#95f8a7",
+                        "tertiary-fixed": "#ffdcc1",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#dce9ff",
+                        "inverse-surface": "#213145",
+                        "on-error": "#ffffff",
+                        "on-secondary-container": "#007233",
+                        "error": "#ba1a1a",
+                        "primary-container": "#0369a1",
+                        "on-primary-fixed-variant": "#004b74"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "sm": "8px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "container-max": "1440px",
+                        "sidebar-width": "280px",
+                        "base": "4px",
+                        "gutter": "24px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "mono-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "display-lg": ["Lexend"],
+                        "label-md": ["Inter"],
+                        "headline-md": ["Lexend"],
+                        "headline-lg-mobile": ["Lexend"],
+                        "body-sm": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg": ["Lexend"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "mono-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface h-full flex font-body-md text-body-md overflow-hidden">
+<!-- SideNavBar -->
+<nav class="bg-surface dark:bg-surface-dim h-screen w-sidebar-width fixed left-0 top-0 border-r border-outline-variant dark:border-outline flex flex-col gap-sm p-md z-40 hidden md:flex">
+<!-- Header -->
+<div class="flex items-center gap-md mb-xl mt-sm px-sm">
+<img class="w-12 h-12 rounded-full object-cover border border-outline-variant" data-alt="A professional headshot of a young male designer with short brown hair, wearing a casual navy blazer and white t-shirt, smiling softly against a clean, light grey studio background. The lighting is soft and flattering, typical of a modern corporate portrait." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBXsjIL2gsfYLBPSHWBLOU_swYV5_Eq2KMzV-ciexCuyKwCW2sRb9CDAqoebrHKGyjKBtyL0FqMZhAxw1F_xTtn5LByh6AEYDUTG84HH6GyrSdrvKfNOqypdHhIiTSof5srRvRKkZ1LCb_5oNOYw0tnpU5-3p9iM8UNtbxzl2GTMuXvZi5WdFtXrVLPA3U3PtCe2tylMPF1tR03tvLQEJrSMqkgzBsTAglOKzka6fH7xFaFGPKCT9j0"/>
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md text-primary truncate">Alex Thompson</span>
+<span class="text-body-sm font-body-sm text-on-surface-variant truncate">Product Designer</span>
+</div>
+</div>
+<!-- Main Navigation -->
+<div class="flex-1 overflow-y-auto pr-sm">
+<a class="flex items-center gap-md px-md py-sm mb-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-body-md font-body-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm mb-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="text-body-md font-body-md">Profile</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm mb-xs bg-secondary-container text-on-secondary-container rounded-xl font-semibold scale-[0.98] transition-transform shadow-sm relative group overflow-hidden" href="#">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="absolute inset-0 bg-primary opacity-5"></div>
+<span class="material-symbols-outlined fill z-10" data-icon="description">description</span>
+<span class="text-body-md font-body-md z-10">CVs</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm mb-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="bookmark">bookmark</span>
+<span class="text-body-md font-body-md">Saved Jobs</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm mb-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span class="text-body-md font-body-md">Applications</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm mb-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span class="text-body-md font-body-md">AI Interviews</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm mb-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="text-body-md font-body-md flex-1">Notifications</span>
+<span class="bg-primary text-on-primary text-label-sm font-label-sm px-2 py-0.5 rounded-full">3</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm mb-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="text-body-md font-body-md">Settings</span>
+</a>
+</div>
+<!-- Footer Links -->
+<div class="mt-auto pt-md border-t border-outline-variant">
+<a class="flex items-center gap-md px-md py-sm mb-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="text-body-md font-body-md">Help Center</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="text-body-md font-body-md">Logout</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-sidebar-width flex flex-col h-screen overflow-y-auto bg-surface relative">
+<!-- TopAppBar (Mobile Only) -->
+<header class="md:hidden sticky top-0 z-30 bg-surface-container-lowest border-b border-outline-variant px-md py-sm flex items-center justify-between shadow-sm">
+<span class="text-headline-sm font-headline-sm font-bold text-primary">Nexus Recruit</span>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-highest rounded-full transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</header>
+<div class="px-md py-lg md:px-gutter md:py-xl max-w-container-max mx-auto w-full">
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-md mb-xl">
+<div>
+<h1 class="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-on-surface mb-xs">Manage Resumes</h1>
+<p class="text-body-md font-body-md text-on-surface-variant">Upload and manage your CVs for different applications.</p>
+</div>
+<button class="inline-flex items-center justify-center gap-sm bg-primary text-on-primary px-lg py-sm rounded-lg hover:bg-primary-container hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+<span class="material-symbols-outlined text-[20px]" data-icon="upload_file">upload_file</span>
+<span class="text-label-md font-label-md">Upload New CV</span>
+</button>
+</div>
+<!-- Content Area - Bento/Card Layout -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-lg">
+<!-- Main Table Card -->
+<div class="xl:col-span-2 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col">
+<div class="p-md border-b border-outline-variant bg-surface-bright flex justify-between items-center">
+<h2 class="text-headline-md font-headline-md text-on-surface">Uploaded Documents</h2>
+<span class="text-label-sm font-label-sm text-on-surface-variant bg-surface-container px-2 py-1 rounded">2 Files</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse min-w-[600px]">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="px-md py-sm text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider w-1/2">File Name</th>
+<th class="px-md py-sm text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider w-1/4">Date Uploaded</th>
+<th class="px-md py-sm text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider w-1/4 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<!-- Row 1: Default CV -->
+<tr class="hover:bg-surface-container-lowest hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.05)] transition-shadow group relative bg-surface-bright">
+<td class="px-md py-sm h-[64px]">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary shrink-0 border border-outline-variant">
+<span class="material-symbols-outlined" data-icon="picture_as_pdf">picture_as_pdf</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-xs">
+<span class="text-body-md font-body-md font-medium text-on-surface truncate">Nguyen-Minh-Anh-Backend-CV.pdf</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-secondary/10 text-secondary border border-secondary/20 shrink-0">DEFAULT</span>
+</div>
+<span class="text-label-sm font-label-sm text-on-surface-variant">2.4 MB • PDF</span>
+</div>
+</div>
+</td>
+<td class="px-md py-sm h-[64px] text-body-sm font-body-sm text-on-surface-variant">
+                                        Oct 24, 2024
+                                    </td>
+<td class="px-md py-sm h-[64px] text-right">
+<div class="flex items-center justify-end gap-sm opacity-100 xl:opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-md transition-colors" title="Download">
+<span class="material-symbols-outlined text-[20px]" data-icon="download">download</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded-md transition-colors" title="Delete">
+<span class="material-symbols-outlined text-[20px]" data-icon="delete">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-lowest hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.05)] transition-shadow group relative">
+<td class="px-md py-sm h-[64px]">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant shrink-0 border border-outline-variant">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-body-md font-body-md text-on-surface truncate">CV_v2_2024.pdf</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">1.8 MB • PDF</span>
+</div>
+</div>
+</td>
+<td class="px-md py-sm h-[64px] text-body-sm font-body-sm text-on-surface-variant">
+                                        Sep 12, 2024
+                                    </td>
+<td class="px-md py-sm h-[64px] text-right">
+<div class="flex items-center justify-end gap-sm opacity-100 xl:opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-label-sm font-label-sm text-primary hover:underline px-2 py-1" title="Set as Default">
+                                                Set Default
+                                            </button>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-md transition-colors" title="Download">
+<span class="material-symbols-outlined text-[20px]" data-icon="download">download</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded-md transition-colors" title="Delete">
+<span class="material-symbols-outlined text-[20px]" data-icon="delete">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Side Info Card -->
+<div class="flex flex-col gap-lg">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm p-lg relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary-fixed-dim rounded-bl-full opacity-20 -z-0"></div>
+<h3 class="text-headline-md font-headline-md text-on-surface mb-sm relative z-10 flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary" data-icon="info">info</span>
+                            CV Best Practices
+                        </h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-md relative z-10">Ensure your resume is parsed correctly by our ATS system.</p>
+<ul class="space-y-sm text-body-sm font-body-sm text-on-surface-variant relative z-10">
+<li class="flex items-start gap-xs">
+<span class="material-symbols-outlined text-[16px] text-secondary mt-0.5" data-icon="check_circle">check_circle</span>
+                                Use standard fonts (Arial, Calibri)
+                            </li>
+<li class="flex items-start gap-xs">
+<span class="material-symbols-outlined text-[16px] text-secondary mt-0.5" data-icon="check_circle">check_circle</span>
+                                Keep it to 1-2 pages maximum
+                            </li>
+<li class="flex items-start gap-xs">
+<span class="material-symbols-outlined text-[16px] text-secondary mt-0.5" data-icon="check_circle">check_circle</span>
+                                Export as a clean PDF
+                            </li>
+<li class="flex items-start gap-xs">
+<span class="material-symbols-outlined text-[16px] text-error mt-0.5" data-icon="cancel">cancel</span>
+                                Avoid complex columns or graphics
+                            </li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

@@ -1,0 +1,268 @@
+spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:backend/.env[.properties]
+
+  application:
+    name: smart-recruitment-portal
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE:25MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:25MB}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:none}
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    ignore-missing-migrations: true
+    validate-on-migrate: false
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+server:
+  port: 8080
+  forward-headers-strategy: native
+  servlet:
+    context-path: /api
+
+logging:
+  level:
+    com.sjp.recruitment: DEBUG
+    org.springframework.security: INFO
+
+management:
+  health:
+    mail:
+      enabled: ${MAIL_HEALTH_ENABLED:false}
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:86400000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+app:
+  data-seeder:
+    enabled: ${APP_DATA_SEEDER_ENABLED:false}
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  backend-base-url: ${BACKEND_BASE_URL:http://localhost:8080/api}
+  oauth:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+  mail-from: ${MAIL_FROM:no-reply@smart-recruitment.local}
+  email-verification-token-ttl-minutes: ${EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:1440}
+  password-reset-token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
+  oauth-role-selection-token-ttl-minutes: ${OAUTH_ROLE_SELECTION_TOKEN_TTL_MINUTES:15}
+  auth-rate-limit:
+    enabled: ${AUTH_RATE_LIMIT_ENABLED:true}
+    window-seconds: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:60}
+    login-requests: ${AUTH_RATE_LIMIT_LOGIN_REQUESTS:10}
+    register-requests: ${AUTH_RATE_LIMIT_REGISTER_REQUESTS:5}
+    forgot-password-requests: ${AUTH_RATE_LIMIT_FORGOT_PASSWORD_REQUESTS:5}
+    reset-password-requests: ${AUTH_RATE_LIMIT_RESET_PASSWORD_REQUESTS:10}
+    resend-verification-requests: ${AUTH_RATE_LIMIT_RESEND_VERIFICATION_REQUESTS:3}
+  ai-interview:
+    gladia-api-key: ${GLADIA_API_KEY:}
+    gladia-base-url: ${GLADIA_BASE_URL:https://api.gladia.io}
+    shopaikey-api-key: ${SHOPAIKEY_API_KEY:}
+    shopaikey-base-url: ${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}
+    text-ai:
+      provider: ${AI_INTERVIEW_TEXT_PROVIDER:shopaikey}
+      base-url: ${AI_INTERVIEW_TEXT_BASE_URL:${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}}
+      api-key: ${AI_INTERVIEW_TEXT_API_KEY:${SHOPAIKEY_API_KEY:}}
+      cv-analysis:
+        model: ${AI_INTERVIEW_CV_MODEL:gemini-2.5-pro}
+        effort: ${AI_INTERVIEW_CV_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_CV_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_CV_MAX_ATTEMPTS:3}
+      initial-questions:
+        model: ${AI_INTERVIEW_INITIAL_MODEL:gemini-3.5-flash}
+        effort: ${AI_INTERVIEW_INITIAL_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_INITIAL_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_INITIAL_MAX_ATTEMPTS:3}
+      turn-decision:
+        model: ${AI_INTERVIEW_TURN_DECISION_MODEL:gemini-3.5-flash-lite}
+        effort: ${AI_INTERVIEW_TURN_DECISION_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_TURN_DECISION_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_TURN_DECISION_MAX_ATTEMPTS:1}
+        read-timeout-ms: ${AI_INTERVIEW_TURN_DECISION_TIMEOUT_MS:15000}
+      turn-evidence:
+        model: ${AI_INTERVIEW_TURN_EVIDENCE_MODEL:gemini-3.1-flash-lite}
+        effort: ${AI_INTERVIEW_TURN_EVIDENCE_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_TURN_EVIDENCE_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_TURN_EVIDENCE_MAX_ATTEMPTS:3}
+        read-timeout-ms: ${AI_INTERVIEW_TURN_EVIDENCE_TIMEOUT_MS:60000}
+      adaptive-questions:
+        model: ${AI_INTERVIEW_ADAPTIVE_MODEL:gemini-3.5-flash}
+        effort: ${AI_INTERVIEW_ADAPTIVE_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_ADAPTIVE_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_ADAPTIVE_MAX_ATTEMPTS:3}
+      transcript-correction:
+        model: ${AI_INTERVIEW_TRANSCRIPT_MODEL:gemini-2.5-flash-lite}
+        effort: ${AI_INTERVIEW_TRANSCRIPT_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_TRANSCRIPT_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_TRANSCRIPT_MAX_ATTEMPTS:3}
+      final-evaluation:
+        model: ${AI_INTERVIEW_FINAL_MODEL:gemini-2.5-pro}
+        effort: ${AI_INTERVIEW_FINAL_EFFORT:none}
+        reasoning-enabled: ${AI_INTERVIEW_FINAL_REASONING_ENABLED:false}
+        max-attempts: ${AI_INTERVIEW_FINAL_MAX_ATTEMPTS:3}
+    tts-base-url: ${AI_INTERVIEW_TTS_BASE_URL:https://api.shopaikey.com}
+    tts-model: ${AI_INTERVIEW_TTS_MODEL:gemini-3.1-flash-tts-preview}
+    tts-voice: ${AI_INTERVIEW_TTS_VOICE:Kore}
+    tts-voice-instruction: ${AI_INTERVIEW_TTS_VOICE_INSTRUCTION:Speak naturally as a professional Vietnamese interviewer. Use a warm, conversational tone and moderate pace. Pronounce English technical terms naturally in English. Do not add or remove words.}
+    tts-connect-timeout-ms: ${AI_INTERVIEW_TTS_CONNECT_TIMEOUT_MS:2000}
+    tts-first-audio-timeout-ms: ${AI_INTERVIEW_TTS_FIRST_AUDIO_TIMEOUT_MS:12000}
+    tts-idle-timeout-ms: ${AI_INTERVIEW_TTS_IDLE_TIMEOUT_MS:3000}
+    tts-cache-max-entries: ${AI_INTERVIEW_TTS_CACHE_MAX_ENTRIES:100}
+    tts-cache-ttl-seconds: ${AI_INTERVIEW_TTS_CACHE_TTL_SECONDS:1800}
+    tts-prefetch-initial-wait-ms: ${AI_INTERVIEW_TTS_PREFETCH_INITIAL_WAIT_MS:20000}
+    tts-prefetch-playback-wait-ms: ${AI_INTERVIEW_TTS_PREFETCH_PLAYBACK_WAIT_MS:1200}
+    tts-prefetch-cooldown-ms: ${AI_INTERVIEW_TTS_PREFETCH_COOLDOWN_MS:30000}
+    audio-max-seconds: ${AI_INTERVIEW_AUDIO_MAX_SECONDS:180}
+    audio-max-size-mb: ${AI_INTERVIEW_AUDIO_MAX_SIZE_MB:25}
+    question-count: ${AI_INTERVIEW_QUESTION_COUNT:5}
+    max-follow-ups-per-core: ${AI_INTERVIEW_MAX_FOLLOW_UPS_PER_CORE:1}
+    max-probes-per-core: ${AI_INTERVIEW_MAX_PROBES_PER_CORE:1}
+    max-clarifies-per-core: ${AI_INTERVIEW_MAX_CLARIFIES_PER_CORE:1}
+    max-total-assessment-turns: ${AI_INTERVIEW_MAX_TOTAL_ASSESSMENT_TURNS:10}
+    provider-connect-timeout-ms: ${AI_INTERVIEW_PROVIDER_CONNECT_TIMEOUT_MS:5000}
+    provider-read-timeout-ms: ${AI_INTERVIEW_PROVIDER_READ_TIMEOUT_MS:60000}
+    voice-streaming-enabled: ${AI_INTERVIEW_VOICE_STREAMING_ENABLED:true}
+    voice-provider: ${AI_INTERVIEW_VOICE_PROVIDER:shopaikey_gemini_stream}
+    voice-confirmation-prompt-delay-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_PROMPT_DELAY_MS:2000}
+    voice-confirmation-auto-finalize-ms: ${AI_INTERVIEW_VOICE_CONFIRMATION_AUTO_FINALIZE_MS:3000}
+    voice-recognition-restart-delay-ms: ${AI_INTERVIEW_VOICE_RECOGNITION_RESTART_DELAY_MS:250}
+    voice-load-wait-ms: ${AI_INTERVIEW_VOICE_LOAD_WAIT_MS:700}
+    voice-next-question-delay-ms: ${AI_INTERVIEW_VOICE_NEXT_QUESTION_DELAY_MS:0}
+    background-core-pool-size: ${AI_INTERVIEW_BACKGROUND_CORE_POOL_SIZE:4}
+    background-queue-capacity: ${AI_INTERVIEW_BACKGROUND_QUEUE_CAPACITY:32}
+    voice-evidence-core-pool-size: ${AI_INTERVIEW_VOICE_EVIDENCE_CORE_POOL_SIZE:2}
+    voice-evidence-queue-capacity: ${AI_INTERVIEW_VOICE_EVIDENCE_QUEUE_CAPACITY:4}
+    voice-evidence-await-timeout-ms: ${AI_INTERVIEW_VOICE_EVIDENCE_AWAIT_TIMEOUT_MS:5000}
+    answer-transcription-provider: ${AI_INTERVIEW_ANSWER_TRANSCRIPTION_PROVIDER:speechmatics_realtime}
+    speechmatics-realtime-enabled: ${SPEECHMATICS_REALTIME_ENABLED:true}
+    speechmatics-api-key: ${SPEECHMATICS_API_KEY:}
+    speechmatics-realtime-url: ${SPEECHMATICS_REALTIME_URL:wss://global.rt.speechmatics.com/v2/}
+    speechmatics-language: ${SPEECHMATICS_LANGUAGE:vi}
+    speechmatics-operating-point: ${SPEECHMATICS_OPERATING_POINT:standard}
+    speechmatics-max-delay-seconds: ${SPEECHMATICS_MAX_DELAY_SECONDS:1.5}
+    speechmatics-ticket-ttl-seconds: ${SPEECHMATICS_TICKET_TTL_SECONDS:60}
+    speechmatics-connect-timeout-ms: ${SPEECHMATICS_CONNECT_TIMEOUT_MS:8000}
+    speechmatics-final-flush-timeout-ms: ${SPEECHMATICS_FINAL_FLUSH_TIMEOUT_MS:15000}
+    speechmatics-max-concurrent-sessions: ${SPEECHMATICS_MAX_CONCURRENT_SESSIONS:20}
+    transcript-correction-enabled: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_ENABLED:false}
+    transcript-correction-min-confidence: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MIN_CONFIDENCE:0.90}
+    transcript-correction-max-corrections: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_CORRECTIONS:12}
+    transcript-correction-max-evidence-items: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_EVIDENCE_ITEMS:12}
+    transcript-correction-max-context-terms: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_CONTEXT_TERMS:100}
+    transcript-correction-max-previous-context-chars: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_MAX_PREVIOUS_CONTEXT_CHARS:1200}
+    transcript-correction-timeout-ms: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_TIMEOUT_MS:15000}
+    transcript-correction-prompt-version: ${AI_INTERVIEW_TRANSCRIPT_CORRECTION_PROMPT_VERSION:browser-transcript-correction-v2}
+    costly-requests-per-minute: ${AI_INTERVIEW_COSTLY_REQUESTS_PER_MINUTE:12}
+    gladia-languages: ${GLADIA_LANGUAGES:vi,en}
+    gladia-code-switching-enabled: ${GLADIA_CODE_SWITCHING_ENABLED:true}
+    gladia-custom-vocabulary-enabled: ${GLADIA_CUSTOM_VOCABULARY_ENABLED:true}
+    gladia-custom-vocabulary-intensity: ${GLADIA_CUSTOM_VOCABULARY_INTENSITY:0.5}
+    gladia-custom-vocabulary-max-items: ${GLADIA_CUSTOM_VOCABULARY_MAX_ITEMS:100}
+    gladia-base-vocabulary: ${GLADIA_BASE_VOCABULARY:Spring Boot,Java,REST API,Hibernate,JPA,PostgreSQL,Docker,Kubernetes,Redis,Kafka,JWT,OAuth,React,TypeScript}
+  vad:
+    enabled: ${VAD_ENABLED:true}
+    required: ${VAD_REQUIRED:false}
+    ffmpeg-path: ${VAD_FFMPEG_PATH:}
+    decode-timeout: ${VAD_DECODE_TIMEOUT:20s}
+    health-check-timeout: ${VAD_HEALTH_CHECK_TIMEOUT:3s}
+    max-input-bytes-per-segment: ${VAD_MAX_INPUT_BYTES_PER_SEGMENT:26214400}
+    max-output-bytes: ${VAD_MAX_OUTPUT_BYTES:5760000}
+    max-duration-seconds: ${VAD_MAX_DURATION_SECONDS:180}
+    max-concurrent-analyses: ${VAD_MAX_CONCURRENT_ANALYSES:2}
+    concurrency-acquire-timeout: ${VAD_CONCURRENCY_ACQUIRE_TIMEOUT:2s}
+    model:
+      resource: ${VAD_MODEL_RESOURCE:classpath:models/silero-vad/v6.2.1/silero_vad.onnx}
+      version: ${VAD_MODEL_VERSION:v6.2.1}
+      sha256: ${VAD_MODEL_SHA256:1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3}
+    segmentation:
+      speech-threshold: ${VAD_SPEECH_THRESHOLD:0.50}
+      negative-threshold: ${VAD_NEGATIVE_THRESHOLD:0.35}
+      min-speech-duration-ms: ${VAD_MIN_SPEECH_DURATION_MS:250}
+      min-silence-duration-ms: ${VAD_MIN_SILENCE_DURATION_MS:100}
+      speech-pad-ms: ${VAD_SPEECH_PAD_MS:30}
+  ai-job-search:
+    enabled: ${AI_JOB_SEARCH_ENABLED:true}
+    shopaikey-api-key: ${SHOPAIKEY_API_KEY:}
+    shopaikey-base-url: ${SHOPAIKEY_BASE_URL:https://api.shopaikey.com/v1}
+    shopaikey-model: ${SHOPAIKEY_MODEL:gpt-4.1-mini}
+    prompt-version: ${AI_JOB_SEARCH_PROMPT_VERSION:selected-cv-ranking-v4}
+    provider-connect-timeout-ms: ${AI_JOB_SEARCH_CONNECT_TIMEOUT_MS:5000}
+    provider-read-timeout-ms: ${AI_JOB_SEARCH_READ_TIMEOUT_MS:60000}
+    cache-hours: ${AI_JOB_SEARCH_CACHE_HOURS:24}
+    max-candidate-jobs: ${AI_JOB_SEARCH_MAX_CANDIDATE_JOBS:30}
+    max-prompt-jobs: ${AI_JOB_SEARCH_MAX_PROMPT_JOBS:30}
+    max-results: ${AI_JOB_SEARCH_MAX_RESULTS:10}
+    max-cv-characters: ${AI_JOB_SEARCH_MAX_CV_CHARACTERS:12000}
+    retention-days: ${AI_JOB_SEARCH_RETENTION_DAYS:90}
+  storage:
+    cv-upload-dir: ${CV_UPLOAD_DIR:}
+    avatar-upload-dir: ${AVATAR_UPLOAD_DIR:}
+  payment:
+    momo:
+      enabled: ${MOMO_ENABLED:false}
+      partner-code: ${MOMO_PARTNER_CODE:MOMO}
+      access-key: ${MOMO_ACCESS_KEY:}
+      secret-key: ${MOMO_SECRET_KEY:}
+      endpoint: ${MOMO_ENDPOINT:https://test-payment.momo.vn/v2/gateway/api/create}
+      sandbox: ${MOMO_SANDBOX:true}
+    vnpay:
+      enabled: ${VNPAY_ENABLED:false}
+      tmn-code: ${VNPAY_TMN_CODE:}
+      hash-secret: ${VNPAY_HASH_SECRET:}
+      pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+      version: ${VNPAY_VERSION:2.1.0}
+      sandbox: ${VNPAY_SANDBOX:true}
+    bank-transfer:
+      enabled: ${BANK_TRANSFER_ENABLED:false}
+      bank-name: ${BANK_TRANSFER_BANK_NAME:}
+      bank-code: ${BANK_TRANSFER_BANK_CODE:}
+      account-number: ${BANK_TRANSFER_ACCOUNT_NUMBER:}
+      account-name: ${BANK_TRANSFER_ACCOUNT_NAME:}
+      branch: ${BANK_TRANSFER_BRANCH:}
+      expire-minutes: ${BANK_TRANSFER_EXPIRE_MINUTES:15}
+    payos:
+      enabled: ${PAYOS_ENABLED:false}
+      client-id: ${PAYOS_CLIENT_ID:}
+      api-key: ${PAYOS_API_KEY:}
+      checksum-key: ${PAYOS_CHECKSUM_KEY:}
+      endpoint: ${PAYOS_ENDPOINT:https://api-merchant.payos.vn}
+
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}

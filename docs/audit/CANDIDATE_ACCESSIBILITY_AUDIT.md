@@ -1,0 +1,26 @@
+# Candidate Accessibility Audit
+
+Target: WCAG 2.2 AA where applicable. Static review only; keyboard/screen-reader testing is still required.
+
+| ID | Screen | Issue | Evidence | WCAG / Guideline | Priority | Acceptance criteria |
+|---|---|---|---|---|---|---|
+| A11Y-001 | Modals | Modal dialogs do not trap focus, do not restore focus to trigger, and no Escape handling was found. | `ActionModal` uses `role="dialog"` and backdrop mouse close at `frontend/src/App.tsx:275-296`; apply modal similar at `frontend/src/App.tsx:395-414`. | WCAG 2.1.1 Keyboard, 2.4.3 Focus Order; Web Interface Guidelines dialog/focus. | P1 | Keyboard focus stays in modal, Escape closes, focus returns to opener. |
+| A11Y-002 | Forms | Many inputs are wrapped by visible label text, but error messages are not consistently linked with `aria-describedby`/`aria-invalid`. | Auth/profile/apply/account forms in `frontend/src/App.tsx:1341-1778`, `2928-3049`, `3240-3321`. | WCAG 3.3.1 Error Identification, 3.3.2 Labels or Instructions. | P2 | Field-level errors set `aria-invalid` and reference inline error text. |
+| A11Y-003 | Async feedback | Some statuses use `role="status"`/`role="alert"`, but success/error messages are also plain paragraphs. | AI busy status at `frontend/src/App.tsx:5099-5108`; generic auth/profile messages in `frontend/src/App.tsx:1492`, `2852-2854`. | WCAG 4.1.3 Status Messages. | P2 | Important success/error/loading changes are announced without focus loss. |
+| A11Y-004 | Buttons/icons | Several emoji are used as visible icons inside buttons/nav/list items. | Examples `frontend/src/App.tsx:2433`, `2589-2593`, `3481`, `4686`, `5056-5063`; CSS generated content `frontend/src/styles/global.css:3065-3070`. | Web Interface Guidelines: use semantic/icon components, decorative icons hidden. | P3 | Icons are SVG/icon components with accessible names/decorative `aria-hidden`. |
+| A11Y-005 | Icon button | Apply modal close button has `aria-label`, good. Other icon-like home/notification/avatar controls need complete accessible name verification. | `frontend/src/App.tsx:414`, notification `aria-label` at `frontend/src/App.tsx:633`. | WCAG 4.1.2 Name, Role, Value. | P2 | Every icon-only control has a unique accessible name. |
+| A11Y-006 | Popovers/menus | Notification/account menus are custom popovers; no ARIA menu semantics or Escape/arrow key behavior found. | `frontend/src/App.tsx:626-731`. | WCAG 2.1.1 Keyboard, 4.1.2 Name/Role/Value. | P2 | Popovers are keyboard reachable, dismissible, and announced with correct state. |
+| A11Y-007 | Focus styles | Global inputs remove outline but replace with border/box-shadow; buttons/links have focus-visible outline. | `frontend/src/styles/global.css:198-205`, `326-331`. | WCAG 2.4.7 Focus Visible. | P2 | Focus indicator has sufficient contrast and is visible in all candidate surfaces. |
+| A11Y-008 | Reduced motion | CSS includes `prefers-reduced-motion`; Framer Motion usage still needs runtime verification. | CSS media query `frontend/src/styles/global.css:1986-1996`; Framer Motion variants in `frontend/src/App.tsx:50-68`. | WCAG 2.3.3 Animation from Interactions. | P3 | Reduced-motion users see minimized/nonessential motion. |
+| A11Y-009 | Tables | Candidate application rows use custom `data-table` div layout, not semantic table. | `frontend/src/App.tsx:3709-3731`, responsive CSS `frontend/src/styles/global.css:3177-3216`. | WCAG 1.3.1 Info and Relationships. | P2 | Data presented as table uses table semantics or accessible row/card labels. |
+| A11Y-010 | Headings | Candidate routes render nested cards/headings; hierarchy needs manual verification. | Candidate page functions start at `frontend/src/App.tsx:2571`, `2667`, `2833`, `3329`, `3675`, `4444`. | WCAG 1.3.1, 2.4.6 Headings and Labels. | P3 | Each page has one meaningful `h1` and logical heading order. |
+| A11Y-011 | Labels/autocomplete | Auth/account/profile inputs lack consistent `name`, `autocomplete`, and spellcheck settings. | Input occurrences in `frontend/src/App.tsx:1352-1753`, `2928-2968`, `3271-3310`; API evidence not applicable. | Web Interface Guidelines forms; WCAG 1.3.5 Identify Input Purpose. | P2 | Auth/profile fields have correct `name` and `autocomplete`. |
+| A11Y-012 | Error color | Error/success panels use color plus text. Needs contrast testing. | `frontend/src/styles/global.css:362-383`. | WCAG 1.4.1 Use of Color, 1.4.3 Contrast. | P3 | Contrast ratios meet AA and status is not color-only. |
+| A11Y-013 | AI interview | Recording state is visible as button/status text; hands-free status uses `aria-live`. | `frontend/src/App.tsx:5026-5030`, `5054-5064`. | WCAG 4.1.3 Status Messages. | P2 | Screen reader announces recording/listening/saving/error transitions. |
+| A11Y-014 | AI transcript | Hands-free transcript textarea is read-only; manual one editable. | `frontend/src/App.tsx:5033-5040`, `5067-5073`. | WCAG 3.3.2 Labels or Instructions. | P3 | Mode difference is clear programmatically and visually. |
+
+## Manual Accessibility Tests Required
+
+- Full keyboard traversal for candidate nav, job filters, apply modal, profile sections, CV delete dialogs, notification/account popovers, AI interview controls.
+- Screen reader pass for status announcements and modal/popover behavior.
+- Color contrast check for all chips, panels, disabled states, and focus rings.

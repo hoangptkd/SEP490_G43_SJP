@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Company Profile - Nexus Recruit</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lexend:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-container": "#cbe4ff",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#94ccff",
+                        "tertiary-container": "#955301",
+                        "primary-container": "#0369a1",
+                        "on-secondary-fixed": "#00210a",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-low": "#eff4ff",
+                        "surface-container-lowest": "#ffffff",
+                        "outline": "#707881",
+                        "on-primary-fixed": "#001d32",
+                        "inverse-surface": "#213145",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#cbdbf5",
+                        "secondary-container": "#92f5a4",
+                        "on-tertiary-fixed": "#2e1500",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#733f00",
+                        "secondary-fixed": "#95f8a7",
+                        "outline-variant": "#c0c7d1",
+                        "on-secondary-fixed-variant": "#005323",
+                        "background": "#f8f9ff",
+                        "surface-container-highest": "#d3e4fe",
+                        "primary": "#00507d",
+                        "primary-fixed-dim": "#94ccff",
+                        "on-tertiary-fixed-variant": "#6c3a00",
+                        "on-background": "#0b1c30",
+                        "on-surface-variant": "#40474f",
+                        "tertiary-fixed-dim": "#ffb878",
+                        "on-surface": "#0b1c30",
+                        "error": "#ba1a1a",
+                        "surface-container": "#e5eeff",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed": "#cde5ff",
+                        "surface-bright": "#f8f9ff",
+                        "on-tertiary-container": "#ffdbbe",
+                        "secondary-fixed-dim": "#79db8d",
+                        "surface": "#f8f9ff",
+                        "secondary": "#006d30",
+                        "surface-tint": "#006399",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed": "#ffdcc1",
+                        "on-primary-fixed-variant": "#004b74",
+                        "on-secondary-container": "#007233"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "md": "16px",
+                        "container-max": "1440px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "sidebar-width": "280px",
+                        "gutter": "24px",
+                        "xl": "32px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "display-lg": ["Lexend"],
+                        "headline-lg": ["Lexend"],
+                        "headline-md": ["Lexend"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg-mobile": ["Lexend"],
+                        "mono-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "mono-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Base styles to ensure consistency */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+        }
+        
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: theme('colors.surface'); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.outline-variant'); 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.outline'); 
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex antialiased">
+<!-- Mobile Top Navigation (Hidden on Desktop) -->
+<nav class="md:hidden bg-surface-container-lowest border-b border-outline-variant shadow-sm sticky top-0 z-50 flex justify-between items-center w-full px-4 h-16 w-full fixed">
+<div class="text-headline-sm font-headline-sm font-bold text-primary">Nexus Recruit</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer">notifications</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer">menu</span>
+</div>
+</nav>
+<!-- Desktop Side Navigation (from JSON) -->
+<aside class="hidden md:flex h-screen w-64 fixed left-0 top-0 border-r border-outline-variant bg-surface flex flex-col gap-sm p-md z-40">
+<!-- Brand -->
+<div class="mb-lg px-2 pt-4">
+<h1 class="text-headline-md font-headline-md text-primary">Nexus Recruit</h1>
+</div>
+<!-- User Profile Shell -->
+<div class="flex items-center gap-3 mb-xl px-2">
+<img alt="Candidate Profile Picture" class="w-10 h-10 rounded-full object-cover border border-outline-variant" data-alt="A professional headshot portrait of a product designer in a modern studio setting, softly lit with cool white light, wearing smart casual corporate attire against a neutral grey background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDExszIYrRUZW9hfHTvQPc4a4ey0B46RTaM08PV8rE5hvWmZFXO0TcfZ8bPTKuFGtyBY7Vb9DtTrRWCyaQxiXZWRLMTSiKuIQ13avaMFAr6Rpd9B_p37DjySFOoEp4DR7jAOFfymnArPnu-_bMRV7F_dJR2XERBcY4oUbM2RnoZRLQ0DbI_-4SXqbBRTF5vg0WkNFIFo_0npjuey8bd_Hufc4x1fiRitLnCtPyoWEuskIqFSQBHVqJu"/>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md text-on-surface">Alex Thompson</span>
+<span class="text-body-sm font-body-sm text-on-surface-variant">Product Designer</span>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="flex-1 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">dashboard</span>
+<span class="text-body-md font-body-md">Dashboard</span>
+</a>
+<!-- Active State: Profile -->
+<a class="flex items-center gap-3 px-3 py-2 bg-secondary-container text-on-secondary-container rounded-xl font-semibold scale-[0.98] transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="text-body-md font-body-md">Profile</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">description</span>
+<span class="text-body-md font-body-md">CVs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">bookmark</span>
+<span class="text-body-md font-body-md">Saved Jobs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">assignment</span>
+<span class="text-body-md font-body-md">Applications</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">psychology</span>
+<span class="text-body-md font-body-md">AI Interviews</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">notifications</span>
+<span class="text-body-md font-body-md">Notifications</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">settings</span>
+<span class="text-body-md font-body-md">Settings</span>
+</a>
+</nav>
+<!-- CTA -->
+<div class="mt-auto mb-4">
+<button class="w-full bg-primary text-on-primary py-2 px-4 rounded-lg text-label-md font-label-md hover:opacity-90 transition-opacity">
+                Upload New CV
+            </button>
+</div>
+<!-- Footer Links -->
+<div class="flex flex-col gap-1 border-t border-outline-variant pt-4 mt-2">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">help</span>
+<span class="text-body-md font-body-md">Help Center</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">logout</span>
+<span class="text-body-md font-body-md">Logout</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-64 w-full min-h-screen pt-16 md:pt-0">
+<!-- Top App Bar / Page Header for Desktop Content -->
+<header class="hidden md:flex sticky top-0 z-30 bg-surface/90 backdrop-blur-sm border-b border-outline-variant px-gutter py-4 justify-between items-center h-20">
+<div>
+<h2 class="text-headline-lg font-headline-lg text-on-surface">Company Profile</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-1">Manage your organization's public presence and details.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 border border-outline text-on-surface rounded-lg text-label-md font-label-md hover:bg-surface-container transition-colors">Discard</button>
+<button class="px-4 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label-md hover:opacity-90 transition-opacity shadow-sm hover:shadow-md">Save Changes</button>
+</div>
+</header>
+<!-- Mobile Header (Visible only on mobile to replace desktop header) -->
+<div class="md:hidden px-4 py-6">
+<h2 class="text-headline-lg-mobile font-headline-lg-mobile text-on-surface">Company Profile</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-1">Manage your organization's details.</p>
+</div>
+<!-- Content Canvas -->
+<div class="px-4 md:px-gutter py-lg max-w-container-max mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-lg pb-24">
+<!-- Left Column: Core Identity & Details -->
+<div class="lg:col-span-8 flex flex-col gap-lg">
+<!-- Basic Info Card -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md md:p-lg shadow-sm hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1)] transition-shadow duration-300">
+<div class="flex items-start justify-between mb-6">
+<h3 class="text-headline-md font-headline-md text-on-surface">Core Identity</h3>
+<!-- Verified Badge -->
+<div class="bg-secondary-container/20 border border-secondary/30 px-3 py-1 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-secondary text-[16px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-label-sm font-label-sm text-secondary uppercase tracking-wider">Verified Employer</span>
+</div>
+</div>
+<div class="flex flex-col md:flex-row gap-lg">
+<!-- Logo Upload -->
+<div class="flex flex-col items-center gap-3 shrink-0">
+<div class="relative w-32 h-32 rounded-xl border-2 border-dashed border-outline-variant bg-surface flex items-center justify-center overflow-hidden group cursor-pointer hover:border-primary transition-colors">
+<!-- Simulated existing logo -->
+<div class="absolute inset-0 bg-white flex items-center justify-center p-4">
+<span class="text-headline-lg font-headline-lg font-bold text-primary tracking-tighter">FPT.</span>
+</div>
+<div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">upload</span>
+</div>
+</div>
+<span class="text-label-sm font-label-sm text-on-surface-variant">Update Logo</span>
+</div>
+<!-- Core Fields -->
+<div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="col-span-1 md:col-span-2">
+<label class="block text-label-md font-label-md text-on-surface mb-1">Company Name</label>
+<input class="w-full bg-surface-container-lowest border border-outline rounded-lg px-3 py-2 text-body-md font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" placeholder="e.g. Acme Corp" type="text" value="FPT Software"/>
+</div>
+<div class="col-span-1 md:col-span-2">
+<label class="block text-label-md font-label-md text-on-surface mb-1">Website</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-on-surface-variant text-[20px]">language</span>
+<input class="w-full bg-surface-container-lowest border border-outline rounded-lg pl-10 pr-3 py-2 text-body-md font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" placeholder="https://" type="url" value="https://fptsoftware.com"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Company Overview / Description -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md md:p-lg shadow-sm hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1)] transition-shadow duration-300">
+<h3 class="text-headline-md font-headline-md text-on-surface mb-6">Company Overview</h3>
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1">Detailed Description</label>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-3">Provide a comprehensive overview of your company culture, mission, and what makes it a great place to work. This is visible to all candidates.</p>
+<textarea class="w-full bg-surface-container-lowest border border-outline rounded-lg px-3 py-2 text-body-md font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors resize-y" rows="8">FPT Software is a global technology and IT services provider headquartered in Vietnam, with nearly $1 billion in revenue and over 30,000 employees in 28 countries and territories. As a pioneer in digital transformation, we deliver world-class services in Smart factory, Digital platforms, RPA, AI, IoT, Cloud, AR/VR, BPO, and more. 
+
+We are committed to driving success for our clients and providing a dynamic, innovative, and rewarding work environment for our global talent pool.</textarea>
+</div>
+</section>
+</div>
+<!-- Right Column: Meta & Geography -->
+<div class="lg:col-span-4 flex flex-col gap-lg">
+<!-- Operational Details -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md md:p-lg shadow-sm hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1)] transition-shadow duration-300">
+<h3 class="text-headline-md font-headline-md text-on-surface mb-6">Operational Details</h3>
+<div class="flex flex-col gap-md">
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1">Industry</label>
+<div class="relative">
+<select class="w-full bg-surface-container-lowest border border-outline rounded-lg px-3 py-2 appearance-none text-body-md font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors">
+<option>Information Technology (IT)</option>
+<option>Finance</option>
+<option>Healthcare</option>
+<option>Manufacturing</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1">Company Size</label>
+<div class="relative">
+<select class="w-full bg-surface-container-lowest border border-outline rounded-lg px-3 py-2 appearance-none text-body-md font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors">
+<option>1-50 employees</option>
+<option>51-200 employees</option>
+<option>201-1000 employees</option>
+<option>1001-5000 employees</option>
+<option selected="">30,000+ employees</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1">Tax Code (EIN)</label>
+<input class="w-full bg-surface-container-lowest border border-outline rounded-lg px-3 py-2 text-body-md font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors bg-surface-container-low" readonly="" type="text" value="0101601092"/>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-1 text-xs">Verified by Nexus Recruit admin.</p>
+</div>
+</div>
+</section>
+<!-- Headquarters / Locations -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md md:p-lg shadow-sm hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1)] transition-shadow duration-300">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-headline-md font-headline-md text-on-surface">Primary Location</h3>
+<button class="text-primary text-label-sm font-label-sm hover:underline">Manage Offices</button>
+</div>
+<div class="rounded-lg overflow-hidden border border-outline-variant mb-4 relative h-40">
+<!-- Map Image Placeholder -->
+<img class="w-full h-full object-cover" data-alt="A highly detailed, modern stylized vector map view centered on Hanoi, Vietnam. The map uses a clean, light corporate color palette with subtle blue and grey tones, featuring crisp road lines and subtle topographical shading to indicate an urban tech hub environment." data-location="Hanoi" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCOaxl7ilQArHzyeYEFU3ywnP-CcYnJxrZ9MbpidRlf_RBU5xWtNrfUIs7jOuEqhJ7tfuG0ArgyLVmwyk1ym2tQVxlHrB5RgoeeOxMt33y7qnflcazvn4ZlSFZTctq5dfCdD_tOgVoU7dUVY3gqJ_Hh5fRnI9Nl7dNG6y1CbhxlC2HH0PBbpv5VHQKI2saGYug4HUiHyHANG5WhkqLsbRVfoVvnzLCLbRcGYz-FsWwuUsJHq_9a-97Z"/>
+<!-- Pin overlay -->
+<div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+<span class="material-symbols-outlined text-primary text-[32px] drop-shadow-md" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+</div>
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1">Headquarters</label>
+<input class="w-full bg-surface-container-lowest border border-outline rounded-lg px-3 py-2 text-body-md font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" type="text" value="Hanoi, Vietnam"/>
+</div>
+</section>
+</div>
+</div>
+<!-- Mobile Action Bar (Sticky Bottom) -->
+<div class="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-lowest border-t border-outline-variant p-4 flex gap-3 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] z-40">
+<button class="flex-1 py-3 border border-outline text-on-surface rounded-lg text-label-md font-label-md font-semibold">Discard</button>
+<button class="flex-1 py-3 bg-primary text-on-primary rounded-lg text-label-md font-label-md font-semibold">Save</button>
+</div>
+</main>
+</body></html>

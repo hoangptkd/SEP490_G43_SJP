@@ -1,0 +1,539 @@
+package com.sjp.recruitment.service;
+
+import com.sjp.recruitment.exception.ApiException;
+import com.sjp.recruitment.model.dto.request.CandidateProfileRequest;
+import com.sjp.recruitment.model.dto.request.CandidateOnboardingRequest;
+import com.sjp.recruitment.model.dto.request.CvVersionRequest;
+import com.sjp.recruitment.model.dto.response.*;
+import com.sjp.recruitment.model.entity.*;
+import com.sjp.recruitment.repository.*;
+import com.sjp.recruitment.service.storage.StorageService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.time.LocalDateTime;
+
+@Service
+@RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
+public class CandidateService {
+
+    private static final long MAX_CV_SIZE = 5L * 1024 * 1024;
+    private static final String SOURCE_UPLOADED = "uploaded";
+    private static final String SOURCE_BUILDER = "builder";
+
+    private final AuthService authService;
+    private final DtoMapper dtoMapper;
+    private final CandidateProfileRepository candidateProfileRepository;
+    private final CandidateCvRepository candidateCvRepository;
+    private final CvVersionRepository cvVersionRepository;
+    private final SavedJobRepository savedJobRepository;
+    private final JobRepository jobRepository;
+    private final ApplicationRepository applicationRepository;
+    private final NotificationRepository notificationRepository;
+    private final CandidateRealtimeEventPublisher realtimeEventPublisher;
+    private final SubscriptionRepository subscriptionRepository;
+    private final SkillRepository skillRepository;
+    private final CandidateSkillRepository candidateSkillRepository;
+    private final StorageService storageService;
+    private final FeatureLimitService featureLimitService;
+    private final VietnamProvinceCatalog vietnamProvinceCatalog;
+
+    public record CvDownload(String fileName, String contentType, org.springframework.core.io.Resource resource) {
+    }
+
+    @Transactional(readOnly = true)
+    public CandidateProfile getCurrentCandidateProfile() {
+        User user = authService.getCurrentUser();
+        requireCandidate(user);
+        return candidateProfileRepository.findWithSkillsByUserId(user.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CANDIDATE_PROFILE_NOT_FOUND", "Chưa có hồ sơ ứng viên"));
+    }
+
+    @Transactional(readOnly = true)
+    public CandidateProfileResponse getProfile() {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        List<String> missing = missingReadinessItems(profile);
+        return dtoMapper.toCandidateProfileResponse(profile, missing.isEmpty(), missing);
+    }
+
+    @Transactional
+    public CandidateProfileResponse updateProfile(CandidateProfileRequest request) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        profile.setFullName(request.fullName());
+        profile.setPhone(request.phone());
+        profile.setDateOfBirth(request.dateOfBirth());
+        profile.setLocation(request.location());
+        profile.setBio(request.bio());
+        profile.setHeadline(request.headline());
+        profile.setExperienceYears(request.experienceYears() == null ? 0 : request.experienceYears());
+        profile.setExperienceLevel(emptyToNull(request.experienceLevel()));
+        profile.setLinkedinUrl(emptyToNull(request.linkedinUrl()));
+        profile.setPortfolioUrl(emptyToNull(request.portfolioUrl()));
+        updateCandidateSkills(profile, request.skills() == null ? List.of() : request.skills());
+        profile.setSkills(request.skills() == null ? List.of() : request.skills());
+        profile.setEducation(request.education() == null ? List.of() : request.education());
+        profile.setWorkExperience(request.workExperience() == null ? List.of() : request.workExperience());
+        profile.setProjects(request.projects() == null ? List.of() : request.projects());
+        profile.setCertifications(request.certifications() == null ? List.of() : request.certifications());
+        CandidateProfile saved = candidateProfileRepository.save(profile);
+        List<String> missing = missingReadinessItems(saved);
+        return dtoMapper.toCandidateProfileResponse(saved, missing.isEmpty(), missing);
+    }
+
+    @Transactional(readOnly = true)
+    public CandidateOnboardingResponse getOnboarding() {
+        return toOnboardingResponse(getCurrentCandidateProfile());
+    }
+
+    @Transactional
+    public CandidateOnboardingResponse completeOnboarding(CandidateOnboardingRequest request) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        List<String> desiredJobTitles = normalizedTextValues(request.desiredJobTitles(), 5);
+        List<String> preferredLocations = normalizedTextValues(request.preferredLocations(), 5);
+        if (desiredJobTitles.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DESIRED_JOB_TITLES_REQUIRED",
+                    "Vui lòng chọn ít nhất một vị trí mong muốn");
+        }
+        vietnamProvinceCatalog.requireAllValid(preferredLocations);
+
+        profile.setDesiredJobTitles(desiredJobTitles);
+        profile.setExpectedSalary(request.expectedSalary());
+        profile.setExperienceLevel(request.experienceLevel());
+        profile.setPreferredLocations(preferredLocations);
+        profile.setWillingToRelocate(request.willingToRelocate());
+        profile.setOnboardingStatus("COMPLETED");
+        profile.setOnboardingCompletedAt(LocalDateTime.now());
+        return toOnboardingResponse(candidateProfileRepository.save(profile));
+    }
+
+    @Transactional
+    public CandidateOnboardingResponse skipOnboarding() {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        profile.setOnboardingStatus("SKIPPED");
+        profile.setOnboardingCompletedAt(null);
+        return toOnboardingResponse(candidateProfileRepository.save(profile));
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> jobTitleSuggestions(String query, int size) {
+        getCurrentCandidateProfile();
+        String normalizedQuery = query == null ? "" : query.trim().replaceAll("\\s+", " ");
+        if (normalizedQuery.length() > 120) {
+            normalizedQuery = normalizedQuery.substring(0, 120);
+        }
+        return jobRepository.findPublishedTitleSuggestions(
+                normalizedQuery,
+                PageRequest.of(0, Math.min(Math.max(size, 1), 20))
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isApplyReady(CandidateProfile profile) {
+        return missingReadinessItems(profile).isEmpty();
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> missingReadinessItems(CandidateProfile profile) {
+        java.util.ArrayList<String> missing = new java.util.ArrayList<>();
+        if (!hasText(profile.getFullName())) missing.add("FULL_NAME");
+        if (!hasText(profile.getPhone())) missing.add("PHONE");
+        if (!hasText(profile.getLocation())) missing.add("LOCATION");
+        if (profile.getSkills() == null || profile.getSkills().isEmpty()) missing.add("SKILLS");
+        if (!candidateCvRepository.existsByCandidateIdAndDeletedAtIsNull(profile.getId())) missing.add("CV");
+        return List.copyOf(missing);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<CvResponse> getCvs(int page, int size) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        Page<CandidateCv> result = candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNull(
+                profile.getId(), SOURCE_UPLOADED, pageRequest(page, size, "createdAt"));
+        return PageResponse.from(result, dtoMapper::toCvResponse);
+    }
+
+    @Transactional
+    public CvResponse uploadCv(MultipartFile file) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        featureLimitService.requireCvUpload(profile.getUser());
+        validateCvFile(file);
+        try {
+            StorageService.StoredFile stored = storageService.storeCandidateCv(profile.getId(), file);
+            CandidateCv cv = new CandidateCv();
+            cv.setCandidate(profile);
+            cv.setTitle(file.getOriginalFilename() == null ? "CV ứng viên" : file.getOriginalFilename());
+            cv.setOriginalFileName(file.getOriginalFilename() == null ? "cv.pdf" : file.getOriginalFilename());
+            cv.setStorageKey(stored.storageKey());
+            cv.setContentType(stored.contentType() == null ? "application/pdf" : stored.contentType());
+            cv.setFileSize(stored.fileSize());
+            cv.setSourceType(SOURCE_UPLOADED);
+            boolean firstCv = !candidateCvRepository.existsByCandidateIdAndSourceTypeAndDeletedAtIsNull(profile.getId(), SOURCE_UPLOADED);
+            if (firstCv) {
+                candidateCvRepository.clearDefaultForCandidate(profile.getId());
+                candidateCvRepository.flush();
+            }
+            cv.setDefaultCv(firstCv);
+            
+            // Eagerly parse the CV text so AI features can use it immediately
+            try (InputStream stream = file.getInputStream()) {
+                String extractedText = new org.apache.tika.Tika().parseToString(stream);
+                if (extractedText != null && !extractedText.isBlank()) {
+                    cv.setParsedText(extractedText.trim());
+                    cv.setParseStatus("parsed");
+                }
+            } catch (Exception e) {
+                log.warn("Failed to extract text during upload for CV", e);
+                cv.setParseStatus("failed");
+            }
+
+            CvResponse response = dtoMapper.toCvResponse(candidateCvRepository.save(cv));
+            featureLimitService.consumeCvUpload(profile.getUser());
+            return response;
+        } catch (IOException exception) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "CV_STORAGE_FAILED", "Không thể lưu file CV");
+        }
+    }
+
+    @Transactional
+    public CvResponse setDefaultCv(String cvId) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        CandidateCv target = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(cvId, "CV_ID_INVALID"), profile.getId(), SOURCE_UPLOADED)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Không tìm thấy CV"));
+        if (target.isDefaultCv()) {
+            return dtoMapper.toCvResponse(target);
+        }
+        candidateCvRepository.clearDefaultForCandidate(profile.getId());
+        candidateCvRepository.flush();
+        target.setDefaultCv(true);
+        candidateCvRepository.flush();
+        return dtoMapper.toCvResponse(target);
+    }
+
+    @Transactional
+    public void deleteCv(String cvId) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        CandidateCv cv = candidateCvRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(cvId, "CV_ID_INVALID"), profile.getId(), SOURCE_UPLOADED)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Không tìm thấy CV"));
+        if (applicationRepository.existsByCvId(cv.getId())) {
+            cv.setDeletedAt(java.time.LocalDateTime.now());
+            cv.setDefaultCv(false);
+            candidateCvRepository.flush();
+            ensureDefaultUploadedCv(profile.getId());
+            return;
+        }
+        cv.setDefaultCv(false);
+        candidateCvRepository.flush();
+        candidateCvRepository.delete(cv);
+        candidateCvRepository.flush();
+        ensureDefaultUploadedCv(profile.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public CvDownload downloadCv(String cvId) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        CandidateCv cv = candidateCvRepository.findByIdAndCandidateId(parseUuid(cvId, "CV_ID_INVALID"), profile.getId())
+                .filter(this::isUploadedCv)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_NOT_FOUND", "Không tìm thấy CV"));
+        return toCvDownload(cv);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<CvVersionResponse> getCvVersions(int page, int size) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        Page<CvVersion> result = cvVersionRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNull(
+                profile.getId(), SOURCE_BUILDER, pageRequest(page, size, "updatedAt"));
+        return PageResponse.from(result, dtoMapper::toCvVersionResponse);
+    }
+
+    @Transactional
+    public CvVersionResponse createCvVersion(CvVersionRequest request) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        CvVersion version = new CvVersion();
+        version.setCandidate(profile);
+        version.setTitle(request.title());
+        version.setSourceType(SOURCE_BUILDER);
+        version.setTemplateKey(request.templateKey() == null || request.templateKey().isBlank() ? "classic" : request.templateKey());
+        version.setSnapshot(request.snapshot() == null ? defaultSnapshot(profile) : request.snapshot());
+        return dtoMapper.toCvVersionResponse(cvVersionRepository.save(version));
+    }
+
+    @Transactional
+    public CvVersionResponse updateCvVersion(String id, CvVersionRequest request) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        CvVersion version = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(id, "CV_VERSION_ID_INVALID"), profile.getId(), SOURCE_BUILDER)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Không tìm thấy bản CV"));
+        version.setTitle(request.title());
+        version.setTemplateKey(request.templateKey() == null || request.templateKey().isBlank() ? "classic" : request.templateKey());
+        version.setSnapshot(request.snapshot() == null ? defaultSnapshot(profile) : request.snapshot());
+        return dtoMapper.toCvVersionResponse(version);
+    }
+
+    @Transactional
+    public void deleteCvVersion(String id) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        CvVersion version = cvVersionRepository.findByIdAndCandidateIdAndSourceTypeAndDeletedAtIsNull(parseUuid(id, "CV_VERSION_ID_INVALID"), profile.getId(), SOURCE_BUILDER)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CV_VERSION_NOT_FOUND", "Không tìm thấy bản CV"));
+        version.setDeletedAt(java.time.LocalDateTime.now());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<JobResponse> getSavedJobs(int page, int size) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        Page<SavedJob> result = savedJobRepository.findByCandidateId(profile.getId(), pageRequest(page, size, "createdAt"));
+        List<UUID> jobIds = result.getContent().stream().map(saved -> saved.getJob().getId()).toList();
+        java.util.Set<UUID> appliedIds = jobIds.isEmpty()
+                ? java.util.Set.of()
+                : new java.util.HashSet<>(applicationRepository.findAppliedJobIds(profile.getId(), jobIds));
+        return PageResponse.from(result, saved -> dtoMapper.toJobResponse(
+                saved.getJob(), true, appliedIds.contains(saved.getJob().getId()), null));
+    }
+
+    @Transactional
+    public void saveJob(String jobId) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        UUID parsedJobId = parseUuid(jobId, "JOB_ID_INVALID");
+        if (savedJobRepository.existsByCandidateIdAndJobId(profile.getId(), parsedJobId)) {
+            return;
+        }
+        Job job = jobRepository.findById(parsedJobId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND", "Không tìm thấy việc làm"));
+        SavedJob saved = new SavedJob();
+        saved.setCandidate(profile);
+        saved.setJob(job);
+        savedJobRepository.save(saved);
+    }
+
+    @Transactional
+    public void unsaveJob(String jobId) {
+        CandidateProfile profile = getCurrentCandidateProfile();
+        savedJobRepository.findByCandidateIdAndJobId(profile.getId(), parseUuid(jobId, "JOB_ID_INVALID"))
+                .ifPresent(savedJobRepository::delete);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<NotificationResponse> getNotifications(int page, int size) {
+        User user = authService.getCurrentUser();
+        Page<Notification> result = notificationRepository.findByRecipientUserId(
+                user.getId(), pageRequest(page, size, "createdAt"));
+        return PageResponse.from(result, dtoMapper::toNotificationResponse);
+    }
+
+    @Transactional
+    public void markNotificationRead(String notificationId) {
+        User user = authService.getCurrentUser();
+        Notification notification = notificationRepository.findByIdAndRecipientUserId(parseUuid(notificationId, "NOTIFICATION_ID_INVALID"), user.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "Không tìm thấy thông báo"));
+        notification.setRead(true);
+        realtimeEventPublisher.publishAfterCommit(user, "NOTIFICATION_UPDATED", notification.getId());
+    }
+
+    @Transactional
+    public void markAllNotificationsRead() {
+        User user = authService.getCurrentUser();
+        notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(user.getId())
+                .forEach(notification -> notification.setRead(true));
+        realtimeEventPublisher.publishAfterCommit(user, "NOTIFICATION_UPDATED", null);
+    }
+
+    @Transactional(readOnly = true)
+    public SubscriptionResponse getSubscription() {
+        User user = authService.getCurrentUser();
+        Subscription subscription = subscriptionRepository
+                .findFirstByUserIdAndStatusOrderByCreatedAtDesc(user.getId(), "active")
+                .or(() -> subscriptionRepository.findTopByUserIdOrderByStartedAtDesc(user.getId()))
+                .orElse(null);
+        Plan plan = subscription == null ? null : subscription.getPlan();
+        return new SubscriptionResponse(
+                plan == null ? "FREE" : plan.getCode(),
+                plan == null ? "Free" : plan.getName(),
+                subscription == null ? "ACTIVE" : subscription.getStatusEnum().name(),
+                plan == null ? java.math.BigDecimal.ZERO : plan.getPrice(),
+                plan == null ? List.of("Hồ sơ ứng viên", "Tìm kiếm việc làm", "Ứng tuyển việc làm") : plan.getBenefits(),
+                subscription == null ? null : subscription.getStartedAt(),
+                subscription == null ? null : subscription.getExpiresAt(),
+                getCurrentProfileIdIfCandidate(user) == null ? 0 : savedJobRepository.countByCandidateId(getCurrentProfileIdIfCandidate(user)),
+                getCurrentProfileIdIfCandidate(user) == null ? 0 : candidateCvRepository.findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(getCurrentProfileIdIfCandidate(user), SOURCE_UPLOADED).size(),
+                notificationRepository.countByRecipientUserIdAndReadFalse(user.getId()),
+                featureLimitService.getUsageSummary(user)
+        );
+    }
+
+    private UUID getCurrentProfileIdIfCandidate(User user) {
+        if (user.getRoleEnum() != User.UserRole.CANDIDATE) {
+            return null;
+        }
+        return candidateProfileRepository.findByUserId(user.getId()).map(CandidateProfile::getId).orElse(null);
+    }
+
+    private void ensureDefaultUploadedCv(UUID candidateId) {
+        List<CandidateCv> activeUploaded = candidateCvRepository
+                .findByCandidateIdAndSourceTypeAndDeletedAtIsNullOrderByCreatedAtDesc(candidateId, SOURCE_UPLOADED);
+        if (!activeUploaded.isEmpty() && activeUploaded.stream().noneMatch(CandidateCv::isDefaultCv)) {
+            candidateCvRepository.clearDefaultForCandidate(candidateId);
+            candidateCvRepository.flush();
+            activeUploaded.get(0).setDefaultCv(true);
+        }
+    }
+
+    public CvDownload toCvDownload(CandidateCv cv) {
+        if (cv == null || !isUploadedCv(cv) || cv.getStorageKey() == null || cv.getStorageKey().isBlank()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Không tìm thấy file CV");
+        }
+        return toCvDownload(cv.getStorageKey(), cv.getOriginalFileName(), cv.getContentType());
+    }
+
+    public CvDownload toCvDownload(String storageKey, String originalFileName, String contentType) {
+        if (storageKey == null || storageKey.isBlank()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Không tìm thấy file CV");
+        }
+        try {
+            org.springframework.core.io.Resource resource = storageService.loadCandidateCv(storageKey);
+            return new CvDownload(
+                    originalFileName == null || originalFileName.isBlank() ? "cv.pdf" : originalFileName,
+                    contentType == null || contentType.isBlank() ? "application/pdf" : contentType,
+                    resource
+            );
+        } catch (IOException exception) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "CV_FILE_NOT_FOUND", "Không tìm thấy file CV");
+        }
+    }
+
+    private boolean isUploadedCv(CandidateCv cv) {
+        return cv != null && SOURCE_UPLOADED.equalsIgnoreCase(cv.getSourceType());
+    }
+
+    public void requireCandidate(User user) {
+        if (user.getRoleEnum() != User.UserRole.CANDIDATE) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "CANDIDATE_REQUIRED", "Chỉ ứng viên mới có thể thực hiện thao tác này");
+        }
+        if (!user.isEmailVerified() || user.getStatusEnum() != User.UserStatus.ACTIVE) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", "Email chưa được xác minh");
+        }
+    }
+
+    private void validateCvFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_FILE_REQUIRED", "Vui lòng chọn file CV");
+        }
+        String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
+        String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
+        if (!name.endsWith(".pdf")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_INVALID_TYPE", "Chỉ hỗ trợ file CV định dạng PDF");
+        }
+        if (file.getSize() > MAX_CV_SIZE) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CV_FILE_TOO_LARGE", "File CV vuot qua dung luong 5MB");
+        }
+    }
+
+    private Map<String, Object> defaultSnapshot(CandidateProfile profile) {
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.put("fullName", profile.getFullName());
+        snapshot.put("phone", profile.getPhone());
+        snapshot.put("location", profile.getLocation());
+        snapshot.put("bio", profile.getBio());
+        snapshot.put("skills", profile.getSkills());
+        snapshot.put("education", profile.getEducation());
+        snapshot.put("workExperience", profile.getWorkExperience());
+        snapshot.put("projects", profile.getProjects());
+        snapshot.put("certifications", profile.getCertifications());
+        return snapshot;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private void updateCandidateSkills(CandidateProfile profile, List<String> skillNames) {
+        candidateSkillRepository.deleteByCandidateId(profile.getId());
+        candidateSkillRepository.flush();
+        normalizedSkillNames(skillNames).stream()
+                .forEach(skillName -> {
+                    Skill skill = skillRepository.findByNameIgnoreCase(skillName)
+                            .orElseGet(() -> {
+                                Skill created = new Skill();
+                                created.setName(skillName);
+                                created.setSlug(slugify(skillName));
+                                created.setCategory("General");
+                                return skillRepository.save(created);
+                            });
+                    CandidateSkill candidateSkill = new CandidateSkill();
+                    candidateSkill.setCandidate(profile);
+                    candidateSkill.setSkill(skill);
+                    candidateSkill.setLevel("intermediate");
+                    candidateSkillRepository.save(candidateSkill);
+                });
+    }
+
+    private List<String> normalizedSkillNames(List<String> skillNames) {
+        Map<String, String> uniqueByLowercase = new LinkedHashMap<>();
+        skillNames.stream()
+                .map(String::trim)
+                .filter(this::hasText)
+                .forEach(skillName -> uniqueByLowercase.putIfAbsent(skillName.toLowerCase(Locale.ROOT), skillName));
+        return List.copyOf(uniqueByLowercase.values());
+    }
+
+    private List<String> normalizedTextValues(List<String> values, int limit) {
+        Map<String, String> uniqueByLowercase = new LinkedHashMap<>();
+        if (values == null) return List.of();
+        values.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::trim)
+                .map(value -> value.replaceAll("\\s+", " "))
+                .filter(this::hasText)
+                .forEach(value -> uniqueByLowercase.putIfAbsent(value.toLowerCase(Locale.ROOT), value));
+        if (uniqueByLowercase.size() > limit) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "TOO_MANY_ONBOARDING_VALUES",
+                    "Số lượng lựa chọn vượt quá giới hạn cho phép");
+        }
+        return List.copyOf(uniqueByLowercase.values());
+    }
+
+    private CandidateOnboardingResponse toOnboardingResponse(CandidateProfile profile) {
+        return new CandidateOnboardingResponse(
+                profile.getDesiredJobTitles() == null ? List.of() : List.copyOf(profile.getDesiredJobTitles()),
+                profile.getExpectedSalary(),
+                profile.getExperienceLevel(),
+                profile.getPreferredLocations() == null ? List.of() : List.copyOf(profile.getPreferredLocations()),
+                profile.isWillingToRelocate(),
+                profile.getOnboardingStatus(),
+                profile.getOnboardingCompletedAt()
+        );
+    }
+
+    private String slugify(String value) {
+        return value.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+    }
+
+    private UUID parseUuid(String value, String code) {
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Mã định danh không hợp lệ");
+        }
+    }
+
+    private String emptyToNull(String value) {
+        return hasText(value) ? value.trim() : null;
+    }
+
+    private PageRequest pageRequest(int page, int size, String sortField) {
+        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, sortField));
+    }
+}

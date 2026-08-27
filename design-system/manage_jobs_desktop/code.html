@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Employer Job Management - Nexus Recruit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lexend:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-container": "#cbe4ff",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#94ccff",
+                        "tertiary-container": "#955301",
+                        "primary-container": "#0369a1",
+                        "on-secondary-fixed": "#00210a",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-low": "#eff4ff",
+                        "surface-container-lowest": "#ffffff",
+                        "outline": "#707881",
+                        "on-primary-fixed": "#001d32",
+                        "inverse-surface": "#213145",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#cbdbf5",
+                        "secondary-container": "#92f5a4",
+                        "on-tertiary-fixed": "#2e1500",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#733f00",
+                        "secondary-fixed": "#95f8a7",
+                        "outline-variant": "#c0c7d1",
+                        "on-secondary-fixed-variant": "#005323",
+                        "background": "#f8f9ff",
+                        "surface-container-highest": "#d3e4fe",
+                        "primary": "#00507d",
+                        "primary-fixed-dim": "#94ccff",
+                        "on-tertiary-fixed-variant": "#6c3a00",
+                        "on-background": "#0b1c30",
+                        "on-surface-variant": "#40474f",
+                        "tertiary-fixed-dim": "#ffb878",
+                        "on-surface": "#0b1c30",
+                        "error": "#ba1a1a",
+                        "surface-container": "#e5eeff",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed": "#cde5ff",
+                        "surface-bright": "#f8f9ff",
+                        "on-tertiary-container": "#ffdbbe",
+                        "secondary-fixed-dim": "#79db8d",
+                        "surface": "#f8f9ff",
+                        "secondary": "#006d30",
+                        "surface-tint": "#006399",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed": "#ffdcc1",
+                        "on-primary-fixed-variant": "#004b74",
+                        "on-secondary-container": "#007233"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "md": "16px",
+                        "container-max": "1440px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "sidebar-width": "280px",
+                        "gutter": "24px",
+                        "xl": "32px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "display-lg": ["Lexend"],
+                        "headline-lg": ["Lexend"],
+                        "headline-md": ["Lexend"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg-mobile": ["Lexend"],
+                        "mono-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "mono-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen flex flex-col md:flex-row">
+<!-- Top Navigation (Mobile Only) -->
+<header class="md:hidden sticky top-0 z-50 bg-surface-container-lowest border-b border-outline-variant shadow-sm w-full px-gutter max-w-container-max mx-auto flex justify-between items-center py-sm">
+<div class="text-headline-md font-headline-md font-bold text-primary">Nexus Recruit</div>
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</div>
+</header>
+<!-- Side Navigation (Desktop) -->
+<aside class="hidden md:flex h-screen w-[280px] fixed left-0 top-0 border-r border-outline-variant bg-surface flex-col gap-sm p-md">
+<div class="mb-lg px-sm">
+<h1 class="text-headline-md font-headline-md text-primary font-bold">Nexus Recruit</h1>
+</div>
+<nav class="flex-1 flex flex-col gap-xs">
+<a class="flex items-center gap-md px-sm py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-body-md font-body-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md px-sm py-sm bg-secondary-container text-on-secondary-container rounded-xl font-semibold border-l-[3px] border-secondary" href="#">
+<span class="material-symbols-outlined filled">work</span>
+<span class="text-body-md font-body-md">Job Postings</span>
+</a>
+<a class="flex items-center gap-md px-sm py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="text-body-md font-body-md">Candidates</span>
+</a>
+<a class="flex items-center gap-md px-sm py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined">assessment</span>
+<span class="text-body-md font-body-md">Reports</span>
+</a>
+<a class="flex items-center gap-md px-sm py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-body-md font-body-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-outline-variant pt-sm">
+<div class="flex items-center gap-sm px-sm py-sm">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a corporate HR manager in a brightly lit modern office setting, wearing a smart casual navy blazer, smiling confidently. Light mode aesthetic with cool tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAcEWwUCJyJ3HfuzIyJrRY-rmz7mL8b13vYuM8yW1PA3G88Gnfrp7KWCsSyQ3yBj-2-aZZ2NVLUxeyLIhW_-BGank5SEvWDK_qmYo-dD1WlnTwiWaUnYGr9P5efQnAkBpscZpTyLdOYwwBSmPEJ7B6T1ki2IlLQIWu2pYGsTGiGoc2iG88GB7cscFQCCLbU7-sWCPQtOeCHiIpXyEEb8d3Ac8slYcAkDghATvG3lWPicIRnVOnPxqwJ"/>
+</div>
+<div>
+<div class="text-label-md font-label-md text-on-surface">TechCorp HR</div>
+<div class="text-body-sm font-body-sm text-on-surface-variant">Enterprise Plan</div>
+</div>
+</div>
+<a class="flex items-center gap-md px-sm py-sm mt-xs text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="text-body-md font-body-md">Logout</span>
+</a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 md:ml-[280px] min-h-screen flex flex-col">
+<!-- Top App Bar (Desktop) -->
+<header class="hidden md:flex sticky top-0 z-40 bg-surface-container-lowest border-b border-outline-variant shadow-sm w-full px-gutter py-sm justify-between items-center h-[72px]">
+<h2 class="text-headline-md font-headline-md text-on-surface">Job Postings</h2>
+<div class="flex items-center gap-lg">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm font-body-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Search jobs..." type="text"/>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="bg-primary text-on-primary px-4 py-2 rounded-lg text-label-md font-label-md hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                    Post a New Job
+                </button>
+</div>
+</header>
+<!-- Page Content Container -->
+<div class="flex-1 p-md md:p-lg lg:p-xl max-w-container-max mx-auto w-full flex flex-col gap-lg">
+<!-- Mobile Action Bar -->
+<div class="md:hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-md mb-md">
+<h2 class="text-headline-lg-mobile font-headline-lg-mobile text-on-surface">Job Postings</h2>
+<button class="w-full sm:w-auto bg-primary text-on-primary px-4 py-2 rounded-lg text-label-md font-label-md hover:bg-primary/90 transition-colors shadow-sm flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                    Post a New Job
+                </button>
+</div>
+<!-- Dashboard Stats -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-md">
+<div class="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-sm flex flex-col gap-sm hover:shadow-md transition-shadow">
+<div class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">Active Postings</div>
+<div class="text-headline-lg font-headline-lg text-on-surface flex items-baseline gap-2">
+                        12 <span class="text-body-sm font-body-sm text-secondary flex items-center"><span class="material-symbols-outlined text-[16px]">arrow_upward</span> +2 this week</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-sm flex flex-col gap-sm hover:shadow-md transition-shadow">
+<div class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">Total Applications</div>
+<div class="text-headline-lg font-headline-lg text-on-surface flex items-baseline gap-2">
+                        845 <span class="text-body-sm font-body-sm text-secondary flex items-center"><span class="material-symbols-outlined text-[16px]">arrow_upward</span> +15%</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-sm flex flex-col gap-sm hover:shadow-md transition-shadow">
+<div class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">Time to Hire (Avg)</div>
+<div class="text-headline-lg font-headline-lg text-on-surface flex items-baseline gap-2">
+                        18d <span class="text-body-sm font-body-sm text-secondary flex items-center"><span class="material-symbols-outlined text-[16px]">arrow_downward</span> -2d</span>
+</div>
+</div>
+</div>
+<!-- Job List Container -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col">
+<!-- Filters/Tabs -->
+<div class="border-b border-outline-variant px-md flex gap-lg overflow-x-auto">
+<button class="py-md text-label-md font-label-md text-primary border-b-2 border-primary whitespace-nowrap">All Jobs (24)</button>
+<button class="py-md text-label-md font-label-md text-on-surface-variant hover:text-on-surface whitespace-nowrap">Published (12)</button>
+<button class="py-md text-label-md font-label-md text-on-surface-variant hover:text-on-surface whitespace-nowrap">Drafts (5)</button>
+<button class="py-md text-label-md font-label-md text-on-surface-variant hover:text-on-surface whitespace-nowrap">Closed (7)</button>
+</div>
+<!-- Job Items -->
+<div class="flex flex-col divide-y divide-outline-variant">
+<!-- Job Item 1 -->
+<div class="p-md hover:bg-surface-container-low transition-colors flex flex-col lg:flex-row gap-md lg:items-center justify-between">
+<div class="flex-1 flex flex-col gap-xs">
+<div class="flex items-center gap-sm">
+<h3 class="text-label-md font-label-md text-on-surface text-lg">Senior Java Spring Boot Developer</h3>
+<span class="bg-secondary/10 text-secondary text-label-sm font-label-sm px-2 py-0.5 rounded-full border border-secondary/20">Published</span>
+</div>
+<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm font-body-sm text-on-surface-variant">
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">location_on</span> New York, NY (Hybrid)</div>
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">payments</span> $130k - $160k</div>
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> Posted 2 days ago</div>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+<div class="flex gap-md text-center">
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md text-on-surface">42</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">Applicants</span>
+</div>
+<div class="w-px h-10 bg-outline-variant self-center"></div>
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md text-on-surface">315</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">Views</span>
+</div>
+</div>
+<div class="flex items-center gap-sm ml-4 lg:ml-8">
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant hover:text-primary rounded-lg transition-colors" title="Edit">
+<span class="material-symbols-outlined">edit</span>
+</button>
+<button class="px-4 py-2 border border-outline text-on-surface text-label-md font-label-md rounded-lg hover:bg-surface-variant transition-colors whitespace-nowrap">
+                                    View Applications
+                                </button>
+<button class="p-2 text-on-surface-variant hover:bg-error-container hover:text-error rounded-lg transition-colors" title="More Options">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Job Item 2 -->
+<div class="p-md hover:bg-surface-container-low transition-colors flex flex-col lg:flex-row gap-md lg:items-center justify-between">
+<div class="flex-1 flex flex-col gap-xs">
+<div class="flex items-center gap-sm">
+<h3 class="text-label-md font-label-md text-on-surface text-lg">Frontend React Developer</h3>
+<span class="bg-tertiary/10 text-tertiary text-label-sm font-label-sm px-2 py-0.5 rounded-full border border-tertiary/20">Pending Approval</span>
+</div>
+<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm font-body-sm text-on-surface-variant">
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">location_on</span> Remote</div>
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">payments</span> $110k - $140k</div>
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> Created today</div>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+<div class="flex gap-md text-center opacity-50">
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md text-on-surface">0</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">Applicants</span>
+</div>
+<div class="w-px h-10 bg-outline-variant self-center"></div>
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md text-on-surface">0</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">Views</span>
+</div>
+</div>
+<div class="flex items-center gap-sm ml-4 lg:ml-8">
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant hover:text-primary rounded-lg transition-colors" title="Edit">
+<span class="material-symbols-outlined">edit</span>
+</button>
+<button class="px-4 py-2 border border-outline text-on-surface text-label-md font-label-md rounded-lg hover:bg-surface-variant transition-colors whitespace-nowrap opacity-50 cursor-not-allowed">
+                                    View Applications
+                                </button>
+<button class="p-2 text-on-surface-variant hover:bg-error-container hover:text-error rounded-lg transition-colors" title="More Options">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Job Item 3 -->
+<div class="p-md hover:bg-surface-container-low transition-colors flex flex-col lg:flex-row gap-md lg:items-center justify-between">
+<div class="flex-1 flex flex-col gap-xs">
+<div class="flex items-center gap-sm">
+<h3 class="text-label-md font-label-md text-on-surface text-lg">Data Analyst Intern</h3>
+<span class="bg-outline-variant/30 text-on-surface-variant text-label-sm font-label-sm px-2 py-0.5 rounded-full border border-outline-variant">Draft</span>
+</div>
+<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm font-body-sm text-on-surface-variant">
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">location_on</span> Austin, TX (On-site)</div>
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">payments</span> $30 - $40 / hr</div>
+<div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> Edited 5 days ago</div>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+<div class="flex gap-md text-center opacity-50">
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md text-on-surface">-</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">Applicants</span>
+</div>
+<div class="w-px h-10 bg-outline-variant self-center"></div>
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md text-on-surface">-</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">Views</span>
+</div>
+</div>
+<div class="flex items-center gap-sm ml-4 lg:ml-8">
+<button class="px-4 py-2 bg-primary-container text-on-primary-container text-label-md font-label-md rounded-lg hover:bg-primary/20 transition-colors whitespace-nowrap">
+                                    Resume Editing
+                                </button>
+<button class="p-2 text-on-surface-variant hover:bg-error-container hover:text-error rounded-lg transition-colors" title="Delete Draft">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Pagination -->
+<div class="border-t border-outline-variant p-sm flex justify-between items-center bg-surface-container-lowest">
+<span class="text-body-sm font-body-sm text-on-surface-variant ml-sm">Showing 1-3 of 24 jobs</span>
+<div class="flex gap-xs">
+<button class="p-1 text-on-surface-variant hover:bg-surface-variant rounded disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<button class="p-1 text-on-surface-variant hover:bg-surface-variant rounded">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<footer class="mt-auto bg-surface-container-lowest border-t border-outline-variant w-full py-xl px-gutter flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto text-body-sm font-body-sm">
+<div class="text-on-surface-variant mb-4 md:mb-0">© 2024 Nexus Recruit. All rights reserved.</div>
+<div class="flex flex-wrap justify-center gap-md text-on-surface-variant">
+<a class="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="hover:text-primary transition-colors" href="#">Contact Support</a>
+</div>
+</footer>
+</main>
+</body></html>

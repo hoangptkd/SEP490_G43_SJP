@@ -1,0 +1,152 @@
+package com.sjp.recruitment.model.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import com.sjp.recruitment.model.dto.profile.CertificationItem;
+import com.sjp.recruitment.model.dto.profile.EducationItem;
+import com.sjp.recruitment.model.dto.profile.ProjectItem;
+import com.sjp.recruitment.model.dto.profile.WorkExperienceItem;
+
+@Entity
+@Table(name = "job_seekers")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
+public class CandidateProfile {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @OneToOne
+    @JoinColumn(name = "user_id", unique = true, nullable = false)
+    private User user;
+
+    private String headline;
+
+    @Column(name = "summary")
+    private String bio;
+
+    private String location;
+
+    @Column(name = "date_of_birth")
+    private java.time.LocalDate dateOfBirth;
+
+    @Column(name = "years_of_experience", nullable = false)
+    private Integer experienceYears = 0;
+
+    @Column(name = "experience_level")
+    private String experienceLevel;
+
+    @Column(name = "linkedin_url")
+    private String linkedinUrl;
+
+    @Column(name = "portfolio_url")
+    private String portfolioUrl;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "desired_job_titles", nullable = false)
+    private List<String> desiredJobTitles = List.of();
+
+    @Column(name = "expected_salary", precision = 14, scale = 2)
+    private BigDecimal expectedSalary;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "preferred_locations", nullable = false)
+    private List<String> preferredLocations = List.of();
+
+    @Column(name = "willing_to_relocate", nullable = false)
+    private boolean willingToRelocate;
+
+    @Column(name = "onboarding_status", nullable = false)
+    private String onboardingStatus = "PENDING";
+
+    @Column(name = "onboarding_completed_at")
+    private LocalDateTime onboardingCompletedAt;
+
+    @OneToMany(mappedBy = "candidate", fetch = FetchType.LAZY)
+    private List<CandidateSkill> candidateSkills = new ArrayList<>();
+
+    @Transient
+    private List<String> skills;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "education_json", nullable = false)
+    private List<EducationItem> education = List.of();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "work_experience_json", nullable = false)
+    private List<WorkExperienceItem> workExperience = List.of();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "projects_json", nullable = false)
+    private List<ProjectItem> projects = List.of();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "certifications_json", nullable = false)
+    private List<CertificationItem> certifications = List.of();
+
+    @CreatedDate
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+
+    public String getFullName() {
+        return user == null ? null : user.getFullName();
+    }
+
+    public String getEmail() {
+        return user == null ? null : user.getEmail();
+    }
+
+    public String getTitle() {
+        return headline;
+    }
+
+    public void setFullName(String fullName) {
+        if (user != null) {
+            user.setFullName(fullName);
+        }
+    }
+
+    public String getPhone() {
+        return user == null ? null : user.getPhone();
+    }
+
+    public void setPhone(String phone) {
+        if (user != null) {
+            user.setPhone(phone);
+        }
+    }
+
+    public List<String> getSkills() {
+        if (skills != null) {
+            return skills;
+        }
+        if (candidateSkills == null) {
+            return List.of();
+        }
+        return candidateSkills.stream()
+                .map(CandidateSkill::getSkill)
+                .filter(java.util.Objects::nonNull)
+                .map(Skill::getName)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+}

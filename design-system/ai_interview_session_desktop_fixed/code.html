@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Interview Session - CAN-007-Session</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lexend:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "surface-variant": "#d3e4fe",
+                "on-tertiary-fixed-variant": "#6c3a00",
+                "secondary-container": "#92f5a4",
+                "on-secondary": "#ffffff",
+                "on-primary-fixed": "#001d32",
+                "secondary-fixed": "#95f8a7",
+                "background": "#f8f9ff",
+                "inverse-on-surface": "#eaf1ff",
+                "surface-bright": "#f8f9ff",
+                "on-secondary-container": "#007233",
+                "inverse-surface": "#213145",
+                "inverse-primary": "#94ccff",
+                "on-tertiary-fixed": "#2e1500",
+                "surface-container-highest": "#d3e4fe",
+                "surface-tint": "#006399",
+                "on-surface-variant": "#40474f",
+                "on-error": "#ffffff",
+                "error": "#ba1a1a",
+                "on-secondary-fixed": "#00210a",
+                "tertiary-container": "#955301",
+                "on-tertiary": "#ffffff",
+                "on-surface": "#0b1c30",
+                "error-container": "#ffdad6",
+                "on-background": "#0b1c30",
+                "primary-container": "#0369a1",
+                "surface-container-lowest": "#ffffff",
+                "secondary-fixed-dim": "#79db8d",
+                "primary-fixed": "#cde5ff",
+                "outline": "#707881",
+                "tertiary-fixed": "#ffdcc1",
+                "primary-fixed-dim": "#94ccff",
+                "outline-variant": "#c0c7d1",
+                "on-secondary-fixed-variant": "#005323",
+                "on-error-container": "#93000a",
+                "on-primary-fixed-variant": "#004b74",
+                "tertiary-fixed-dim": "#ffb878",
+                "secondary": "#006d30",
+                "primary": "#00507d",
+                "on-primary-container": "#cbe4ff",
+                "surface-dim": "#cbdbf5",
+                "tertiary": "#733f00",
+                "surface": "#f8f9ff",
+                "surface-container-low": "#eff4ff",
+                "surface-container": "#e5eeff",
+                "on-primary": "#ffffff",
+                "on-tertiary-container": "#ffdbbe",
+                "surface-container-high": "#dce9ff"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.125rem",
+                "lg": "0.25rem",
+                "xl": "0.5rem",
+                "full": "0.75rem"
+        },
+        "spacing": {
+                "sidebar-width": "280px",
+                "gutter": "24px",
+                "container-max": "1440px",
+                "base": "4px",
+                "md": "16px",
+                "xs": "4px",
+                "xl": "32px",
+                "lg": "24px",
+                "sm": "8px"
+        },
+        "fontFamily": {
+                "headline-md": [
+                        "Lexend"
+                ],
+                "headline-lg-mobile": [
+                        "Lexend"
+                ],
+                "display-lg": [
+                        "Lexend"
+                ],
+                "body-lg": [
+                        "Inter"
+                ],
+                "mono-sm": [
+                        "Inter"
+                ],
+                "label-sm": [
+                        "Inter"
+                ],
+                "label-md": [
+                        "Inter"
+                ],
+                "headline-lg": [
+                        "Lexend"
+                ],
+                "body-sm": [
+                        "Inter"
+                ],
+                "body-md": [
+                        "Inter"
+                ]
+        },
+        "fontSize": {
+                "headline-md": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "fontWeight": "500"
+                        }
+                ],
+                "headline-lg-mobile": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "display-lg": [
+                        "48px",
+                        {
+                                "lineHeight": "56px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body-lg": [
+                        "18px",
+                        {
+                                "lineHeight": "28px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "mono-sm": [
+                        "13px",
+                        {
+                                "lineHeight": "18px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-sm": [
+                        "12px",
+                        {
+                                "lineHeight": "16px",
+                                "letterSpacing": "0.02em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "label-md": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "headline-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "40px",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body-sm": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "400"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+</head>
+<body class="bg-background text-on-background font-body-md h-screen flex flex-col overflow-hidden">
+<header class="w-full bg-surface-container-lowest border-b border-outline-variant h-16 flex items-center justify-between px-gutter shrink-0 z-50">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-[24px]">psychology</span>
+<span class="text-headline-md font-headline-md font-bold text-primary">Nexus Recruit AI</span>
+</div>
+<div class="flex items-center gap-md">
+<div class="bg-surface-container-high px-sm py-xs rounded-lg flex items-center gap-xs border border-outline-variant">
+<div class="w-2 h-2 rounded-full bg-error"></div>
+<span class="text-label-sm font-label-sm text-on-surface-variant">Session CAN-007</span>
+</div>
+<button class="flex items-center gap-xs text-label-md font-label-md text-on-surface-variant hover:text-on-surface transition-colors" title="End Session">
+<span class="material-symbols-outlined text-[20px]">exit_to_app</span>
+<span>End</span>
+</button>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto p-gutter lg:p-xl flex justify-center items-start bg-background">
+<div class="w-full max-w-[800px] flex flex-col gap-lg pb-xl">
+<!-- Question Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg shadow-sm">
+<div class="flex items-start gap-md">
+<div class="bg-surface-container-high rounded-full p-sm shrink-0 mt-xs">
+<span class="material-symbols-outlined text-primary" data-weight="fill">smart_toy</span>
+</div>
+<div class="flex-1">
+<h2 class="text-headline-md font-headline-md text-on-surface mb-sm">Explain how you would design a Spring Boot service to handle high-throughput asynchronous events.</h2>
+<p class="text-body-md font-body-md text-on-surface-variant">Please focus on architectural patterns, specifically mentioning message brokers and thread management within the Spring ecosystem.</p>
+</div>
+</div>
+</div>
+<!-- Recording / Answer Area -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl flex flex-col overflow-hidden shadow-sm">
+<!-- Video / Avatar Feed Placeholder -->
+<div class="relative bg-inverse-surface aspect-video flex items-center justify-center overflow-hidden">
+<img alt="Candidate Video Feed" class="w-full h-full object-cover opacity-90" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoI_Ey6RWCitYrM_JnnWGiYuu6qrTIHIxpLKF8EY4wT7AL8xL_HLVsXjColZVLUdls-3pstU51LR0vFrvb67hyA69XmB5HRCMYjuAVQP6BhRMs8ghYhDTqhABMVZcpujMFxQn6C-JIgNn6nwGxgiSC9W6RImmQB2XAV2XtCkJEpOOVCwmIsiyXEZfCFfqFelHhI0JUDwbEzgR3s7N2PCAcz7rSrwv0AeJ84sUSjVwHpXQnTvXf0nRc"/>
+<!-- Recording Indicator Overlay -->
+<div class="absolute top-md left-md bg-error/10 border border-error/20 text-error px-sm py-xs rounded-lg flex items-center gap-xs backdrop-blur-sm">
+<div class="w-2 h-2 rounded-full bg-error animate-pulse"></div>
+<span class="text-label-sm font-label-sm font-semibold tracking-wider">REC</span>
+<span class="text-mono-sm font-mono-sm ml-sm" id="timer">01:45</span>
+</div>
+<!-- Waveform Overlay (Simulated) -->
+<div class="absolute bottom-md left-1/2 -translate-x-1/2 flex items-end gap-[2px] h-8 bg-surface-container-lowest/80 p-sm rounded-full backdrop-blur-md border border-outline-variant/50">
+<div class="w-1 bg-primary rounded-t-full h-[20%] animate-[bounce_1s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[60%] animate-[bounce_1.2s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[40%] animate-[bounce_0.8s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[90%] animate-[bounce_1.5s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[30%] animate-[bounce_0.9s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[70%] animate-[bounce_1.1s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[50%] animate-[bounce_1.3s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[20%] animate-[bounce_1s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[60%] animate-[bounce_1.2s_infinite]"></div>
+<div class="w-1 bg-primary rounded-t-full h-[40%] animate-[bounce_0.8s_infinite]"></div>
+</div>
+</div>
+<!-- Live Transcript -->
+<div class="p-md border-t border-outline-variant bg-surface-container-lowest">
+<div class="flex items-center gap-xs mb-sm">
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">closed_caption</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">Live Transcript</span>
+</div>
+<div class="h-24 overflow-y-auto pr-sm text-body-md font-body-md text-on-surface-variant leading-relaxed relative">
+<p>To design a Spring Boot service for high-throughput asynchronous events, I would primarily rely on an event-driven architecture using a message broker like Apache Kafka or RabbitMQ. <span class="text-on-surface">For the service itself, I would utilize Spring Kafka...</span><span class="animate-pulse">|</span></p>
+<!-- Gradient fade at bottom -->
+<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-surface-container-lowest to-transparent pointer-events-none"></div>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex justify-end items-center gap-md pt-sm">
+<button class="px-lg py-sm rounded-xl border border-outline-variant text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors flex items-center gap-sm bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[20px]">pause</span>
+                Pause
+            </button>
+<button class="px-lg py-sm rounded-xl bg-primary text-on-primary font-label-md text-label-md hover:bg-primary/90 hover:shadow-sm transition-all flex items-center gap-sm">
+<span class="material-symbols-outlined text-[20px]">done</span>
+                Submit Answer
+            </button>
+</div>
+</div>
+</main>
+<script>
+    // Simple timer logic for demonstration
+    let seconds = 105; // 01:45
+    const timerElement = document.getElementById('timer');
+    
+    setInterval(() => {
+        seconds++;
+        const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const secs = (seconds % 60).toString().padStart(2, '0');
+        if (timerElement) {
+            timerElement.textContent = `${mins}:${secs}`;
+        }
+    }, 1000);
+</script>
+</body></html>

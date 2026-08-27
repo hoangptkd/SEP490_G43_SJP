@@ -1,0 +1,68 @@
+package com.sjp.recruitment.scheduler;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+@Slf4j
+@Component
+@ConditionalOnProperty(name = "app.scheduling.enabled", havingValue = "true", matchIfMissing = true)
+@RequiredArgsConstructor
+public class SubscriptionExpirationScheduler {
+
+    private final NamedParameterJdbcTemplate jdbc;
+
+    @Scheduled(cron = "0 5 0 * * ?")
+    @Scheduled(fixedDelay = 3600000)
+    @Transactional
+    public void expireSubscriptions() {
+        int updated = jdbc.update("""
+                        UPDATE subscriptions
+                        SET status = 'expired',
+                            updated_at = now()
+                        WHERE status = 'active'
+                          AND end_date IS NOT NULL
+                          AND end_date < now()
+                        """,
+                new MapSqlParameterSource());
+        if (updated > 0) {
+            log.info("SubscriptionExpirationScheduler: expired {} subscriptions", updated);
+        }
+
+        // QR hết hạn: giữ pending 1 ngày để admin còn xác nhận nếu tiền đã về.
+        // Chỉ hủy hẳn sau expiresAt + 1 day. Bill bị thay thế đã cancelled riêng, không vào đây.
+        int expiredPayments = jdbc.update("""
+                        UPDATE payments p
+                        SET status = 'cancelled',
+                            failure_reason = 'Hết hạn thanh toán chuyển khoản'
+                        WHERE p.status = 'pending'
+                          AND p.payment_method = 'bank_transfer'
+                          AND (p.gateway_response ->> 'expiresAt') IS NOT NULL
+                          AND (p.gateway_response ->> 'expiresAt')::timestamptz + interval '1 day' < now()
+                        """,
+                new MapSqlParameterSource());
+        if (expiredPayments > 0) {
+            jdbc.update("""
+                            UPDATE subscriptions s
+                            SET status = 'cancelled',
+                                cancelled_at = now(),
+                                cancelled_reason = 'Hết hạn thanh toán chuyển khoản',
+                                updated_at = now()
+                            WHERE s.status = 'pending'
+                              AND EXISTS (
+                                SELECT 1 FROM payments p
+                                WHERE p.subscription_id = s.id
+                                  AND p.status = 'cancelled'
+                                  AND p.failure_reason = 'Hết hạn thanh toán chuyển khoản'
+                              )
+                            """,
+                    new MapSqlParameterSource());
+            log.info("SubscriptionExpirationScheduler: cancelled {} expired bank-transfer payments after 1-day grace", expiredPayments);
+        }
+    }
+}

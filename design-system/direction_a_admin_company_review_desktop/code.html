@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SJP Review Workflows</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#00507d",
+                        "on-secondary-container": "#5c647a",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#0b1c30",
+                        "surface-container-low": "#eef4ff",
+                        "surface-tint": "#006399",
+                        "on-background": "#0d1c2d",
+                        "surface": "#f8f9ff",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#38485d",
+                        "on-tertiary-container": "#d2e2fd",
+                        "outline-variant": "#c0c7d1",
+                        "secondary-container": "#dae2fd",
+                        "tertiary": "#3d4d62",
+                        "error-container": "#ffdad6",
+                        "background": "#f8f9ff",
+                        "outline": "#707881",
+                        "on-error": "#ffffff",
+                        "on-secondary-fixed": "#131b2e",
+                        "surface-dim": "#ccdbf2",
+                        "tertiary-container": "#55657b",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "primary-fixed": "#cde5ff",
+                        "secondary": "#565e74",
+                        "inverse-primary": "#94ccff",
+                        "surface-container-high": "#dbe9ff",
+                        "tertiary-fixed": "#d3e4fe",
+                        "inverse-on-surface": "#e9f1ff",
+                        "on-primary-fixed": "#001d32",
+                        "surface-container-highest": "#d4e4fa",
+                        "on-surface-variant": "#40474f",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#0369a1",
+                        "inverse-surface": "#233143",
+                        "primary-fixed-dim": "#94ccff",
+                        "surface-variant": "#d4e4fa",
+                        "secondary-fixed": "#dae2fd",
+                        "surface-container": "#e5efff",
+                        "on-surface": "#0d1c2d",
+                        "surface-bright": "#f8f9ff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-container": "#cbe4ff",
+                        "on-primary-fixed-variant": "#004b74",
+                        "tertiary-fixed-dim": "#b7c8e1"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "3xl": "64px",
+                        "lg": "24px",
+                        "2xl": "48px",
+                        "container-max": "1280px",
+                        "sm": "8px",
+                        "md": "16px",
+                        "gutter": "24px",
+                        "xs": "4px",
+                        "xl": "32px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "headline-sm": ["20px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "1.2", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9ff; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+        .ambient-shadow { box-shadow: 0px 1px 3px rgba(15, 23, 42, 0.08); }
+        .hover-shadow:hover { box-shadow: 0px 10px 15px -3px rgba(15, 23, 42, 0.1); }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background text-on-background flex h-screen overflow-hidden">
+<!-- SideNavBar (Shared Component) -->
+<aside class="bg-secondary dark:bg-inverse-surface w-64 h-screen fixed left-0 top-0 shadow-md flex flex-col h-full py-md px-sm transition-all duration-200 ease-in-out z-40 hidden md:flex">
+<div class="flex items-center gap-md mb-xl px-sm">
+<div class="w-10 h-10 rounded-full bg-surface-container-lowest flex items-center justify-center overflow-hidden">
+<span class="material-symbols-outlined text-primary" data-icon="hub">hub</span>
+</div>
+<div>
+<h1 class="font-headline-sm text-headline-sm text-on-secondary dark:text-inverse-on-surface m-0">Recruitment Hub</h1>
+<p class="font-label-sm text-label-sm text-on-secondary-fixed-variant m-0 opacity-80">Role: Admin</p>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-xs">
+<a class="flex items-center gap-md px-md py-sm rounded-full text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-full text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-label-md text-label-md">Applications</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-full text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="work">work</span>
+<span class="font-label-md text-label-md">Job Postings</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-full bg-secondary-container text-on-secondary-container dark:bg-secondary dark:text-on-secondary-fixed transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined icon-fill" data-icon="verified_user">verified_user</span>
+<span class="font-label-md text-label-md">Verification</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-full text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-md flex flex-col gap-sm">
+<button class="w-full py-sm px-md rounded-full border border-on-secondary-fixed-variant text-on-secondary font-label-md text-label-md hover:bg-secondary-fixed-dim/20 transition-colors">
+                Support Center
+            </button>
+<a class="flex items-center gap-md px-md py-sm rounded-full text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-secondary-fixed-dim/20 dark:hover:bg-secondary-fixed-dim/10 transition-all duration-200 ease-in-out mt-sm" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-label-md text-label-md">Logout</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-0 md:ml-64 flex flex-col h-screen overflow-hidden bg-background">
+<!-- TopNavBar (Shared Component for Mobile, modified slightly for Desktop contextual header) -->
+<header class="bg-surface-container-lowest dark:bg-surface-container-low w-full h-16 border-b border-outline-variant dark:border-outline shadow-sm flex justify-between items-center px-lg sticky top-0 z-30 shrink-0">
+<div class="flex items-center gap-md md:hidden">
+<button class="text-on-surface-variant p-sm rounded-full hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<span class="font-headline-md text-headline-md text-primary font-bold">Verification</span>
+</div>
+<div class="hidden md:flex items-center gap-md">
+<h2 class="font-headline-sm text-headline-sm text-on-surface m-0">Pending Verifications</h2>
+<span class="bg-error-container text-on-error-container px-2 py-0.5 rounded-full font-label-sm text-label-sm">12 Pending</span>
+</div>
+<div class="flex items-center gap-md">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-2 border border-outline-variant rounded-md text-body-sm font-body-sm focus:border-primary focus:ring-2 focus:ring-primary-container focus:outline-none w-64 bg-surface-container-lowest" placeholder="Search companies..." type="text"/>
+</div>
+<button class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A professional headshot of an administrative user in a modern office environment, soft lighting, sharp focus, corporate aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCdViF3cLv_QSMxzTOJjreBwmO81PeiLOBrAgXdPpVMC2E15eO95Ib5o_qTmKJQb6Bs6PPzVjnNYJjwmIHqURsqpc6L8DzA4p8KemRwqHUPSKqf8YUwJNdubmxBmiE8iyguZnoKX1WjemPO62VOygka0i15wsIZsgm0rwd5FUDFwc1Hl_7E1kAL_ezDo1rEe5K7fh2A0IW-zBNrv6Cw44S_z80lzJBYA1-l6C9-GomcU58Act8ZT3A"/>
+</button>
+</div>
+</header>
+<!-- Two-Pane Layout -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Left Pane: List -->
+<div class="w-full md:w-1/3 lg:w-96 border-r border-outline-variant bg-surface flex flex-col h-full shrink-0">
+<div class="p-md border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest shrink-0">
+<div class="flex gap-sm">
+<button class="px-3 py-1.5 bg-primary-container text-on-primary-container rounded-full font-label-sm text-label-sm">All</button>
+<button class="px-3 py-1.5 border border-outline-variant text-on-surface-variant rounded-full font-label-sm text-label-sm hover:bg-surface-variant">High Priority</button>
+</div>
+<button class="text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="filter_list">filter_list</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto scrollbar-hide p-sm flex flex-col gap-sm">
+<!-- List Item Active -->
+<div class="bg-surface-container-lowest p-md rounded-lg border border-primary ambient-shadow cursor-pointer relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+<div class="flex justify-between items-start mb-sm">
+<h3 class="font-label-md text-label-md text-on-surface m-0">TechFlow Solutions Inc.</h3>
+<span class="text-xs font-semibold text-primary bg-primary-fixed px-2 py-0.5 rounded">New</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-md m-0">Submitted: Oct 24, 2024</p>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]" data-icon="person">person</span>
+<span class="font-body-sm text-body-sm text-xs">Sarah Jenkins</span>
+</div>
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]" data-icon="attach_file">attach_file</span>
+<span class="font-body-sm text-body-sm text-xs">4 Docs</span>
+</div>
+</div>
+</div>
+<!-- List Item Inactive -->
+<div class="bg-surface-container-lowest p-md rounded-lg border border-outline-variant hover:border-outline ambient-shadow cursor-pointer hover:bg-surface transition-colors">
+<div class="flex justify-between items-start mb-sm">
+<h3 class="font-label-md text-label-md text-on-surface m-0">Global Logistics Corp</h3>
+<span class="text-xs font-medium text-on-surface-variant">2d ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-md m-0">Submitted: Oct 22, 2024</p>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]" data-icon="person">person</span>
+<span class="font-body-sm text-body-sm text-xs">Marcus Chen</span>
+</div>
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]" data-icon="attach_file">attach_file</span>
+<span class="font-body-sm text-body-sm text-xs">2 Docs</span>
+</div>
+</div>
+</div>
+<!-- List Item Inactive -->
+<div class="bg-surface-container-lowest p-md rounded-lg border border-outline-variant hover:border-outline ambient-shadow cursor-pointer hover:bg-surface transition-colors">
+<div class="flex justify-between items-start mb-sm">
+<h3 class="font-label-md text-label-md text-on-surface m-0">Apex Healthcare</h3>
+<span class="text-xs font-semibold text-error bg-error-container px-2 py-0.5 rounded">Action Req</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-md m-0">Submitted: Oct 20, 2024</p>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]" data-icon="person">person</span>
+<span class="font-body-sm text-body-sm text-xs">Dr. E. Vance</span>
+</div>
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]" data-icon="attach_file">attach_file</span>
+<span class="font-body-sm text-body-sm text-xs">5 Docs</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Pane: Detail View -->
+<div class="flex-1 flex flex-col h-full bg-surface-container-lowest overflow-hidden hidden md:flex">
+<!-- Detail Header -->
+<div class="p-xl border-b border-outline-variant shrink-0 flex justify-between items-start">
+<div>
+<div class="flex items-center gap-sm mb-xs">
+<h2 class="font-headline-lg text-headline-lg text-on-surface m-0">TechFlow Solutions Inc.</h2>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-1 rounded-md font-label-sm text-label-sm border border-outline-variant">ID: VER-8892</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant m-0 flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]" data-icon="location_on">location_on</span> San Francisco, CA • Software Development
+                        </p>
+</div>
+<div class="flex gap-md">
+<button class="px-md py-sm border border-outline-variant text-error font-label-md text-label-md rounded-md hover:bg-error-container transition-colors flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]" data-icon="close">close</span> Reject
+                        </button>
+<button class="px-md py-sm bg-primary text-on-primary font-label-md text-label-md rounded-md hover:bg-primary-container transition-colors flex items-center gap-xs shadow-sm">
+<span class="material-symbols-outlined text-[18px]" data-icon="check">check</span> Approve Company
+                        </button>
+</div>
+</div>
+<!-- Detail Scrollable Content -->
+<div class="flex-1 overflow-y-auto p-xl scrollbar-hide">
+<div class="max-w-container-max mx-auto grid grid-cols-12 gap-lg">
+<!-- Left Column: Info & Form -->
+<div class="col-span-12 lg:col-span-5 flex flex-col gap-lg">
+<!-- Company Details Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-lg ambient-shadow">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-md border-b border-outline-variant pb-xs">Company Information</h3>
+<dl class="grid grid-cols-1 gap-sm">
+<div class="grid grid-cols-3">
+<dt class="font-label-sm text-label-sm text-on-surface-variant col-span-1">Legal Name</dt>
+<dd class="font-body-sm text-body-sm text-on-surface col-span-2 font-medium">TechFlow Solutions Incorporated</dd>
+</div>
+<div class="grid grid-cols-3">
+<dt class="font-label-sm text-label-sm text-on-surface-variant col-span-1">Registration #</dt>
+<dd class="font-body-sm text-body-sm text-on-surface col-span-2 font-mono">C-89384729</dd>
+</div>
+<div class="grid grid-cols-3">
+<dt class="font-label-sm text-label-sm text-on-surface-variant col-span-1">Tax ID</dt>
+<dd class="font-body-sm text-body-sm text-on-surface col-span-2 font-mono">94-3948572</dd>
+</div>
+<div class="grid grid-cols-3 mt-sm pt-sm border-t border-surface-variant">
+<dt class="font-label-sm text-label-sm text-on-surface-variant col-span-1">Primary Contact</dt>
+<dd class="font-body-sm text-body-sm text-on-surface col-span-2">
+                                            Sarah Jenkins<br/>
+<span class="text-on-surface-variant text-xs">sarah.j@techflow.io</span><br/>
+<span class="text-on-surface-variant text-xs">+1 (415) 555-0198</span>
+</dd>
+</div>
+</dl>
+</div>
+<!-- Rejection Form (Contextual) -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-lg ambient-shadow">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-md border-b border-outline-variant pb-xs flex items-center gap-xs">
+<span class="material-symbols-outlined text-[20px] text-error" data-icon="warning">warning</span> Review Actions
+                                </h3>
+<div class="flex flex-col gap-md">
+<div>
+<label class="block font-label-sm text-label-sm text-on-surface mb-xs">Rejection Reason (Required for rejection)</label>
+<select class="w-full border border-outline-variant rounded-md p-2 text-body-sm font-body-sm bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+<option>Select reason...</option>
+<option>Missing required documentation</option>
+<option>Information mismatch</option>
+<option>Failed background check</option>
+<option>Other (specify below)</option>
+</select>
+</div>
+<div>
+<textarea class="w-full border border-outline-variant rounded-md p-2 text-body-sm font-body-sm bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none h-24 resize-none" placeholder="Add internal notes or detailed rejection reasons..."></textarea>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Documents -->
+<div class="col-span-12 lg:col-span-7 flex flex-col gap-lg">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-lg ambient-shadow h-full flex flex-col">
+<div class="flex justify-between items-center mb-md border-b border-outline-variant pb-xs">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Supporting Documents (4)</h3>
+<button class="text-primary font-label-sm text-label-sm hover:underline">Download All ZIP</button>
+</div>
+<div class="grid grid-cols-2 gap-md flex-1">
+<!-- Document Card 1 -->
+<div class="border border-outline-variant rounded-md overflow-hidden flex flex-col hover-shadow transition-shadow group">
+<div class="bg-surface-variant h-32 relative overflow-hidden flex items-center justify-center border-b border-outline-variant">
+<span class="material-symbols-outlined text-4xl text-outline-variant group-hover:scale-110 transition-transform" data-icon="description">description</span>
+<div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<button class="bg-surface text-on-surface px-3 py-1 rounded-md font-label-sm text-label-sm">View Document</button>
+</div>
+</div>
+<div class="p-sm bg-surface-container-lowest">
+<p class="font-label-sm text-label-sm text-on-surface truncate m-0" title="Certificate_of_Incorporation.pdf">Certificate_of_Incorporation.pdf</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-xs m-0">PDF • 1.2 MB</p>
+</div>
+</div>
+<!-- Document Card 2 -->
+<div class="border border-outline-variant rounded-md overflow-hidden flex flex-col hover-shadow transition-shadow group">
+<div class="bg-surface-variant h-32 relative overflow-hidden flex items-center justify-center border-b border-outline-variant">
+<span class="material-symbols-outlined text-4xl text-outline-variant group-hover:scale-110 transition-transform" data-icon="image">image</span>
+<div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<button class="bg-surface text-on-surface px-3 py-1 rounded-md font-label-sm text-label-sm">View Image</button>
+</div>
+</div>
+<div class="p-sm bg-surface-container-lowest">
+<p class="font-label-sm text-label-sm text-on-surface truncate m-0" title="Tax_Clearance_2024.jpg">Tax_Clearance_2024.jpg</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-xs m-0">JPG • 800 KB</p>
+</div>
+</div>
+<!-- Document Card 3 (Data Reference) -->
+<div class="border border-outline-variant rounded-md overflow-hidden flex flex-col hover-shadow transition-shadow group col-span-2 h-48">
+<div class="bg-surface-variant flex-1 relative overflow-hidden flex flex-col border-b border-outline-variant">
+<div class="p-sm bg-surface-container-lowest border-b border-outline-variant flex justify-between items-center z-10">
+<p class="font-label-sm text-label-sm text-on-surface truncate m-0">Business_License_Scan.pdf</p>
+<button class="text-primary"><span class="material-symbols-outlined text-[18px]" data-icon="open_in_new">open_in_new</span></button>
+</div>
+<!-- Pretend iframe/viewer area -->
+<div class="flex-1 bg-surface-dim flex items-center justify-center relative">
+<div class="w-3/4 h-5/6 bg-white shadow-sm border border-outline-variant p-4 text-[8px] text-outline opacity-50 flex flex-col gap-2 overflow-hidden">
+<div class="h-2 w-1/2 bg-outline-variant rounded"></div>
+<div class="h-1 w-full bg-outline-variant rounded mt-2"></div>
+<div class="h-1 w-full bg-outline-variant rounded"></div>
+<div class="h-1 w-3/4 bg-outline-variant rounded"></div>
+<div class="h-10 w-10 border border-outline-variant rounded-full self-end mt-auto"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

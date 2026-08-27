@@ -1,0 +1,12 @@
+package com.sjp.recruitment.model.dto.request;
+
+import jakarta.validation.constraints.NotBlank;
+
+public record ChangePasswordRequest(
+        @NotBlank
+        String currentPassword,
+
+        @NotBlank
+        String newPassword
+) {
+}
