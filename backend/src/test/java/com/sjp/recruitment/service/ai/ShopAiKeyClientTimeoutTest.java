@@ -874,6 +874,36 @@ class ShopAiKeyClientTimeoutTest {
         assertTrue(serializedRequest.contains("PROBE"));
     }
 
+    @Test
+    void groupedEvaluationAcceptsActionPlanAtTwelveHundredCharacterLimit() throws Exception {
+        InterviewSession session = practiceSessionWithProfile();
+        InterviewQuestion question = technicalQuestion(session, 1, "problem-solving");
+        String actionPlan = "a".repeat(ShopAiKeyClient.ACTION_PLAN_ITEM_MAX_LENGTH);
+        startServer(exchange -> respondJson(
+                exchange, groupedEvaluationResponse(question, actionPlan)));
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        ShopAiKeyClient.InterviewEvaluationDraft result = client.evaluateGroupedInterview(
+                session, List.of(groupedEvidence(question)));
+
+        assertEquals(List.of(actionPlan), result.actionPlan());
+    }
+
+    @Test
+    void groupedEvaluationRejectsActionPlanAboveTwelveHundredCharacterLimit() throws Exception {
+        InterviewSession session = practiceSessionWithProfile();
+        InterviewQuestion question = technicalQuestion(session, 1, "problem-solving");
+        String actionPlan = "a".repeat(ShopAiKeyClient.ACTION_PLAN_ITEM_MAX_LENGTH + 1);
+        startServer(exchange -> respondJson(
+                exchange, groupedEvaluationResponse(question, actionPlan)));
+        ShopAiKeyClient client = client(mock(AiInterviewTelemetryService.class), 2_000);
+
+        AiProviderException exception = assertThrows(AiProviderException.class,
+                () -> client.evaluateGroupedInterview(session, List.of(groupedEvidence(question))));
+
+        assertEquals("AI_INVALID_ANALYSIS_SCHEMA", exception.getCode());
+    }
+
     private ShopAiKeyClient client(AiInterviewTelemetryService telemetry, int readTimeoutMs) {
         AiInterviewProperties properties = new AiInterviewProperties();
         properties.getTextAi().setApiKey("test-key");
@@ -929,6 +959,39 @@ class ShopAiKeyClientTimeoutTest {
                 "bars", Map.of("level1", "Mơ hồ", "level3", "Có quy trình", "level5", "Có kiểm chứng")
         ));
         return question;
+    }
+
+    private ShopAiKeyClient.GroupedAssessmentEvidence groupedEvidence(InterviewQuestion question) {
+        return new ShopAiKeyClient.GroupedAssessmentEvidence(
+                question.getId().toString(),
+                question.getCompetencyId(),
+                question.getQuestionType(),
+                question.getContent(),
+                question.getRubric(),
+                List.of(new ShopAiKeyClient.EvidenceTurnDraft(
+                        "CORE_QUESTION", "Tôi kiểm tra execution plan và đo lại kết quả."))
+        );
+    }
+
+    private byte[] groupedEvaluationResponse(
+            InterviewQuestion question,
+            String actionPlan
+    ) throws IOException {
+        return chatResponse("""
+                {
+                  "questionRatings":[{
+                    "questionId":"%s",
+                    "competencyId":"%s",
+                    "barsLevel":3,
+                    "evidence":["có quy trình kiểm chứng"],
+                    "missingEvidence":["cần thêm số liệu"]
+                  }],
+                  "summary":"Đã hoàn thành đánh giá.",
+                  "strengths":["có quy trình"],
+                  "improvements":["bổ sung số liệu"],
+                  "actionPlan":["%s"]
+                }
+                """.formatted(question.getId(), question.getCompetencyId(), actionPlan));
     }
 
     private void startServer(ExchangeHandler handler) throws IOException {

@@ -54,6 +54,7 @@ import java.util.concurrent.CompletableFuture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -654,6 +655,57 @@ class AiInterviewDeferredEvaluationTest {
         assertEquals("Cần bổ sung số liệu", summaryCaptor.getValue().getWeaknesses());
         assertEquals("Trong 2 tuần, luyện 3 câu trả lời có số liệu mỗi ngày",
                 summaryCaptor.getValue().getSuggestions());
+    }
+
+    @Test
+    void finishingReloadsCurrentAnswerBeforePersistingEvaluation() {
+        answer.setVersion(1L);
+        answer.setTranscriptText("Tôi kiểm tra log và đo lại hiệu năng.");
+        answer.setTranscriptStatus("completed");
+        answer.setFeedbackStatus("pending");
+        answer.setAnsweredAt(LocalDateTime.now());
+
+        InterviewAnswer currentAnswer = new InterviewAnswer();
+        currentAnswer.setId(answer.getId());
+        currentAnswer.setVersion(2L);
+        currentAnswer.setSession(session);
+        currentAnswer.setQuestionId(question.getId());
+        currentAnswer.setTranscriptText(answer.getTranscriptText());
+        currentAnswer.setTranscriptStatus("completed");
+        currentAnswer.setFeedbackStatus("pending");
+        currentAnswer.setAnsweredAt(answer.getAnsweredAt());
+
+        when(answerRepository.findBySessionIdOrderByAnsweredAtAsc(session.getId()))
+                .thenReturn(List.of(answer), List.of(answer), List.of(currentAnswer));
+        when(questionRepository.findBySessionIdOrderByOrderIndexAsc(session.getId()))
+                .thenReturn(List.of(question));
+        when(answerFeedbackRepository.findByAnswerId(currentAnswer.getId()))
+                .thenReturn(Optional.empty());
+        ShopAiKeyClient.QuestionRatingDraft rating = new ShopAiKeyClient.QuestionRatingDraft(
+                question.getId().toString(), "problem-solving", 3,
+                List.of("Có quy trình"), List.of("Cần thêm số liệu"));
+        when(shopAiKeyClient.evaluateInterview(session, List.of(question), List.of(answer)))
+                .thenReturn(new ShopAiKeyClient.InterviewEvaluationDraft(
+                        List.of(rating), "Đã hoàn thành.", List.of("Có quy trình"),
+                        List.of("Cần thêm số liệu"), List.of("Luyện lại với số liệu")));
+        when(scoreCalculator.calculate(any(), any(), any(), any())).thenReturn(
+                new AiInterviewScoreCalculator.ScoreResult(
+                        BigDecimal.valueOf(50), null, null,
+                        BigDecimal.ZERO, 0, BigDecimal.ZERO, 0, 1,
+                        BigDecimal.valueOf(50), Map.of(
+                                question.getId(), new AiInterviewScoreCalculator.QuestionScoreResult(
+                                        "RATED", 3, BigDecimal.valueOf(50), null)
+                        ), Map.of()));
+        when(sessionFeedbackRepository.findBySessionId(session.getId())).thenReturn(Optional.empty());
+
+        service.finishInterview(session.getId().toString(), null, null);
+
+        assertEquals("pending", answer.getFeedbackStatus());
+        assertEquals("completed", currentAnswer.getFeedbackStatus());
+        verify(answerRepository).save(currentAnswer);
+        ArgumentCaptor<AiAnswerFeedback> feedbackCaptor = ArgumentCaptor.forClass(AiAnswerFeedback.class);
+        verify(answerFeedbackRepository).save(feedbackCaptor.capture());
+        assertSame(currentAnswer, feedbackCaptor.getValue().getAnswer());
     }
 
     @Test

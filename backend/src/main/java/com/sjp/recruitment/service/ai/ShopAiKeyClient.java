@@ -49,6 +49,7 @@ public class ShopAiKeyClient {
     static final int ADAPTIVE_QUESTION_MAX_TOKENS = 8_000;
     static final int TRANSCRIPT_CORRECTION_MAX_TOKENS = 8_000;
     static final int FINAL_EVALUATION_MAX_TOKENS = 8_000;
+    static final int ACTION_PLAN_ITEM_MAX_LENGTH = 1_200;
     static final int PROVIDER_MAX_ATTEMPTS = 3;
     static final int QUESTION_TARGET_MAX_LENGTH = 240;
     static final int QUESTION_HARD_MAX_LENGTH = 500;
@@ -1769,7 +1770,8 @@ public class ShopAiKeyClient {
                   "improvements": ["string"],
                   "actionPlan": ["string"]
                 }
-                actionPlan bắt buộc có ít nhất một hành động cụ thể, đo lường được và không lặp lại nguyên văn improvements.
+                actionPlan bắt buộc có ít nhất một hành động cụ thể, đo lường được, tối đa 1200 ký tự
+                cho mỗi phần tử và không lặp lại nguyên văn improvements.
                 GroupedEvaluationInput:
                 %s
                 """.formatted(groupedEvaluationInput(session, groupedEvidence)));
@@ -1788,7 +1790,8 @@ public class ShopAiKeyClient {
                 requireText(json, "summary"),
                 stringList(json.path("strengths")),
                 stringList(json.path("improvements")),
-                requiredNonEmptyCompactStringList(json, "actionPlan", 6, 300)
+                requiredNonEmptyCompactStringList(
+                        json, "actionPlan", 6, ACTION_PLAN_ITEM_MAX_LENGTH)
         );
     }
 

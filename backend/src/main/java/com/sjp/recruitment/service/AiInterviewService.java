@@ -897,9 +897,24 @@ public class AiInterviewService {
             InterviewSession session = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND",
                             "Không tìm thấy phiên phỏng vấn"));
+            Map<UUID, InterviewAnswer> currentAnswersByQuestion = answerRepository
+                    .findBySessionIdOrderByAnsweredAtAsc(sessionId)
+                    .stream()
+                    .filter(answer -> answer.getAnsweredAt() != null)
+                    .collect(Collectors.toMap(
+                            InterviewAnswer::getQuestionId,
+                            answer -> answer,
+                            (first, ignored) -> first,
+                            LinkedHashMap::new
+                    ));
             Map<UUID, ShopAiKeyClient.QuestionRatingDraft> ratings = resolvedEvaluation.questionRatings().stream()
                     .collect(Collectors.toMap(rating -> UUID.fromString(rating.questionId()), rating -> rating));
-            for (InterviewAnswer answer : context.answers()) {
+            for (InterviewAnswer evaluatedAnswer : context.answers()) {
+                InterviewAnswer answer = currentAnswersByQuestion.get(evaluatedAnswer.getQuestionId());
+                if (answer == null) {
+                    throw new ApiException(HttpStatus.CONFLICT, "INTERVIEW_ANSWER_CHANGED",
+                            "Câu trả lời đã thay đổi trong lúc hệ thống đang chấm điểm");
+                }
                 AiInterviewScoreCalculator.QuestionScoreResult questionResult =
                         score.questionResults().get(answer.getQuestionId());
                 if (questionResult == null) {

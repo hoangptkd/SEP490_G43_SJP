@@ -5,6 +5,8 @@ import com.sjp.recruitment.model.entity.User;
 import com.sjp.recruitment.repository.UserRepository;
 import com.sjp.recruitment.service.HandsFreeAnswerCaptureService;
 import com.sjp.recruitment.util.JwtUtil;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.RequestDispatcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
@@ -91,6 +94,19 @@ class SecurityAsyncDispatchTest {
         mvc.perform(captureRequest())
                 .andExpect(status().is3xxRedirection())
                 .andExpect(request().asyncNotStarted());
+    }
+
+    @Test
+    void unauthenticatedErrorDispatchCanReachErrorController() throws Exception {
+        mvc.perform(get("/error")
+                        .with(request -> {
+                            request.setDispatcherType(DispatcherType.ERROR);
+                            return request;
+                        })
+                        .requestAttr(RequestDispatcher.ERROR_STATUS_CODE, 500)
+                        .requestAttr(RequestDispatcher.ERROR_REQUEST_URI, "/candidate/failing-request")
+                        .requestAttr(RequestDispatcher.ERROR_MESSAGE, "test failure"))
+                .andExpect(status().isInternalServerError());
     }
 
     private MockHttpServletRequestBuilder captureRequest() {
